@@ -1,0 +1,806 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Business {
+  id                              String   @id @default(uuid())
+  name                            String
+  taxType                         String   @default("VAT")
+  serviceChargeRate               Float    @default(10)
+  negativePolicyDefault           String   @default("BLOCK")
+  posMode                         String   @default("RETAIL")
+  expiredItemPolicy               String   @default("BLOCK")
+  expenseApprovalThresholdCents   Int?     @default(500000)
+  etimsCredentialsEncrypted       String?
+  mpesaCredentialsEncrypted       String?
+  subscriptionTier                String   @default("TRIAL")
+  subscriptionStatus              String   @default("TRIAL")
+  trialEndsAt                     DateTime?
+  createdAt                       DateTime @default(now())
+  updatedAt                       DateTime @updatedAt
+
+  stores                          Store[]
+  users                           User[]
+  apiKeys                         ApiKey[]
+  auditLogs                       AuditLog[]
+
+  @@index([subscriptionStatus])
+}
+
+model User {
+  id                String   @id @default(uuid())
+  businessId        String
+  email             String   @unique
+  name              String
+  role              String
+  passwordHash      String?
+  pin               String?
+  pinHash           String?
+  totpSecret        String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  business          Business @relation(fields: [businessId], references: [id])
+  employee          Employee?
+  sales             Sale[]
+  orders            Order[]
+
+  @@index([businessId, role])
+}
+
+model Store {
+  id                String   @id @default(uuid())
+  businessId        String
+  name              String
+  storeCode         String   @unique
+  receiptSequence   Int      @default(0)
+  proformaSequence  Int      @default(0)
+  zReportSequence   Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  business          Business @relation(fields: [businessId], references: [id])
+  items             Item[]
+  sales             Sale[]
+  orders            Order[]
+  tables            Table[]
+  printers          Printer[]
+
+  @@index([businessId])
+}
+
+model Item {
+  id                      String    @id @default(uuid())
+  offlineId               String?   @unique
+  businessId              String
+  storeId                 String
+  name                    String
+  type                    String    @default("PRODUCT")
+  retailPriceCents        Int
+  wholesalePriceCents     Int?
+  vipPriceCents           Int?
+  costPriceCents          Int?
+  trackStock              Boolean   @default(true)
+  trackSerials            Boolean   @default(false)
+  trackBatches            Boolean   @default(false)
+  trackExpiry             Boolean   @default(false)
+  defaultExpiryDays       Int?
+  negativeStockPolicy     String?
+  weightUnit              String?
+  vatApplicable           Boolean   @default(true)
+  totApplicable           Boolean   @default(false)
+  barcode                 String?
+  category                String?
+  unitWeightGrams         Int?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  deletedAt               DateTime?
+
+  store                   Store     @relation(fields: [storeId], references: [id])
+  batches                 Batch[]
+  movements               InventoryMovement[]
+  bundleComponents        BundleComponent[] @relation("BundleItem")
+  componentOf             BundleComponent[] @relation("ComponentItem")
+  recipeIngredients       RecipeIngredient[] @relation("RecipeItem")
+  ingredientOf            RecipeIngredient[] @relation("IngredientItem")
+  saleItems               SaleItem[]
+  orderItems              OrderItem[]
+  serialRecords           SerialRecord[]
+
+  @@index([businessId, storeId])
+  @@index([type])
+  @@index([barcode])
+  @@index([offlineId])
+}
+
+model Batch {
+  id                String    @id @default(uuid())
+  offlineId         String    @unique
+  itemId            String
+  storeId           String
+  lotNumber         String
+  manufacturingDate DateTime?
+  expiryDate        DateTime?
+  supplierId        String?
+  quantityReceived  Int
+  quantityRemaining Int
+  status            String    @default("ACTIVE")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  item              Item      @relation(fields: [itemId], references: [id])
+  movements         InventoryMovement[]
+
+  @@index([itemId, expiryDate])
+  @@index([status])
+}
+
+model Sale {
+  id                    String    @id @default(uuid())
+  offlineId             String    @unique
+  businessId            String
+  storeId               String?
+  receiptNumber         String?   @unique
+  amendmentNumber       String?
+  orderId               String?   @unique
+  cashierId             String?
+  customerId            String?
+  customerName          String?
+  customerPhone         String?
+  notes                 String?
+  proformaValidUntil    DateTime?
+  type                  String    @default("NORMAL")
+  status                String    @default("DRAFT")
+  priceLevel            String    @default("RETAIL")
+  subtotalCents         Int       @default(0)
+  serviceChargeCents    Int       @default(0)
+  vatCents              Int       @default(0)
+  totCents              Int       @default(0)
+  totalCents            Int       @default(0)
+  etimsSubmitted        Boolean   @default(false)
+  etimsControlNumber    String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  deletedAt             DateTime?
+
+  store               Store?    @relation(fields: [storeId], references: [id])
+  cashier             User?     @relation(fields: [cashierId], references: [id])
+  customer            Customer? @relation(fields: [customerId], references: [id])
+  order               Order?    @relation(fields: [orderId], references: [id])
+  layaway             Layaway?
+  items               SaleItem[]
+  payments            Payment[]
+  movements           InventoryMovement[]
+  voidRecord          VoidRecord?
+  serialRecords       SerialRecord[]
+  returns             Return[]
+
+  @@index([businessId, storeId, status])
+  @@index([receiptNumber])
+  @@index([offlineId])
+}
+
+model Order {
+  id          String    @id @default(uuid())
+  offlineId   String    @unique
+  businessId  String
+  storeId     String
+  tableId     String?
+  roomNumber  String?
+  waiterId    String
+  status      String    @default("OPEN")
+  mode        String    @default("HOSPITALITY")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  store       Store     @relation(fields: [storeId], references: [id])
+  waiter      User      @relation(fields: [waiterId], references: [id])
+  table       Table?    @relation(fields: [tableId], references: [id])
+  items       OrderItem[]
+  kots        KOT[]
+  sale        Sale?
+
+  @@index([businessId, storeId, status])
+  @@index([offlineId])
+}
+
+model Employee {
+  id               String    @id @default(uuid())
+  userId           String    @unique
+  businessId       String
+  idNumber         String?
+  emergencyContact String?
+  employmentType   String    @default("PERMANENT")
+  commissionRate   Float     @default(0)
+  salesTargetCents Int?
+  startDate        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user             User      @relation(fields: [userId], references: [id])
+  attendance       AttendanceRecord[]
+  leaves           Leave[]
+
+  @@index([businessId])
+}
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  businessId    String
+  previousHash  String
+  hash          String
+  actor         String
+  actorType     String
+  action        String
+  entity        String
+  entityId      String
+  before        String?
+  after         String?
+  source        String
+  createdAt     DateTime @default(now())
+
+  business      Business @relation(fields: [businessId], references: [id])
+
+  @@index([businessId, createdAt])
+  @@index([entity, entityId])
+}
+
+model ApiKey {
+  id              String   @id @default(uuid())
+  businessId      String
+  name            String
+  keyHash         String   @unique
+  scopes          String
+  ipWhitelist     String
+  isActive        Boolean  @default(true)
+  lastUsedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  business        Business @relation(fields: [businessId], references: [id])
+
+  @@index([businessId])
+}
+
+model SaleItem {
+  id              String   @id @default(uuid())
+  saleId          String
+  itemId          String?
+  name            String
+  quantity        Int
+  unitPriceCents  Int
+  totalCents      Int
+  createdAt       DateTime @default(now())
+
+  sale            Sale     @relation(fields: [saleId], references: [id])
+  item            Item?    @relation(fields: [itemId], references: [id])
+
+  @@index([saleId])
+}
+
+model OrderItem {
+  id                  String   @id @default(uuid())
+  orderId             String
+  itemId              String
+  name                String
+  quantity            Int
+  unitPriceCents      Int
+  totalCents          Int
+  specialInstructions String?
+  modifiers           String?
+  createdAt           DateTime @default(now())
+
+  order               Order    @relation(fields: [orderId], references: [id])
+  item                Item     @relation(fields: [itemId], references: [id])
+
+  @@index([orderId])
+}
+
+model Payment {
+  id              String   @id @default(uuid())
+  offlineId       String   @unique
+  saleId          String
+  method          String
+  amountCents     Int
+  reference       String?
+  createdAt       DateTime @default(now())
+
+  sale            Sale     @relation(fields: [saleId], references: [id])
+
+  @@index([saleId])
+}
+
+model VoidRecord {
+  id                String   @id @default(uuid())
+  saleId            String   @unique
+  type              String
+  authorizedBy      String
+  reason            String
+  voidedItemIds     String
+  refundAmountCents Int
+  etimsVoidRef      String?
+  createdAt         DateTime @default(now())
+
+  sale              Sale     @relation(fields: [saleId], references: [id])
+
+  @@index([saleId])
+}
+
+model InventoryMovement {
+  id              String    @id @default(uuid())
+  offlineId       String    @unique
+  businessId      String
+  itemId          String
+  storeId         String
+  type            String
+  quantity        Int
+  batchId         String?
+  saleId          String?
+  recipeItemId    String?
+  bundleItemId    String?
+  grnId           String?
+  source          String
+  createdAt       DateTime  @default(now())
+
+  item            Item      @relation(fields: [itemId], references: [id])
+  batch           Batch?    @relation(fields: [batchId], references: [id])
+  sale            Sale?     @relation(fields: [saleId], references: [id])
+
+  @@index([businessId, itemId, createdAt])
+  @@index([type])
+  @@index([offlineId])
+}
+
+model Table {
+  id           String             @id @default(uuid())
+  storeId      String
+  number       String
+  capacity     Int
+  floor        String?
+  status       String             @default("AVAILABLE")
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  store        Store              @relation(fields: [storeId], references: [id])
+  orders       Order[]
+  reservations TableReservation[]
+
+  @@index([storeId, status])
+}
+
+model Printer {
+  id                String   @id @default(uuid())
+  storeId           String
+  name              String
+  connectionType    String
+  connectionDetails String
+  isDefault         Boolean  @default(false)
+  handles           String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  store             Store    @relation(fields: [storeId], references: [id])
+
+  @@index([storeId])
+}
+
+model BundleComponent {
+  id                String   @id @default(uuid())
+  bundleItemId      String
+  componentItemId   String
+  quantity          Int
+  createdAt         DateTime @default(now())
+
+  bundleItem        Item     @relation("BundleItem", fields: [bundleItemId], references: [id])
+  componentItem     Item     @relation("ComponentItem", fields: [componentItemId], references: [id])
+
+  @@index([bundleItemId])
+}
+
+model RecipeIngredient {
+  id                String   @id @default(uuid())
+  recipeItemId      String
+  ingredientItemId  String
+  quantityGrams     Float
+  createdAt         DateTime @default(now())
+
+  recipeItem        Item     @relation("RecipeItem", fields: [recipeItemId], references: [id])
+  ingredientItem    Item     @relation("IngredientItem", fields: [ingredientItemId], references: [id])
+
+  @@index([recipeItemId])
+}
+
+model Supplier {
+  id                      String   @id @default(uuid())
+  businessId              String
+  name                    String
+  contact                 String?
+  address                 String?
+  paymentTerms            String?
+  creditLimitCents        Int?
+  outstandingBalanceCents Int      @default(0)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  purchaseOrders          PurchaseOrder[]
+
+  @@index([businessId])
+}
+
+model PurchaseOrder {
+  id                String    @id @default(uuid())
+  poNumber          String    @unique
+  businessId        String
+  supplierId        String
+  status            String    @default("DRAFT")
+  expectedDelivery  DateTime?
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  supplier          Supplier  @relation(fields: [supplierId], references: [id])
+  items             POItem[]
+  grns              GRN[]
+
+  @@index([businessId, supplierId, status])
+}
+
+model POItem {
+  id                String   @id @default(uuid())
+  poId              String
+  itemId            String
+  quantityOrdered   Int
+  agreedPriceCents  Int
+  createdAt         DateTime @default(now())
+
+  po                PurchaseOrder @relation(fields: [poId], references: [id])
+
+  @@index([poId])
+}
+
+model GRN {
+  id          String   @id @default(uuid())
+  poId        String
+  receivedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  po          PurchaseOrder @relation(fields: [poId], references: [id])
+  items       GRNItem[]
+
+  @@index([poId])
+}
+
+model GRNItem {
+  id                String    @id @default(uuid())
+  grnId             String
+  poItemId          String
+  quantityReceived  Int
+  batchLotNumber    String?
+  expiryDate        DateTime?
+  createdAt         DateTime  @default(now())
+
+  grn               GRN       @relation(fields: [grnId], references: [id])
+
+  @@index([grnId])
+}
+
+model Expense {
+  id                    String    @id @default(uuid())
+  offlineId             String    @unique
+  businessId            String
+  storeId               String
+  amountCents           Int
+  category              String
+  description           String
+  paidBy                String
+  receiptPhotoUrl       String?
+  isRecurring           Boolean   @default(false)
+  recurringDay          Int?
+  approvalStatus        String    @default("APPROVED")
+  approvedBy            String?
+  submittedBy           String
+  cashDrawerSessionId   String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  deletedAt             DateTime?
+
+  @@index([businessId, category, createdAt])
+  @@index([approvalStatus])
+}
+
+model AttendanceRecord {
+  id          String    @id @default(uuid())
+  offlineId   String    @unique
+  employeeId  String
+  storeId     String
+  clockIn     DateTime
+  clockOut    DateTime?
+  isLate      Boolean   @default(false)
+  shiftDate   DateTime
+  createdAt   DateTime  @default(now())
+
+  employee    Employee  @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId, shiftDate])
+}
+
+model Leave {
+  id          String   @id @default(uuid())
+  employeeId  String
+  type        String
+  startDate   DateTime
+  endDate     DateTime
+  reason      String?
+  createdAt   DateTime @default(now())
+
+  employee    Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId])
+}
+
+model Customer {
+  id                String   @id @default(uuid())
+  businessId        String
+  name              String
+  phone             String?
+  email             String?
+  creditLimitCents  Int      @default(0)
+  balanceCents      Int      @default(0)
+  loyaltyPoints     Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  sales             Sale[]
+  layaways          Layaway[]
+
+  @@index([businessId])
+  @@index([phone])
+}
+
+model Layaway {
+  id                String   @id @default(uuid())
+  offlineId         String   @unique
+  businessId        String
+  storeId           String
+  customerId        String
+  saleId            String?  @unique
+  status            String   @default("ACTIVE")
+  totalCents        Int
+  paidCents         Int      @default(0)
+  remainingCents    Int
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  customer          Customer @relation(fields: [customerId], references: [id])
+  sale              Sale?    @relation(fields: [saleId], references: [id])
+  payments          LayawayPayment[]
+
+  @@index([businessId, customerId, status])
+}
+
+model LayawayPayment {
+  id          String   @id @default(uuid())
+  layawayId   String
+  amountCents Int
+  method      String
+  reference   String?
+  createdAt   DateTime @default(now())
+
+  layaway     Layaway  @relation(fields: [layawayId], references: [id])
+
+  @@index([layawayId])
+}
+
+model SerialRecord {
+  id            String   @id @default(uuid())
+  itemId        String
+  saleId        String?
+  serialNumber  String   @unique
+  status        String   @default("AVAILABLE")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  item          Item     @relation(fields: [itemId], references: [id])
+  sale          Sale?    @relation(fields: [saleId], references: [id])
+
+  @@index([itemId, status])
+  @@index([serialNumber])
+}
+
+model CashDrawerSession {
+  id                      String    @id @default(uuid())
+  businessId              String
+  storeId                 String
+  cashierId               String
+  status                  String    @default("OPEN")
+  openingBalanceCents     Int
+  closingBalanceCents     Int?
+  expectedBalanceCents    Int?
+  varianceCents           Int?
+  notes                   String?
+  openedAt                DateTime  @default(now())
+  closedAt                DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  @@index([businessId, storeId, cashierId])
+  @@index([status])
+}
+
+model StoreTransfer {
+  id                String    @id @default(uuid())
+  offlineId         String    @unique
+  businessId        String
+  fromStoreId       String
+  toStoreId         String
+  status            String    @default("PENDING")
+  initiatedBy       String
+  receivedBy        String?
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  items             TransferItem[]
+
+  @@index([businessId, fromStoreId, toStoreId])
+  @@index([status])
+}
+
+model TransferItem {
+  id                String    @id @default(uuid())
+  transferId        String
+  itemId            String
+  quantity          Int
+  createdAt         DateTime  @default(now())
+
+  transfer          StoreTransfer @relation(fields: [transferId], references: [id])
+
+  @@index([transferId])
+}
+
+model Integration {
+  id                String    @id @default(uuid())
+  businessId        String
+  type              String
+  name              String
+  config            String
+  isActive          Boolean   @default(true)
+  lastSyncAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([businessId, type])
+}
+
+model Promotion {
+  id                String    @id @default(uuid())
+  businessId        String
+  name              String
+  type              String
+  discountType      String
+  discountValue     Int
+  minPurchaseCents  Int?
+  maxDiscountCents  Int?
+  startDate         DateTime
+  endDate           DateTime
+  isActive          Boolean   @default(true)
+  applicableItems   String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([businessId, isActive])
+}
+
+model GiftCard {
+  id                String    @id @default(uuid())
+  businessId        String
+  code              String    @unique
+  initialValueCents Int
+  balanceCents      Int
+  status            String    @default("ACTIVE")
+  purchasedBy       String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  transactions      GiftCardTransaction[]
+
+  @@index([businessId, status])
+  @@index([code])
+}
+
+model GiftCardTransaction {
+  id                String    @id @default(uuid())
+  giftCardId        String
+  saleId            String?
+  type              String
+  amountCents       Int
+  balanceAfterCents Int
+  createdAt         DateTime  @default(now())
+
+  giftCard          GiftCard  @relation(fields: [giftCardId], references: [id])
+
+  @@index([giftCardId])
+}
+
+model LoyaltyProgram {
+  id                String    @id @default(uuid())
+  businessId        String
+  name              String
+  pointsPerCent     Float
+  redemptionRate    Float
+  minRedemption     Int
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([businessId])
+}
+
+model LoyaltyTransaction {
+  id                String    @id @default(uuid())
+  customerId        String
+  saleId            String?
+  type              String
+  points            Int
+  balanceAfter      Int
+  createdAt         DateTime  @default(now())
+
+  @@index([customerId])
+}
+
+model Return {
+  id                String   @id @default(uuid())
+  offlineId         String   @unique
+  businessId        String
+  saleId            String
+  refundAmountCents Int
+  refundMethod      String
+  reason            String
+  returnedItemIds   String
+  processedBy       String
+  createdAt         DateTime @default(now())
+
+  sale              Sale     @relation(fields: [saleId], references: [id])
+
+  @@index([businessId, saleId])
+}
+
+model KOT {
+  id          String    @id @default(uuid())
+  orderId     String
+  kotNumber   Int
+  type        String
+  status      String    @default("PENDING")
+  printedAt   DateTime?
+  preparedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  order       Order     @relation(fields: [orderId], references: [id])
+
+  @@index([orderId])
+  @@index([status])
+}
+
+model TableReservation {
+  id              String   @id @default(uuid())
+  tableId         String
+  customerName    String
+  customerPhone   String?
+  partySize       Int
+  reservationTime DateTime
+  duration        Int      @default(120)
+  status          String   @default("CONFIRMED")
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  table           Table    @relation(fields: [tableId], references: [id])
+
+  @@index([tableId, reservationTime])
+}

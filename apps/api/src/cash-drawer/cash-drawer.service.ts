@@ -1,0 +1,105 @@
+import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+
+@Injectable()
+export class CashDrawerService {
+  constructor(private prisma: PrismaService) {}
+
+  async openSession(data: {
+    businessId: string;
+    storeId: string;
+    cashierId: string;
+    openingBalanceCents: number;
+  }) {
+    return this.prisma.cashDrawerSession.create({
+      data: {
+        ...data,
+        status: 'OPEN',
+        openedAt: new Date(),
+      },
+    });
+  }
+
+  async closeSession(sessionId: string, data: {
+    closingBalanceCents: number;
+    expectedBalanceCents: number;
+    notes?: string;
+  }) {
+    const varianceCents = data.closingBalanceCents - data.expectedBalanceCents;
+    
+    return this.prisma.cashDrawerSession.update({
+      where: { id: sessionId },
+      data: {
+        ...data,
+        varianceCents,
+        status: 'CLOSED',
+        closedAt: new Date(),
+      },
+    });
+  }
+
+  async getCurrentSession(cashierId: string, storeId: string) {
+    return this.prisma.cashDrawerSession.findFirst({
+      where: {
+        cashierId,
+        storeId,
+        status: 'OPEN',
+      },
+      orderBy: { openedAt: 'desc' },
+    });
+  }
+
+  async getSessionSummary(sessionId: string) {
+    const session = await this.prisma.cashDrawerSession.findUnique({
+      where: { id: sessionId },
+    });
+
+    const sales = await this.prisma.sale.aggregate({
+      where: {
+        cashierId: session.cashierId,
+        storeId: session.storeId,
+        status: 'PAID',
+        createdAt: {
+          gte: session.openedAt,
+          lte: session.closedAt || new Date(),
+        },
+      },
+      _sum: { totalCents: true },
+      _count: true,
+    });
+
+    const cashPayments = await this.prisma.payment.aggregate({
+      where: {
+        method: 'CASH',
+        sale: {
+          cashierId: session.cashierId,
+          storeId: session.storeId,
+          createdAt: {
+            gte: session.openedAt,
+            lte: session.closedAt || new Date(),
+          },
+        },
+      },
+      _sum: { amountCents: true },
+    });
+
+    const expenses = await this.prisma.expense.aggregate({
+      where: {
+        cashDrawerSessionId: sessionId,
+      },
+      _sum: { amountCents: true },
+    });
+
+    return {
+      session,
+      totalSalesCents: sales._sum.totalCents || 0,
+      salesCount: sales._count,
+      cashPaymentsCents: cashPayments._sum.amountCents || 0,
+      expensesCents: expenses._sum.amountCents || 0,
+      expectedBalanceCents: 
+        session.openingBalanceCents + 
+        (cashPayments._sum.amountCents || 0) - 
+        (expenses._sum.amountCents || 0),
+    };
+  }
+}

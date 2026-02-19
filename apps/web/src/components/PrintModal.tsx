@@ -1,0 +1,110 @@
+import { useState } from 'react';
+import { X, Printer, Bluetooth, Usb, Globe } from 'lucide-react';
+import { printToBrowser, printToUSB, printToBluetooth, type ReceiptData } from '../lib/printer';
+
+interface PrintModalProps {
+  receipt: ReceiptData;
+  onClose: () => void;
+}
+
+export default function PrintModal({ receipt, onClose }: PrintModalProps) {
+  const [printing, setPrinting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handlePrint = async (method: 'browser' | 'usb' | 'bluetooth') => {
+    setPrinting(true);
+    setError('');
+    
+    try {
+      switch (method) {
+        case 'browser':
+          printToBrowser(receipt);
+          break;
+        case 'usb':
+          await printToUSB(receipt);
+          break;
+        case 'bluetooth':
+          await printToBluetooth(receipt);
+          break;
+      }
+      setTimeout(onClose, 500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Print failed');
+    } finally {
+      setPrinting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <h2 className="text-lg font-bold text-gray-800">Print Receipt</h2>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-3">
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          <button
+            onClick={() => handlePrint('browser')}
+            disabled={printing}
+            className="w-full flex items-center gap-3 p-4 border-2 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-colors disabled:opacity-50"
+          >
+            <Globe className="w-6 h-6 text-blue-600" />
+            <div className="text-left flex-1">
+              <div className="font-semibold text-gray-800">Browser Print</div>
+              <div className="text-xs text-gray-500">Print using system printer</div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => handlePrint('usb')}
+            disabled={printing}
+            className="w-full flex items-center gap-3 p-4 border-2 rounded-xl hover:border-green-500 hover:bg-green-50 transition-colors disabled:opacity-50"
+          >
+            <Usb className="w-6 h-6 text-green-600" />
+            <div className="text-left flex-1">
+              <div className="font-semibold text-gray-800">USB Thermal Printer</div>
+              <div className="text-xs text-gray-500">Connect via USB cable</div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => handlePrint('bluetooth')}
+            disabled={printing}
+            className="w-full flex items-center gap-3 p-4 border-2 rounded-xl hover:border-purple-500 hover:bg-purple-50 transition-colors disabled:opacity-50"
+          >
+            <Bluetooth className="w-6 h-6 text-purple-600" />
+            <div className="text-left flex-1">
+              <div className="font-semibold text-gray-800">Bluetooth Printer</div>
+              <div className="text-xs text-gray-500">Pair with Bluetooth device</div>
+            </div>
+          </button>
+
+          {printing && (
+            <div className="text-center py-2 text-sm text-gray-500">
+              <Printer className="w-5 h-5 animate-pulse mx-auto mb-1" />
+              Printing...
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 pb-6">
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

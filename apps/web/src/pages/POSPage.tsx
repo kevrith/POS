@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, ShoppingCart, Trash2, Plus, Minus, PauseCircle,
-  PlayCircle, X, ChevronDown, User,
+  PlayCircle, X, ChevronDown, User, MessageSquare, Star,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { usePOSStore, type ApiItem, type PriceLevel } from '../stores/pos';
@@ -21,8 +21,22 @@ interface SalePayload {
   cashierId: string;
   type: 'NORMAL';
   priceLevel: PriceLevel;
+  customerId?: string;
   items: Array<{ itemId: string; quantity: number }>;
   payments: Array<{ method: string; amountCents: number; reference?: string }>;
+  discountCents?: number;
+  promotionId?: string;
+}
+
+interface Promotion {
+  id: string;
+  name: string;
+  type: string;
+  discountType: string;
+  discountValue: number;
+  minPurchaseCents?: number;
+  maxDiscountCents?: number;
+  applicableItems: string; // JSON array of item IDs
 }
 
 interface SaleResult {
@@ -61,7 +75,7 @@ export default function POSPage() {
   const {
     cart, addToCart, removeFromCart, updateQuantity, updateDiscount, clearCart,
     priceLevel, setPriceLevel,
-    customerId: _customerId, customerName, setCustomer,
+    customerId, customerName, setCustomer,
     heldSales, holdCurrentSale, resumeHeldSale, discardHeldSale,
   } = usePOSStore();
 
@@ -74,6 +88,10 @@ export default function POSPage() {
   const [lastReceipt, setLastReceipt] = useState<SaleResult | null>(null);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [serviceChargeEnabled, setServiceChargeEnabled] = useState(false);
+  const [loyaltyDiscountApplied, setLoyaltyDiscountApplied] = useState(false);
+  const [loyaltyDiscountCents, setLoyaltyDiscountCents] = useState(0);
+  const [customerPhone, setCustomerPhone] = useState<string | null>(null);
+  const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const businessId = user?.businessId ?? '';
@@ -98,6 +116,39 @@ export default function POSPage() {
     enabled: !!businessId,
   });
 
+  const { data: activePromotions = [] } = useQuery<Promotion[]>({
+    queryKey: ['active-promotions', businessId],
+    queryFn: () => api.get<Promotion[]>(`/promotions/active?businessId=${businessId}`),
+    enabled: !!businessId,
+    staleTime: 60_000,
+  });
+
+  // Loyalty points for selected customer
+  const { data: loyaltyData } = useQuery<{ loyaltyPoints: number; program?: { redemptionRate: number; minRedemption: number } } | null>({
+    queryKey: ['loyalty-customer', customerId],
+    queryFn: async () => {
+      if (!customerId) return null;
+      try {
+        const [customer, program] = await Promise.all([
+          api.get<{ id: string; phone?: string; loyaltyPoints: number }>(`/businesses/${businessId}/customers/${customerId}`),
+          api.get<{ pointsPerCent: number; redemptionRate: number; minRedemption: number } | null>(`/loyalty/program?businessId=${businessId}`).catch(() => null),
+        ]);
+        if (customer?.phone) setCustomerPhone(customer.phone);
+        return { loyaltyPoints: customer.loyaltyPoints ?? 0, program: program ?? undefined };
+      } catch {
+        return null;
+      }
+    },
+    enabled: !!customerId && !!businessId,
+  });
+
+  // Reset loyalty discount when customer changes or cart is cleared
+  useEffect(() => {
+    setLoyaltyDiscountApplied(false);
+    setLoyaltyDiscountCents(0);
+    setCustomerPhone(null);
+  }, [customerId]);
+
   // ─── Filtered items ─────────────────────────────────────
 
   const filteredItems =
@@ -109,10 +160,30 @@ export default function POSPage() {
 
   const subtotalCents = cart.reduce((s, i) => s + i.totalCents, 0);
   const serviceChargeCents = serviceChargeEnabled ? Math.round(subtotalCents * 0.10) : 0;
+
+  // Best applicable promotion
+  const cartItemIds = cart.map((i) => i.id);
+  const appliedPromotion = activePromotions.find((p) => {
+    if (p.minPurchaseCents && subtotalCents < p.minPurchaseCents) return false;
+    const applicableItems: string[] = (() => { try { return JSON.parse(p.applicableItems) as string[]; } catch { return []; } })();
+    if (applicableItems.length > 0 && !cartItemIds.some(id => applicableItems.includes(id))) return false;
+    return true;
+  });
+  const promoDiscountCents = (() => {
+    if (!appliedPromotion || subtotalCents === 0) return 0;
+    let d = appliedPromotion.discountType === 'PERCENTAGE'
+      ? Math.round((subtotalCents * appliedPromotion.discountValue) / 100)
+      : appliedPromotion.discountValue;
+    if (appliedPromotion.maxDiscountCents && d > appliedPromotion.maxDiscountCents) d = appliedPromotion.maxDiscountCents;
+    return d;
+  })();
+
+  const totalDiscountCents = promoDiscountCents + (loyaltyDiscountApplied ? loyaltyDiscountCents : 0);
+  const taxBase = subtotalCents - totalDiscountCents;
   const vatCents = Math.round(
-    cart.filter((i) => i.vatApplicable).reduce((s, i) => s + i.totalCents, 0) * 0.16,
+    cart.filter((i) => i.vatApplicable).reduce((s, i) => s + i.totalCents, 0) * 0.16 * (Math.max(taxBase, 0) / Math.max(subtotalCents, 1)),
   );
-  const totalCents = subtotalCents + serviceChargeCents + vatCents;
+  const totalCents = Math.max(0, taxBase) + serviceChargeCents + vatCents;
 
   // ─── Checkout ──────────────────────────────────────────
 
@@ -124,15 +195,40 @@ export default function POSPage() {
         cashierId: user?.id ?? '',
         type: 'NORMAL',
         priceLevel,
+        customerId: customerId ?? undefined,
         items: cart.map((i) => ({ itemId: i.id, quantity: i.quantity })),
         payments,
+        ...(totalDiscountCents > 0 && {
+          discountCents: totalDiscountCents,
+          promotionId: appliedPromotion?.id,
+        }),
       };
       return api.post<SaleResult>('/sales/checkout', payload);
     },
     onSuccess: (result) => {
       setLastReceipt(result);
-      
-      // Prepare receipt data for printing
+
+      // Redeem gift card if used as payment
+      const gcPayment = (checkoutMutation.variables ?? []).find((p) => p.method === 'GIFT_CARD');
+      if (gcPayment?.reference) {
+        void api.post(`/gift-cards/${gcPayment.reference}/redeem`, {
+          amountCents: gcPayment.amountCents,
+          saleId: result.id,
+        });
+      }
+
+      // Earn loyalty points if customer linked
+      if (customerId) {
+        void api.post('/loyalty/earn', {
+          customerId,
+          saleCents: subtotalCents,
+          saleId: result.id,
+        }).then(() => {
+          void qc.invalidateQueries({ queryKey: ['loyalty-customer', customerId] });
+        }).catch(() => {/* non-critical */});
+      }
+
+      // Prepare receipt data for printing (eTIMS not yet submitted)
       const receipt: ReceiptData = {
         receiptNumber: result.receiptNumber,
         businessName: 'Universal POS',
@@ -140,6 +236,7 @@ export default function POSPage() {
         date: new Date().toISOString(),
         cashierName: user?.name ?? 'Cashier',
         customerName: customerName ?? undefined,
+        customerPhone: customerPhone ?? undefined,
         items: cart.map(item => ({
           name: item.name,
           quantity: item.quantity,
@@ -152,19 +249,41 @@ export default function POSPage() {
         vatCents,
         totalCents,
         payments: checkoutMutation.variables ?? [],
+        etimsSubmitted: false,
+        saleId: result.id,
       };
       setReceiptData(receipt);
-      
+
+      // Best-effort eTIMS submission in background
+      void api.post(`/etims/submit/${result.id}`).then(() => {
+        setReceiptData((prev) => prev ? { ...prev, etimsSubmitted: true } : prev);
+      }).catch(() => {/* will show watermark if fails */});
+
       clearCart();
+      setLoyaltyDiscountApplied(false);
+      setLoyaltyDiscountCents(0);
       setShowPayment(false);
       void qc.invalidateQueries({ queryKey: ['items'] });
     },
   });
 
-  // ─── Barcode scan handler ───────────────────────────────
+  // ─── Barcode / quick-entry handler ──────────────────────
 
-  const handleBarcodeSearch = useCallback((barcode: string) => {
-    const item = items.find(i => i.barcode === barcode);
+  const handleBarcodeSearch = useCallback((raw: string) => {
+    // Quick keyboard entry: "3×500" or "3x500" => find item at KES 500 and add 3 times
+    const qkMatch = raw.match(/^(\d+)[x×*](\d+)$/i);
+    if (qkMatch) {
+      const qty = parseInt(qkMatch[1]);
+      const priceCents = parseInt(qkMatch[2]) * 100;
+      const hit = items.find(i => i.retailPriceCents === priceCents);
+      if (hit) {
+        for (let k = 0; k < qty; k++) addToCart(hit);
+        setSearch('');
+        return;
+      }
+    }
+    // Barcode scan fallback
+    const item = items.find(i => i.barcode === raw);
     if (item) {
       addToCart(item);
       setSearch('');
@@ -249,12 +368,43 @@ export default function POSPage() {
           </div>
 
           {customerName ? (
-            <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg text-sm">
-              <User className="w-4 h-4 text-blue-600" />
-              <span className="text-blue-700 font-medium">{customerName}</span>
-              <button onClick={() => setCustomer(null, null)} className="text-blue-400 hover:text-blue-700">
-                <X className="w-3 h-3" />
-              </button>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg text-sm">
+                <User className="w-4 h-4 text-blue-600" />
+                <span className="text-blue-700 font-medium">{customerName}</span>
+                <button onClick={() => setCustomer(null, null)} className="text-blue-400 hover:text-blue-700">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+              {loyaltyData && loyaltyData.loyaltyPoints > 0 && loyaltyData.program && (
+                <button
+                  onClick={async () => {
+                    if (loyaltyDiscountApplied) {
+                      setLoyaltyDiscountApplied(false);
+                      setLoyaltyDiscountCents(0);
+                    } else {
+                      try {
+                        const result = await api.post<{ discountCents: number }>('/loyalty/redeem', {
+                          customerId,
+                          points: loyaltyData.loyaltyPoints,
+                          saleId: 'preview',
+                        });
+                        setLoyaltyDiscountCents(result.discountCents);
+                        setLoyaltyDiscountApplied(true);
+                      } catch { /* insufficient points or no program */ }
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                    loyaltyDiscountApplied
+                      ? 'bg-yellow-500 text-white'
+                      : 'bg-yellow-50 text-yellow-700 border border-yellow-300 hover:bg-yellow-100'
+                  }`}
+                  title={`${loyaltyData.loyaltyPoints} pts = KES ${((loyaltyData.loyaltyPoints * (loyaltyData.program?.redemptionRate ?? 0)) / 100).toFixed(0)}`}
+                >
+                  <Star className="w-3.5 h-3.5" />
+                  {loyaltyDiscountApplied ? `−KES ${(loyaltyDiscountCents / 100).toFixed(0)}` : `${loyaltyData.loyaltyPoints} pts`}
+                </button>
+              )}
             </div>
           ) : (
             <button
@@ -474,6 +624,15 @@ export default function POSPage() {
               <span>Subtotal</span>
               <span>{formatKES(subtotalCents)}</span>
             </div>
+            {promoDiscountCents > 0 && (
+              <div className="flex justify-between text-green-600 font-medium">
+                <span className="flex items-center gap-1">
+                  <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">PROMO</span>
+                  {appliedPromotion?.name}
+                </span>
+                <span>-{formatKES(promoDiscountCents)}</span>
+              </div>
+            )}
             {serviceChargeCents > 0 && (
               <div className="flex justify-between text-gray-600">
                 <span>Service (10%)</span>
@@ -564,6 +723,29 @@ export default function POSPage() {
             >
               Print
             </button>
+            {customerPhone && (
+              <button
+                onClick={async () => {
+                  setSendingWhatsApp(true);
+                  try {
+                    await api.post('/notifications/send-receipt', {
+                      businessId,
+                      phone: customerPhone,
+                      receiptNumber: lastReceipt.receiptNumber,
+                      totalCents: lastReceipt.totalCents,
+                      channel: 'whatsapp',
+                    });
+                  } finally {
+                    setSendingWhatsApp(false);
+                  }
+                }}
+                disabled={sendingWhatsApp}
+                className="px-3 py-1.5 bg-teal-500 rounded-lg hover:bg-teal-400 disabled:opacity-50"
+                title="Send WhatsApp receipt"
+              >
+                <MessageSquare className="w-4 h-4" />
+              </button>
+            )}
             <button
               onClick={() => { setLastReceipt(null); setReceiptData(null); }}
               className="px-3 py-1.5 bg-green-700 rounded-lg hover:bg-green-800"

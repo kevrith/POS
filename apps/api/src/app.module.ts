@@ -28,6 +28,8 @@ import { GiftCardsModule } from './gift-cards/gift-cards.module';
 import { LoyaltyModule } from './loyalty/loyalty.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { BusinessModule } from './business/business.module';
+import { BudgetModule } from './budget/budget.module';
+import { PrintersModule } from './printers/printers.module';
 
 @Module({
   imports: [
@@ -65,6 +67,8 @@ import { BusinessModule } from './business/business.module';
     LoyaltyModule,
     NotificationsModule,
     BusinessModule,
+    BudgetModule,
+    PrintersModule,
   ],
 })
 export class AppModule {}

@@ -10,6 +10,7 @@ export interface ReceiptData {
   date: string;
   cashierName: string;
   customerName?: string;
+  customerPhone?: string;
   items: Array<{
     name: string;
     quantity: number;
@@ -30,7 +31,9 @@ export interface ReceiptData {
   changeCents?: number;
   kraQRCode?: string;
   kraControlNumber?: string;
+  etimsSubmitted?: boolean;
   notes?: string;
+  saleId?: string;
 }
 
 // ESC/POS Commands
@@ -74,6 +77,13 @@ function line(char: string = '-', width: number = 32): string {
 // Generate ESC/POS commands for thermal printer
 export function generateESCPOS(receipt: ReceiptData): string {
   let output = ESCPOS.INIT;
+
+  // Pending KRA watermark
+  if (receipt.etimsSubmitted === false) {
+    output += ESCPOS.ALIGN_CENTER + ESCPOS.BOLD_ON;
+    output += '*** PENDING KRA SUBMISSION ***' + ESCPOS.FEED;
+    output += ESCPOS.BOLD_OFF;
+  }
 
   // Header
   output += ESCPOS.ALIGN_CENTER + ESCPOS.BOLD_ON + ESCPOS.DOUBLE_HEIGHT;
@@ -198,9 +208,21 @@ export function generateHTML(receipt: ReceiptData): string {
     table { width: 100%; border-collapse: collapse; }
     td { padding: 2px 0; }
     .right { text-align: right; }
+    .pending-watermark {
+      background: #fee2e2;
+      border: 2px solid #ef4444;
+      color: #991b1b;
+      text-align: center;
+      font-weight: bold;
+      font-size: 11px;
+      padding: 6px 4px;
+      margin-bottom: 8px;
+      letter-spacing: 0.5px;
+    }
   </style>
 </head>
 <body>
+  ${receipt.etimsSubmitted === false ? `<div class="pending-watermark">⚠ PENDING KRA SUBMISSION</div>` : ''}
   <div class="center bold large">${receipt.businessName}</div>
   <div class="center">${receipt.storeName}</div>
   ${receipt.storeAddress ? `<div class="center small">${receipt.storeAddress}</div>` : ''}

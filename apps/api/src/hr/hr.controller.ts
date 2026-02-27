@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Patch, Body, Param, Query } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Body, Param, Query } from '@nestjs/common';
 import { HrService } from './hr.service';
 
 @Controller('hr')
@@ -79,5 +79,33 @@ export class HrController {
     @Query('year') year: string,
   ) {
     return this.hrService.getEmployeeStats(employeeId, parseInt(month), parseInt(year));
+  }
+
+  @Get('shifts')
+  async getShifts(
+    @Query('businessId') businessId: string,
+    @Query('storeId') storeId?: string,
+  ) {
+    return this.hrService.getShifts(businessId, storeId);
+  }
+
+  @Post('shifts')
+  async createShift(@Body() data: {
+    businessId: string;
+    storeId: string;
+    employeeId: string;
+    startTime: string;
+    endTime: string;
+    dayOfWeek: number;
+  }) {
+    return this.hrService.createShift(data);
+  }
+
+  @Delete('shifts/:id')
+  async deleteShift(
+    @Param('id') id: string,
+    @Query('businessId') businessId: string,
+  ) {
+    return this.hrService.deleteShift(id, businessId);
   }
 }

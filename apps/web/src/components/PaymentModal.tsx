@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, DollarSign, Smartphone, CreditCard, Scissors, AlertCircle, Loader2, CheckCircle } from 'lucide-react';
+import { X, DollarSign, Smartphone, CreditCard, Scissors, AlertCircle, Loader2, CheckCircle, Gift } from 'lucide-react';
 import { api } from '../lib/api';
 
 function formatKES(cents: number): string {
@@ -9,7 +9,13 @@ function formatKES(cents: number): string {
   })}`;
 }
 
-type PaymentMethod = 'CASH' | 'MPESA_STK' | 'MPESA_QR' | 'SPLIT';
+type PaymentMethod = 'CASH' | 'MPESA_STK' | 'MPESA_QR' | 'SPLIT' | 'GIFT_CARD';
+
+interface GiftCard {
+  code: string;
+  currentBalanceCents: number;
+  status: string;
+}
 type StkStatus = 'idle' | 'sending' | 'waiting' | 'paid' | 'failed';
 
 interface PaymentEntry {
@@ -45,6 +51,10 @@ export default function PaymentModal({
   const [splitMethod, setSplitMethod] = useState<'CASH' | 'MPESA_STK'>('CASH');
   const [splitAmount, setSplitAmount] = useState('');
   const [splitPhone, setSplitPhone] = useState('');
+  const [gcCode, setGcCode] = useState('');
+  const [gcCard, setGcCard] = useState<GiftCard | null>(null);
+  const [gcError, setGcError] = useState('');
+  const [gcLookingUp, setGcLookingUp] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const cashCents = Math.round(parseFloat(cashInput || '0') * 100);
@@ -134,6 +144,29 @@ export default function PaymentModal({
     onComplete([{ method: 'MPESA_QR', amountCents: totalCents }]);
   }
 
+  async function lookupGiftCard() {
+    const code = gcCode.trim().toUpperCase();
+    if (!code) return;
+    setGcLookingUp(true);
+    setGcError('');
+    setGcCard(null);
+    try {
+      const card = await api.get<GiftCard>(`/gift-cards/${code}`);
+      if (card.status !== 'ACTIVE') { setGcError('This gift card is not active'); return; }
+      setGcCard(card);
+    } catch (err) {
+      setGcError(err instanceof Error ? err.message : 'Gift card not found');
+    } finally {
+      setGcLookingUp(false);
+    }
+  }
+
+  function handleGiftCard() {
+    if (!gcCard) return;
+    const payAmount = Math.min(gcCard.currentBalanceCents, totalCents);
+    onComplete([{ method: 'GIFT_CARD', amountCents: payAmount, reference: gcCode.trim().toUpperCase() }]);
+  }
+
   function addSplitLeg() {
     if (splitLegCents <= 0 || splitLegCents > splitRemainingCents) return;
     if (splitMethod === 'MPESA_STK' && splitPhone.replace(/\s/g, '').length < 9) return;
@@ -157,6 +190,7 @@ export default function PaymentModal({
     { id: 'CASH', label: 'Cash', Icon: DollarSign },
     { id: 'MPESA_STK', label: 'M-Pesa', Icon: Smartphone },
     { id: 'MPESA_QR', label: 'QR', Icon: CreditCard },
+    { id: 'GIFT_CARD', label: 'Gift Card', Icon: Gift },
     { id: 'SPLIT', label: 'Split', Icon: Scissors },
   ];
 
@@ -373,6 +407,85 @@ export default function PaymentModal({
               >
                 {isProcessing ? 'Generating…' : 'Generate QR Code'}
               </button>
+            </div>
+          )}
+
+          {/* ── GIFT CARD ── */}
+          {method === 'GIFT_CARD' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Gift Card Code</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={gcCode}
+                    onChange={(e) => { setGcCode(e.target.value.toUpperCase()); setGcCard(null); setGcError(''); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') void lookupGiftCard(); }}
+                    placeholder="GC-XXXX-XXXX"
+                    className="flex-1 px-4 py-3 border rounded-xl text-lg font-mono uppercase tracking-wider focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => void lookupGiftCard()}
+                    disabled={gcLookingUp || !gcCode.trim()}
+                    className="px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-medium disabled:opacity-40"
+                  >
+                    {gcLookingUp ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Check'}
+                  </button>
+                </div>
+              </div>
+
+              {gcError && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  {gcError}
+                </div>
+              )}
+
+              {gcCard && (
+                <div className="space-y-3">
+                  <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Card Balance</span>
+                      <span className="font-bold text-purple-700 text-base">{formatKES(gcCard.currentBalanceCents)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Sale Total</span>
+                      <span className="font-medium">{formatKES(totalCents)}</span>
+                    </div>
+                    {gcCard.currentBalanceCents < totalCents && (
+                      <div className="flex justify-between text-sm border-t pt-2">
+                        <span className="text-orange-600 font-medium">Remaining to pay</span>
+                        <span className="text-orange-600 font-bold">{formatKES(totalCents - gcCard.currentBalanceCents)}</span>
+                      </div>
+                    )}
+                    {gcCard.currentBalanceCents >= totalCents && (
+                      <div className="flex justify-between text-sm border-t pt-2">
+                        <span className="text-green-600 font-medium">Remaining balance after</span>
+                        <span className="text-green-600 font-bold">{formatKES(gcCard.currentBalanceCents - totalCents)}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {gcCard.currentBalanceCents < totalCents ? (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                      Insufficient balance. Partial payment of {formatKES(gcCard.currentBalanceCents)} will be applied — pay the remainder via another method.
+                    </p>
+                  ) : null}
+
+                  <button
+                    onClick={handleGiftCard}
+                    disabled={isProcessing}
+                    className="w-full py-3.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl disabled:opacity-40 transition-colors"
+                  >
+                    {isProcessing
+                      ? 'Processing…'
+                      : gcCard.currentBalanceCents >= totalCents
+                        ? 'Pay with Gift Card'
+                        : `Apply ${formatKES(gcCard.currentBalanceCents)} from Gift Card`}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

@@ -12,6 +12,7 @@ interface FindAllOptions {
   startDate?: Date;
   endDate?: Date;
   status?: string;
+  etimsSubmitted?: boolean;
   limit: number;
   offset: number;
 }
@@ -40,6 +41,8 @@ interface CreateSaleDto {
   priceLevel: 'RETAIL' | 'WHOLESALE' | 'VIP';
   items: Array<{ itemId: string; quantity: number }>;
   payments: Array<{ method: string; amountCents: number; reference?: string }>;
+  discountCents?: number;
+  promotionId?: string;
 }
 
 @Injectable()
@@ -95,9 +98,11 @@ export class SalesService {
       }
 
       const serviceChargeCents = calculateServiceCharge(subtotalCents, store.business.serviceChargeRate);
-      const vatCents = store.business.taxType === 'VAT' ? calculateVAT(subtotalCents) : 0;
-      const totCents = store.business.taxType === 'TOT' ? calculateTOT(subtotalCents) : 0;
-      const totalCents = subtotalCents + serviceChargeCents + vatCents + totCents;
+      const discountCents = dto.discountCents ?? 0;
+      const taxBase = subtotalCents - discountCents;
+      const vatCents = store.business.taxType === 'VAT' ? calculateVAT(taxBase) : 0;
+      const totCents = store.business.taxType === 'TOT' ? calculateTOT(taxBase) : 0;
+      const totalCents = taxBase + serviceChargeCents + vatCents + totCents;
 
       const receiptNumber = `${store.storeCode}-${new Date().getFullYear()}-${String(store.receiptSequence + 1).padStart(7, '0')}`;
 
@@ -114,6 +119,8 @@ export class SalesService {
           priceLevel: dto.priceLevel,
           subtotalCents,
           serviceChargeCents,
+          discountCents,
+          promotionId: dto.promotionId,
           vatCents,
           totCents,
           totalCents,
@@ -332,6 +339,7 @@ export class SalesService {
 
     if (opts.storeId) where['storeId'] = opts.storeId;
     if (opts.status) where['status'] = opts.status;
+    if (opts.etimsSubmitted !== undefined) where['etimsSubmitted'] = opts.etimsSubmitted;
     if (opts.startDate || opts.endDate) {
       where['createdAt'] = {
         ...(opts.startDate ? { gte: opts.startDate } : {}),

@@ -11,6 +11,12 @@ import {
   Loader2,
   RotateCcw,
   Eye,
+  Sliders,
+  Trash2,
+  Download,
+  Upload,
+  Printer,
+  CheckCircle,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
@@ -82,6 +88,18 @@ interface CreateItemPayload {
   storeId?: string;
 }
 
+interface ItemVariant {
+  id: string;
+  itemId: string;
+  name: string;
+  sku?: string;
+  barcode?: string;
+  retailPriceCents: number;
+  wholesalePriceCents?: number;
+  costPriceCents?: number;
+  attributes: string; // JSON string
+}
+
 interface AdjustmentPayload {
   itemId: string;
   storeId: string;
@@ -141,6 +159,17 @@ function stockColor(item: InventoryItem): string {
     return 'text-yellow-600 font-semibold';
   }
   return 'text-gray-800';
+}
+
+function downloadCsv(filename: string, rows: string[][]) {
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ---------------------------------------------------------------------------
@@ -528,6 +557,464 @@ function AdjustStockModal({ item, storeId, onClose }: AdjustStockModalProps) {
 // Items Tab
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Variants Modal
+// ---------------------------------------------------------------------------
+
+interface VariantsModalProps {
+  item: InventoryItem;
+  businessId: string;
+  onClose: () => void;
+}
+
+function VariantsModal({ item, businessId, onClose }: VariantsModalProps) {
+  const qc = useQueryClient();
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({ name: '', sku: '', barcode: '', retailPrice: '', costPrice: '', color: '', size: '' });
+  const [formError, setFormError] = useState('');
+
+  const { data: variants = [], isLoading } = useQuery<ItemVariant[]>({
+    queryKey: ['variants', item.id],
+    queryFn: () => api.get<ItemVariant[]>(`/items/${item.id}/variants?businessId=${businessId}`),
+  });
+
+  const addMutation = useMutation({
+    mutationFn: (payload: unknown) => api.post(`/items/${item.id}/variants?businessId=${businessId}`, payload),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['variants', item.id] }); setShowAdd(false); setForm({ name: '', sku: '', barcode: '', retailPrice: '', costPrice: '', color: '', size: '' }); },
+    onError: (err: Error) => setFormError(err.message),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (variantId: string) => api.delete(`/items/${item.id}/variants/${variantId}?businessId=${businessId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['variants', item.id] }),
+  });
+
+  function handleAdd(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.name.trim()) { setFormError('Name is required'); return; }
+    const retailPriceCents = Math.round(parseFloat(form.retailPrice) * 100);
+    if (!retailPriceCents || retailPriceCents <= 0) { setFormError('Valid retail price required'); return; }
+    const attributes: Record<string, string> = {};
+    if (form.color.trim()) attributes['color'] = form.color.trim();
+    if (form.size.trim()) attributes['size'] = form.size.trim();
+    addMutation.mutate({
+      name: form.name.trim(),
+      sku: form.sku.trim() || undefined,
+      barcode: form.barcode.trim() || undefined,
+      retailPriceCents,
+      costPriceCents: form.costPrice ? Math.round(parseFloat(form.costPrice) * 100) : undefined,
+      attributes,
+    });
+  }
+
+  const inputCls = 'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Variants — {item.name}</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Manage size, color, or other attribute variants</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8 text-gray-400 gap-2">
+              <Loader2 className="w-5 h-5 animate-spin" /> Loading variants…
+            </div>
+          ) : variants.length === 0 && !showAdd ? (
+            <div className="text-center py-8 text-gray-400">
+              <Sliders className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              <p className="text-sm">No variants yet</p>
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  {['Name', 'SKU', 'Barcode', 'Attributes', 'Retail Price', ''].map(h => (
+                    <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {variants.map((v) => {
+                  const attrs = (() => { try { return JSON.parse(v.attributes) as Record<string,string>; } catch { return {}; } })();
+                  return (
+                    <tr key={v.id} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 font-medium">{v.name}</td>
+                      <td className="px-3 py-2 font-mono text-xs text-gray-500">{v.sku ?? '—'}</td>
+                      <td className="px-3 py-2 font-mono text-xs text-gray-500">{v.barcode ?? '—'}</td>
+                      <td className="px-3 py-2">
+                        {Object.entries(attrs).map(([k, val]) => (
+                          <span key={k} className="inline-flex items-center bg-gray-100 text-gray-700 text-xs px-1.5 py-0.5 rounded mr-1">
+                            {k}: {val}
+                          </span>
+                        ))}
+                      </td>
+                      <td className="px-3 py-2">{fmt(v.retailPriceCents)}</td>
+                      <td className="px-3 py-2">
+                        <button
+                          onClick={() => deleteMutation.mutate(v.id)}
+                          className="text-red-400 hover:text-red-600 p-1"
+                          title="Delete variant"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+
+          {showAdd && (
+            <form onSubmit={handleAdd} className="border rounded-xl p-4 bg-gray-50 space-y-3">
+              <h3 className="text-sm font-semibold text-gray-700">Add Variant</h3>
+              {formError && <p className="text-xs text-red-600">{formError}</p>}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">Name *</label>
+                  <input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Large Red" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">Retail Price (KES) *</label>
+                  <input className={inputCls} type="number" min="0" step="0.01" value={form.retailPrice} onChange={(e) => setForm({ ...form, retailPrice: e.target.value })} />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">SKU</label>
+                  <input className={inputCls} value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} placeholder="Optional" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">Barcode</label>
+                  <input className={inputCls} value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} placeholder="Optional" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">Color</label>
+                  <input className={inputCls} value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} placeholder="e.g. Red" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">Size</label>
+                  <input className={inputCls} value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })} placeholder="e.g. XL" />
+                </div>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button type="submit" disabled={addMutation.isPending} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                  {addMutation.isPending ? 'Saving…' : 'Add Variant'}
+                </button>
+                <button type="button" onClick={() => setShowAdd(false)} className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5">Cancel</button>
+              </div>
+            </form>
+          )}
+        </div>
+
+        <div className="p-4 border-t flex justify-between">
+          <button
+            onClick={() => { setShowAdd(true); setFormError(''); }}
+            className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-800"
+          >
+            <Plus className="w-4 h-4" /> Add Variant
+          </button>
+          <button onClick={onClose} className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CSV Import Modal
+// ---------------------------------------------------------------------------
+
+function CsvImportModal({ businessId, storeId, onClose, onSuccess }: {
+  businessId: string;
+  storeId: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [csvText, setCsvText] = useState('');
+  const [preview, setPreview] = useState<Array<Record<string, string>>>([]);
+  const [result, setResult] = useState<{ imported: number; failed: number } | null>(null);
+  const [step, setStep] = useState<'upload' | 'preview' | 'done'>('upload');
+
+  function parseCsv(text: string): Array<Record<string, string>> {
+    const lines = text.trim().split('\n');
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+    return lines.slice(1).map(line => {
+      const vals = line.split(',').map(v => v.trim().replace(/"/g, ''));
+      const obj: Record<string, string> = {};
+      headers.forEach((h, i) => { obj[h] = vals[i] ?? ''; });
+      return obj;
+    });
+  }
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      setCsvText(text);
+      setPreview(parseCsv(text));
+      setStep('preview');
+    };
+    reader.readAsText(file);
+  }
+
+  const importMutation = useMutation({
+    mutationFn: () => {
+      const rows = preview.map(r => ({
+        name: r.name ?? r.Name ?? '',
+        category: r.category ?? r.Category ?? undefined,
+        retailPrice: parseFloat(r.retailPrice ?? r.retail_price ?? r['Retail Price'] ?? '0'),
+        costPrice: r.costPrice ? parseFloat(r.costPrice) : undefined,
+        barcode: r.barcode ?? r.Barcode ?? undefined,
+        currentStock: r.currentStock ? parseInt(r.currentStock) : undefined,
+        expiryDate: r.expiryDate ?? r.expiry_date ?? undefined,
+        lotNumber: r.lotNumber ?? r.lot_number ?? undefined,
+      })).filter(r => r.name);
+      return api.post<{ imported: number; failed: number }>('/items/import-csv', { businessId, storeId, rows });
+    },
+    onSuccess: (data) => {
+      setResult(data);
+      setStep('done');
+    },
+  });
+
+  const sampleCsv = `name,category,retailPrice,costPrice,barcode,currentStock
+Bread,Food,50,30,1234567890,100
+Milk 500ml,Drinks,65,45,0987654321,50
+Sugar 1kg,Food,130,90,,200`;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <h2 className="text-lg font-bold">Import Items from CSV</h2>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          {step === 'upload' && (
+            <div className="space-y-4">
+              <div className="bg-blue-50 rounded-lg p-4 text-sm text-blue-800">
+                <p className="font-semibold mb-2">CSV Format</p>
+                <p className="mb-2">Required: <strong>name</strong>, <strong>retailPrice</strong></p>
+                <p>Optional: category, costPrice, barcode, currentStock, expiryDate (YYYY-MM-DD), lotNumber</p>
+              </div>
+              <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center">
+                <Upload className="w-10 h-10 mx-auto text-gray-400 mb-3" />
+                <p className="text-gray-600 mb-2">Upload CSV file</p>
+                <input type="file" accept=".csv,.txt" onChange={handleFile} className="hidden" id="csv-file" />
+                <label htmlFor="csv-file" className="cursor-pointer px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+                  Choose File
+                </label>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 mb-2">Or paste CSV directly:</p>
+                <textarea
+                  value={csvText}
+                  onChange={(e) => { setCsvText(e.target.value); setPreview(parseCsv(e.target.value)); }}
+                  rows={6}
+                  placeholder={sampleCsv}
+                  className="w-full px-3 py-2 border rounded-lg text-xs font-mono resize-none"
+                />
+                {preview.length > 0 && (
+                  <button onClick={() => setStep('preview')} className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">
+                    Preview {preview.length} rows
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={() => { setCsvText(sampleCsv); setPreview(parseCsv(sampleCsv)); setStep('preview'); }}
+                className="text-sm text-blue-600 underline"
+              >
+                Load sample data
+              </button>
+            </div>
+          )}
+
+          {step === 'preview' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-gray-700">{preview.length} rows to import</p>
+                <button onClick={() => setStep('upload')} className="text-sm text-blue-600">← Back</button>
+              </div>
+              <div className="overflow-x-auto border rounded-lg">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      {preview[0] && Object.keys(preview[0]).map(k => (
+                        <th key={k} className="px-3 py-2 text-left font-medium text-gray-500">{k}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {preview.slice(0, 10).map((row, i) => (
+                      <tr key={i} className={!row.name ? 'bg-red-50' : ''}>
+                        {Object.values(row).map((v, j) => (
+                          <td key={j} className="px-3 py-2 text-gray-700">{v}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {preview.length > 10 && (
+                  <p className="px-3 py-2 text-xs text-gray-400">...and {preview.length - 10} more rows</p>
+                )}
+              </div>
+              {importMutation.error && (
+                <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+                  {importMutation.error instanceof Error ? importMutation.error.message : 'Import failed'}
+                </div>
+              )}
+            </div>
+          )}
+
+          {step === 'done' && result && (
+            <div className="text-center py-8">
+              <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
+              <p className="text-2xl font-bold text-gray-800">{result.imported} items imported</p>
+              {result.failed > 0 && (
+                <p className="text-sm text-red-600 mt-1">{result.failed} rows failed</p>
+              )}
+              <button onClick={() => { onSuccess(); onClose(); }} className="mt-6 px-6 py-2 bg-green-600 text-white rounded-lg font-medium">
+                Done
+              </button>
+            </div>
+          )}
+        </div>
+
+        {step === 'preview' && (
+          <div className="px-6 pb-6 pt-2 border-t flex gap-3">
+            <button onClick={onClose} className="flex-1 py-2.5 border rounded-lg text-gray-700 font-medium">
+              Cancel
+            </button>
+            <button
+              onClick={() => importMutation.mutate()}
+              disabled={importMutation.isPending || preview.length === 0}
+              className="flex-1 py-2.5 bg-blue-600 text-white font-bold rounded-lg disabled:opacity-40"
+            >
+              {importMutation.isPending ? 'Importing...' : `Import ${preview.length} Items`}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Barcode Label Modal
+// ---------------------------------------------------------------------------
+
+function BarcodeLabelModal({ items, onClose }: { items: Array<{ id: string; name: string; barcode?: string; retailPriceCents: number }>; onClose: () => void }) {
+  const [selected, setSelected] = useState<Set<string>>(new Set(items.slice(0, 10).map(i => i.id)));
+  const [cols, setCols] = useState(3);
+  const [showPrice, setShowPrice] = useState(true);
+
+  function printLabels() {
+    const win = window.open('', '_blank');
+    if (!win) return;
+    const selectedItems = items.filter(i => selected.has(i.id));
+    const labelHtml = selectedItems.map(item => `
+      <div style="width:${100/cols}%; display:inline-block; padding:4px; box-sizing:border-box; text-align:center; border:1px solid #ddd; font-family:monospace;">
+        <svg id="bc-${item.id}" style="width:100%;height:50px;"></svg>
+        <div style="font-size:10px;font-weight:bold;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.name}</div>
+        ${showPrice ? `<div style="font-size:12px;font-weight:bold">KES ${(item.retailPriceCents/100).toFixed(2)}</div>` : ''}
+        <div style="font-size:9px;color:#666">${item.barcode ?? ''}</div>
+      </div>
+    `).join('');
+    win.document.write(`
+      <html><head><title>Barcode Labels</title>
+      <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
+      </head><body>
+      <div style="padding:10mm;">${labelHtml}</div>
+      <script>
+        window.onload = function() {
+          ${selectedItems.filter(i=>i.barcode).map(i => `try { JsBarcode("#bc-${i.id}", "${i.barcode}", {width:1.5,height:40,displayValue:false,margin:2}); } catch(e){}`).join('\n')}
+          setTimeout(()=>window.print(), 500);
+        };
+      <\/script>
+      </body></html>
+    `);
+    win.document.close();
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <h2 className="text-lg font-bold">Print Barcode Labels</h2>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          <div className="flex gap-4">
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1">Columns per row</label>
+              <select value={cols} onChange={e => setCols(parseInt(e.target.value))} className="px-3 py-2 border rounded-lg text-sm">
+                {[2,3,4,5,6].map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer mt-5">
+              <input type="checkbox" checked={showPrice} onChange={e => setShowPrice(e.target.checked)} className="rounded" />
+              <span className="text-sm">Show price</span>
+            </label>
+          </div>
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium text-gray-700">Select items ({selected.size}/{items.length})</p>
+              <div className="flex gap-2">
+                <button onClick={() => setSelected(new Set(items.map(i=>i.id)))} className="text-xs text-blue-600">All</button>
+                <button onClick={() => setSelected(new Set())} className="text-xs text-gray-500">None</button>
+              </div>
+            </div>
+            <div className="border rounded-lg divide-y max-h-64 overflow-y-auto">
+              {items.map(item => (
+                <label key={item.id} className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-gray-50">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(item.id)}
+                    onChange={() => setSelected(prev => { const n = new Set(prev); n.has(item.id) ? n.delete(item.id) : n.add(item.id); return n; })}
+                    className="rounded"
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{item.name}</p>
+                    {item.barcode && <p className="text-xs text-gray-400 font-mono">{item.barcode}</p>}
+                  </div>
+                  <span className="text-sm text-gray-600">KES {(item.retailPriceCents/100).toFixed(2)}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="px-6 pb-6 pt-2 border-t flex gap-3">
+          <button onClick={onClose} className="flex-1 py-2.5 border rounded-lg text-gray-700 font-medium">Cancel</button>
+          <button
+            onClick={printLabels}
+            disabled={selected.size === 0}
+            className="flex-1 py-2.5 bg-blue-600 text-white font-bold rounded-lg disabled:opacity-40"
+          >
+            Print {selected.size} Labels
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Items Tab
+// ---------------------------------------------------------------------------
+
 interface ItemsTabProps {
   businessId: string;
   storeId?: string;
@@ -540,6 +1027,10 @@ function ItemsTab({ businessId, storeId }: ItemsTabProps) {
   const [showAdd, setShowAdd] = useState(false);
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);
   const [adjustItem, setAdjustItem] = useState<InventoryItem | null>(null);
+  const [variantItem, setVariantItem] = useState<InventoryItem | null>(null);
+  const [showCsvImport, setShowCsvImport] = useState(false);
+  const [showBarcodeModal, setShowBarcodeModal] = useState(false);
+  const qc = useQueryClient();
 
   const params = new URLSearchParams({
     businessId,
@@ -606,6 +1097,30 @@ function ItemsTab({ businessId, storeId }: ItemsTabProps) {
           <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
         </div>
 
+        <button
+          onClick={() => downloadCsv(`inventory-${new Date().toISOString().split('T')[0]}.csv`, [
+            ['Name', 'Category', 'Barcode', 'Retail Price', 'Cost Price', 'Stock', 'Type'],
+            ...items.map(i => [i.name, i.category?.name ?? '', i.barcode ?? '', (i.retailPriceCents/100).toFixed(2), ((i.costPriceCents ?? 0)/100).toFixed(2), String(i.currentStock ?? 0), i.type])
+          ])}
+          className="flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+        >
+          <Download className="w-4 h-4" />
+          Export
+        </button>
+        <button
+          onClick={() => setShowBarcodeModal(true)}
+          className="flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+        >
+          <Printer className="w-4 h-4" />
+          Labels
+        </button>
+        <button
+          onClick={() => setShowCsvImport(true)}
+          className="flex items-center gap-1.5 px-3 py-2 border border-green-300 text-green-700 rounded-lg text-sm font-medium hover:bg-green-50"
+        >
+          <Upload className="w-4 h-4" />
+          Import CSV
+        </button>
         <button
           onClick={() => setShowAdd(true)}
           className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
@@ -680,6 +1195,10 @@ function ItemsTab({ businessId, storeId }: ItemsTabProps) {
                             Adjust
                           </button>
                         )}
+                        <button onClick={() => setVariantItem(item)} className="text-xs text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1">
+                          <Sliders className="w-3 h-3" />
+                          Variants
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -693,6 +1212,21 @@ function ItemsTab({ businessId, storeId }: ItemsTabProps) {
       {showAdd && <AddItemModal businessId={businessId} storeId={storeId} categories={categories} onClose={() => setShowAdd(false)} />}
       {editItem && <EditItemModal item={editItem} categories={categories} onClose={() => setEditItem(null)} />}
       {adjustItem && <AdjustStockModal item={adjustItem} storeId={storeId} onClose={() => setAdjustItem(null)} />}
+      {variantItem && <VariantsModal item={variantItem} businessId={businessId} onClose={() => setVariantItem(null)} />}
+      {showCsvImport && (
+        <CsvImportModal
+          businessId={businessId}
+          storeId={storeId ?? ''}
+          onClose={() => setShowCsvImport(false)}
+          onSuccess={() => qc.invalidateQueries({ queryKey: ['items'] })}
+        />
+      )}
+      {showBarcodeModal && (
+        <BarcodeLabelModal
+          items={items}
+          onClose={() => setShowBarcodeModal(false)}
+        />
+      )}
     </div>
   );
 }

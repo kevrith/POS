@@ -22,6 +22,7 @@ build
 out
 **/.turbo
 .turbo
+packages/shared/dist
 
 # Logs
 logs

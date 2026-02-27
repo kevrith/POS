@@ -90,7 +90,6 @@ export class AuthService {
     businessId: string,
     storeId?: string,
   ): Promise<{ accessToken: string; user: AuthUser }> {
-    const pinHash = await bcrypt.hash(pin, 10);
     const users = await this.prisma.user.findMany({
       where: { businessId, pinHash: { not: null } },
     });

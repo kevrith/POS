@@ -119,12 +119,12 @@ export class ReportsService {
     });
 
     const valuation = items.map(item => {
-      const stock = item.movements.reduce((sum, m) => sum + m.quantity, 0);
-      const valueCents = stock * (item.costPriceCents || 0);
+      const quantity = item.movements.reduce((sum, m) => sum + m.quantity, 0);
+      const valueCents = quantity * (item.costPriceCents || 0);
       return {
         itemId: item.id,
         name: item.name,
-        stock,
+        quantity,
         costPriceCents: item.costPriceCents || 0,
         valueCents,
       };
@@ -156,14 +156,18 @@ export class ReportsService {
     ]);
 
     const revenueCents = sales._sum.totalCents || 0;
+    const cogsCents = 0; // COGS not tracked per-sale in this system
+    const grossProfitCents = revenueCents - cogsCents;
     const expensesCents = expenses._sum.amountCents || 0;
-    const profitCents = revenueCents - expensesCents;
+    const netProfitCents = grossProfitCents - expensesCents;
 
     return {
       revenueCents,
+      cogsCents,
+      grossProfitCents,
       expensesCents,
-      profitCents,
-      profitMargin: revenueCents > 0 ? (profitCents / revenueCents) * 100 : 0,
+      netProfitCents,
+      profitMargin: revenueCents > 0 ? (netProfitCents / revenueCents) * 100 : 0,
     };
   }
 

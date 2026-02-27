@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Users, Clock, Calendar, AlertCircle,
-  Loader2, RefreshCw, LogIn, LogOut, ChevronRight, X, Plus,
+  Users, Clock, Calendar, AlertCircle, TrendingUp, LayoutGrid,
+  Loader2, RefreshCw, LogIn, LogOut, ChevronRight, X, Plus, Trash2,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
@@ -28,9 +28,7 @@ interface AttendanceRecord {
   clockOut?: string;
   isLate: boolean;
   shiftDate: string;
-  employee?: {
-    user: { name: string; role: string };
-  };
+  employee?: { user: { name: string; role: string } };
 }
 
 interface EmployeeStats {
@@ -49,13 +47,32 @@ interface Leave {
   createdAt: string;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function uuid() {
-  return crypto.randomUUID();
+interface CommissionRow {
+  employeeId: string;
+  employeeName: string;
+  commissionRate: number;
+  salesCount: number;
+  totalSalesCents: number;
+  commissionCents: number;
 }
 
+interface Shift {
+  id: string;
+  businessId: string;
+  storeId: string;
+  employeeId: string;
+  startTime: string;
+  endTime: string;
+  dayOfWeek: number;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function uuid() { return crypto.randomUUID(); }
+
 const LEAVE_TYPES = ['ANNUAL', 'SICK', 'MATERNITY', 'PATERNITY', 'UNPAID', 'EMERGENCY'];
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 const ROLE_COLORS: Record<string, string> = {
   OWNER: 'bg-purple-100 text-purple-800',
@@ -81,6 +98,10 @@ function hoursWorked(clockIn: string, clockOut?: string): string {
   return `${h}h ${m}m`;
 }
 
+function fmt(cents: number) {
+  return `KES ${(cents / 100).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 // ─── Leave Request Modal ──────────────────────────────────────────────────────
 
 interface LeaveModalProps {
@@ -90,12 +111,7 @@ interface LeaveModalProps {
 }
 
 function LeaveModal({ employeeId, onClose, onSuccess }: LeaveModalProps) {
-  const [form, setForm] = useState({
-    type: 'ANNUAL',
-    startDate: '',
-    endDate: '',
-    reason: '',
-  });
+  const [form, setForm] = useState({ type: 'ANNUAL', startDate: '', endDate: '', reason: '' });
   const [error, setError] = useState('');
 
   const submit = useMutation({
@@ -116,9 +132,7 @@ function LeaveModal({ employeeId, onClose, onSuccess }: LeaveModalProps) {
       <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="text-lg font-bold text-gray-800">Request Leave</h2>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100"><X className="w-5 h-5 text-gray-500" /></button>
         </div>
         <div className="p-6 space-y-4">
           {error && (
@@ -128,59 +142,122 @@ function LeaveModal({ employeeId, onClose, onSuccess }: LeaveModalProps) {
           )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Leave Type</label>
-            <select
-              value={form.type}
-              onChange={(e) => setForm({ ...form, type: e.target.value })}
-              className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-            >
+            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}
+              className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
               {LEAVE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-              <input
-                type="date"
-                value={form.startDate}
-                onChange={(e) => setForm({ ...form, startDate: e.target.value })}
-                className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-              />
+              <input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })}
+                className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-              <input
-                type="date"
-                value={form.endDate}
-                min={form.startDate}
-                onChange={(e) => setForm({ ...form, endDate: e.target.value })}
-                className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-              />
+              <input type="date" value={form.endDate} min={form.startDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })}
+                className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
             </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Reason (optional)</label>
-            <textarea
-              value={form.reason}
-              onChange={(e) => setForm({ ...form, reason: e.target.value })}
-              rows={2}
-              className="w-full border rounded-xl px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-blue-500"
-            />
+            <textarea value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} rows={2}
+              className="w-full border rounded-xl px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-blue-500" />
           </div>
         </div>
         <div className="border-t px-6 py-4 flex gap-3">
-          <button
-            onClick={onClose}
-            className="flex-1 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 font-medium"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => submit.mutate()}
-            disabled={!form.startDate || !form.endDate || submit.isPending}
-            className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold disabled:opacity-40 flex items-center justify-center gap-2"
-          >
+          <button onClick={onClose} className="flex-1 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 font-medium">Cancel</button>
+          <button onClick={() => submit.mutate()} disabled={!form.startDate || !form.endDate || submit.isPending}
+            className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold disabled:opacity-40 flex items-center justify-center gap-2">
             {submit.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calendar className="w-4 h-4" />}
             Submit
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Add Shift Modal ──────────────────────────────────────────────────────────
+
+interface AddShiftModalProps {
+  businessId: string;
+  storeId: string;
+  employees: Employee[];
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function AddShiftModal({ businessId, storeId, employees, onClose, onSuccess }: AddShiftModalProps) {
+  const [form, setForm] = useState({
+    employeeId: '',
+    dayOfWeek: 1,
+    startTime: '08:00',
+    endTime: '17:00',
+  });
+  const [error, setError] = useState('');
+
+  const create = useMutation({
+    mutationFn: () =>
+      api.post('/hr/shifts', {
+        businessId,
+        storeId,
+        employeeId: form.employeeId,
+        dayOfWeek: form.dayOfWeek,
+        startTime: form.startTime,
+        endTime: form.endTime,
+      }),
+    onSuccess: () => { onSuccess(); onClose(); },
+    onError: (err) => setError(err instanceof Error ? err.message : 'Failed'),
+  });
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <h2 className="text-lg font-bold text-gray-800">Add Shift</h2>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100"><X className="w-5 h-5 text-gray-500" /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>
+          )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Employee *</label>
+            <select value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
+              className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
+              <option value="">Select employee...</option>
+              {employees.map((e) => (
+                <option key={e.id} value={e.id}>{e.user.name} ({e.user.role})</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Day of Week *</label>
+            <select value={form.dayOfWeek} onChange={(e) => setForm({ ...form, dayOfWeek: Number(e.target.value) })}
+              className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
+              {DAY_NAMES.map((day, i) => <option key={i} value={i}>{day}</option>)}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Start Time *</label>
+              <input type="time" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })}
+                className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">End Time *</label>
+              <input type="time" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })}
+                className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </div>
+        </div>
+        <div className="border-t px-6 py-4 flex gap-3">
+          <button onClick={onClose} className="flex-1 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 font-medium">Cancel</button>
+          <button onClick={() => create.mutate()} disabled={!form.employeeId || create.isPending}
+            className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold disabled:opacity-40 flex items-center justify-center gap-2">
+            {create.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            Save Shift
           </button>
         </div>
       </div>
@@ -202,9 +279,7 @@ function MyShiftCard({ employeeId, storeId }: MyShiftCardProps) {
   const { data: todayAttendance = [], refetch } = useQuery<AttendanceRecord[]>({
     queryKey: ['my-attendance-today', employeeId, today],
     queryFn: () =>
-      api.get<AttendanceRecord[]>(
-        `/hr/attendance/${employeeId}?startDate=${today}&endDate=${today}`,
-      ),
+      api.get<AttendanceRecord[]>(`/hr/attendance/${employeeId}?startDate=${today}&endDate=${today}`),
     enabled: !!employeeId,
     refetchInterval: 30000,
   });
@@ -263,20 +338,14 @@ function MyShiftCard({ employeeId, storeId }: MyShiftCardProps) {
       ))}
 
       {activeRecord ? (
-        <button
-          onClick={() => clockOut.mutate(activeRecord.id)}
-          disabled={clockOut.isPending}
-          className="w-full py-3 bg-white/20 hover:bg-white/30 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-40"
-        >
+        <button onClick={() => clockOut.mutate(activeRecord.id)} disabled={clockOut.isPending}
+          className="w-full py-3 bg-white/20 hover:bg-white/30 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-40">
           {clockOut.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogOut className="w-5 h-5" />}
           Clock Out
         </button>
       ) : (
-        <button
-          onClick={() => clockIn.mutate()}
-          disabled={clockIn.isPending}
-          className="w-full py-3 bg-white/20 hover:bg-white/30 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-40"
-        >
+        <button onClick={() => clockIn.mutate()} disabled={clockIn.isPending}
+          className="w-full py-3 bg-white/20 hover:bg-white/30 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-40">
           {clockIn.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogIn className="w-5 h-5" />}
           Clock In
         </button>
@@ -287,13 +356,19 @@ function MyShiftCard({ employeeId, storeId }: MyShiftCardProps) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type Tab = 'overview' | 'employees' | 'attendance' | 'leave';
+type Tab = 'overview' | 'employees' | 'attendance' | 'leave' | 'commissions' | 'shifts';
 
 export default function HRPage() {
+  const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const [tab, setTab] = useState<Tab>('overview');
   const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [showAddShiftModal, setShowAddShiftModal] = useState(false);
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
+
+  const now = new Date();
+  const [commFrom, setCommFrom] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`);
+  const [commTo, setCommTo] = useState(now.toISOString().split('T')[0]);
 
   const businessId = user?.businessId ?? '';
   const storeId = user?.storeId ?? '';
@@ -310,13 +385,10 @@ export default function HRPage() {
   const { data: allAttendance = [], isLoading: attLoading, refetch: refetchAtt } = useQuery<AttendanceRecord[]>({
     queryKey: ['all-attendance', businessId, storeId, attendanceDate],
     queryFn: () =>
-      api.get<AttendanceRecord[]>(
-        `/hr/attendance?businessId=${businessId}&storeId=${storeId}&date=${attendanceDate}`,
-      ),
+      api.get<AttendanceRecord[]>(`/hr/attendance?businessId=${businessId}&storeId=${storeId}&date=${attendanceDate}`),
     enabled: !!businessId && !!storeId && tab === 'attendance',
   });
 
-  const now = new Date();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 
@@ -332,11 +404,39 @@ export default function HRPage() {
   const { data: myLeaves = [], refetch: refetchLeaves } = useQuery<Leave[]>({
     queryKey: ['my-leaves', myEmployee?.id],
     queryFn: () =>
-      myEmployee?.id
-        ? api.get<Leave[]>(`/hr/leave/${myEmployee.id}`)
-        : Promise.resolve([]),
+      myEmployee?.id ? api.get<Leave[]>(`/hr/leave/${myEmployee.id}`) : Promise.resolve([]),
     enabled: !!myEmployee?.id && tab === 'leave',
   });
+
+  const { data: commissions = [], isLoading: commLoading } = useQuery<CommissionRow[]>({
+    queryKey: ['commissions', businessId, commFrom, commTo],
+    queryFn: () =>
+      api.get<CommissionRow[]>(
+        `/reports/commissions?businessId=${businessId}&startDate=${commFrom}T00:00:00Z&endDate=${commTo}T23:59:59Z`,
+      ),
+    enabled: !!businessId && tab === 'commissions',
+  });
+
+  const { data: shifts = [], isLoading: shiftsLoading, refetch: refetchShifts } = useQuery<Shift[]>({
+    queryKey: ['shifts', businessId, storeId],
+    queryFn: () =>
+      api.get<Shift[]>(`/hr/shifts?businessId=${businessId}&storeId=${storeId}`),
+    enabled: !!businessId && tab === 'shifts',
+  });
+
+  const deleteShift = useMutation({
+    mutationFn: (id: string) => api.delete(`/hr/shifts/${id}?businessId=${businessId}`),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['shifts'] }),
+  });
+
+  const tabs: Array<{ id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+    { id: 'overview', label: 'Overview', icon: Users },
+    { id: 'employees', label: 'Team', icon: Users },
+    { id: 'attendance', label: 'Attendance', icon: Clock },
+    { id: 'leave', label: 'Leave', icon: Calendar },
+    { id: 'commissions', label: 'Commissions', icon: TrendingUp },
+    { id: 'shifts', label: 'Shifts', icon: LayoutGrid },
+  ];
 
   return (
     <div className="h-full flex flex-col bg-gray-50">
@@ -350,28 +450,18 @@ export default function HRPage() {
               {myEmployee && <span className="ml-2 text-green-600 font-medium">• Your record is active</span>}
             </p>
           </div>
-          <button
-            onClick={() => { void refetchEmps(); void refetchAtt(); }}
-            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
-          >
+          <button onClick={() => { void refetchEmps(); void refetchAtt(); }}
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg">
             <RefreshCw className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="flex gap-1 mt-3">
-          {([
-            { id: 'overview' as const, label: 'Overview', Icon: Users },
-            { id: 'employees' as const, label: 'Team', Icon: Users },
-            { id: 'attendance' as const, label: 'Attendance', Icon: Clock },
-            { id: 'leave' as const, label: 'Leave', Icon: Calendar },
-          ]).map(({ id, label, Icon }) => (
-            <button
-              key={id}
-              onClick={() => setTab(id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+        <div className="flex gap-1 mt-3 overflow-x-auto">
+          {tabs.map(({ id, label, icon: Icon }) => (
+            <button key={id} onClick={() => setTab(id)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                 tab === id ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
+              }`}>
               <Icon className="w-4 h-4" />
               {label}
             </button>
@@ -415,9 +505,7 @@ export default function HRPage() {
               <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-center">
                 <AlertCircle className="w-8 h-8 text-amber-500 mx-auto mb-2" />
                 <p className="font-semibold text-amber-800">No Employee Record Found</p>
-                <p className="text-sm text-amber-600 mt-1">
-                  Your account doesn't have an employee record. Contact your manager.
-                </p>
+                <p className="text-sm text-amber-600 mt-1">Your account doesn't have an employee record. Contact your manager.</p>
               </div>
             )}
 
@@ -427,10 +515,8 @@ export default function HRPage() {
                   <h3 className="font-semibold text-gray-800">Leave Requests</h3>
                   <p className="text-sm text-gray-500 mt-0.5">Request time off or vacation</p>
                 </div>
-                <button
-                  onClick={() => setShowLeaveModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium text-sm"
-                >
+                <button onClick={() => setShowLeaveModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium text-sm">
                   <Plus className="w-4 h-4" />
                   Request Leave
                 </button>
@@ -450,9 +536,6 @@ export default function HRPage() {
               <div className="text-center py-20">
                 <Users className="w-16 h-16 mx-auto text-gray-300 mb-4" />
                 <p className="text-gray-500 font-medium text-lg">No employee records</p>
-                <p className="text-sm text-gray-400 mt-1">
-                  Employee records are created when users register with the business
-                </p>
               </div>
             ) : (
               <div className="bg-white rounded-2xl border overflow-hidden shadow-sm">
@@ -479,9 +562,7 @@ export default function HRPage() {
                             {emp.user.role}
                           </span>
                         </td>
-                        <td className="px-4 py-4 text-sm text-gray-600 hidden md:table-cell">
-                          {emp.employmentType}
-                        </td>
+                        <td className="px-4 py-4 text-sm text-gray-600 hidden md:table-cell">{emp.employmentType}</td>
                         <td className="px-4 py-4 text-right font-semibold text-gray-800">
                           {emp.commissionRate > 0 ? `${emp.commissionRate}%` : '—'}
                         </td>
@@ -506,30 +587,20 @@ export default function HRPage() {
             <div className="flex flex-wrap items-end gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                <input
-                  type="date"
-                  value={attendanceDate}
-                  onChange={(e) => setAttendanceDate(e.target.value)}
-                  className="border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                />
+                <input type="date" value={attendanceDate} onChange={(e) => setAttendanceDate(e.target.value)}
+                  className="border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
               </div>
               <div className="flex gap-3">
                 <div className="text-center bg-white border rounded-xl px-4 py-2">
-                  <div className="text-2xl font-bold text-green-600">
-                    {allAttendance.filter((r) => !r.clockOut).length}
-                  </div>
+                  <div className="text-2xl font-bold text-green-600">{allAttendance.filter((r) => !r.clockOut).length}</div>
                   <div className="text-xs text-gray-500">Clocked In</div>
                 </div>
                 <div className="text-center bg-white border rounded-xl px-4 py-2">
-                  <div className="text-2xl font-bold text-blue-600">
-                    {allAttendance.filter((r) => r.clockOut).length}
-                  </div>
+                  <div className="text-2xl font-bold text-blue-600">{allAttendance.filter((r) => r.clockOut).length}</div>
                   <div className="text-xs text-gray-500">Completed</div>
                 </div>
                 <div className="text-center bg-white border rounded-xl px-4 py-2">
-                  <div className="text-2xl font-bold text-red-500">
-                    {allAttendance.filter((r) => r.isLate).length}
-                  </div>
+                  <div className="text-2xl font-bold text-red-500">{allAttendance.filter((r) => r.isLate).length}</div>
                   <div className="text-xs text-gray-500">Late</div>
                 </div>
               </div>
@@ -560,28 +631,19 @@ export default function HRPage() {
                     {allAttendance.map((rec) => (
                       <tr key={rec.id} className="border-t">
                         <td className="px-6 py-4">
-                          <div className="font-semibold text-gray-800">
-                            {rec.employee?.user.name ?? rec.employeeId.slice(0, 8)}
-                          </div>
+                          <div className="font-semibold text-gray-800">{rec.employee?.user.name ?? rec.employeeId.slice(0, 8)}</div>
                           <div className="text-xs text-gray-400">{rec.employee?.user.role ?? ''}</div>
                         </td>
+                        <td className="px-4 py-4 text-center text-sm font-mono text-gray-700">{fmtTime(rec.clockIn)}</td>
                         <td className="px-4 py-4 text-center text-sm font-mono text-gray-700">
-                          {fmtTime(rec.clockIn)}
+                          {rec.clockOut ? fmtTime(rec.clockOut) : <span className="text-green-600 font-semibold text-xs">Active</span>}
                         </td>
-                        <td className="px-4 py-4 text-center text-sm font-mono text-gray-700">
-                          {rec.clockOut ? fmtTime(rec.clockOut) : (
-                            <span className="text-green-600 font-semibold text-xs">Active</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-4 text-center text-sm text-gray-600">
-                          {hoursWorked(rec.clockIn, rec.clockOut)}
-                        </td>
+                        <td className="px-4 py-4 text-center text-sm text-gray-600">{hoursWorked(rec.clockIn, rec.clockOut)}</td>
                         <td className="px-4 py-4 text-center">
-                          {rec.isLate ? (
-                            <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full font-semibold">Late</span>
-                          ) : (
-                            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-semibold">On Time</span>
-                          )}
+                          {rec.isLate
+                            ? <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full font-semibold">Late</span>
+                            : <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-semibold">On Time</span>
+                          }
                         </td>
                       </tr>
                     ))}
@@ -598,54 +660,40 @@ export default function HRPage() {
             <div className="flex items-center justify-between">
               <h2 className="font-semibold text-gray-700">Leave Requests</h2>
               {myEmployee && (
-                <button
-                  onClick={() => setShowLeaveModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium text-sm"
-                >
+                <button onClick={() => setShowLeaveModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium text-sm">
                   <Plus className="w-4 h-4" />
                   New Request
                 </button>
               )}
             </div>
-
             {!myEmployee ? (
               <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-center">
                 <AlertCircle className="w-8 h-8 text-amber-500 mx-auto mb-2" />
                 <p className="font-semibold text-amber-800">No Employee Record</p>
-                <p className="text-sm text-amber-600 mt-1">You need an employee record to request leave.</p>
               </div>
             ) : myLeaves.length === 0 ? (
               <div className="text-center py-20">
                 <Calendar className="w-16 h-16 mx-auto text-gray-300 mb-4" />
                 <p className="text-gray-500 font-medium">No leave requests</p>
-                <button
-                  onClick={() => setShowLeaveModal(true)}
-                  className="mt-4 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium"
-                >
+                <button onClick={() => setShowLeaveModal(true)}
+                  className="mt-4 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium">
                   Request Leave
                 </button>
               </div>
             ) : (
               <div className="space-y-3">
                 {myLeaves.map((leave) => {
-                  const days = Math.ceil(
-                    (new Date(leave.endDate).getTime() - new Date(leave.startDate).getTime()) / 86400000,
-                  ) + 1;
+                  const days = Math.ceil((new Date(leave.endDate).getTime() - new Date(leave.startDate).getTime()) / 86400000) + 1;
                   return (
                     <div key={leave.id} className="bg-white rounded-2xl border p-5 flex items-center justify-between">
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-gray-800">{leave.type} Leave</span>
-                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
-                            {days} day{days !== 1 ? 's' : ''}
-                          </span>
+                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{days} day{days !== 1 ? 's' : ''}</span>
                         </div>
-                        <div className="text-sm text-gray-500 mt-1">
-                          {fmtDate(leave.startDate)} → {fmtDate(leave.endDate)}
-                        </div>
-                        {leave.reason && (
-                          <p className="text-sm text-gray-600 mt-1">{leave.reason}</p>
-                        )}
+                        <div className="text-sm text-gray-500 mt-1">{fmtDate(leave.startDate)} → {fmtDate(leave.endDate)}</div>
+                        {leave.reason && <p className="text-sm text-gray-600 mt-1">{leave.reason}</p>}
                       </div>
                       <div className="text-xs text-gray-400">{fmtDate(leave.createdAt)}</div>
                     </div>
@@ -655,13 +703,180 @@ export default function HRPage() {
             )}
           </>
         )}
+
+        {/* ── Commissions Tab ── */}
+        {tab === 'commissions' && (
+          <>
+            <div className="flex flex-wrap items-end gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">From</label>
+                <input type="date" value={commFrom} onChange={(e) => setCommFrom(e.target.value)}
+                  className="border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
+                <input type="date" value={commTo} onChange={(e) => setCommTo(e.target.value)}
+                  className="border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+              </div>
+            </div>
+
+            {commLoading ? (
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+              </div>
+            ) : commissions.length === 0 ? (
+              <div className="text-center py-20">
+                <TrendingUp className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+                <p className="text-gray-500 font-medium">No commission data for this period</p>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  <div className="bg-white rounded-xl border p-4">
+                    <p className="text-xs font-medium text-gray-500 uppercase mb-1">Total Commissions</p>
+                    <p className="text-xl font-bold text-blue-600">
+                      {fmt(commissions.reduce((s, c) => s + c.commissionCents, 0))}
+                    </p>
+                  </div>
+                  <div className="bg-white rounded-xl border p-4">
+                    <p className="text-xs font-medium text-gray-500 uppercase mb-1">Total Sales</p>
+                    <p className="text-xl font-bold text-green-600">
+                      {fmt(commissions.reduce((s, c) => s + c.totalSalesCents, 0))}
+                    </p>
+                  </div>
+                  <div className="bg-white rounded-xl border p-4">
+                    <p className="text-xs font-medium text-gray-500 uppercase mb-1">Transactions</p>
+                    <p className="text-xl font-bold text-gray-800">
+                      {commissions.reduce((s, c) => s + c.salesCount, 0)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl border overflow-hidden shadow-sm">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b">
+                      <tr>
+                        <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Employee</th>
+                        <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Rate</th>
+                        <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Sales</th>
+                        <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Total Sales</th>
+                        <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Commission Earned</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {commissions
+                        .sort((a, b) => b.commissionCents - a.commissionCents)
+                        .map((c) => (
+                          <tr key={c.employeeId} className="border-t hover:bg-gray-50">
+                            <td className="px-6 py-4 font-semibold text-gray-800">{c.employeeName}</td>
+                            <td className="px-4 py-4 text-center text-sm text-gray-600">{c.commissionRate}%</td>
+                            <td className="px-4 py-4 text-center text-sm text-gray-600">{c.salesCount}</td>
+                            <td className="px-4 py-4 text-right text-sm text-gray-700">{fmt(c.totalSalesCents)}</td>
+                            <td className="px-4 py-4 text-right font-bold text-green-700">{fmt(c.commissionCents)}</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {/* ── Shifts Tab ── */}
+        {tab === 'shifts' && (
+          <>
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold text-gray-700">Shift Schedule</h2>
+              <button onClick={() => setShowAddShiftModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium text-sm">
+                <Plus className="w-4 h-4" />
+                Add Shift
+              </button>
+            </div>
+
+            {shiftsLoading ? (
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+              </div>
+            ) : shifts.length === 0 ? (
+              <div className="text-center py-20">
+                <LayoutGrid className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+                <p className="text-gray-500 font-medium">No shifts scheduled</p>
+                <p className="text-sm text-gray-400 mt-1">Add shifts to build your team schedule</p>
+                <button onClick={() => setShowAddShiftModal(true)}
+                  className="mt-4 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium">
+                  Add First Shift
+                </button>
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {DAY_NAMES.map((dayName, dayIndex) => {
+                  const dayShifts = shifts.filter((s) => s.dayOfWeek === dayIndex);
+                  if (dayShifts.length === 0) return null;
+                  return (
+                    <div key={dayIndex} className="bg-white rounded-2xl border overflow-hidden shadow-sm">
+                      <div className="bg-gray-50 border-b px-6 py-3">
+                        <h3 className="font-bold text-gray-700">{dayName}</h3>
+                      </div>
+                      <div className="divide-y">
+                        {dayShifts.map((shift) => {
+                          const emp = employees.find((e) => e.id === shift.employeeId);
+                          return (
+                            <div key={shift.id} className="px-6 py-4 flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-bold text-sm">
+                                  {emp?.user.name.slice(0, 2).toUpperCase() ?? '??'}
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-gray-800">{emp?.user.name ?? 'Unknown'}</p>
+                                  <p className="text-xs text-gray-500">{emp?.user.role ?? ''}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <div className="text-center">
+                                  <p className="text-sm font-bold text-gray-700 font-mono">
+                                    {shift.startTime} – {shift.endTime}
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => deleteShift.mutate(shift.id)}
+                                  disabled={deleteShift.isPending}
+                                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  title="Delete shift"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
+      {/* Modals */}
       {showLeaveModal && myEmployee && (
         <LeaveModal
           employeeId={myEmployee.id}
           onClose={() => setShowLeaveModal(false)}
           onSuccess={() => void refetchLeaves()}
+        />
+      )}
+
+      {showAddShiftModal && (
+        <AddShiftModal
+          businessId={businessId}
+          storeId={storeId}
+          employees={employees}
+          onClose={() => setShowAddShiftModal(false)}
+          onSuccess={() => void refetchShifts()}
         />
       )}
     </div>

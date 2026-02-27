@@ -90,6 +90,28 @@ export class HrService {
     });
   }
 
+  async getShifts(businessId: string, storeId?: string) {
+    return this.prisma.shift.findMany({
+      where: { businessId, ...(storeId ? { storeId } : {}) },
+      orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
+    });
+  }
+
+  async createShift(data: {
+    businessId: string;
+    storeId: string;
+    employeeId: string;
+    startTime: string;
+    endTime: string;
+    dayOfWeek: number;
+  }) {
+    return this.prisma.shift.create({ data });
+  }
+
+  async deleteShift(shiftId: string, businessId: string) {
+    return this.prisma.shift.deleteMany({ where: { id: shiftId, businessId } });
+  }
+
   async getEmployeeStats(employeeId: string, month: number, year: number) {
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0);

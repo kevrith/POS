@@ -18,6 +18,7 @@ model Business {
   expenseApprovalThresholdCents   Int?     @default(500000)
   etimsCredentialsEncrypted       String?
   mpesaCredentialsEncrypted       String?
+  atCredentialsEncrypted          String?
   subscriptionTier                String   @default("TRIAL")
   subscriptionStatus              String   @default("TRIAL")
   trialEndsAt                     DateTime?
@@ -111,11 +112,33 @@ model Item {
   saleItems               SaleItem[]
   orderItems              OrderItem[]
   serialRecords           SerialRecord[]
+  variants                ItemVariant[]
 
   @@index([businessId, storeId])
   @@index([type])
   @@index([barcode])
   @@index([offlineId])
+}
+
+model ItemVariant {
+  id                  String   @id @default(uuid())
+  itemId              String
+  name                String
+  sku                 String?  @unique
+  barcode             String?  @unique
+  retailPriceCents    Int
+  wholesalePriceCents Int?
+  vipPriceCents       Int?
+  costPriceCents      Int?
+  attributes          String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  item                Item     @relation(fields: [itemId], references: [id])
+
+  @@index([itemId])
+  @@index([barcode])
+  @@index([sku])
 }
 
 model Batch {
@@ -159,6 +182,8 @@ model Sale {
   priceLevel            String    @default("RETAIL")
   subtotalCents         Int       @default(0)
   serviceChargeCents    Int       @default(0)
+  discountCents         Int       @default(0)
+  promotionId           String?
   vatCents              Int       @default(0)
   totCents              Int       @default(0)
   totalCents            Int       @default(0)
@@ -725,6 +750,50 @@ model GiftCardTransaction {
   giftCard          GiftCard  @relation(fields: [giftCardId], references: [id])
 
   @@index([giftCardId])
+}
+
+model Notification {
+  id          String   @id @default(uuid())
+  businessId  String
+  type        String
+  priority    String   @default("NORMAL")
+  title       String
+  body        String
+  entityId    String?
+  entityType  String?
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([businessId, isRead, createdAt])
+}
+
+model Budget {
+  id            String   @id @default(uuid())
+  businessId    String
+  category      String
+  amountCents   Int
+  month         Int
+  year          Int
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([businessId, category, month, year])
+  @@index([businessId, year, month])
+}
+
+model Shift {
+  id          String   @id @default(uuid())
+  businessId  String
+  storeId     String
+  employeeId  String
+  startTime   String
+  endTime     String
+  dayOfWeek   Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([businessId, storeId])
+  @@index([employeeId])
 }
 
 model LoyaltyProgram {

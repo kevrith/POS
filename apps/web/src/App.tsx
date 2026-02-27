@@ -24,6 +24,9 @@ const RecipeManagementPage = lazy(() => import('./pages/RecipeManagementPage'));
 const BundleManagementPage = lazy(() => import('./pages/BundleManagementPage'));
 const TablesPage = lazy(() => import('./pages/HospitalityPage'));
 const SalesListPage = lazy(() => import('./pages/SalesListPage'));
+const PromotionsPage = lazy(() => import('./pages/PromotionsPage'));
+const GiftCardsPage = lazy(() => import('./pages/GiftCardsPage'));
+const KDSPage = lazy(() => import('./pages/KDSPage'));
 
 function PageLoader() {
   return (
@@ -66,6 +69,11 @@ export default function App() {
           {/* People */}
           <Route path="/customers" element={<CustomersPage />} />
           <Route path="/hr" element={<HRPage />} />
+          {/* Hospitality */}
+          <Route path="/kds" element={<KDSPage />} />
+          {/* Marketing */}
+          <Route path="/promotions" element={<PromotionsPage />} />
+          <Route path="/gift-cards" element={<GiftCardsPage />} />
           {/* System */}
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/settings" element={<SettingsPage />} />

@@ -9,6 +9,15 @@ import { RoleGuard, RequirePermission } from '../auth/role.guard';
 export class BatchController {
   constructor(private batchService: BatchService) {}
 
+  @Get()
+  @RequirePermission('inventory.read')
+  async listAll(
+    @Param('businessId') businessId: string,
+    @Query('status') status?: string,
+  ) {
+    return this.batchService.listBatches(businessId, status);
+  }
+
   @Post()
   @RequirePermission('inventory.create')
   async create(@Param('businessId') businessId: string, @Body() body: unknown) {

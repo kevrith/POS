@@ -37,7 +37,15 @@ export class AuthController {
   @Throttle({ auth: { limit: 20, ttl: 60000 } })
   @Post('login/pin')
   async loginPin(@Body() dto: PinLoginDto) {
-    return this.authService.loginWithPin(dto.pin, dto.businessId, dto.storeId);
+    try {
+      console.log('PIN login attempt:', { pin: dto.pin?.substring(0, 2) + '**', businessId: dto.businessId });
+      const result = await this.authService.loginWithPin(dto.pin, dto.businessId, dto.storeId);
+      console.log('PIN login success:', result.user.name);
+      return result;
+    } catch (error) {
+      console.error('PIN login error:', error.message, error.stack);
+      throw error;
+    }
   }
 
   @Post('register')

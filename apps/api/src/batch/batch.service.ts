@@ -41,6 +41,17 @@ export class BatchService {
     });
   }
 
+  async listBatches(businessId: string, status?: string) {
+    return this.prisma.batch.findMany({
+      where: {
+        item: { businessId },
+        ...(status ? { status } : {}),
+      },
+      include: { item: { select: { name: true, unit: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async getExpiringBatches(businessId: string, daysThreshold: number) {
     const thresholdDate = new Date();
     thresholdDate.setDate(thresholdDate.getDate() + daysThreshold);

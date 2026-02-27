@@ -27,6 +27,17 @@ interface CreateItemDto {
 
 interface UpdateItemDto extends Partial<Omit<CreateItemDto, 'businessId' | 'storeId'>> {}
 
+interface CreateVariantDto {
+  name: string;
+  sku?: string;
+  barcode?: string;
+  retailPriceCents: number;
+  wholesalePriceCents?: number;
+  vipPriceCents?: number;
+  costPriceCents?: number;
+  attributes: Record<string, string>;
+}
+
 @Injectable()
 export class ItemsService {
   constructor(
@@ -152,6 +163,58 @@ export class ItemsService {
     return { id: name, businessId, name };
   }
 
+  async listVariants(itemId: string, businessId: string) {
+    const item = await this.prisma.item.findFirst({ where: { id: itemId, businessId, deletedAt: null } });
+    if (!item) throw new NotFoundException('Item not found');
+    return this.prisma.itemVariant.findMany({ where: { itemId }, orderBy: { name: 'asc' } });
+  }
+
+  async createVariant(itemId: string, businessId: string, dto: CreateVariantDto) {
+    const item = await this.prisma.item.findFirst({ where: { id: itemId, businessId, deletedAt: null } });
+    if (!item) throw new NotFoundException('Item not found');
+    return this.prisma.itemVariant.create({
+      data: {
+        itemId,
+        name: dto.name,
+        sku: dto.sku,
+        barcode: dto.barcode,
+        retailPriceCents: dto.retailPriceCents,
+        wholesalePriceCents: dto.wholesalePriceCents,
+        vipPriceCents: dto.vipPriceCents,
+        costPriceCents: dto.costPriceCents,
+        attributes: JSON.stringify(dto.attributes ?? {}),
+      },
+    });
+  }
+
+  async updateVariant(itemId: string, variantId: string, businessId: string, dto: Partial<CreateVariantDto>) {
+    const item = await this.prisma.item.findFirst({ where: { id: itemId, businessId, deletedAt: null } });
+    if (!item) throw new NotFoundException('Item not found');
+    const variant = await this.prisma.itemVariant.findFirst({ where: { id: variantId, itemId } });
+    if (!variant) throw new NotFoundException('Variant not found');
+    return this.prisma.itemVariant.update({
+      where: { id: variantId },
+      data: {
+        ...(dto.name !== undefined && { name: dto.name }),
+        ...(dto.sku !== undefined && { sku: dto.sku }),
+        ...(dto.barcode !== undefined && { barcode: dto.barcode }),
+        ...(dto.retailPriceCents !== undefined && { retailPriceCents: dto.retailPriceCents }),
+        ...(dto.wholesalePriceCents !== undefined && { wholesalePriceCents: dto.wholesalePriceCents }),
+        ...(dto.vipPriceCents !== undefined && { vipPriceCents: dto.vipPriceCents }),
+        ...(dto.costPriceCents !== undefined && { costPriceCents: dto.costPriceCents }),
+        ...(dto.attributes !== undefined && { attributes: JSON.stringify(dto.attributes) }),
+      },
+    });
+  }
+
+  async deleteVariant(itemId: string, variantId: string, businessId: string) {
+    const item = await this.prisma.item.findFirst({ where: { id: itemId, businessId, deletedAt: null } });
+    if (!item) throw new NotFoundException('Item not found');
+    const variant = await this.prisma.itemVariant.findFirst({ where: { id: variantId, itemId } });
+    if (!variant) throw new NotFoundException('Variant not found');
+    await this.prisma.itemVariant.delete({ where: { id: variantId } });
+  }
+
   async importBulk(businessId: string, storeId: string, rows: CreateItemDto[]) {
     const created: string[] = [];
     for (const row of rows) {
@@ -159,5 +222,72 @@ export class ItemsService {
       created.push(item.id);
     }
     return { created: created.length };
+  }
+
+  async importFromCsv(businessId: string, storeId: string, rows: Array<{
+    name: string;
+    category?: string;
+    retailPrice: number;
+    costPrice?: number;
+    barcode?: string;
+    currentStock?: number;
+    expiryDate?: string;
+    lotNumber?: string;
+  }>) {
+    const results: Array<{ success: boolean; name: string; id?: string; error?: string }> = [];
+    for (const row of rows) {
+      try {
+        const item = await this.prisma.item.create({
+          data: {
+            offlineId: uuidv4(),
+            businessId,
+            storeId,
+            name: row.name,
+            category: row.category,
+            retailPriceCents: Math.round((row.retailPrice ?? 0) * 100),
+            costPriceCents: row.costPrice ? Math.round(row.costPrice * 100) : undefined,
+            barcode: row.barcode || undefined,
+            type: 'PRODUCT',
+            trackStock: true,
+          },
+        });
+        // If initial stock provided, create movement
+        if (row.currentStock && row.currentStock > 0) {
+          await this.prisma.inventoryMovement.create({
+            data: {
+              offlineId: uuidv4(),
+              businessId,
+              itemId: item.id,
+              storeId,
+              type: 'INITIAL',
+              quantity: row.currentStock,
+              source: 'IMPORT',
+            },
+          });
+        }
+        // If batch/expiry data provided, create batch
+        if (row.expiryDate || row.lotNumber) {
+          await this.prisma.batch.create({
+            data: {
+              offlineId: uuidv4(),
+              itemId: item.id,
+              storeId,
+              lotNumber: row.lotNumber ?? `LOT-${Date.now()}`,
+              expiryDate: row.expiryDate ? new Date(row.expiryDate) : undefined,
+              quantityReceived: row.currentStock ?? 0,
+              quantityRemaining: row.currentStock ?? 0,
+            },
+          });
+        }
+        results.push({ success: true, name: row.name, id: item.id });
+      } catch (e) {
+        results.push({ success: false, name: row.name, error: (e as Error).message });
+      }
+    }
+    return {
+      imported: results.filter(r => r.success).length,
+      failed: results.filter(r => !r.success).length,
+      results,
+    };
   }
 }

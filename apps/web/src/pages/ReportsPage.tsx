@@ -88,7 +88,7 @@ interface XReport {
   generatedAt: string;
 }
 
-type Tab = 'overview' | 'sales' | 'tax' | 'pl' | 'inventory' | 'fiscal';
+type Tab = 'overview' | 'sales' | 'tax' | 'pl' | 'inventory' | 'fiscal' | 'attendance' | 'commissions';
 type Range = 'today' | 'week' | 'month' | 'custom';
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -156,6 +156,28 @@ function StatCard({
       {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
     </div>
   );
+}
+
+// ─── CSV Export Utility ───────────────────────────────────────
+
+function downloadCsv(filename: string, rows: string[][]): void {
+  const content = rows
+    .map((row) =>
+      row.map((cell) => {
+        const s = String(cell ?? '');
+        return s.includes(',') || s.includes('"') || s.includes('\n')
+          ? `"${s.replace(/"/g, '""')}"`
+          : s;
+      }).join(',')
+    )
+    .join('\r\n');
+  const blob = new Blob(['\uFEFF' + content], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ─── Main Component ───────────────────────────────────────────
@@ -241,6 +263,34 @@ export default function ReportsPage() {
     enabled: false,
   });
 
+  const { data: attendanceReport = [] } = useQuery<Array<{
+    id: string;
+    shiftDate: string;
+    clockIn: string;
+    clockOut?: string;
+    isLate: boolean;
+    employee?: { user: { name: string; role: string } };
+  }>>({
+    queryKey: ['report-attendance', businessId, startDate, endDate],
+    queryFn: () =>
+      api.get(`/reports/attendance?businessId=${businessId}&startDate=${startDate}&endDate=${endDate}`),
+    enabled: !!businessId && tab === 'attendance',
+  });
+
+  const { data: commissionReport = [] } = useQuery<Array<{
+    employeeId: string;
+    employeeName: string;
+    commissionRate: number;
+    salesCount: number;
+    totalSalesCents: number;
+    commissionCents: number;
+  }>>({
+    queryKey: ['report-commissions', businessId, startDate, endDate],
+    queryFn: () =>
+      api.get(`/reports/commissions?businessId=${businessId}&startDate=${startDate}&endDate=${endDate}`),
+    enabled: !!businessId && tab === 'commissions',
+  });
+
   const zReportMutation = useMutation({
     mutationFn: () =>
       api.post<{ zReportNumber: string; totalSalesCents: number }>('/reports/z-report', {
@@ -283,6 +333,8 @@ export default function ReportsPage() {
     { id: 'pl', label: 'P&L', icon: TrendingUp },
     { id: 'inventory', label: 'Stock', icon: Package },
     { id: 'fiscal', label: 'X / Z Report', icon: DollarSign },
+    { id: 'attendance', label: 'Attendance', icon: BarChart3 },
+    { id: 'commissions', label: 'Commissions', icon: TrendingUp },
   ];
 
   // ── Render ────────────────────────────────────────────────────
@@ -538,7 +590,25 @@ export default function ReportsPage() {
                     <h2 className="font-semibold text-gray-800">
                       Sales ({salesData?.sales?.length ?? 0})
                     </h2>
-                    <span className="text-xs text-gray-400">Showing up to 50</span>
+                    <button
+                      onClick={() => {
+                        if (!salesData?.sales?.length) return;
+                        downloadCsv(`sales-${startDate}-${endDate}.csv`, [
+                          ['Receipt #', 'Date', 'Subtotal (KES)', 'VAT (KES)', 'Total (KES)'],
+                          ...salesData.sales.map((s) => [
+                            s.receiptNumber ?? '',
+                            new Date(s.createdAt).toLocaleString('en-KE'),
+                            (s.subtotalCents / 100).toFixed(2),
+                            (s.vatCents / 100).toFixed(2),
+                            (s.totalCents / 100).toFixed(2),
+                          ]),
+                        ]);
+                      }}
+                      className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700"
+                    >
+                      <Download className="w-4 h-4" />
+                      Export CSV
+                    </button>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -607,9 +677,24 @@ export default function ReportsPage() {
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="px-5 py-4 border-b flex justify-between items-center">
                     <h2 className="font-semibold text-gray-800">VAT Register</h2>
-                    <button className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700">
+                    <button
+                      onClick={() => {
+                        if (!vatData?.sales?.length) return;
+                        downloadCsv(`vat-register-${startDate}-${endDate}.csv`, [
+                          ['Receipt #', 'Date', 'Net (KES)', 'VAT (KES)', 'Total (KES)'],
+                          ...vatData.sales.map((s) => [
+                            s.receiptNumber ?? '',
+                            new Date(s.createdAt).toLocaleDateString('en-KE'),
+                            ((s.subtotalCents) / 100).toFixed(2),
+                            (s.vatCents / 100).toFixed(2),
+                            (s.totalCents / 100).toFixed(2),
+                          ]),
+                        ]);
+                      }}
+                      className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700"
+                    >
                       <Download className="w-4 h-4" />
-                      Export PDF
+                      Export CSV
                     </button>
                   </div>
                   <div className="overflow-x-auto">
@@ -668,9 +753,22 @@ export default function ReportsPage() {
                   <div className="max-w-2xl bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                     <div className="px-6 py-4 border-b flex justify-between items-center">
                       <h2 className="font-semibold text-gray-800">Profit & Loss Statement</h2>
-                      <button className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700">
+                      <button
+                        onClick={() => {
+                          if (!plData) return;
+                          downloadCsv(`profit-loss-${startDate}-${endDate}.csv`, [
+                            ['Line Item', 'Amount (KES)'],
+                            ['Revenue', (plData.revenueCents / 100).toFixed(2)],
+                            ['Cost of Goods Sold', (-plData.cogsCents / 100).toFixed(2)],
+                            ['Gross Profit', (plData.grossProfitCents / 100).toFixed(2)],
+                            ['Expenses', (-plData.expensesCents / 100).toFixed(2)],
+                            ['Net Profit', (plData.netProfitCents / 100).toFixed(2)],
+                          ]);
+                        }}
+                        className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700"
+                      >
                         <Download className="w-4 h-4" />
-                        Export
+                        Export CSV
                       </button>
                     </div>
                     <div className="px-6 py-4 space-y-1">
@@ -758,7 +856,22 @@ export default function ReportsPage() {
                     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                       <div className="px-5 py-4 border-b flex justify-between items-center">
                         <h2 className="font-semibold text-gray-800">Stock Valuation</h2>
-                        <button className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700">
+                        <button
+                          onClick={() => {
+                            if (!stockData?.items?.length) return;
+                            downloadCsv(`stock-valuation-${new Date().toISOString().substring(0, 10)}.csv`, [
+                              ['Item Name', 'Qty', 'Cost Price (KES)', 'Total Value (KES)'],
+                              ...stockData.items.map((i) => [
+                                i.name,
+                                String(i.quantity),
+                                (i.costPriceCents / 100).toFixed(2),
+                                (i.valueCents / 100).toFixed(2),
+                              ]),
+                              ['TOTAL', '', '', (stockData.totalValueCents / 100).toFixed(2)],
+                            ]);
+                          }}
+                          className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700"
+                        >
                           <Download className="w-4 h-4" />
                           Export CSV
                         </button>
@@ -799,6 +912,202 @@ export default function ReportsPage() {
                     Loading stock data…
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* ── ATTENDANCE REPORT ── */}
+            {tab === 'attendance' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <StatCard
+                    label="Total Records"
+                    value={attendanceReport.length}
+                    icon={BarChart3}
+                    color="bg-blue-500"
+                  />
+                  <StatCard
+                    label="On Time"
+                    value={attendanceReport.filter((r) => !r.isLate).length}
+                    icon={BarChart3}
+                    color="bg-green-500"
+                  />
+                  <StatCard
+                    label="Late Arrivals"
+                    value={attendanceReport.filter((r) => r.isLate).length}
+                    icon={BarChart3}
+                    color="bg-red-500"
+                  />
+                  <StatCard
+                    label="Completed Shifts"
+                    value={attendanceReport.filter((r) => r.clockOut).length}
+                    icon={BarChart3}
+                    color="bg-purple-500"
+                  />
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="px-5 py-4 border-b flex justify-between items-center">
+                    <h2 className="font-semibold text-gray-800">Attendance Records ({attendanceReport.length})</h2>
+                    <button
+                      onClick={() => {
+                        if (!attendanceReport.length) return;
+                        downloadCsv(`attendance-${startDate}-${endDate}.csv`, [
+                          ['Employee', 'Role', 'Date', 'Clock In', 'Clock Out', 'Status'],
+                          ...attendanceReport.map((r) => [
+                            r.employee?.user.name ?? r.id.slice(0, 8),
+                            r.employee?.user.role ?? '',
+                            new Date(r.shiftDate).toLocaleDateString('en-KE'),
+                            new Date(r.clockIn).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' }),
+                            r.clockOut ? new Date(r.clockOut).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' }) : '',
+                            r.isLate ? 'Late' : 'On Time',
+                          ]),
+                        ]);
+                      }}
+                      className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700"
+                    >
+                      <Download className="w-4 h-4" />
+                      Export CSV
+                    </button>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="text-left px-5 py-3 font-medium text-gray-600">Employee</th>
+                          <th className="text-left px-5 py-3 font-medium text-gray-600">Date</th>
+                          <th className="text-right px-5 py-3 font-medium text-gray-600">Clock In</th>
+                          <th className="text-right px-5 py-3 font-medium text-gray-600">Clock Out</th>
+                          <th className="text-center px-5 py-3 font-medium text-gray-600">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {attendanceReport.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="px-5 py-8 text-center text-gray-400">No records in this period</td>
+                          </tr>
+                        ) : (
+                          attendanceReport.slice(0, 100).map((r) => (
+                            <tr key={r.id} className="hover:bg-gray-50">
+                              <td className="px-5 py-3">
+                                <div className="font-medium">{r.employee?.user.name ?? r.id.slice(0, 8)}</div>
+                                <div className="text-xs text-gray-400">{r.employee?.user.role ?? ''}</div>
+                              </td>
+                              <td className="px-5 py-3 text-gray-500">
+                                {new Date(r.shiftDate).toLocaleDateString('en-KE', { day: '2-digit', month: 'short' })}
+                              </td>
+                              <td className="px-5 py-3 text-right font-mono">
+                                {new Date(r.clockIn).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}
+                              </td>
+                              <td className="px-5 py-3 text-right font-mono text-gray-500">
+                                {r.clockOut
+                                  ? new Date(r.clockOut).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })
+                                  : <span className="text-green-600 text-xs font-semibold">Active</span>
+                                }
+                              </td>
+                              <td className="px-5 py-3 text-center">
+                                {r.isLate
+                                  ? <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-semibold">Late</span>
+                                  : <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">On Time</span>
+                                }
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── COMMISSIONS REPORT ── */}
+            {tab === 'commissions' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  <StatCard
+                    label="Total Commissions"
+                    value={formatKES(commissionReport.reduce((s, c) => s + c.commissionCents, 0))}
+                    icon={TrendingUp}
+                    color="bg-green-500"
+                  />
+                  <StatCard
+                    label="Total Sales"
+                    value={formatKES(commissionReport.reduce((s, c) => s + c.totalSalesCents, 0))}
+                    icon={DollarSign}
+                    color="bg-blue-500"
+                  />
+                  <StatCard
+                    label="Employees"
+                    value={commissionReport.length}
+                    icon={BarChart3}
+                    color="bg-purple-500"
+                  />
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="px-5 py-4 border-b flex justify-between items-center">
+                    <h2 className="font-semibold text-gray-800">Commission Summary</h2>
+                    <button
+                      onClick={() => {
+                        if (!commissionReport.length) return;
+                        downloadCsv(`commissions-${startDate}-${endDate}.csv`, [
+                          ['Employee', 'Commission Rate', 'Sales Count', 'Total Sales (KES)', 'Commission Earned (KES)'],
+                          ...commissionReport.map((c) => [
+                            c.employeeName,
+                            `${c.commissionRate}%`,
+                            String(c.salesCount),
+                            (c.totalSalesCents / 100).toFixed(2),
+                            (c.commissionCents / 100).toFixed(2),
+                          ]),
+                        ]);
+                      }}
+                      className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700"
+                    >
+                      <Download className="w-4 h-4" />
+                      Export CSV
+                    </button>
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="text-left px-5 py-3 font-medium text-gray-600">Employee</th>
+                        <th className="text-center px-5 py-3 font-medium text-gray-600">Rate</th>
+                        <th className="text-center px-5 py-3 font-medium text-gray-600">Sales</th>
+                        <th className="text-right px-5 py-3 font-medium text-gray-600">Total Sales</th>
+                        <th className="text-right px-5 py-3 font-medium text-gray-600">Commission</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {commissionReport.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="px-5 py-8 text-center text-gray-400">No commission data for this period</td>
+                        </tr>
+                      ) : (
+                        commissionReport
+                          .sort((a, b) => b.commissionCents - a.commissionCents)
+                          .map((c) => (
+                            <tr key={c.employeeId} className="hover:bg-gray-50">
+                              <td className="px-5 py-3 font-medium">{c.employeeName}</td>
+                              <td className="px-5 py-3 text-center">{c.commissionRate}%</td>
+                              <td className="px-5 py-3 text-center">{c.salesCount}</td>
+                              <td className="px-5 py-3 text-right">{formatKES(c.totalSalesCents)}</td>
+                              <td className="px-5 py-3 text-right font-bold text-green-700">{formatKES(c.commissionCents)}</td>
+                            </tr>
+                          ))
+                      )}
+                    </tbody>
+                    {commissionReport.length > 0 && (
+                      <tfoot className="bg-gray-50 font-bold">
+                        <tr>
+                          <td colSpan={4} className="px-5 py-3">TOTAL</td>
+                          <td className="px-5 py-3 text-right text-green-700">
+                            {formatKES(commissionReport.reduce((s, c) => s + c.commissionCents, 0))}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
               </div>
             )}
 

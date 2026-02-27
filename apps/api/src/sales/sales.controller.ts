@@ -53,6 +53,7 @@ export class SalesController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('status') status?: string,
+    @Query('etimsSubmitted') etimsSubmitted?: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ) {
@@ -62,6 +63,7 @@ export class SalesController {
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
       status,
+      etimsSubmitted: etimsSubmitted !== undefined ? etimsSubmitted === 'true' : undefined,
       limit: limit ? parseInt(limit) : 50,
       offset: offset ? parseInt(offset) : 0,
     });

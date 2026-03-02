@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { setToken, clearToken } from '../lib/api';
 
+const API_V1 = '/api/v1';
+
 export type UserRole = 'OWNER' | 'MANAGER' | 'ACCOUNTANT' | 'CASHIER' | 'WAITER' | 'KITCHEN';
 
 export interface AuthUser {
@@ -11,6 +13,7 @@ export interface AuthUser {
   role: UserRole;
   businessId: string;
   storeId?: string;
+  assignedStoreIds?: string[]; // populated for MANAGER: stores they are scoped to
 }
 
 interface AuthState {
@@ -18,6 +21,8 @@ interface AuthState {
   isAuthenticated: boolean;
   // Email + password login
   login: (email: string, password: string, totpCode?: string) => Promise<void>;
+  // OAuth token (returned via URL query param after Google callback redirect)
+  loginWithOAuth: (accessToken: string, user: AuthUser) => Promise<void>;
   // PIN login (Cashier / Waiter / Kitchen)
   loginWithPin: (pin: string, businessId: string, storeId?: string) => Promise<void>;
   logout: () => void;
@@ -34,7 +39,7 @@ export const useAuthStore = create<AuthState>()(
       })(),
 
       login: async (email, password, totpCode) => {
-        const res = await fetch('/api/auth/login', {
+        const res = await fetch(`${API_V1}/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password, totpCode }),
@@ -47,11 +52,48 @@ export const useAuthStore = create<AuthState>()(
 
         const data = await res.json() as { accessToken: string; user: AuthUser };
         setToken(data.accessToken);
+
+        // Email login doesn't include storeId — fetch the first store automatically
+        if (!data.user.storeId) {
+          try {
+            const storesRes = await fetch(`${API_V1}/business/${data.user.businessId}/stores`, {
+              headers: { Authorization: `Bearer ${data.accessToken}` },
+            });
+            if (storesRes.ok) {
+              const stores = await storesRes.json() as Array<{ id: string }>;
+              if (stores.length > 0) {
+                data.user.storeId = stores[0].id;
+              }
+            }
+          } catch {
+            // non-fatal — POS will show no items but other pages still work
+          }
+        }
+
         set({ user: data.user, isAuthenticated: true });
       },
 
+      loginWithOAuth: async (accessToken, user) => {
+        setToken(accessToken);
+
+        // Fetch storeId if not present
+        if (!user.storeId) {
+          try {
+            const storesRes = await fetch(`${API_V1}/business/${user.businessId}/stores`, {
+              headers: { Authorization: `Bearer ${accessToken}` },
+            });
+            if (storesRes.ok) {
+              const stores = await storesRes.json() as Array<{ id: string }>;
+              if (stores.length > 0) user.storeId = stores[0].id;
+            }
+          } catch { /* non-fatal */ }
+        }
+
+        set({ user, isAuthenticated: true });
+      },
+
       loginWithPin: async (pin, businessId, storeId) => {
-        const res = await fetch('/api/auth/login/pin', {
+        const res = await fetch(`${API_V1}/auth/login/pin`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ pin, businessId, storeId }),

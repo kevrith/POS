@@ -15,7 +15,7 @@ interface CreateVariantDto {
   wholesalePriceCents?: number;
   vipPriceCents?: number;
   costPriceCents?: number;
-  attributes: Record<string, string>; // e.g. { size: 'L', color: 'Red' }
+  attributes: Record<string, string>;
 }
 
 interface CreateItemDto {
@@ -45,10 +45,12 @@ interface CreateItemDto {
 export class ItemsController {
   constructor(private items: ItemsService) {}
 
+  // ── Static GET routes MUST come before @Get(':id') ──────────────────────────
+
   @Get()
   findAll(
     @Query('businessId') businessId: string,
-    @Query('storeId') storeId: string,
+    @Query('storeId') storeId?: string,
     @Query('search') search?: string,
   ) {
     return this.items.findAll(businessId, storeId, search);
@@ -59,10 +61,48 @@ export class ItemsController {
     return this.items.getCategories(businessId);
   }
 
+  @Get('fefo-suggestions')
+  async getFEFOSuggestions(
+    @Query('storeId') storeId: string,
+    @Query('itemIds') itemIds: string,
+  ) {
+    const ids = itemIds ? itemIds.split(',').filter(Boolean) : [];
+    return this.items.getFEFOSuggestions(ids, storeId);
+  }
+
+  @Get('expiring')
+  async getExpiringItems(
+    @Query('businessId') businessId: string,
+    @Query('storeId') storeId: string,
+    @Query('days') days?: string,
+  ) {
+    return this.items.getExpiringItems(businessId, storeId, days ? Number(days) : undefined);
+  }
+
+  @Get('low-stock')
+  async getLowStock(
+    @Query('businessId') businessId: string,
+    @Query('storeId') storeId: string,
+  ) {
+    return this.items.getLowStock(businessId, storeId);
+  }
+
+  // ── Parameterised routes AFTER static routes ─────────────────────────────────
+
   @Get(':id')
   findOne(@Param('id') id: string, @Query('businessId') businessId: string) {
     return this.items.findOne(id, businessId);
   }
+
+  @Get(':id/variants')
+  listVariants(
+    @Param('id') itemId: string,
+    @Query('businessId') businessId: string,
+  ) {
+    return this.items.listVariants(itemId, businessId);
+  }
+
+  // ── POST routes ───────────────────────────────────────────────────────────────
 
   @Post()
   create(@Body() dto: CreateItemDto) {
@@ -104,28 +144,11 @@ export class ItemsController {
     return this.items.importFromCsv(data.businessId, data.storeId, data.rows);
   }
 
-  @Patch(':id')
-  update(
-    @Param('id') id: string,
-    @Query('businessId') businessId: string,
-    @Body() dto: Partial<CreateItemDto>,
+  @Post('check-expiry')
+  async checkCartExpiry(
+    @Body() body: { itemIds: string[]; storeId: string; businessId: string },
   ) {
-    return this.items.update(id, businessId, dto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string, @Query('businessId') businessId: string) {
-    return this.items.softDelete(id, businessId);
-  }
-
-  // ── Variant endpoints ──────────────────────────────────────────────────────
-
-  @Get(':id/variants')
-  listVariants(
-    @Param('id') itemId: string,
-    @Query('businessId') businessId: string,
-  ) {
-    return this.items.listVariants(itemId, businessId);
+    return this.items.checkCartExpiry(body.itemIds, body.storeId, body.businessId);
   }
 
   @Post(':id/variants')
@@ -137,6 +160,17 @@ export class ItemsController {
     return this.items.createVariant(itemId, businessId, dto);
   }
 
+  // ── PATCH / DELETE ────────────────────────────────────────────────────────────
+
+  @Patch(':id')
+  update(
+    @Param('id') id: string,
+    @Query('businessId') businessId: string,
+    @Body() dto: Partial<CreateItemDto>,
+  ) {
+    return this.items.update(id, businessId, dto);
+  }
+
   @Patch(':id/variants/:variantId')
   updateVariant(
     @Param('id') itemId: string,
@@ -145,6 +179,11 @@ export class ItemsController {
     @Body() dto: Partial<CreateVariantDto>,
   ) {
     return this.items.updateVariant(itemId, variantId, businessId, dto);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string, @Query('businessId') businessId: string) {
+    return this.items.softDelete(id, businessId);
   }
 
   @Delete(':id/variants/:variantId')

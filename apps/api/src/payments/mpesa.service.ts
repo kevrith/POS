@@ -170,6 +170,48 @@ export class MpesaService {
     return { status: 'pending', resultDesc: 'Processing' };
   }
 
+  async generateDynamicQR(params: {
+    amountCents: number;
+    reference: string;
+    merchantName: string;
+  }): Promise<string> {
+    const token = await this.getAccessToken();
+    const shortcode = this.config.getOrThrow<string>('MPESA_SHORTCODE');
+    const amount = Math.max(1, Math.round(params.amountCents / 100));
+
+    const payload = {
+      MerchantName: params.merchantName.slice(0, 30),
+      RefNo: params.reference.slice(0, 12),
+      Amount: amount,
+      TrxCode: 'BG', // Buy Goods
+      CPI: shortcode,
+      Size: '300',
+    };
+
+    const response = await fetch(`${this.baseUrl}/mpesa/qrcode/v1/generate`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json() as {
+      ResponseCode: string;
+      QRCode?: string;
+      ResponseDescription?: string;
+    };
+
+    if (result.ResponseCode !== '0') {
+      throw new BadRequestException(
+        `QR generation failed: ${result.ResponseDescription ?? 'Unknown error'}`,
+      );
+    }
+
+    return result.QRCode!;
+  }
+
   async handleCallback(body: unknown): Promise<void> {
     const data = body as MpesaCallbackBody;
     const callback = data?.Body?.stkCallback;

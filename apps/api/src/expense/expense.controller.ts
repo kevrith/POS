@@ -1,4 +1,16 @@
-import { Controller, Post, Get, Patch, Body, Param, Query } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Patch,
+  Body,
+  Param,
+  Query,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
 import { ExpenseService } from './expense.service';
 
 @Controller('expenses')
@@ -60,5 +72,39 @@ export class ExpenseController {
       new Date(startDate),
       new Date(endDate)
     );
+  }
+
+  // ── Recurring Expenses ────────────────────────────────────────────────────────
+
+  @Get('recurring')
+  async getRecurring(@Query('businessId') businessId: string) {
+    return this.expenseService.getRecurringExpenses(businessId);
+  }
+
+  @Post('recurring/check')
+  async checkRecurring(@Body('businessId') businessId: string) {
+    await this.expenseService.checkRecurringDue(businessId);
+    return { success: true };
+  }
+
+  // ── Receipt Photo Upload ──────────────────────────────────────────────────────
+
+  @Post('upload-receipt')
+  @UseInterceptors(FileInterceptor('file', {
+    storage: diskStorage({
+      destination: './public/uploads/receipts',
+      filename: (req, file, cb) => {
+        cb(null, `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9.]/g, '_')}`);
+      },
+    }),
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+    fileFilter: (req, file, cb) => {
+      if (file.mimetype.startsWith('image/')) cb(null, true);
+      else cb(new Error('Only images allowed'), false);
+    },
+  }))
+  uploadReceipt(@UploadedFile() file: any) {
+    const url = `/uploads/receipts/${file.filename}`;
+    return { url };
   }
 }

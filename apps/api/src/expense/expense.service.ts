@@ -1,9 +1,14 @@
 import { Injectable } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class ExpenseService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   async create(data: {
     offlineId: string;
@@ -57,13 +62,63 @@ export class ExpenseService {
   }
 
   async approve(id: string, approvedBy: string) {
-    return this.prisma.expense.update({
+    const expense = await this.prisma.expense.update({
       where: { id },
-      data: {
-        approvalStatus: 'APPROVED',
-        approvedBy,
-      },
+      data: { approvalStatus: 'APPROVED', approvedBy },
     });
+
+    // Check budget thresholds after approval
+    this.checkBudgetThreshold(expense.businessId, expense.category, expense.createdAt).catch(() => {});
+
+    return expense;
+  }
+
+  private async checkBudgetThreshold(businessId: string, category: string, referenceDate: Date) {
+    const month = referenceDate.getMonth() + 1;
+    const year = referenceDate.getFullYear();
+
+    const budget = await this.prisma.budget.findFirst({
+      where: { businessId, category, month, year },
+    });
+    if (!budget || budget.amountCents <= 0) return;
+
+    const agg = await this.prisma.expense.aggregate({
+      where: {
+        businessId,
+        category,
+        approvalStatus: 'APPROVED',
+        deletedAt: null,
+        createdAt: {
+          gte: new Date(year, month - 1, 1),
+          lte: new Date(year, month, 0, 23, 59, 59),
+        },
+      },
+      _sum: { amountCents: true },
+    });
+
+    const totalCents = agg._sum.amountCents ?? 0;
+    const pctUsed = (totalCents / budget.amountCents) * 100;
+    const fmt = (c: number) => `KES ${(c / 100).toFixed(2)}`;
+
+    if (pctUsed >= 100) {
+      await this.notifications.createNotification({
+        businessId,
+        type: 'BUDGET_EXCEEDED',
+        priority: 'HIGH',
+        title: `Budget Exceeded: ${category}`,
+        body: `The ${category} budget of ${fmt(budget.amountCents)} has been exceeded. Spent: ${fmt(totalCents)} (${Math.round(pctUsed)}%).`,
+        entityType: 'Budget',
+      });
+    } else if (pctUsed >= 80) {
+      await this.notifications.createNotification({
+        businessId,
+        type: 'BUDGET_WARNING',
+        priority: 'NORMAL',
+        title: `Budget Warning: ${category}`,
+        body: `The ${category} budget is ${Math.round(pctUsed)}% used. Spent ${fmt(totalCents)} of ${fmt(budget.amountCents)}.`,
+        entityType: 'Budget',
+      });
+    }
   }
 
   async reject(id: string, approvedBy: string) {
@@ -97,5 +152,60 @@ export class ExpenseService {
       category: e.category,
       totalCents: e._sum.amountCents || 0,
     }));
+  }
+
+  // ── Recurring Expenses ────────────────────────────────────────────────────────
+
+  async getRecurringExpenses(businessId: string) {
+    return this.prisma.expense.findMany({
+      where: { businessId, isRecurring: true, deletedAt: null },
+      orderBy: { recurringDay: 'asc' },
+    });
+  }
+
+  async checkRecurringDue(businessId: string) {
+    const today = new Date().getDate(); // day of month (1-31)
+    const expenses = await this.prisma.expense.findMany({
+      where: { businessId, isRecurring: true, recurringDay: today, deletedAt: null },
+    });
+
+    for (const expense of expenses) {
+      // Check if already created this month
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
+
+      const existing = await this.prisma.expense.findFirst({
+        where: {
+          businessId,
+          category: expense.category,
+          description: expense.description,
+          isRecurring: false,
+          createdAt: { gte: startOfMonth },
+        },
+      });
+
+      if (!existing) {
+        // Create notification that this recurring expense is due
+        await this.notifications.createNotification({
+          businessId,
+          type: 'EXPENSE_DUE',
+          priority: 'MEDIUM',
+          title: 'Recurring Expense Due',
+          body: `Recurring expense "${expense.description ?? expense.category}" (KES ${(expense.amountCents / 100).toFixed(2)}) is due today.`,
+          entityType: 'Expense',
+          entityId: expense.id,
+        });
+      }
+    }
+  }
+
+  /** Runs every day at 8am to notify businesses of recurring expenses due today. */
+  @Cron('0 8 * * *')
+  async runRecurringCheck() {
+    const businesses = await this.prisma.business.findMany({ select: { id: true } });
+    for (const biz of businesses) {
+      await this.checkRecurringDue(biz.id).catch(() => {});
+    }
   }
 }

@@ -1,29 +1,67 @@
+import * as Sentry from '@sentry/node';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { Logger } from '@nestjs/common';
+import { Logger, VersioningType } from '@nestjs/common';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { IoAdapter } from '@nestjs/platform-socket.io';
+
+// Initialize Sentry before anything else so all errors are captured
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV ?? 'development',
+    tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
+  });
+}
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  
+
   try {
     logger.log('Starting NestJS application...');
     const app = await NestFactory.create(AppModule, {
       logger: ['error', 'warn', 'log', 'debug', 'verbose'],
+      rawBody: true, // required for Paystack webhook signature verification
     });
-    
+
+    // Enable Socket.IO adapter for WebSocket/LAN sync support
+    app.useWebSocketAdapter(new IoAdapter(app));
+
     logger.log('Enabling CORS...');
-    app.enableCors();
-    
+    app.enableCors({
+      origin: [
+        process.env.FRONTEND_URL ?? 'http://localhost:3001',
+        process.env.ADMIN_URL ?? 'http://localhost:3002',
+      ],
+      credentials: true,
+    });
+
     logger.log('Setting global prefix to /api...');
     app.setGlobalPrefix('api');
-    
+
+    logger.log('Enabling URI versioning (default v1)...');
+    app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
+
+    // ─── Swagger / OpenAPI ─────────────────────────────────────────────────────
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('KASTRA POS API')
+      .setDescription('eTIMS-compliant POS API for Kenyan businesses')
+      .setVersion('1.0')
+      .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'JWT')
+      .build();
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api/docs', app, document);
+
     logger.log('Starting server on port 3010...');
     await app.listen(3010);
-    
+
     logger.log('🚀 API running on http://localhost:3010/api');
     logger.log('📋 Health check: http://localhost:3010/api/auth/me');
+    logger.log('📖 Swagger docs: http://localhost:3010/api/docs');
+    logger.log('🔑 Super Admin: POST /api/v1/super-admin/login');
   } catch (error) {
     logger.error('Failed to start application:', error);
+    if (process.env.SENTRY_DSN) Sentry.captureException(error);
     process.exit(1);
   }
 }

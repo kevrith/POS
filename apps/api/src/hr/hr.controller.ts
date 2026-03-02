@@ -1,13 +1,45 @@
 import { Controller, Post, Get, Patch, Delete, Body, Param, Query } from '@nestjs/common';
 import { HrService } from './hr.service';
+import { PayrollService } from './payroll.service';
 
 @Controller('hr')
 export class HrController {
-  constructor(private hrService: HrService) {}
+  constructor(
+    private hrService: HrService,
+    private payrollService: PayrollService,
+  ) {}
 
   @Get('employees')
   async getEmployees(@Query('businessId') businessId: string) {
     return this.hrService.getEmployees(businessId);
+  }
+
+  @Post('employees')
+  async createEmployee(
+    @Query('businessId') businessId: string,
+    @Body() dto: {
+      userId: string;
+      idNumber?: string;
+      employmentType?: string;
+      commissionRate?: number;
+      commissionBasis?: string;
+      salesTargetCents?: number;
+      startDate?: string;
+      emergencyContact?: string;
+      bankName?: string;
+      bankAccount?: string;
+    },
+  ) {
+    return this.hrService.createEmployee(businessId, dto);
+  }
+
+  @Patch('employees/:id')
+  async updateEmployee(
+    @Param('id') id: string,
+    @Query('businessId') businessId: string,
+    @Body() dto: { commissionRate?: number; commissionBasis?: string; salesTargetCents?: number },
+  ) {
+    return this.hrService.updateEmployee(id, businessId, dto);
   }
 
   @Post('attendance/clock-in')
@@ -67,9 +99,69 @@ export class HrController {
     });
   }
 
+  @Get('leave')
+  async getPendingLeaves(@Query('businessId') businessId: string) {
+    return this.hrService.getPendingLeaves(businessId);
+  }
+
   @Get('leave/:employeeId')
   async getLeaves(@Param('employeeId') employeeId: string) {
     return this.hrService.getLeaves(employeeId);
+  }
+
+  @Patch('leave/:id/approve')
+  async approveLeave(
+    @Param('id') id: string,
+    @Body('approvedBy') approvedBy: string,
+  ) {
+    return this.hrService.approveLeave(id, approvedBy);
+  }
+
+  @Patch('leave/:id/reject')
+  async rejectLeave(
+    @Param('id') id: string,
+    @Body('approvedBy') approvedBy: string,
+  ) {
+    return this.hrService.rejectLeave(id, approvedBy);
+  }
+
+  @Get('leave-balance')
+  getLeaveBalance(
+    @Query('employeeId') employeeId: string,
+    @Query('year') year: string,
+  ) {
+    return this.hrService.getLeaveBalances(employeeId, parseInt(year) || new Date().getFullYear());
+  }
+
+  @Post('leave-balance')
+  allocateLeave(
+    @Body() body: { employeeId: string; year: number; leaveType: string; allocatedDays: number },
+  ) {
+    return this.hrService.allocateLeave(body.employeeId, body.year, body.leaveType, body.allocatedDays);
+  }
+
+  @Get('performance')
+  getPerformanceDashboard(
+    @Query('businessId') businessId: string,
+    @Query('month') month: string,
+    @Query('year') year: string,
+  ) {
+    const now = new Date();
+    return this.hrService.getPerformanceDashboard(
+      businessId,
+      parseInt(month) || now.getMonth() + 1,
+      parseInt(year) || now.getFullYear(),
+    );
+  }
+
+  @Get('shift-sales')
+  getShiftSalesReport(
+    @Query('businessId') businessId: string,
+    @Query('storeId') storeId: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    return this.hrService.getShiftSalesReport(businessId, storeId, startDate, endDate);
   }
 
   @Get('stats/:employeeId')
@@ -107,5 +199,47 @@ export class HrController {
     @Query('businessId') businessId: string,
   ) {
     return this.hrService.deleteShift(id, businessId);
+  }
+
+  // ─── Payroll Routes ──────────────────────────────────────────────────────────
+
+  @Post('payroll')
+  async createPayrollRun(
+    @Body() body: { businessId: string; storeId?: string; month: number; year: number },
+  ) {
+    return this.payrollService.createPayrollRun(body.businessId, body.storeId, body.month, body.year);
+  }
+
+  @Get('payroll')
+  async getPayrollRuns(@Query('businessId') businessId: string) {
+    return this.payrollService.getPayrollRuns(businessId);
+  }
+
+  @Get('payroll/employee/:employeeId')
+  async getEmployeePayslips(@Param('employeeId') employeeId: string) {
+    return this.payrollService.getEmployeePayslips(employeeId);
+  }
+
+  @Get('payroll/:runId/payslips')
+  async getPayslipsByRun(@Param('runId') runId: string) {
+    return this.payrollService.getPayslipsByRun(runId);
+  }
+
+  @Patch('payroll/:runId/approve')
+  async approvePayrollRun(
+    @Param('runId') runId: string,
+    @Body('approvedBy') approvedBy: string,
+  ) {
+    return this.payrollService.approvePayrollRun(runId, approvedBy);
+  }
+
+  @Patch('payroll/:runId/paid')
+  async markAsPaid(@Param('runId') runId: string) {
+    return this.payrollService.markAsPaid(runId);
+  }
+
+  @Delete('payroll/:runId')
+  async deletePayrollRun(@Param('runId') runId: string) {
+    return this.payrollService.deletePayrollRun(runId);
   }
 }

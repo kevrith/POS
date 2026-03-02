@@ -16,7 +16,7 @@ import {
 } from './db';
 import { useSyncStore } from '../stores/sync';
 
-const API_BASE = '/api';
+const API_BASE = '/api/v1';
 
 // ─── Network check ────────────────────────────────────────────────────────────
 

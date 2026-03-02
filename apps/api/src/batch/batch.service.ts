@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { v4 as uuidv4 } from 'uuid';
 
 interface CreateBatchDto {
@@ -14,7 +15,10 @@ interface CreateBatchDto {
 
 @Injectable()
 export class BatchService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationsService: NotificationsService,
+  ) {}
 
   async create(businessId: string, dto: CreateBatchDto) {
     const item = await this.prisma.item.findFirst({
@@ -47,7 +51,7 @@ export class BatchService {
         item: { businessId },
         ...(status ? { status } : {}),
       },
-      include: { item: { select: { name: true, unit: true } } },
+      include: { item: { select: { name: true, weightUnit: true } } },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -72,6 +76,7 @@ export class BatchService {
     const batch = await this.prisma.batch.findFirst({
       where: { id: batchId, item: { businessId } },
       include: {
+        item: { select: { name: true, businessId: true } },
         movements: {
           where: { type: 'SALE' },
           include: { sale: { include: { customer: true } } },
@@ -86,9 +91,21 @@ export class BatchService {
       data: { status: 'RECALLED' },
     });
 
+    const affectedSales = batch.movements.map(m => m.sale).filter(Boolean);
+
+    const affectedCount = await this.prisma.inventoryMovement.count({
+      where: { batchId: batch.id, type: 'SALE' },
+    });
+    this.notificationsService.notifyBatchRecall(
+      batch.item.businessId,
+      batch.id,
+      batch.item.name,
+      affectedCount,
+    ).catch(() => {});
+
     return {
       batch,
-      affectedSales: batch.movements.map(m => m.sale).filter(Boolean),
+      affectedSales,
     };
   }
 

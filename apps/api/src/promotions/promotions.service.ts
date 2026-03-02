@@ -86,4 +86,8 @@ export class PromotionsService {
       orderBy: { createdAt: 'desc' },
     });
   }
+
+  async deletePromotion(id: string) {
+    return this.prisma.promotion.delete({ where: { id } });
+  }
 }

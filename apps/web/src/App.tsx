@@ -27,6 +27,18 @@ const SalesListPage = lazy(() => import('./pages/SalesListPage'));
 const PromotionsPage = lazy(() => import('./pages/PromotionsPage'));
 const GiftCardsPage = lazy(() => import('./pages/GiftCardsPage'));
 const KDSPage = lazy(() => import('./pages/KDSPage'));
+const SetupWizardPage = lazy(() => import('./pages/SetupWizardPage'));
+const TransfersPage = lazy(() => import('./pages/TransfersPage'));
+const OwnerDashboardPage = lazy(() => import('./pages/OwnerDashboardPage'));
+const PoleDisplayPage = lazy(() => import('./pages/PoleDisplayPage'));
+const PrescriptionsPage = lazy(() => import('./pages/PrescriptionsPage'));
+const AppointmentsPage = lazy(() => import('./pages/AppointmentsPage'));
+const DeliveryPage = lazy(() => import('./pages/DeliveryPage'));
+const CustomerPortalPage = lazy(() => import('./pages/CustomerPortalPage'));
+const PayrollPage = lazy(() => import('./pages/PayrollPage'));
+const ForecastingPage = lazy(() => import('./pages/ForecastingPage'));
+const ReconciliationPage = lazy(() => import('./pages/ReconciliationPage'));
+const FranchisePage = lazy(() => import('./pages/FranchisePage'));
 
 function PageLoader() {
   return (
@@ -38,6 +50,24 @@ function PageLoader() {
 
 export default function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
+  // Pole display is a standalone page — no auth, no layout
+  if (window.location.pathname === '/pole-display') {
+    return (
+      <Suspense fallback={<div style={{ background: '#0d1b2a', height: '100vh' }} />}>
+        <PoleDisplayPage />
+      </Suspense>
+    );
+  }
+
+  // Customer portal — public, no auth, no layout
+  if (window.location.pathname === '/portal') {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-indigo-50" />}>
+        <CustomerPortalPage />
+      </Suspense>
+    );
+  }
 
   if (!isAuthenticated) {
     return <LoginPage />;
@@ -69,14 +99,28 @@ export default function App() {
           {/* People */}
           <Route path="/customers" element={<CustomersPage />} />
           <Route path="/hr" element={<HRPage />} />
+          <Route path="/payroll" element={<PayrollPage />} />
           {/* Hospitality */}
           <Route path="/kds" element={<KDSPage />} />
           {/* Marketing */}
           <Route path="/promotions" element={<PromotionsPage />} />
           <Route path="/gift-cards" element={<GiftCardsPage />} />
+          {/* Multi-store */}
+          <Route path="/transfers" element={<TransfersPage />} />
+          <Route path="/owner-dashboard" element={<OwnerDashboardPage />} />
+          {/* Clinic / Pharmacy */}
+          <Route path="/prescriptions" element={<PrescriptionsPage />} />
+          {/* Appointments / Service */}
+          <Route path="/appointments" element={<AppointmentsPage />} />
+          {/* Delivery */}
+          <Route path="/delivery" element={<DeliveryPage />} />
           {/* System */}
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/setup" element={<SetupWizardPage />} />
+          <Route path="/forecasting" element={<ForecastingPage />} />
+          <Route path="/reconciliation" element={<ReconciliationPage />} />
+          <Route path="/franchise" element={<FranchisePage />} />
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/pos" replace />} />
         </Routes>

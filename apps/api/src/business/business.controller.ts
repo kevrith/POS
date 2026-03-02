@@ -10,8 +10,9 @@ import {
   Req,
 } from '@nestjs/common';
 import { BusinessService } from './business.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtAuthGuard, Public } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../auth/tenant.guard';
+import { SkipSubscriptionCheck } from '../auth/subscription.guard';
 import type { Request } from 'express';
 import type { AuthUser } from '../auth/auth.service';
 import { UserRole } from '@pos/shared';
@@ -56,6 +57,7 @@ export class BusinessController {
     return this.businessService.createStore(businessId, dto);
   }
 
+  @SkipSubscriptionCheck()
   @Get(':businessId/subscription')
   async getSubscription(@Param('businessId') businessId: string) {
     return this.businessService.getSubscriptionStatus(businessId);
@@ -110,6 +112,24 @@ export class BusinessController {
     return this.businessService.deleteUser(businessId, userId);
   }
 
+  @Post(':businessId/users/:userId/stores/:storeId')
+  async assignUserToStore(
+    @Param('businessId') businessId: string,
+    @Param('userId') userId: string,
+    @Param('storeId') storeId: string,
+  ) {
+    return this.businessService.assignUserToStore(businessId, userId, storeId);
+  }
+
+  @Delete(':businessId/users/:userId/stores/:storeId')
+  async removeUserFromStore(
+    @Param('businessId') businessId: string,
+    @Param('userId') userId: string,
+    @Param('storeId') storeId: string,
+  ) {
+    return this.businessService.removeUserFromStore(businessId, userId, storeId);
+  }
+
   // ─── Credential Management ──────────────────────────────────────────────────
 
   @Patch(':businessId/etims-credentials')
@@ -141,5 +161,39 @@ export class BusinessController {
     @Body() dto: { apiKey: string; username: string; senderId?: string },
   ) {
     return this.businessService.saveAtCredentials(businessId, dto);
+  }
+
+  // ─── Exchange Rates ──────────────────────────────────────────────────────────
+
+  @Get(':businessId/exchange-rates')
+  async getExchangeRates(@Param('businessId') businessId: string) {
+    return this.businessService.getExchangeRates(businessId);
+  }
+
+  /** Auto-fetch live rates from open.er-api.com for requested currencies. */
+  @Post(':businessId/exchange-rates/refresh')
+  async refreshExchangeRates(
+    @Param('businessId') businessId: string,
+    @Body() dto: { currencies: string[] },
+  ) {
+    return this.businessService.refreshExchangeRates(businessId, dto.currencies ?? []);
+  }
+
+  @Patch(':businessId/exchange-rates')
+  async updateExchangeRates(
+    @Param('businessId') businessId: string,
+    @Body() dto: { rates?: Record<string, number>; displayCurrencies?: string[] },
+  ) {
+    return this.businessService.updateExchangeRates(businessId, dto);
+  }
+
+  // ── Pole Display Config (public, no auth required) ────────────────────────────
+
+  @Public()
+  @SkipSubscriptionCheck()
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/pole-config')
+  async getPoleConfig(@Param('id') id: string) {
+    return this.businessService.getPoleConfig(id);
   }
 }

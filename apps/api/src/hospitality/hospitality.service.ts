@@ -1,6 +1,7 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class HospitalityService {
@@ -11,6 +12,38 @@ export class HospitalityService {
       where: { storeId, ...(status && { status }) },
       orderBy: { number: 'asc' },
     });
+  }
+
+  async createTable(data: { storeId: string; number: string; capacity: number; floor?: string }) {
+    return this.prisma.table.create({
+      data: {
+        storeId: data.storeId,
+        number: data.number,
+        capacity: data.capacity,
+        floor: data.floor,
+        status: 'AVAILABLE',
+      },
+    });
+  }
+
+  async updateTable(id: string, data: { number?: string; capacity?: number; floor?: string | null }) {
+    return this.prisma.table.update({
+      where: { id },
+      data: {
+        ...(data.number !== undefined && { number: data.number }),
+        ...(data.capacity !== undefined && { capacity: data.capacity }),
+        ...(data.floor !== undefined && { floor: data.floor || null }),
+      },
+    });
+  }
+
+  async deleteTable(id: string) {
+    const table = await this.prisma.table.findUnique({ where: { id } });
+    if (!table) throw new NotFoundException('Table not found');
+    if (table.status !== 'AVAILABLE') {
+      throw new BadRequestException('Cannot delete a table that is currently occupied or reserved');
+    }
+    return this.prisma.table.delete({ where: { id } });
   }
 
   async updateTableStatus(tableId: string, status: string) {
@@ -45,23 +78,28 @@ export class HospitalityService {
     quantity: number;
     unitPriceCents: number;
     specialInstructions?: string;
-    modifiers?: string[];
+    modifiers?: Array<{ name: string; priceCents?: number } | string>;
   }>) {
     return Promise.all(
-      items.map(item =>
-        this.prisma.orderItem.create({
+      items.map(item => {
+        // Support both legacy string[] modifiers and new priced modifier objects
+        const modifierTotal = Array.isArray(item.modifiers)
+          ? item.modifiers.reduce((s: number, m: any) => s + (typeof m === 'object' ? (m.priceCents ?? 0) : 0), 0)
+          : 0;
+        const totalCents = (item.unitPriceCents + modifierTotal) * item.quantity;
+        return this.prisma.orderItem.create({
           data: {
             orderId,
             itemId: item.itemId,
             name: item.name,
             quantity: item.quantity,
             unitPriceCents: item.unitPriceCents,
-            totalCents: item.quantity * item.unitPriceCents,
+            totalCents,
             specialInstructions: item.specialInstructions,
             modifiers: item.modifiers ? JSON.stringify(item.modifiers) : null,
           },
-        })
-      )
+        });
+      })
     );
   }
 
@@ -274,6 +312,150 @@ export class HospitalityService {
         },
       },
       orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  // ── Bar Tab Methods ────────────────────────────────────────────────────────
+
+  async createBarTab(businessId: string, storeId: string, tabName: string, waiterId: string) {
+    return this.prisma.order.create({
+      data: {
+        offlineId: randomUUID(),
+        businessId,
+        storeId,
+        mode: 'BAR_TAB',
+        status: 'OPEN',
+        waiterId,
+      },
+    });
+  }
+
+  async getBarTabs(businessId: string, storeId?: string) {
+    return this.prisma.order.findMany({
+      where: {
+        businessId,
+        mode: 'BAR_TAB',
+        status: { in: ['OPEN', 'BILL_REQUESTED'] },
+        ...(storeId ? { storeId } : {}),
+      },
+      include: {
+        items: { include: { item: { select: { name: true, category: true } } } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async addToBarTab(
+    tabId: string,
+    items: Array<{
+      itemId: string;
+      name: string;
+      quantity: number;
+      unitPriceCents: number;
+      modifiers?: Array<{ name: string; priceCents: number }>;
+      specialInstructions?: string;
+    }>,
+  ) {
+    const order = await this.prisma.order.findUnique({ where: { id: tabId } });
+    if (!order) throw new NotFoundException('Bar tab not found');
+
+    const createdItems = await Promise.all(
+      items.map(item => {
+        const modifierTotal = (item.modifiers ?? []).reduce((s, m) => s + m.priceCents, 0);
+        const totalCents = (item.unitPriceCents + modifierTotal) * item.quantity;
+        return this.prisma.orderItem.create({
+          data: {
+            orderId: tabId,
+            itemId: item.itemId,
+            name: item.name,
+            quantity: item.quantity,
+            unitPriceCents: item.unitPriceCents,
+            totalCents,
+            modifiers: item.modifiers ? JSON.stringify(item.modifiers) : null,
+            specialInstructions: item.specialInstructions,
+          },
+        });
+      }),
+    );
+
+    const kotCount = await this.prisma.kOT.count({ where: { orderId: tabId } });
+    await this.prisma.kOT.create({
+      data: {
+        orderId: tabId,
+        kotNumber: kotCount + 1,
+        type: 'KOT_DRINKS',
+        status: 'PENDING',
+      },
+    });
+
+    return { added: createdItems.length };
+  }
+
+  async settleBarTab(
+    tabId: string,
+    payments: Array<{ method: string; amountCents: number; reference?: string }>,
+  ) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: tabId },
+      include: { items: true },
+    });
+    if (!order) throw new NotFoundException('Bar tab not found');
+
+    const totalCents = order.items.reduce((s, i) => s + i.totalCents, 0);
+
+    const store = await this.prisma.store.findUnique({ where: { id: order.storeId } });
+    const updatedStore = await this.prisma.store.update({
+      where: { id: order.storeId },
+      data: { receiptSequence: { increment: 1 } },
+    });
+    const receiptNumber = `${store.storeCode}-${String(updatedStore.receiptSequence).padStart(6, '0')}`;
+
+    const sale = await this.prisma.$transaction(async tx => {
+      const newSale = await tx.sale.create({
+        data: {
+          offlineId: randomUUID(),
+          businessId: order.businessId,
+          storeId: order.storeId,
+          receiptNumber,
+          orderId: tabId,
+          cashierId: order.waiterId,
+          type: 'NORMAL',
+          status: 'PAID',
+          subtotalCents: totalCents,
+          vatCents: Math.round(totalCents * 16 / 116),
+          totCents: 0,
+          totalCents,
+          items: {
+            create: order.items.map(i => ({
+              itemId: i.itemId,
+              name: i.name,
+              quantity: i.quantity,
+              unitPriceCents: i.unitPriceCents,
+              totalCents: i.totalCents,
+            })),
+          },
+          payments: {
+            create: payments.map(p => ({
+              offlineId: randomUUID(),
+              method: p.method,
+              amountCents: p.amountCents,
+              reference: p.reference,
+            })),
+          },
+        },
+      });
+
+      await tx.order.update({ where: { id: tabId }, data: { status: 'PAID' } });
+      return newSale;
+    });
+
+    return { id: sale.id, receiptNumber: sale.receiptNumber, totalCents: sale.totalCents };
+  }
+
+  async closeBarTab(tabId: string) {
+    return this.prisma.order.update({
+      where: { id: tabId },
+      data: { status: 'CLOSED' },
     });
   }
 }

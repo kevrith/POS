@@ -89,7 +89,6 @@ function IngredientsModal({
 
   const filtered = catalog.filter(
     (c) =>
-      c.type !== 'RECIPE' &&
       c.type !== 'BUNDLE' &&
       c.name.toLowerCase().includes(search.toLowerCase()) &&
       !rows.find((r) => r.itemId === c.id),
@@ -272,7 +271,7 @@ function CreateRecipeModal({
     },
   });
 
-  const ingredientCatalog = catalog.filter((c) => c.type !== 'RECIPE' && c.type !== 'BUNDLE');
+  const ingredientCatalog = catalog.filter((c) => c.type !== 'BUNDLE');
   const filtered = ingredientCatalog.filter(
     (c) =>
       c.name.toLowerCase().includes(search.toLowerCase()) &&

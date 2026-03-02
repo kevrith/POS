@@ -14,6 +14,7 @@ export interface JwtPayload {
   businessId: string;
   role: UserRole;
   storeId?: string;
+  assignedStoreIds?: string[]; // for MANAGER: stores they are scoped to
 }
 
 export interface AuthUser {
@@ -23,6 +24,7 @@ export interface AuthUser {
   role: UserRole;
   businessId: string;
   storeId?: string;
+  assignedStoreIds?: string[]; // populated for MANAGER role
 }
 
 @Injectable()
@@ -40,7 +42,10 @@ export class AuthService {
   ): Promise<{ accessToken: string; user: AuthUser }> {
     const user = await this.prisma.user.findUnique({
       where: { email },
-      include: { business: true },
+      include: {
+        business: true,
+        assignedStores: { select: { storeId: true } },
+      },
     });
 
     if (!user || !(await bcrypt.compare(password, user.passwordHash ?? ''))) {
@@ -64,10 +69,16 @@ export class AuthService {
       if (!valid) throw new UnauthorizedException('Invalid TOTP code');
     }
 
+    const assignedStoreIds =
+      user.role === UserRole.MANAGER && user.assignedStores.length > 0
+        ? user.assignedStores.map((s) => s.storeId)
+        : undefined;
+
     const payload: JwtPayload = {
       sub: user.id,
       businessId: user.businessId,
       role: user.role as UserRole,
+      ...(assignedStoreIds && { assignedStoreIds }),
     };
 
     const accessToken = this.jwt.sign(payload, { expiresIn: '15m' });
@@ -80,6 +91,7 @@ export class AuthService {
         email: user.email,
         role: user.role as UserRole,
         businessId: user.businessId,
+        ...(assignedStoreIds && { assignedStoreIds }),
       },
     };
   }
@@ -132,12 +144,19 @@ export class AuthService {
   ): Promise<{ accessToken: string }> {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
+      include: { assignedStores: { select: { storeId: true } } },
     });
+
+    const assignedStoreIds =
+      user.role === UserRole.MANAGER && user.assignedStores.length > 0
+        ? user.assignedStores.map((s) => s.storeId)
+        : undefined;
 
     const payload: JwtPayload = {
       sub: user.id,
       businessId: user.businessId,
       role: user.role as UserRole,
+      ...(assignedStoreIds && { assignedStoreIds }),
     };
 
     return { accessToken: this.jwt.sign(payload, { expiresIn: '15m' }) };
@@ -146,7 +165,7 @@ export class AuthService {
   // ─── TOTP setup ──────────────────────────────────────────────
   async setupTotp(userId: string): Promise<{ secret: string; otpauthUrl: string }> {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    const secret = speakeasy.generateSecret({ name: `POS Kenya (${user.email ?? user.name})` });
+    const secret = speakeasy.generateSecret({ name: `KASTRA POS (${user.email ?? user.name})` });
 
     await this.prisma.user.update({
       where: { id: userId },
@@ -211,6 +230,64 @@ export class AuthService {
         email: result.user.email,
         role: UserRole.OWNER,
         businessId: result.user.businessId,
+      },
+    };
+  }
+
+  // ─── Google OAuth ────────────────────────────────────────────
+  async loginWithGoogle(profile: {
+    googleId: string;
+    email: string | null;
+    name: string;
+    avatarUrl: string | null;
+  }): Promise<{ accessToken: string; user: AuthUser }> {
+    // Find existing user by googleId or email
+    let user = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { googleId: profile.googleId },
+          ...(profile.email ? [{ email: profile.email }] : []),
+        ],
+      },
+      include: { assignedStores: { select: { storeId: true } } },
+    });
+
+    if (user) {
+      // Link googleId if signing in via email account for the first time with Google
+      if (!user.googleId) {
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: { googleId: profile.googleId, avatarUrl: profile.avatarUrl },
+          include: { assignedStores: { select: { storeId: true } } },
+        });
+      }
+    } else {
+      throw new UnauthorizedException(
+        'No account linked to this Google identity. Please register or ask your admin to add your email.',
+      );
+    }
+
+    const assignedStoreIds =
+      user.role === UserRole.MANAGER && user.assignedStores.length > 0
+        ? user.assignedStores.map((s) => s.storeId)
+        : undefined;
+
+    const jwtPayload: JwtPayload = {
+      sub: user.id,
+      businessId: user.businessId,
+      role: user.role as UserRole,
+      ...(assignedStoreIds && { assignedStoreIds }),
+    };
+
+    return {
+      accessToken: this.jwt.sign(jwtPayload, { expiresIn: '15m' }),
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role as UserRole,
+        businessId: user.businessId,
+        ...(assignedStoreIds && { assignedStoreIds }),
       },
     };
   }

@@ -2,16 +2,101 @@
 @tailwind components;
 @tailwind utilities;
 
-* {
+/* ─── Base resets ─────────────────────────────────────────────────────────── */
+*, *::before, *::after {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Custom scrollbar ────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+.dark ::-webkit-scrollbar-thumb { background: #374151; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+
+/* ─── Focus rings ─────────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* ─── Selection ───────────────────────────────────────────────────────────── */
+::selection { background: #bfdbfe; color: #1e40af; }
+.dark ::selection { background: #1d4ed8; color: #dbeafe; }
+
+/* ─── Utility layer ───────────────────────────────────────────────────────── */
+@layer components {
+  /* Stat card */
+  .stat-card {
+    @apply bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-5 shadow-sm;
+  }
+  .stat-label {
+    @apply text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide;
+  }
+  .stat-value {
+    @apply text-2xl font-bold text-gray-900 dark:text-white mt-1;
+  }
+
+  /* Badge / pill */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold;
+  }
+  .badge-green  { @apply badge bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400; }
+  .badge-red    { @apply badge bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400; }
+  .badge-amber  { @apply badge bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400; }
+  .badge-blue   { @apply badge bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400; }
+  .badge-purple { @apply badge bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400; }
+  .badge-gray   { @apply badge bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300; }
+
+  /* Data table */
+  .data-table { @apply w-full text-sm; }
+  .data-table thead th {
+    @apply px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider bg-gray-50 dark:bg-gray-900/40 whitespace-nowrap;
+  }
+  .data-table tbody tr {
+    @apply border-t border-gray-100 dark:border-gray-700/60 hover:bg-gray-50/80 dark:hover:bg-gray-700/30 transition-colors duration-100;
+  }
+  .data-table tbody td {
+    @apply px-4 py-3;
+  }
+
+  /* Form */
+  .form-input {
+    @apply w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition;
+  }
+  .form-label {
+    @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1;
+  }
+
+  /* Buttons */
+  .btn { @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-150 active:scale-95; }
+  .btn-primary { @apply btn bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white shadow-sm; }
+  .btn-secondary { @apply btn bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600; }
+  .btn-danger { @apply btn bg-red-600 hover:bg-red-700 text-white; }
+  .btn-success { @apply btn bg-emerald-600 hover:bg-emerald-700 text-white; }
+  .btn-sm { @apply text-xs px-3 py-1.5; }
+  .btn-lg { @apply text-base px-6 py-3; }
+
+  /* Page */
+  .page-container { @apply p-6 space-y-6; }
+}
+
+/* ─── Print ───────────────────────────────────────────────────────────────── */
+@media print {
+  nav, aside, .no-print { display: none !important; }
+  body { background: white !important; color: black !important; }
 }

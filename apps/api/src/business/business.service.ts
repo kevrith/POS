@@ -17,6 +17,14 @@ interface UpdateBusinessDto {
   posMode?: string;
   expiredItemPolicy?: string;
   expenseApprovalThresholdCents?: number;
+  expiryAlertDays?: number;
+  exchangeRates?: string;    // JSON: { USD: 130.5, EUR: 141.2 }
+  displayCurrencies?: string; // JSON: ["USD","EUR"]
+  paystackPublicKey?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankAccountName?: string;
+  bankBranch?: string;
 }
 
 interface CreateStoreDto {
@@ -112,10 +120,38 @@ export class BusinessService {
         email: true,
         role: true,
         createdAt: true,
-        // Never return passwordHash, pinHash, or totpSecret
+        assignedStores: {
+          select: { storeId: true },
+        },
       },
       orderBy: { name: 'asc' },
     });
+  }
+
+  // ─── User-Store Assignment ────────────────────────────────────────────────────
+
+  async assignUserToStore(businessId: string, userId: string, storeId: string) {
+    // Verify both user and store belong to this business
+    const [user, store] = await Promise.all([
+      this.prisma.user.findFirst({ where: { id: userId, businessId } }),
+      this.prisma.store.findFirst({ where: { id: storeId, businessId } }),
+    ]);
+    if (!user) throw new NotFoundException('User not found');
+    if (!store) throw new NotFoundException('Store not found');
+
+    await this.prisma.userStore.upsert({
+      where: { userId_storeId: { userId, storeId } },
+      create: { userId, storeId, businessId },
+      update: {},
+    });
+    return { message: 'Store assigned' };
+  }
+
+  async removeUserFromStore(businessId: string, userId: string, storeId: string) {
+    await this.prisma.userStore.deleteMany({
+      where: { userId, storeId, businessId },
+    });
+    return { message: 'Store assignment removed' };
   }
 
   async createUser(businessId: string, dto: CreateUserDto) {
@@ -228,6 +264,62 @@ export class BusinessService {
     return { message: 'Africa\'s Talking credentials saved' };
   }
 
+  // ─── Exchange Rates ───────────────────────────────────────────────────────────
+
+  async getExchangeRates(businessId: string) {
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { exchangeRates: true, displayCurrencies: true },
+    });
+    if (!business) throw new NotFoundException('Business not found');
+    return {
+      rates: business.exchangeRates ? JSON.parse(business.exchangeRates) : {},
+      displayCurrencies: business.displayCurrencies
+        ? JSON.parse(business.displayCurrencies)
+        : [],
+    };
+  }
+
+  /** Fetch live rates from open.er-api.com (KES base) and persist. */
+  async refreshExchangeRates(businessId: string, currencies: string[]) {
+    const resp = await fetch('https://open.er-api.com/v6/latest/KES');
+    if (!resp.ok) throw new BadRequestException('Failed to fetch exchange rates');
+    const data = (await resp.json()) as { result: string; rates: Record<string, number> };
+    if (data.result !== 'success') throw new BadRequestException('Exchange rate API error');
+
+    // open.er-api with base=KES: rates.USD = 0.00773 → invert → 1 USD = 129.4 KES
+    const kesPerCurrency: Record<string, number> = {};
+    for (const code of currencies) {
+      const raw = data.rates[code];
+      if (raw) kesPerCurrency[code] = Math.round((1 / raw) * 100) / 100;
+    }
+
+    await this.prisma.business.update({
+      where: { id: businessId },
+      data: {
+        exchangeRates: JSON.stringify(kesPerCurrency),
+        displayCurrencies: JSON.stringify(currencies),
+      },
+    });
+    return { rates: kesPerCurrency, displayCurrencies: currencies, refreshedAt: new Date() };
+  }
+
+  async updateExchangeRates(
+    businessId: string,
+    dto: { rates?: Record<string, number>; displayCurrencies?: string[] },
+  ) {
+    await this.prisma.business.update({
+      where: { id: businessId },
+      data: {
+        ...(dto.rates !== undefined && { exchangeRates: JSON.stringify(dto.rates) }),
+        ...(dto.displayCurrencies !== undefined && {
+          displayCurrencies: JSON.stringify(dto.displayCurrencies),
+        }),
+      },
+    });
+    return { message: 'Exchange rates updated' };
+  }
+
   // ─── Subscription ─────────────────────────────────────────────────────────────
 
   async getSubscriptionStatus(businessId: string) {
@@ -259,5 +351,15 @@ export class BusinessService {
           )
         : null,
     };
+  }
+
+  // ── Pole Display Config (public) ──────────────────────────────────────────────
+
+  async getPoleConfig(businessId: string) {
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { id: true, name: true, idleMessage: true, idleLogoUrl: true },
+    });
+    return business ?? { name: 'KASTRA POS', idleMessage: 'Welcome!', idleLogoUrl: null };
   }
 }

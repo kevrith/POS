@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Package, AlertTriangle, Clock, RotateCcw, History, X,
-  RefreshCw, ChevronDown, CheckCircle, XCircle, Loader2, Plus,
+  RefreshCw, CheckCircle, XCircle, Loader2, Plus,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';

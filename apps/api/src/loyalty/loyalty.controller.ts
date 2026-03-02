@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Param, Query } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Body, Param, Query } from '@nestjs/common';
 import { LoyaltyService } from './loyalty.service';
 
 @Controller('loyalty')
@@ -42,5 +42,45 @@ export class LoyaltyController {
   @Get('customer/:id')
   async getCustomerPoints(@Param('id') id: string) {
     return this.loyaltyService.getCustomerPoints(id);
+  }
+
+  // ─── Tiers ─────────────────────────────────────────────────────────────────
+
+  @Post('tiers')
+  async createTier(@Body() data: {
+    businessId: string;
+    name: string;
+    minPoints: number;
+    multiplier: number;
+    color: string;
+    perksJson?: string;
+  }) {
+    return this.loyaltyService.createTier(data);
+  }
+
+  @Get('tiers')
+  async getTiers(@Query('businessId') businessId: string) {
+    return this.loyaltyService.getTiers(businessId);
+  }
+
+  @Patch('tiers/:id')
+  async updateTier(@Param('id') id: string, @Body() data: Partial<{
+    name: string;
+    minPoints: number;
+    multiplier: number;
+    color: string;
+    perksJson: string;
+  }>) {
+    return this.loyaltyService.updateTier(id, data);
+  }
+
+  @Delete('tiers/:id')
+  async deleteTier(@Param('id') id: string) {
+    return this.loyaltyService.deleteTier(id);
+  }
+
+  @Get('customer/:id/tier')
+  async getCustomerTier(@Param('id') id: string) {
+    return this.loyaltyService.getCustomerTier(id);
   }
 }

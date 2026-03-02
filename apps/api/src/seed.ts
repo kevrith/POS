@@ -63,40 +63,41 @@ async function main() {
   // ─── Menu Items ───────────────────────────────────────────────────────────
   console.log('\n📦 Creating menu items...');
 
+  // trackStock=true for packaged/bottled items; false for prepared food & coffee (service items)
   const itemDefs = [
-    { name: 'Chicken Burger', category: 'Food', retailPriceCents: 75000, costPriceCents: 28000 },
-    { name: 'Beef Burger', category: 'Food', retailPriceCents: 85000, costPriceCents: 35000 },
-    { name: 'Fish & Chips', category: 'Food', retailPriceCents: 90000, costPriceCents: 38000 },
-    { name: 'Caesar Salad', category: 'Food', retailPriceCents: 65000, costPriceCents: 22000 },
-    { name: 'Nyama Choma 500g', category: 'Food', retailPriceCents: 120000, costPriceCents: 55000 },
-    { name: 'Pilau (Plate)', category: 'Food', retailPriceCents: 45000, costPriceCents: 15000 },
-    { name: 'Chips (Regular)', category: 'Food', retailPriceCents: 20000, costPriceCents: 6000 },
-    { name: 'Chips (Large)', category: 'Food', retailPriceCents: 30000, costPriceCents: 9000 },
-    { name: 'Samosa (2 pcs)', category: 'Snacks', retailPriceCents: 15000, costPriceCents: 5000 },
-    { name: 'Spring Rolls (4 pcs)', category: 'Snacks', retailPriceCents: 20000, costPriceCents: 7000 },
-    { name: 'Coca-Cola 500ml', category: 'Drinks', retailPriceCents: 12000, costPriceCents: 7000 },
-    { name: 'Fanta 500ml', category: 'Drinks', retailPriceCents: 12000, costPriceCents: 7000 },
-    { name: 'Sprite 500ml', category: 'Drinks', retailPriceCents: 12000, costPriceCents: 7000 },
-    { name: 'Tusker Lager 500ml', category: 'Drinks', retailPriceCents: 30000, costPriceCents: 18000 },
-    { name: 'Guinness 500ml', category: 'Drinks', retailPriceCents: 35000, costPriceCents: 22000 },
-    { name: 'Still Water 500ml', category: 'Drinks', retailPriceCents: 7000, costPriceCents: 3000 },
-    { name: 'Still Water 1L', category: 'Drinks', retailPriceCents: 12000, costPriceCents: 5000 },
-    { name: 'Fresh Orange Juice', category: 'Drinks', retailPriceCents: 35000, costPriceCents: 12000 },
-    { name: 'Espresso', category: 'Coffee', retailPriceCents: 20000, costPriceCents: 5000 },
-    { name: 'Cappuccino', category: 'Coffee', retailPriceCents: 30000, costPriceCents: 8000 },
-    { name: 'Latte', category: 'Coffee', retailPriceCents: 30000, costPriceCents: 8000 },
-    { name: 'Americano', category: 'Coffee', retailPriceCents: 25000, costPriceCents: 6000 },
-    { name: 'Kenya AA Tea', category: 'Coffee', retailPriceCents: 15000, costPriceCents: 3000 },
-    { name: 'Hot Chocolate', category: 'Coffee', retailPriceCents: 35000, costPriceCents: 10000 },
-    { name: 'Chocolate Cake Slice', category: 'Desserts', retailPriceCents: 45000, costPriceCents: 15000 },
-    { name: 'Cheesecake Slice', category: 'Desserts', retailPriceCents: 50000, costPriceCents: 18000 },
-    { name: 'Ice Cream (2 scoops)', category: 'Desserts', retailPriceCents: 25000, costPriceCents: 8000 },
+    { name: 'Chicken Burger', category: 'Food', retailPriceCents: 75000, costPriceCents: 28000, trackStock: false },
+    { name: 'Beef Burger', category: 'Food', retailPriceCents: 85000, costPriceCents: 35000, trackStock: false },
+    { name: 'Fish & Chips', category: 'Food', retailPriceCents: 90000, costPriceCents: 38000, trackStock: false },
+    { name: 'Caesar Salad', category: 'Food', retailPriceCents: 65000, costPriceCents: 22000, trackStock: false },
+    { name: 'Nyama Choma 500g', category: 'Food', retailPriceCents: 120000, costPriceCents: 55000, trackStock: false },
+    { name: 'Pilau (Plate)', category: 'Food', retailPriceCents: 45000, costPriceCents: 15000, trackStock: false },
+    { name: 'Chips (Regular)', category: 'Food', retailPriceCents: 20000, costPriceCents: 6000, trackStock: false },
+    { name: 'Chips (Large)', category: 'Food', retailPriceCents: 30000, costPriceCents: 9000, trackStock: false },
+    { name: 'Samosa (2 pcs)', category: 'Snacks', retailPriceCents: 15000, costPriceCents: 5000, trackStock: true, initialStock: 50 },
+    { name: 'Spring Rolls (4 pcs)', category: 'Snacks', retailPriceCents: 20000, costPriceCents: 7000, trackStock: true, initialStock: 30 },
+    { name: 'Coca-Cola 500ml', category: 'Drinks', retailPriceCents: 12000, costPriceCents: 7000, trackStock: true, initialStock: 120 },
+    { name: 'Fanta 500ml', category: 'Drinks', retailPriceCents: 12000, costPriceCents: 7000, trackStock: true, initialStock: 96 },
+    { name: 'Sprite 500ml', category: 'Drinks', retailPriceCents: 12000, costPriceCents: 7000, trackStock: true, initialStock: 96 },
+    { name: 'Tusker Lager 500ml', category: 'Drinks', retailPriceCents: 30000, costPriceCents: 18000, trackStock: true, initialStock: 60 },
+    { name: 'Guinness 500ml', category: 'Drinks', retailPriceCents: 35000, costPriceCents: 22000, trackStock: true, initialStock: 48 },
+    { name: 'Still Water 500ml', category: 'Drinks', retailPriceCents: 7000, costPriceCents: 3000, trackStock: true, initialStock: 200 },
+    { name: 'Still Water 1L', category: 'Drinks', retailPriceCents: 12000, costPriceCents: 5000, trackStock: true, initialStock: 100 },
+    { name: 'Fresh Orange Juice', category: 'Drinks', retailPriceCents: 35000, costPriceCents: 12000, trackStock: false },
+    { name: 'Espresso', category: 'Coffee', retailPriceCents: 20000, costPriceCents: 5000, trackStock: false },
+    { name: 'Cappuccino', category: 'Coffee', retailPriceCents: 30000, costPriceCents: 8000, trackStock: false },
+    { name: 'Latte', category: 'Coffee', retailPriceCents: 30000, costPriceCents: 8000, trackStock: false },
+    { name: 'Americano', category: 'Coffee', retailPriceCents: 25000, costPriceCents: 6000, trackStock: false },
+    { name: 'Kenya AA Tea', category: 'Coffee', retailPriceCents: 15000, costPriceCents: 3000, trackStock: false },
+    { name: 'Hot Chocolate', category: 'Coffee', retailPriceCents: 35000, costPriceCents: 10000, trackStock: false },
+    { name: 'Chocolate Cake Slice', category: 'Desserts', retailPriceCents: 45000, costPriceCents: 15000, trackStock: true, initialStock: 20 },
+    { name: 'Cheesecake Slice', category: 'Desserts', retailPriceCents: 50000, costPriceCents: 18000, trackStock: true, initialStock: 15 },
+    { name: 'Ice Cream (2 scoops)', category: 'Desserts', retailPriceCents: 25000, costPriceCents: 8000, trackStock: false },
   ];
 
   for (const item of itemDefs) {
-    const existing = await prisma.item.findFirst({ where: { name: item.name, storeId: store.id } });
-    if (!existing) {
-      await prisma.item.create({
+    let dbItem = await prisma.item.findFirst({ where: { name: item.name, storeId: store.id } });
+    if (!dbItem) {
+      dbItem = await prisma.item.create({
         data: {
           offlineId: randomUUID(),
           businessId: business.id,
@@ -108,10 +109,24 @@ async function main() {
           costPriceCents: item.costPriceCents,
           wholesalePriceCents: Math.round(item.retailPriceCents * 0.85),
           vatApplicable: true,
-          trackStock: false,
+          trackStock: item.trackStock,
         },
       });
       console.log(`  + ${item.name} — KES ${(item.retailPriceCents / 100).toFixed(0)}`);
+      // Create initial inventory movement for stocked items
+      if (item.trackStock && item.initialStock) {
+        await prisma.inventoryMovement.create({
+          data: {
+            offlineId: randomUUID(),
+            businessId: business.id,
+            storeId: store.id,
+            itemId: dbItem.id,
+            type: 'INITIAL',
+            quantity: item.initialStock,
+            source: 'SEED',
+          },
+        });
+      }
     }
   }
 

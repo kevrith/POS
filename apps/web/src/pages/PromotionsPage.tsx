@@ -11,6 +11,7 @@ import {
   ToggleRight,
   Percent,
   Calendar,
+  Trash2,
 } from 'lucide-react';
 import { formatKES } from '@pos/shared';
 
@@ -253,6 +254,11 @@ export default function PromotionsPage() {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['promotions'] }),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/promotions/${id}`),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['promotions'] }),
+  });
+
   const now = new Date();
   const filtered = promotions.filter((p) => {
     if (filter === 'active') return p.isActive;
@@ -414,6 +420,17 @@ export default function PromotionsPage() {
                     <ToggleLeft className="w-6 h-6 text-gray-400" />
                   )}
                   {promo.isActive ? 'Active' : 'Off'}
+                </button>
+                {/* Delete */}
+                <button
+                  onClick={() => {
+                    if (confirm(`Delete "${promo.name}"?`)) deleteMutation.mutate(promo.id);
+                  }}
+                  disabled={deleteMutation.isPending}
+                  className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                  title="Delete promotion"
+                >
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
             );

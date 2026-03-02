@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KASTRA POS — Kenya's Smart Point of Sale System</title>
+  <meta name="description" content="KRA eTIMS-compliant POS for Kenyan businesses. Offline-first, M-Pesa integrated, multi-store ready. Start free for 30 days." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --blue: #2563eb;
+      --blue-dark: #1d4ed8;
+      --blue-light: #eff6ff;
+      --green: #16a34a;
+      --green-light: #f0fdf4;
+      --gray-50: #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-400: #9ca3af;
+      --gray-600: #4b5563;
+      --gray-700: #374151;
+      --gray-900: #111827;
+      --radius: 12px;
+      --shadow: 0 4px 24px rgba(0,0,0,.08);
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', sans-serif; color: var(--gray-900); background: #fff; line-height: 1.6; }
+    a { color: inherit; text-decoration: none; }
+
+    /* ── Layout helpers ── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+    .flex { display: flex; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .gap-2 { gap: 8px; }
+    .gap-3 { gap: 12px; }
+    .gap-4 { gap: 16px; }
+    .gap-6 { gap: 24px; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+    @media(max-width: 768px) {
+      .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+      .hide-mobile { display: none; }
+    }
+
+    /* ── Nav ── */
+    nav { position: sticky; top: 0; z-index: 100; background: rgba(255,255,255,.9); backdrop-filter: blur(12px); border-bottom: 1px solid var(--gray-200); }
+    .nav-inner { height: 64px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { font-size: 1.25rem; font-weight: 800; color: var(--blue); letter-spacing: -.5px; }
+    .logo span { color: var(--gray-900); }
+    .nav-links { display: flex; align-items: center; gap: 28px; list-style: none; }
+    .nav-links a { font-size: .875rem; font-weight: 500; color: var(--gray-600); transition: color .15s; }
+    .nav-links a:hover { color: var(--blue); }
+    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 8px; font-size: .875rem; font-weight: 600; cursor: pointer; transition: all .15s; border: none; }
+    .btn-primary { background: var(--blue); color: #fff; }
+    .btn-primary:hover { background: var(--blue-dark); }
+    .btn-outline { background: transparent; color: var(--blue); border: 1.5px solid var(--blue); }
+    .btn-outline:hover { background: var(--blue-light); }
+    .btn-lg { padding: 14px 28px; font-size: 1rem; border-radius: 10px; }
+    .btn-white { background: #fff; color: var(--blue); }
+    .btn-white:hover { background: #f0f9ff; }
+
+    /* ── Hero ── */
+    .hero { padding: 80px 0 64px; background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 50%, #2563eb 100%); color: #fff; text-align: center; position: relative; overflow: hidden; }
+    .hero::before { content:''; position:absolute; inset:0; background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E"); }
+    .hero-badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.25); color: #fff; font-size: .75rem; font-weight: 600; padding: 6px 14px; border-radius: 100px; margin-bottom: 24px; }
+    .hero h1 { font-size: clamp(2rem, 5vw, 3.25rem); font-weight: 800; line-height: 1.15; margin-bottom: 20px; letter-spacing: -.5px; }
+    .hero h1 span { color: #93c5fd; }
+    .hero p { font-size: 1.125rem; opacity: .85; max-width: 600px; margin: 0 auto 32px; }
+    .hero-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 48px; }
+    .hero-stats { display: flex; gap: 32px; justify-content: center; flex-wrap: wrap; }
+    .hero-stat { text-align: center; }
+    .hero-stat-num { font-size: 1.5rem; font-weight: 800; }
+    .hero-stat-label { font-size: .75rem; opacity: .7; margin-top: 2px; }
+
+    /* ── Section styles ── */
+    section { padding: 64px 0; }
+    .section-label { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--blue); margin-bottom: 10px; }
+    .section-title { font-size: clamp(1.5rem, 3vw, 2.25rem); font-weight: 800; color: var(--gray-900); margin-bottom: 12px; line-height: 1.2; }
+    .section-sub { font-size: 1.0625rem; color: var(--gray-600); max-width: 560px; }
+    .section-header { margin-bottom: 48px; }
+    .section-header.center { text-align: center; }
+    .section-header.center .section-sub { margin: 0 auto; }
+
+    /* ── Feature cards ── */
+    .feature-card { background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius); padding: 24px; transition: box-shadow .2s, transform .2s; }
+    .feature-card:hover { box-shadow: var(--shadow); transform: translateY(-2px); }
+    .feature-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; font-size: 1.25rem; }
+    .icon-blue { background: var(--blue-light); }
+    .icon-green { background: var(--green-light); }
+    .icon-purple { background: #faf5ff; }
+    .icon-orange { background: #fff7ed; }
+    .feature-card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 6px; }
+    .feature-card p { font-size: .875rem; color: var(--gray-600); line-height: 1.55; }
+
+    /* ── Checklist ── */
+    .check-list { list-style: none; space-y: 10px; }
+    .check-list li { display: flex; align-items: flex-start; gap: 10px; font-size: .9375rem; color: var(--gray-700); margin-bottom: 10px; }
+    .check-list li::before { content: '✓'; display: flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; background: var(--green); color: #fff; border-radius: 50%; font-size: .625rem; font-weight: 700; margin-top: 2px; }
+
+    /* ── Compliance section ── */
+    .compliance-card { background: #f8faff; border: 1px solid #c7d7ff; border-radius: var(--radius); padding: 32px; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; font-size: .75rem; font-weight: 600; padding: 4px 10px; border-radius: 100px; }
+    .badge-green { background: var(--green-light); color: var(--green); border: 1px solid #bbf7d0; }
+    .badge-blue { background: var(--blue-light); color: var(--blue); border: 1px solid #bfdbfe; }
+
+    /* ── Pricing ── */
+    .pricing-card { background: #fff; border: 2px solid var(--gray-200); border-radius: 16px; padding: 32px; display: flex; flex-direction: column; }
+    .pricing-card.featured { border-color: var(--blue); background: linear-gradient(180deg, #eff6ff 0%, #fff 40%); position: relative; }
+    .popular-badge { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--blue); color: #fff; font-size: .75rem; font-weight: 700; padding: 4px 14px; border-radius: 100px; white-space: nowrap; }
+    .pricing-tier { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--blue); margin-bottom: 8px; }
+    .pricing-price { font-size: 2rem; font-weight: 800; color: var(--gray-900); margin-bottom: 4px; }
+    .pricing-price span { font-size: 1rem; font-weight: 500; color: var(--gray-400); }
+    .pricing-desc { font-size: .875rem; color: var(--gray-600); margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--gray-100); }
+    .pricing-features { list-style: none; margin-bottom: 28px; flex: 1; }
+    .pricing-features li { font-size: .875rem; color: var(--gray-700); padding: 6px 0; display: flex; align-items: center; gap: 8px; }
+    .pricing-features li::before { content: '✓'; color: var(--green); font-weight: 700; flex-shrink: 0; }
+    .pricing-features li.muted { color: var(--gray-400); }
+    .pricing-features li.muted::before { color: var(--gray-300); }
+
+    /* ── Testimonials ── */
+    .testimonial-card { background: var(--gray-50); border: 1px solid var(--gray-100); border-radius: var(--radius); padding: 24px; }
+    .stars { color: #f59e0b; font-size: .875rem; margin-bottom: 12px; }
+    .testimonial-card p { font-size: .9375rem; color: var(--gray-700); font-style: italic; margin-bottom: 16px; line-height: 1.6; }
+    .testimonial-author { display: flex; align-items: center; gap: 10px; }
+    .avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--blue); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .875rem; flex-shrink: 0; }
+    .author-name { font-size: .875rem; font-weight: 600; }
+    .author-biz { font-size: .75rem; color: var(--gray-400); }
+
+    /* ── Integration logos ── */
+    .integrations-row { display: flex; align-items: center; justify-content: center; gap: 32px; flex-wrap: wrap; }
+    .integration-logo { display: flex; align-items: center; gap: 8px; font-size: .9375rem; font-weight: 700; color: var(--gray-600); opacity: .7; filter: grayscale(1); transition: all .2s; }
+    .integration-logo:hover { opacity: 1; filter: none; color: var(--gray-900); }
+    .integration-logo .dot { width: 28px; height: 28px; border-radius: 6px; }
+
+    /* ── FAQ ── */
+    .faq-item { border-bottom: 1px solid var(--gray-200); padding: 20px 0; }
+    .faq-q { font-size: 1rem; font-weight: 600; cursor: pointer; color: var(--gray-900); display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .faq-q::after { content: '+'; font-size: 1.25rem; font-weight: 400; color: var(--blue); flex-shrink: 0; }
+    .faq-a { font-size: .9375rem; color: var(--gray-600); margin-top: 10px; line-height: 1.6; display: none; }
+    .faq-item.open .faq-q::after { content: '–'; }
+    .faq-item.open .faq-a { display: block; }
+
+    /* ── CTA banner ── */
+    .cta-section { background: linear-gradient(135deg, #1e3a8a, #2563eb); color: #fff; border-radius: 20px; padding: 56px 48px; text-align: center; }
+    .cta-section h2 { font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 800; margin-bottom: 12px; }
+    .cta-section p { opacity: .85; margin-bottom: 28px; font-size: 1.0625rem; }
+
+    /* ── Footer ── */
+    footer { background: var(--gray-900); color: var(--gray-400); padding: 48px 0 28px; }
+    .footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 32px; margin-bottom: 40px; }
+    @media(max-width: 768px) { .footer-grid { grid-template-columns: 1fr 1fr; } }
+    .footer-logo { font-size: 1.25rem; font-weight: 800; color: #fff; margin-bottom: 10px; }
+    .footer-desc { font-size: .875rem; line-height: 1.6; max-width: 220px; }
+    .footer-col h4 { color: #fff; font-size: .875rem; font-weight: 600; margin-bottom: 14px; }
+    .footer-col ul { list-style: none; }
+    .footer-col li { margin-bottom: 8px; }
+    .footer-col a { font-size: .875rem; color: var(--gray-400); transition: color .15s; }
+    .footer-col a:hover { color: #fff; }
+    .footer-bottom { border-top: 1px solid #1f2937; padding-top: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: gap; gap: 12px; font-size: .8125rem; }
+    .footer-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+    .footer-badge { background: #1f2937; color: var(--gray-400); border: 1px solid #374151; border-radius: 6px; padding: 4px 10px; font-size: .75rem; }
+
+    /* ── Utility ── */
+    .mt-2 { margin-top: 8px; }
+    .mt-4 { margin-top: 16px; }
+    .mt-6 { margin-top: 24px; }
+    .text-center { text-align: center; }
+    .bg-gray { background: var(--gray-50); }
+    .divider { height: 1px; background: var(--gray-200); margin: 0; }
+  </style>
+</head>
+<body>
+
+<!-- ── Navigation ───────────────────────────────────────────────────────────── -->
+<nav>
+  <div class="container nav-inner">
+    <div class="logo">KASTRA<span> POS</span></div>
+    <ul class="nav-links hide-mobile">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#compliance">Compliance</a></li>
+      <li><a href="#pricing">Pricing</a></li>
+      <li><a href="#faq">FAQ</a></li>
+    </ul>
+    <div class="flex gap-3">
+      <a href="/login" class="btn btn-outline">Log in</a>
+      <a href="/setup" class="btn btn-primary">Start Free Trial</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ── Hero ─────────────────────────────────────────────────────────────────── -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-badge">
+      <span>🇰🇪</span> KRA eTIMS Compliant • Offline-First
+    </div>
+    <h1>The Smart POS Built<br/>for <span>Kenyan Businesses</span></h1>
+    <p>Manage sales, inventory, staff, and compliance from one place — even without internet. Integrated with M-Pesa and KRA eTIMS out of the box.</p>
+    <div class="hero-cta">
+      <a href="/setup" class="btn btn-white btn-lg">Start 30-Day Free Trial</a>
+      <a href="#pricing" class="btn btn-outline btn-lg" style="color:#fff;border-color:rgba(255,255,255,.4)">View Pricing</a>
+    </div>
+    <div class="hero-stats">
+      <div class="hero-stat"><div class="hero-stat-num">100%</div><div class="hero-stat-label">KRA eTIMS Ready</div></div>
+      <div class="hero-stat"><div class="hero-stat-num">30 Days</div><div class="hero-stat-label">Free Trial</div></div>
+      <div class="hero-stat"><div class="hero-stat-num">Offline</div><div class="hero-stat-label">Works Without Internet</div></div>
+      <div class="hero-stat"><div class="hero-stat-num">M-Pesa</div><div class="hero-stat-label">STK Push Built-in</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Integrations strip ────────────────────────────────────────────────────── -->
+<div style="padding: 28px 0; border-bottom: 1px solid var(--gray-200);">
+  <div class="container">
+    <p class="text-center" style="font-size:.8125rem;color:var(--gray-400);margin-bottom:20px;font-weight:600;text-transform:uppercase;letter-spacing:1px;">Integrated with</p>
+    <div class="integrations-row">
+      <div class="integration-logo"><div class="dot" style="background:#4caf50;"></div>M-Pesa</div>
+      <div class="integration-logo"><div class="dot" style="background:#1565c0;"></div>KRA eTIMS</div>
+      <div class="integration-logo"><div class="dot" style="background:#e53935;"></div>Africa's Talking</div>
+      <div class="integration-logo"><div class="dot" style="background:#f57c00;"></div>QuickBooks</div>
+      <div class="integration-logo"><div class="dot" style="background:#7b1fa2;"></div>Sage</div>
+      <div class="integration-logo"><div class="dot" style="background:#0d47a1;"></div>Paystack</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Core Features ─────────────────────────────────────────────────────────── -->
+<section id="features">
+  <div class="container">
+    <div class="section-header center">
+      <p class="section-label">Features</p>
+      <h2 class="section-title">Everything Your Business Needs</h2>
+      <p class="section-sub">From the counter to the back office — KASTRA covers every part of your operation.</p>
+    </div>
+    <div class="grid-4">
+      <div class="feature-card">
+        <div class="feature-icon icon-blue">🛒</div>
+        <h3>Smart Point of Sale</h3>
+        <p>Keyboard-first POS with barcode scanning, quantity shortcuts (3×500), promotions auto-applied, split payments, and gift cards.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon icon-green">📦</div>
+        <h3>Inventory Management</h3>
+        <p>FEFO batch tracking, expiry alerts, serial number registry, CSV import, barcode labels, and inter-store stock transfers.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon icon-purple">📊</div>
+        <h3>Comprehensive Reports</h3>
+        <p>X/Z-reports, VAT/TOT summaries, P&amp;L, supplier ageing, KRA JSON export, and tamper-evident audit logs.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon icon-orange">📱</div>
+        <h3>M-Pesa Integration</h3>
+        <p>STK push, dynamic QR code payments, and real-time transaction confirmation — right at the POS terminal.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon icon-blue">🏨</div>
+        <h3>Hospitality Mode</h3>
+        <p>Table management, kitchen order tickets (auto-print), table merge &amp; transfer, reservations, and fast-food counter mode.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon icon-green">👥</div>
+        <h3>HR &amp; Staff Management</h3>
+        <p>Staff shifts, attendance tracking, commission calculation (sales/margin/count), leave management with approval workflow.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon icon-purple">🎁</div>
+        <h3>Loyalty Program</h3>
+        <p>Points earn &amp; redemption, tiered tiers (Bronze/Silver/Gold), WhatsApp receipts, and customer purchase history.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon icon-orange">🔄</div>
+        <h3>Offline-First Sync</h3>
+        <p>Full IndexedDB offline storage with background sync. Keep selling during outages — all data reconciles automatically.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Compliance section ────────────────────────────────────────────────────── -->
+<section id="compliance" class="bg-gray">
+  <div class="container">
+    <div class="grid-2" style="align-items:center; gap:48px;">
+      <div>
+        <p class="section-label">Compliance &amp; Security</p>
+        <h2 class="section-title">Built for Kenya's Regulatory Requirements</h2>
+        <p class="section-sub" style="margin-bottom:24px;">KASTRA is pre-integrated with KRA's eTIMS system and compliant with KDPA data protection requirements.</p>
+        <ul class="check-list">
+          <li>Automatic eTIMS invoice submission after every sale</li>
+          <li>PENDING KRA watermark on unsubmitted receipts</li>
+          <li>VAT (16%) and TOT inclusive pricing modes</li>
+          <li>KRA-formatted JSON/CSV export for filing</li>
+          <li>KDPA data deletion requests with audit trail</li>
+          <li>Tamper-evident audit log with chain verification</li>
+          <li>AES-256-CBC encryption for M-Pesa &amp; eTIMS credentials</li>
+          <li>Role-based access control (Owner → Cashier)</li>
+        </ul>
+      </div>
+      <div class="compliance-card">
+        <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">
+          <span class="badge badge-green">✓ KRA eTIMS</span>
+          <span class="badge badge-blue">✓ KDPA 2019</span>
+          <span class="badge badge-green">✓ VAT 16%</span>
+          <span class="badge badge-blue">✓ TOT Mode</span>
+        </div>
+        <h3 style="font-size:1.0625rem;font-weight:700;margin-bottom:8px;">Why KRA Compliance Matters</h3>
+        <p style="font-size:.9rem;color:var(--gray-600);margin-bottom:16px;line-height:1.6;">
+          From 2024, KRA requires all VAT-registered businesses to submit invoices via eTIMS in real time. Penalties for non-compliance can reach <strong>KES 1 million</strong> per year.
+        </p>
+        <p style="font-size:.9rem;color:var(--gray-600);line-height:1.6;">
+          KASTRA handles eTIMS submission automatically after checkout — so you stay compliant without any extra steps.
+        </p>
+        <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--gray-200);">
+          <p style="font-size:.8125rem;font-weight:600;color:var(--gray-700);margin-bottom:8px;">Also built-in:</p>
+          <ul class="check-list" style="font-size:.875rem;">
+            <li>TOTP two-factor authentication</li>
+            <li>15-minute session tokens + PIN auto-lock</li>
+            <li>Google OAuth sign-in option</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Multi-store ────────────────────────────────────────────────────────────── -->
+<section>
+  <div class="container">
+    <div class="grid-2" style="align-items:center; gap:48px;">
+      <div style="background:linear-gradient(135deg,#eff6ff,#e0f2fe);border-radius:16px;padding:36px;text-align:center;">
+        <div style="font-size:3.5rem;margin-bottom:16px;">🏪</div>
+        <div style="font-size:2rem;font-weight:800;color:var(--blue);margin-bottom:6px;">Multi-Store</div>
+        <p style="color:var(--gray-600);font-size:.9375rem;">One account. All your branches. Real-time visibility.</p>
+        <div style="display:flex;gap:16px;justify-content:center;margin-top:24px;">
+          <div style="text-align:center;">
+            <div style="font-size:1.5rem;font-weight:800;">5+</div>
+            <div style="font-size:.75rem;color:var(--gray-400);">Stores (Pro)</div>
+          </div>
+          <div style="width:1px;background:var(--gray-200);"></div>
+          <div style="text-align:center;">
+            <div style="font-size:1.5rem;font-weight:800;">∞</div>
+            <div style="font-size:.75rem;color:var(--gray-400);">Stores (Enterprise)</div>
+          </div>
+          <div style="width:1px;background:var(--gray-200);"></div>
+          <div style="text-align:center;">
+            <div style="font-size:1.5rem;font-weight:800;">Live</div>
+            <div style="font-size:.75rem;color:var(--gray-400);">Stock Transfers</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <p class="section-label">Multi-Store Management</p>
+        <h2 class="section-title">Grow Beyond One Location</h2>
+        <p class="section-sub" style="margin-bottom:24px;">The Pro and Enterprise plans support multiple branches with centralised reporting, inter-store stock transfers, and per-manager store scoping.</p>
+        <ul class="check-list">
+          <li>Owner dashboard with cross-store P&amp;L and stock overview</li>
+          <li>Managers scoped to their assigned stores</li>
+          <li>Inter-store transfer requests with approval</li>
+          <li>Consolidated inventory visibility across all branches</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Testimonials ───────────────────────────────────────────────────────────── -->
+<section class="bg-gray">
+  <div class="container">
+    <div class="section-header center">
+      <p class="section-label">Testimonials</p>
+      <h2 class="section-title">Trusted by Kenyan Businesses</h2>
+    </div>
+    <div class="grid-3">
+      <div class="testimonial-card">
+        <div class="stars">★★★★★</div>
+        <p>"eTIMS submission used to be a nightmare. With KASTRA it just happens automatically after every sale. KRA audits are no longer scary."</p>
+        <div class="testimonial-author">
+          <div class="avatar">JM</div>
+          <div>
+            <div class="author-name">James Mwangi</div>
+            <div class="author-biz">Premier Café, Nairobi</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial-card">
+        <div class="stars">★★★★★</div>
+        <p>"M-Pesa integration is seamless. Customers scan the QR code and payment reflects in seconds. No more checking my phone."</p>
+        <div class="testimonial-author">
+          <div class="avatar">AO</div>
+          <div>
+            <div class="author-name">Amina Odhiambo</div>
+            <div class="author-biz">Savanna Superstore, Kisumu</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial-card">
+        <div class="stars">★★★★★</div>
+        <p>"We have 3 branches and the owner dashboard shows me everything in one view. Stock transfers take seconds. Game changer."</p>
+        <div class="testimonial-author">
+          <div class="avatar">PK</div>
+          <div>
+            <div class="author-name">Peter Kamau</div>
+            <div class="author-biz">Kamau Hardware, Thika</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Pricing ────────────────────────────────────────────────────────────────── -->
+<section id="pricing">
+  <div class="container">
+    <div class="section-header center">
+      <p class="section-label">Pricing</p>
+      <h2 class="section-title">Simple, Transparent Pricing</h2>
+      <p class="section-sub">No setup fees. No hidden charges. Cancel anytime. Start with a 30-day free trial on any plan.</p>
+    </div>
+    <div class="grid-3" style="align-items:stretch;">
+
+      <!-- Starter -->
+      <div class="pricing-card">
+        <div class="pricing-tier">Starter</div>
+        <div class="pricing-price">KES 2,999 <span>/ month</span></div>
+        <div class="pricing-desc">Perfect for a single-location business getting started with digital POS.</div>
+        <ul class="pricing-features">
+          <li>1 store</li>
+          <li>Up to 3 users</li>
+          <li>Full POS with M-Pesa</li>
+          <li>KRA eTIMS submission</li>
+          <li>Inventory management</li>
+          <li>Sales reports (X/Z)</li>
+          <li>Customer loyalty program</li>
+          <li class="muted">Multi-store transfers</li>
+          <li class="muted">Webhooks &amp; API access</li>
+          <li class="muted">Priority support</li>
+        </ul>
+        <a href="/setup?plan=STARTER" class="btn btn-outline" style="text-align:center;justify-content:center;">Get Started Free</a>
+      </div>
+
+      <!-- Pro (featured) -->
+      <div class="pricing-card featured">
+        <div class="popular-badge">Most Popular</div>
+        <div class="pricing-tier">Pro</div>
+        <div class="pricing-price">KES 7,999 <span>/ month</span></div>
+        <div class="pricing-desc">For growing businesses with multiple staff and advanced reporting needs.</div>
+        <ul class="pricing-features">
+          <li>Up to 5 stores</li>
+          <li>Up to 10 users</li>
+          <li>Everything in Starter</li>
+          <li>Multi-store stock transfers</li>
+          <li>HR shifts &amp; commissions</li>
+          <li>Hospitality mode (tables/KOT)</li>
+          <li>Supplier &amp; PO management</li>
+          <li>Automation (scheduled reports)</li>
+          <li>Webhooks &amp; API keys</li>
+          <li class="muted">Dedicated support</li>
+        </ul>
+        <a href="/setup?plan=PRO" class="btn btn-primary" style="text-align:center;justify-content:center;">Get Started Free</a>
+      </div>
+
+      <!-- Enterprise -->
+      <div class="pricing-card">
+        <div class="pricing-tier">Enterprise</div>
+        <div class="pricing-price">KES 19,999 <span>/ month</span></div>
+        <div class="pricing-desc">For large chains and franchises that need unlimited scale and white-glove support.</div>
+        <ul class="pricing-features">
+          <li>Unlimited stores</li>
+          <li>Unlimited users</li>
+          <li>Everything in Pro</li>
+          <li>Dedicated account manager</li>
+          <li>Custom integrations</li>
+          <li>QuickBooks &amp; Sage export</li>
+          <li>SLA uptime guarantee</li>
+          <li>Staff training session</li>
+          <li>Custom branding</li>
+          <li>Priority phone support</li>
+        </ul>
+        <a href="mailto:hello@kastrapos.co.ke" class="btn btn-outline" style="text-align:center;justify-content:center;">Contact Sales</a>
+      </div>
+
+    </div>
+    <p class="text-center mt-6" style="color:var(--gray-400);font-size:.875rem;">All plans include a <strong>30-day free trial</strong>. No credit card required to start.</p>
+  </div>
+</section>
+
+<!-- ── FAQ ───────────────────────────────────────────────────────────────────── -->
+<section id="faq" class="bg-gray">
+  <div class="container" style="max-width:760px;">
+    <div class="section-header center">
+      <p class="section-label">FAQ</p>
+      <h2 class="section-title">Frequently Asked Questions</h2>
+    </div>
+    <div>
+      <div class="faq-item">
+        <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">Does KASTRA work without internet?</div>
+        <div class="faq-a">Yes. KASTRA is offline-first — all sales, inventory, and payments are stored locally in your browser's IndexedDB. Data syncs automatically to the cloud when your connection is restored. You can sell through power cuts, weak signal, and full outages.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">Is KASTRA officially approved by KRA for eTIMS?</div>
+        <div class="faq-a">KASTRA integrates with KRA's official eTIMS API (Tax Invoice Management System). Every sale triggers an automatic invoice submission. We maintain a pending queue for offline periods — invoices sync when internet is restored.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">How does M-Pesa integration work?</div>
+        <div class="faq-a">KASTRA uses Safaricom's official Daraja API. When a customer pays by M-Pesa, you enter the amount and their phone number — they receive an STK push on their phone immediately. Alternatively, they can scan a dynamic QR code. Both methods confirm payment in real time at the POS.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">Can I switch plans later?</div>
+        <div class="faq-a">Yes. You can upgrade at any time from Settings → Subscription. Downgrading is also possible at the end of your billing period. All your data is retained regardless of plan changes.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">Is there a setup fee or contract?</div>
+        <div class="faq-a">No setup fees, no long-term contracts. KASTRA is billed monthly and you can cancel anytime. Your 30-day free trial gives you access to all features on your chosen plan.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">What hardware do I need?</div>
+        <div class="faq-a">KASTRA runs in any modern web browser — no special hardware required. It works on tablets, laptops, and desktop PCs. For receipts, it supports standard 58mm/80mm thermal receipt printers via USB. You can also use a USB barcode scanner or your device camera for scanning.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">How is my data protected?</div>
+        <div class="faq-a">All sensitive credentials (M-Pesa API keys, eTIMS certificates) are encrypted with AES-256-CBC before storage. KASTRA is compliant with Kenya's Data Protection Act (KDPA 2019) — customers can request data deletion which triggers a full anonymisation process with audit trail. Access is protected by JWT tokens, PIN auto-lock, and optional TOTP two-factor authentication.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── CTA ───────────────────────────────────────────────────────────────────── -->
+<section>
+  <div class="container">
+    <div class="cta-section">
+      <h2>Ready to modernise your business?</h2>
+      <p>Join hundreds of Kenyan businesses using KASTRA POS. Start your 30-day free trial today — no credit card needed.</p>
+      <div class="flex gap-3 justify-center" style="flex-wrap:wrap;">
+        <a href="/setup" class="btn btn-white btn-lg">Start Free Trial</a>
+        <a href="mailto:hello@kastrapos.co.ke" class="btn btn-lg" style="background:rgba(255,255,255,.15);color:#fff;border:1.5px solid rgba(255,255,255,.3);">Talk to Sales</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Footer ────────────────────────────────────────────────────────────────── -->
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <div class="footer-logo">KASTRA POS</div>
+        <p class="footer-desc">Kenya's most complete KRA eTIMS-compliant point of sale system. Offline-first, M-Pesa integrated, built for growth.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <ul>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#pricing">Pricing</a></li>
+          <li><a href="#compliance">Compliance</a></li>
+          <li><a href="/api/docs">API Docs</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <ul>
+          <li><a href="mailto:hello@kastrapos.co.ke">Contact Us</a></li>
+          <li><a href="#">Privacy Policy</a></li>
+          <li><a href="#">Terms of Service</a></li>
+          <li><a href="#">KDPA Statement</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Support</h4>
+        <ul>
+          <li><a href="#">Setup Guide</a></li>
+          <li><a href="#faq">FAQ</a></li>
+          <li><a href="mailto:support@kastrapos.co.ke">Email Support</a></li>
+          <li><a href="#">WhatsApp Support</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 KASTRA POS. All rights reserved.</span>
+      <div class="footer-badges">
+        <span class="footer-badge">🇰🇪 Made for Kenya</span>
+        <span class="footer-badge">KRA eTIMS Ready</span>
+        <span class="footer-badge">KDPA Compliant</span>
+      </div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

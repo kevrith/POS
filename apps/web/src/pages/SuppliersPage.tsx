@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, Package, FileText, Truck, ChevronRight, X, Check,
-  AlertCircle, Loader2, RefreshCw, ArrowLeft,
+  AlertCircle, Loader2, RefreshCw, ArrowLeft, Mail,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
@@ -51,7 +51,9 @@ interface PurchaseOrder {
   expectedDelivery?: string;
   notes?: string;
   createdAt: string;
-  supplier?: { name: string };
+  invoiceNumber?: string;
+  invoicedAt?: string;
+  supplier?: { name: string; contact?: string };
   items: POItem[];
   grns: GRN[];
 }
@@ -60,7 +62,7 @@ interface CatalogItem {
   id: string;
   name: string;
   sku?: string;
-  costCents?: number;
+  costPriceCents?: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -99,7 +101,7 @@ function CreatePOModal({ businessId, storeId, suppliers, onClose, onSuccess }: C
 
   const { data: items = [] } = useQuery<CatalogItem[]>({
     queryKey: ['catalog-items-po', businessId],
-    queryFn: () => api.get<CatalogItem[]>(`/catalog/items?businessId=${businessId}&storeId=${storeId}`),
+    queryFn: () => api.get<CatalogItem[]>(`/items?businessId=${businessId}&storeId=${storeId}`),
     enabled: !!businessId,
   });
 
@@ -127,7 +129,7 @@ function CreatePOModal({ businessId, storeId, suppliers, onClose, onSuccess }: C
 
   function addLine(item: CatalogItem) {
     if (lines.find((l) => l.itemId === item.id)) return;
-    setLines([...lines, { itemId: item.id, name: item.name, quantity: 1, priceCents: item.costCents ?? 0 }]);
+    setLines([...lines, { itemId: item.id, name: item.name, quantity: 1, priceCents: item.costPriceCents ?? 0 }]);
     setItemSearch('');
   }
 
@@ -447,12 +449,57 @@ interface PODetailProps {
 function PODetail({ po, storeId, onBack, onRefresh }: PODetailProps) {
   const qc = useQueryClient();
   const [showGRN, setShowGRN] = useState(false);
+  const [showEmailPO, setShowEmailPO] = useState(false);
+  const [emailRecipient, setEmailRecipient] = useState(po.supplier?.contact ?? '');
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [invoiceNumberInput, setInvoiceNumberInput] = useState('');
+  const [emailResult, setEmailResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const emailPO = useMutation({
+    mutationFn: () => api.post(`/suppliers/purchase-orders/${po.id}/email`, { recipientEmail: emailRecipient }),
+    onSuccess: (res: any) => {
+      setEmailResult({ success: true, message: res.message ?? 'PO sent!' });
+      setTimeout(() => { setShowEmailPO(false); setEmailResult(null); }, 3000);
+    },
+    onError: (e: any) => setEmailResult({ success: false, message: e.message }),
+  });
+
+  const printPOMutation = useMutation({
+    mutationFn: () => api.get<{ text: string }>(`/suppliers/purchase-orders/${po.id}/print-text`),
+    onSuccess: (data: any) => {
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(`<pre style="font-family:monospace;font-size:12px;padding:20px">${data.text}</pre>`);
+        printWindow.document.close();
+        printWindow.print();
+      }
+    },
+  });
+
+  const closePOMutation = useMutation({
+    mutationFn: () => api.post(`/suppliers/purchase-orders/${po.id}/close`, {}),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['purchase-orders'] });
+      onRefresh();
+    },
+  });
 
   const updateStatus = useMutation({
     mutationFn: (status: string) =>
       api.patch(`/suppliers/purchase-orders/${po.id}/status`, { status }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['purchase-orders'] });
+      onRefresh();
+    },
+  });
+
+  const invoicePO = useMutation({
+    mutationFn: (invoiceNumber: string) =>
+      api.patch(`/suppliers/purchase-orders/${po.id}/invoice`, { invoiceNumber }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['purchase-orders'] });
+      setShowInvoiceModal(false);
+      setInvoiceNumberInput('');
       onRefresh();
     },
   });
@@ -488,6 +535,15 @@ function PODetail({ po, storeId, onBack, onRefresh }: PODetailProps) {
             <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Total Value</p>
             <p className="font-bold text-blue-600 text-lg">{fmt(total)}</p>
           </div>
+          {po.invoiceNumber && (
+            <div className="bg-green-50 border border-green-200 rounded-xl p-4 col-span-2">
+              <p className="text-xs text-green-600 uppercase tracking-wider mb-1 font-medium">Supplier Invoice</p>
+              <p className="font-mono font-semibold text-gray-800">{po.invoiceNumber}</p>
+              {po.invoicedAt && (
+                <p className="text-xs text-gray-500 mt-0.5">Recorded {new Date(po.invoicedAt).toLocaleDateString('en-KE')}</p>
+              )}
+            </div>
+          )}
         </div>
 
         {po.notes && (
@@ -618,6 +674,116 @@ function PODetail({ po, storeId, onBack, onRefresh }: PODetailProps) {
         )}
       </div>
 
+      {/* Invoice generation — for received POs */}
+      {(po.status === 'RECEIVED' || po.status === 'PARTIALLY_RECEIVED') && !po.invoiceNumber && (
+        <div className="px-6 pb-2">
+          <button
+            onClick={() => setShowInvoiceModal(true)}
+            className="w-full py-2 border border-indigo-300 text-indigo-700 bg-indigo-50 rounded-xl text-sm font-medium hover:bg-indigo-100 flex items-center justify-center gap-2"
+          >
+            <FileText className="w-4 h-4" />
+            Generate Invoice
+          </button>
+        </div>
+      )}
+
+      {/* Email PO button — always visible */}
+      <div className="px-6 pb-2">
+        <button
+          onClick={() => setShowEmailPO(true)}
+          className="w-full py-2 border border-gray-300 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-50 flex items-center justify-center gap-2"
+        >
+          <Mail className="w-4 h-4" />
+          Email PO to Supplier
+        </button>
+      </div>
+
+      {/* Print PO + Force Close — always visible */}
+      <div className="px-6 pb-4 flex gap-2">
+        {po.status === 'PARTIALLY_RECEIVED' && (
+          <button
+            onClick={() => { if (confirm('Close this PO as fully received?')) closePOMutation.mutate(); }}
+            disabled={closePOMutation.isPending}
+            className="flex-1 py-2 px-3 text-xs bg-orange-100 text-orange-700 border border-orange-300 rounded-xl hover:bg-orange-200 disabled:opacity-50 font-medium"
+          >
+            Force Close
+          </button>
+        )}
+        <button
+          onClick={() => printPOMutation.mutate()}
+          disabled={printPOMutation.isPending}
+          className="flex-1 py-2 px-3 text-xs bg-gray-100 text-gray-700 border border-gray-300 rounded-xl hover:bg-gray-200 disabled:opacity-50 font-medium flex items-center justify-center gap-1.5"
+        >
+          <FileText className="w-3.5 h-3.5" />
+          {printPOMutation.isPending ? 'Preparing...' : 'Print PO'}
+        </button>
+      </div>
+
+      {/* Invoice number entry modal */}
+      {showInvoiceModal && (
+        <div className="mx-6 mb-4 p-4 border border-indigo-200 rounded-xl bg-indigo-50 space-y-3">
+          <p className="text-sm font-medium text-indigo-800">Enter Supplier Invoice Number</p>
+          <input
+            type="text"
+            value={invoiceNumberInput}
+            onChange={(e) => setInvoiceNumberInput(e.target.value)}
+            placeholder="e.g. INV-2024-00123"
+            className="w-full border rounded-lg px-3 py-2 text-sm font-mono"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={() => invoicePO.mutate(invoiceNumberInput)}
+              disabled={!invoiceNumberInput.trim() || invoicePO.isPending}
+              className="flex-1 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {invoicePO.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              {invoicePO.isPending ? 'Saving…' : 'Record Invoice'}
+            </button>
+            <button
+              onClick={() => { setShowInvoiceModal(false); setInvoiceNumberInput(''); }}
+              className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-100"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showEmailPO && (
+        <div className="mx-6 mb-4 p-4 border rounded-xl bg-gray-50 space-y-3">
+          <p className="text-sm font-medium text-gray-700">Email Purchase Order</p>
+          <input
+            type="email"
+            value={emailRecipient}
+            onChange={(e) => setEmailRecipient(e.target.value)}
+            placeholder="supplier@example.com"
+            className="w-full border rounded-lg px-3 py-2 text-sm"
+          />
+          {emailResult && (
+            <div className={`flex items-center gap-2 text-sm p-2 rounded-lg ${emailResult.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+              {emailResult.success ? <Check className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+              {emailResult.message}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <button
+              onClick={() => emailPO.mutate()}
+              disabled={!emailRecipient || emailPO.isPending}
+              className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {emailPO.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+              {emailPO.isPending ? 'Sending…' : 'Send'}
+            </button>
+            <button
+              onClick={() => { setShowEmailPO(false); setEmailResult(null); }}
+              className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-100"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {showGRN && (
         <GRNModal
           po={po}
@@ -636,7 +802,7 @@ function PODetail({ po, storeId, onBack, onRefresh }: PODetailProps) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type Tab = 'suppliers' | 'purchase-orders';
+type Tab = 'suppliers' | 'purchase-orders' | 'credit-notes';
 
 export default function SuppliersPage() {
   const qc = useQueryClient();
@@ -664,6 +830,46 @@ export default function SuppliersPage() {
     queryKey: ['purchase-orders', businessId],
     queryFn: () => api.get<PurchaseOrder[]>(`/suppliers/purchase-orders?businessId=${businessId}`),
     enabled: !!businessId && tab === 'purchase-orders',
+  });
+
+  interface CreditNote {
+    id: string;
+    creditNumber: string;
+    supplierId: string;
+    supplier: { name: string };
+    amountCents: number;
+    reason: string;
+    status: 'OPEN' | 'APPLIED' | 'VOIDED';
+    issuedDate: string;
+  }
+
+  const { data: creditNotes = [] } = useQuery<CreditNote[]>({
+    queryKey: ['credit-notes', businessId],
+    queryFn: () => api.get<CreditNote[]>(`/suppliers/credit-notes?businessId=${businessId}`),
+    enabled: !!businessId && tab === 'credit-notes',
+  });
+
+  const [cnForm, setCnForm] = useState({ supplierId: '', amountKES: '', reason: '' });
+  const [showAddCN, setShowAddCN] = useState(false);
+
+  const createCN = useMutation({
+    mutationFn: () =>
+      api.post('/suppliers/credit-notes', {
+        businessId,
+        supplierId: cnForm.supplierId,
+        amountCents: Math.round(parseFloat(cnForm.amountKES) * 100),
+        reason: cnForm.reason,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['credit-notes'] });
+      setCnForm({ supplierId: '', amountKES: '', reason: '' });
+      setShowAddCN(false);
+    },
+  });
+
+  const voidCN = useMutation({
+    mutationFn: (id: string) => api.patch(`/suppliers/credit-notes/${id}/void`, {}),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['credit-notes'] }),
   });
 
   const createSupplier = useMutation({
@@ -745,6 +951,7 @@ export default function SuppliersPage() {
           {([
             { id: 'suppliers' as const, label: 'Suppliers', Icon: Package },
             { id: 'purchase-orders' as const, label: 'Purchase Orders', Icon: FileText },
+            { id: 'credit-notes' as const, label: 'Credit Notes', Icon: ChevronRight },
           ]).map(({ id, label, Icon }) => (
             <button
               key={id}
@@ -1014,6 +1221,130 @@ export default function SuppliersPage() {
                         </tr>
                       );
                     })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── Credit Notes Tab ── */}
+        {tab === 'credit-notes' && (
+          <>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-gray-800">Supplier Credit Notes</h2>
+              <button
+                onClick={() => setShowAddCN(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+              >
+                <Plus className="w-4 h-4" /> New Credit Note
+              </button>
+            </div>
+
+            {showAddCN && (
+              <div className="bg-white rounded-xl border p-5 mb-4 shadow-sm">
+                <h3 className="font-semibold text-gray-800 mb-4">Create Credit Note</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Supplier *</label>
+                    <select
+                      value={cnForm.supplierId}
+                      onChange={(e) => setCnForm((f) => ({ ...f, supplierId: e.target.value }))}
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                    >
+                      <option value="">— Select supplier —</option>
+                      {suppliers.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Amount (KES) *</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={cnForm.amountKES}
+                      onChange={(e) => setCnForm((f) => ({ ...f, amountKES: e.target.value }))}
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Reason *</label>
+                    <input
+                      type="text"
+                      value={cnForm.reason}
+                      onChange={(e) => setCnForm((f) => ({ ...f, reason: e.target.value }))}
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                      placeholder="e.g. Returned goods, pricing error"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-4 justify-end">
+                  <button onClick={() => setShowAddCN(false)} className="px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">Cancel</button>
+                  <button
+                    onClick={() => createCN.mutate()}
+                    disabled={!cnForm.supplierId || !cnForm.amountKES || !cnForm.reason || createCN.isPending}
+                    className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {createCN.isPending ? 'Creating...' : 'Create'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {creditNotes.length === 0 ? (
+              <div className="text-center py-16 bg-white rounded-xl border">
+                <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p className="text-gray-500">No credit notes yet</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-gray-600 text-xs font-semibold uppercase">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Credit #</th>
+                      <th className="px-4 py-3 text-left">Supplier</th>
+                      <th className="px-4 py-3 text-left">Reason</th>
+                      <th className="px-4 py-3 text-right">Amount</th>
+                      <th className="px-4 py-3 text-center">Status</th>
+                      <th className="px-4 py-3 text-left">Date</th>
+                      <th className="px-4 py-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {creditNotes.map((cn) => (
+                      <tr key={cn.id} className="border-t hover:bg-gray-50">
+                        <td className="px-4 py-3 font-mono font-semibold text-blue-600">{cn.creditNumber}</td>
+                        <td className="px-4 py-3 font-medium">{cn.supplier.name}</td>
+                        <td className="px-4 py-3 text-gray-600">{cn.reason}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-green-700">{fmt(cn.amountCents)}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                            cn.status === 'OPEN' ? 'bg-green-100 text-green-700'
+                            : cn.status === 'APPLIED' ? 'bg-blue-100 text-blue-700'
+                            : 'bg-gray-100 text-gray-600'
+                          }`}>
+                            {cn.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-500">
+                          {new Date(cn.issuedDate).toLocaleDateString('en-KE')}
+                        </td>
+                        <td className="px-4 py-3">
+                          {cn.status === 'OPEN' && (
+                            <button
+                              onClick={() => voidCN.mutate(cn.id)}
+                              disabled={voidCN.isPending}
+                              className="text-xs text-red-500 hover:text-red-700 font-medium"
+                            >
+                              Void
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>

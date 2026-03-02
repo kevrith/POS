@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ─── API (NestJS) ──────────────────────────────────────────────────────────
+  api:
+    name: API — Build & Type-check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install API dependencies
+        working-directory: apps/api
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: apps/api
+        env:
+          DATABASE_URL: file:./test.db
+        run: npx prisma generate --schema ../../prisma/schema.prisma
+
+      - name: Build API
+        working-directory: apps/api
+        run: npm run build
+
+  # ─── Web (React + Vite) ───────────────────────────────────────────────────
+  web:
+    name: Web — Build & Type-check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Build web
+        working-directory: apps/web
+        env:
+          VITE_API_URL: /api/v1
+        run: npm run build
+
+  # ─── Prisma schema validation ─────────────────────────────────────────────
+  schema:
+    name: Prisma Schema Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Validate Prisma schema
+        env:
+          DATABASE_URL: file:./validate.db
+        run: npx prisma validate --schema prisma/schema.prisma
+
+      - name: Check for pending migrations
+        env:
+          DATABASE_URL: file:./validate.db
+        run: |
+          npx prisma migrate deploy --schema prisma/schema.prisma
+          echo "Migrations applied successfully"

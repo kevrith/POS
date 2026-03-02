@@ -15,6 +15,9 @@ interface CheckoutDto {
   customerId?: string;
   items: Array<{ itemId: string; quantity: number }>;
   payments: Array<{ method: string; amountCents: number; reference?: string }>;
+  discountCents?: number;
+  promotionId?: string;
+  serviceChargeCents?: number;
 }
 
 interface VoidDto {
@@ -43,6 +46,9 @@ export class SalesController {
       customerId: dto.customerId,
       items: dto.items,
       payments: dto.payments,
+      discountCents: dto.discountCents,
+      promotionId: dto.promotionId,
+      serviceChargeCents: dto.serviceChargeCents,
     });
   }
 
@@ -109,6 +115,14 @@ export class SalesController {
     @Body() dto: { businessId: string; storeId: string; cashierId: string; payments: Array<{ method: string; amountCents: number }> },
   ) {
     return this.salesService.convertProformaToSale(id, dto);
+  }
+
+  @Post('proforma/:id/convert')
+  async convertProformaToSaleV2(
+    @Param('id') id: string,
+    @Body() dto: { cashierId: string; payments: Array<{ method: string; amountCents: number; reference?: string }> },
+  ) {
+    return this.salesService.convertProformaToSaleV2(id, dto);
   }
 
   @Post(':id/return')

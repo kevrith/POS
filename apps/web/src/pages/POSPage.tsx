@@ -1,9 +1,12 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, ShoppingCart, Trash2, Plus, Minus, PauseCircle,
-  PlayCircle, X, ChevronDown, User, MessageSquare, Star,
+  PlayCircle, X, User, MessageSquare, Star, Scale, Camera,
+  AlertTriangle, Monitor,
 } from 'lucide-react';
+import { BrowserMultiFormatReader } from '@zxing/browser';
 import { api } from '../lib/api';
 import { usePOSStore, type ApiItem, type PriceLevel } from '../stores/pos';
 import { useAuthStore } from '../stores/auth';
@@ -12,6 +15,7 @@ import HeldSalesModal from '../components/HeldSalesModal';
 import CustomerSelectModal from '../components/CustomerSelectModal';
 import PrintModal from '../components/PrintModal';
 import type { ReceiptData } from '../lib/printer';
+import { isSerialSupported, requestScalePort, readWeight, type ScaleProtocol } from '../lib/scale';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -26,6 +30,7 @@ interface SalePayload {
   payments: Array<{ method: string; amountCents: number; reference?: string }>;
   discountCents?: number;
   promotionId?: string;
+  serviceChargeCents?: number;
 }
 
 interface Promotion {
@@ -53,6 +58,15 @@ interface Category {
 
 // ─── Helpers ─────────────────────────────────────────────────
 
+/** Generate a consistent card colour from the category name string. */
+const CAT_COLORS = ['#3B82F6','#10B981','#F59E0B','#EF4444','#8B5CF6','#06B6D4','#F97316','#EC4899','#6366F1','#14B8A6'];
+function categoryColor(name?: string | null): string {
+  if (!name) return '#3B82F6';
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
+  return CAT_COLORS[Math.abs(h) % CAT_COLORS.length];
+}
+
 function formatKES(cents: number): string {
   return `KES ${(cents / 100).toLocaleString('en-KE', {
     minimumFractionDigits: 2,
@@ -70,6 +84,7 @@ const PRICE_LEVEL_LABELS: Record<PriceLevel, string> = {
 
 export default function POSPage() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
 
   const {
@@ -92,22 +107,40 @@ export default function POSPage() {
   const [loyaltyDiscountCents, setLoyaltyDiscountCents] = useState(0);
   const [customerPhone, setCustomerPhone] = useState<string | null>(null);
   const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
+  const [scaleReading, setScaleReading] = useState(false);
+  const [scaleError, setScaleError] = useState<string | null>(null);
+  const [showCamera, setShowCamera] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [expiryWarnings, setExpiryWarnings] = useState<Array<{ itemId: string; name: string; status: string; expiryDate?: string }>>([]);
+  const [showExpiryWarning, setShowExpiryWarning] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const businessId = user?.businessId ?? '';
   const storeId = user?.storeId ?? '';
 
+  // Fallback: if storeId not in session (email-login users), resolve first store
+  const { data: firstStore } = useQuery<{ id: string; name: string }>({
+    queryKey: ['first-store', businessId],
+    queryFn: () =>
+      api.get<Array<{ id: string; name: string }>>(`/business/${businessId}/stores`).then((s) => s[0] ?? null),
+    enabled: !!businessId && !storeId,
+    staleTime: Infinity,
+  });
+  const effectiveStoreId = storeId || firstStore?.id || '';
+  const effectiveStoreName = firstStore?.name ?? 'Main Store';
+
   // ─── Data ───────────────────────────────────────────────
 
   const { data: items = [] } = useQuery<ApiItem[]>({
-    queryKey: ['items', businessId, storeId, search],
+    queryKey: ['items', businessId, effectiveStoreId, search],
     queryFn: () =>
       api.get<ApiItem[]>(
-        `/items?businessId=${businessId}&storeId=${storeId}${
+        `/items?businessId=${businessId}${effectiveStoreId ? `&storeId=${effectiveStoreId}` : ''}${
           search ? `&search=${encodeURIComponent(search)}` : ''
         }`,
       ),
-    enabled: !!businessId && !!storeId,
+    enabled: !!businessId,
   });
 
   const { data: categories = [] } = useQuery<Category[]>({
@@ -122,6 +155,51 @@ export default function POSPage() {
     enabled: !!businessId,
     staleTime: 60_000,
   });
+
+  // Business settings — service charge rate + display currencies + business name
+  const { data: businessSettings } = useQuery<{ displayCurrencies?: string; serviceChargeRate?: number; name?: string }>({
+    queryKey: ['business-settings-fx', businessId],
+    queryFn: () => api.get(`/business/${businessId}/settings`),
+    enabled: !!businessId,
+    staleTime: 5 * 60_000,
+    select: (d: any) => ({
+      displayCurrencies: d.displayCurrencies,
+      serviceChargeRate: typeof d.serviceChargeRate === 'number' ? d.serviceChargeRate : 10,
+      name: d.name,
+    }),
+  });
+  const serviceChargeRate = businessSettings?.serviceChargeRate ?? 10; // default 10%
+
+  // FEFO suggestion: check if any cart items have batches expiring soon
+  const { data: fefoSuggestions = [] } = useQuery<Array<{ itemId: string; itemName: string; daysLeft: number | null; lotNumber: string; status: string }>>({
+    queryKey: ['fefo-suggestions', effectiveStoreId, cart.map((c) => c.id).join(',')],
+    queryFn: () => {
+      const ids = cart.map((c) => c.id).join(',');
+      return api.get(`/items/fefo-suggestions?storeId=${effectiveStoreId}&itemIds=${ids}`);
+    },
+    enabled: !!effectiveStoreId && cart.length > 0,
+    staleTime: 30_000,
+  });
+  const fefoAlerts = fefoSuggestions.filter((s) => s.status !== 'OK' && s.daysLeft !== null && s.daysLeft >= 0);
+
+  const displayCurrencies: string[] = (() => {
+    try { return businessSettings?.displayCurrencies ? JSON.parse(businessSettings.displayCurrencies) : []; } catch { return []; }
+  })();
+
+  // Stored exchange rates from backend — format: { USD: 129.4 } = KES per 1 foreign unit
+  const { data: exchangeRateData } = useQuery<{ rates: Record<string, number>; displayCurrencies: string[] }>({
+    queryKey: ['exchange-rates', businessId],
+    queryFn: () => api.get(`/business/${businessId}/exchange-rates`),
+    enabled: !!businessId,
+    staleTime: 30 * 60_000,
+    retry: false,
+  });
+  // fxRates[USD] = 129.4  →  convert: totalKES / 129.4 = totalUSD
+  const fxRates: Record<string, number> = exchangeRateData?.rates ?? {};
+  // Use stored displayCurrencies from exchange-rate endpoint (falls back to settings)
+  const activeCurrencies = (exchangeRateData?.displayCurrencies?.length ?? 0) > 0
+    ? exchangeRateData!.displayCurrencies
+    : displayCurrencies;
 
   // Loyalty points for selected customer
   const { data: loyaltyData } = useQuery<{ loyaltyPoints: number; program?: { redemptionRate: number; minRedemption: number } } | null>({
@@ -154,12 +232,12 @@ export default function POSPage() {
   const filteredItems =
     activeCategory === 'all'
       ? items
-      : items.filter((i) => i.category?.id === activeCategory);
+      : items.filter((i) => i.category === activeCategory);
 
   // ─── Totals ────────────────────────────────────────────
 
   const subtotalCents = cart.reduce((s, i) => s + i.totalCents, 0);
-  const serviceChargeCents = serviceChargeEnabled ? Math.round(subtotalCents * 0.10) : 0;
+  const serviceChargeCents = serviceChargeEnabled ? Math.round(subtotalCents * serviceChargeRate / 100) : 0;
 
   // Best applicable promotion
   const cartItemIds = cart.map((i) => i.id);
@@ -180,17 +258,19 @@ export default function POSPage() {
 
   const totalDiscountCents = promoDiscountCents + (loyaltyDiscountApplied ? loyaltyDiscountCents : 0);
   const taxBase = subtotalCents - totalDiscountCents;
-  const vatCents = Math.round(
-    cart.filter((i) => i.vatApplicable).reduce((s, i) => s + i.totalCents, 0) * 0.16 * (Math.max(taxBase, 0) / Math.max(subtotalCents, 1)),
-  );
-  const totalCents = Math.max(0, taxBase) + serviceChargeCents + vatCents;
+  // VAT is inclusive in item prices — extract the VAT component for display/reporting only
+  const vatApplicableTotal = cart.filter((i) => i.vatApplicable).reduce((s, i) => s + i.totalCents, 0);
+  const vatApplicableAfterDiscount = vatApplicableTotal * (Math.max(taxBase, 0) / Math.max(subtotalCents, 1));
+  const vatCents = Math.round(vatApplicableAfterDiscount * 16 / 116);
+  // Total does NOT add vatCents — it is already embedded in item prices
+  const totalCents = Math.max(0, taxBase) + serviceChargeCents;
 
   // ─── Checkout ──────────────────────────────────────────
 
   const checkoutMutation = useMutation<SaleResult, Error, Array<{ method: string; amountCents: number; reference?: string }>>({
     mutationFn: (payments) => {
       const payload: SalePayload = {
-        storeId,
+        storeId: effectiveStoreId,
         businessId,
         cashierId: user?.id ?? '',
         type: 'NORMAL',
@@ -198,6 +278,7 @@ export default function POSPage() {
         customerId: customerId ?? undefined,
         items: cart.map((i) => ({ itemId: i.id, quantity: i.quantity })),
         payments,
+        serviceChargeCents,  // 0 when toggle is off, >0 when on — backend honours this
         ...(totalDiscountCents > 0 && {
           discountCents: totalDiscountCents,
           promotionId: appliedPromotion?.id,
@@ -231,8 +312,8 @@ export default function POSPage() {
       // Prepare receipt data for printing (eTIMS not yet submitted)
       const receipt: ReceiptData = {
         receiptNumber: result.receiptNumber,
-        businessName: 'Universal POS',
-        storeName: 'Main Store',
+        businessName: businessSettings?.name ?? 'KASTRA POS',
+        storeName: effectiveStoreName,
         date: new Date().toISOString(),
         cashierName: user?.name ?? 'Cashier',
         customerName: customerName ?? undefined,
@@ -255,9 +336,34 @@ export default function POSPage() {
       setReceiptData(receipt);
 
       // Best-effort eTIMS submission in background
-      void api.post(`/etims/submit/${result.id}`).then(() => {
-        setReceiptData((prev) => prev ? { ...prev, etimsSubmitted: true } : prev);
+      void api.post<{ success: boolean }>(`/etims/submit/${result.id}`).then((res) => {
+        if (res.success) {
+          setReceiptData((prev) => prev ? { ...prev, etimsSubmitted: true } : prev);
+        }
       }).catch(() => {/* will show watermark if fails */});
+
+      // Broadcast payment complete to pole display
+      try {
+        const ch = new BroadcastChannel('pos-pole-display');
+        ch.postMessage({
+          businessName: 'KASTRA POS',
+          items: [],
+          subtotalCents: 0,
+          discountCents: 0,
+          vatCents: 0,
+          totalCents: result.totalCents,
+          status: 'complete',
+        });
+        ch.close();
+        // Return to idle after 4 seconds
+        setTimeout(() => {
+          try {
+            const ch2 = new BroadcastChannel('pos-pole-display');
+            ch2.postMessage({ businessName: 'KASTRA POS', items: [], subtotalCents: 0, discountCents: 0, vatCents: 0, totalCents: 0, status: 'idle' });
+            ch2.close();
+          } catch { /* non-critical */ }
+        }, 4000);
+      } catch { /* non-critical */ }
 
       clearCart();
       setLoyaltyDiscountApplied(false);
@@ -266,6 +372,35 @@ export default function POSPage() {
       void qc.invalidateQueries({ queryKey: ['items'] });
     },
   });
+
+  // ─── Expiry check before opening payment ────────────────
+
+  const handlePayClick = async () => {
+    if (cart.length === 0) return;
+    const trackExpiry = cart.filter((i) => i.itemType === 'PRODUCT' || i.itemType === 'WEIGHTED');
+    if (trackExpiry.length > 0 && effectiveStoreId) {
+      try {
+        const results = await api.post<Array<{ itemId: string; name: string; status: string; expiryDate?: string }>>(
+          '/items/check-expiry',
+          { itemIds: trackExpiry.map((i) => i.id), storeId: effectiveStoreId, businessId },
+        );
+        const issues = results.filter((r) => r.status !== 'OK');
+        if (issues.some((r) => r.status === 'EXPIRED')) {
+          setExpiryWarnings(issues);
+          setShowExpiryWarning(true);
+          return; // block checkout
+        }
+        if (issues.length > 0) {
+          setExpiryWarnings(issues);
+          setShowExpiryWarning(true);
+          return; // show warning, let user confirm
+        }
+      } catch {
+        // Non-critical — proceed if check fails
+      }
+    }
+    setShowPayment(true);
+  };
 
   // ─── Barcode / quick-entry handler ──────────────────────
 
@@ -290,6 +425,45 @@ export default function POSPage() {
     }
   }, [items, addToCart]);
 
+  // ─── Camera barcode scanner ──────────────────────────────
+
+  const startCamera = useCallback(async () => {
+    setCameraError(null);
+    setShowCamera(true);
+    // Give React time to mount the video element
+    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    if (!videoRef.current) return;
+    try {
+      const reader = new BrowserMultiFormatReader();
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play();
+      reader.decodeFromStream(stream, videoRef.current, (result, err) => {
+        if (result) {
+          const text = result.getText();
+          handleBarcodeSearch(text);
+          // Stop stream after successful scan
+          stream.getTracks().forEach((t) => t.stop());
+          setShowCamera(false);
+        }
+        if (err && !(err.message?.includes('No MultiFormat'))) {
+          // Suppress the constant "not found" errors from continuous scanning
+        }
+      });
+    } catch (e: unknown) {
+      setCameraError(e instanceof Error ? e.message : 'Camera access denied');
+    }
+  }, [handleBarcodeSearch]);
+
+  const stopCamera = useCallback(() => {
+    if (videoRef.current?.srcObject) {
+      (videoRef.current.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
+      videoRef.current.srcObject = null;
+    }
+    setShowCamera(false);
+    setCameraError(null);
+  }, []);
+
   // ─── Keyboard shortcuts ─────────────────────────────────
 
   const handleKeyDown = useCallback(
@@ -301,33 +475,69 @@ export default function POSPage() {
         searchRef.current?.focus();
       } else if (e.key === 'F1') {
         e.preventDefault();
-        if (cart.length > 0) setShowPayment(true);
+        if (cart.length > 0) void handlePayClick();
       } else if (e.key === 'F2') {
         e.preventDefault();
         setShowCustomerModal(true);
       } else if (e.key === 'F3') {
         e.preventDefault();
-        setServiceChargeEnabled(!serviceChargeEnabled);
+        setServiceChargeEnabled((v) => !v);
+      } else if (e.key === 'F4') {
+        e.preventDefault();
+        if (cart.length > 0) void handlePayClick(); // opens payment modal; cashier picks Split tab
       } else if (e.key === 'F5') {
         e.preventDefault();
         holdCurrentSale();
       } else if (e.key === 'F6') {
         e.preventDefault();
         setShowHeld(true);
+      } else if (e.key === 'F7') {
+        e.preventDefault();
+        navigate('/proforma');
+      } else if (e.key === 'F8') {
+        e.preventDefault();
+        navigate('/layaway');
       } else if (e.key === 'Escape') {
         setShowPayment(false);
         setShowHeld(false);
         setShowCustomerModal(false);
+        setShowCamera(false);
         setLastReceipt(null);
       }
     },
-    [cart.length, holdCurrentSale, serviceChargeEnabled],
+    [cart.length, holdCurrentSale, serviceChargeEnabled, navigate],
   );
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
+
+  // ─── Pole Display Broadcast ──────────────────────────────
+  useEffect(() => {
+    try {
+      const channel = new BroadcastChannel('pos-pole-display');
+      channel.postMessage({
+        businessName: 'KASTRA POS',
+        items: cart.map((i) => ({
+          id: i.id,
+          name: i.name,
+          quantity: i.quantity,
+          unitPriceCents: i.unitPriceCents,
+          totalCents: i.totalCents,
+        })),
+        subtotalCents,
+        discountCents: totalDiscountCents,
+        vatCents,
+        totalCents,
+        status: cart.length > 0 ? 'cart' : 'idle',
+        customerName: customerName ?? undefined,
+      });
+      channel.close();
+    } catch {
+      // BroadcastChannel not supported — non-critical
+    }
+  }, [cart, subtotalCents, totalDiscountCents, vatCents, totalCents, customerName]);
 
   // ─── Render ────────────────────────────────────────────
 
@@ -350,22 +560,44 @@ export default function POSPage() {
                 }
               }}
               placeholder='Search, scan barcode, or 3×500 ( / )'
-              className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-9 pr-10 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
+            <button
+              onClick={() => void startCamera()}
+              title="Scan barcode with camera"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-blue-600 rounded"
+            >
+              <Camera className="w-4 h-4" />
+            </button>
           </div>
 
-          <div className="relative">
-            <select
-              value={priceLevel}
-              onChange={(e) => setPriceLevel(e.target.value as PriceLevel)}
-              className="appearance-none pl-3 pr-8 py-2 border rounded-lg text-sm font-medium bg-white cursor-pointer focus:ring-2 focus:ring-blue-500"
-            >
-              {(Object.keys(PRICE_LEVEL_LABELS) as PriceLevel[]).map((val) => (
-                <option key={val} value={val}>{PRICE_LEVEL_LABELS[val]} Price</option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          {/* Price Level selector — pill button group */}
+          <div className="flex items-center border rounded-lg overflow-hidden bg-white" title="Price Level">
+            {(Object.entries(PRICE_LEVEL_LABELS) as [PriceLevel, string][]).map(([val, label]) => (
+              <button
+                key={val}
+                onClick={() => setPriceLevel(val)}
+                className={`px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                  priceLevel === val
+                    ? val === 'RETAIL'    ? 'bg-blue-600 text-white'
+                    : val === 'WHOLESALE' ? 'bg-emerald-600 text-white'
+                    :                      'bg-purple-600 text-white'
+                    : 'text-gray-500 hover:bg-gray-100'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
+
+          {/* Pole Display button */}
+          <button
+            onClick={() => window.open('/pole-display', '_blank', 'width=1024,height=600,resizable=yes')}
+            title="Open customer-facing pole display (2nd screen)"
+            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+          >
+            <Monitor className="w-4 h-4" />
+          </button>
 
           {customerName ? (
             <div className="flex items-center gap-2">
@@ -481,7 +713,7 @@ export default function POSPage() {
                   )}
                   <div
                     className="w-full h-12 rounded-lg mb-2 flex items-center justify-center text-xl font-bold text-white"
-                    style={{ backgroundColor: item.category?.color ?? '#3B82F6' }}
+                    style={{ backgroundColor: categoryColor(item.category) }}
                   >
                     {item.name[0]?.toUpperCase() ?? '?'}
                   </div>
@@ -510,8 +742,11 @@ export default function POSPage() {
           <span><kbd className="bg-gray-200 px-1 rounded">F1</kbd> Pay</span>
           <span><kbd className="bg-gray-200 px-1 rounded">F2</kbd> Customer</span>
           <span><kbd className="bg-gray-200 px-1 rounded">F3</kbd> Service</span>
+          <span><kbd className="bg-gray-200 px-1 rounded">F4</kbd> Split</span>
           <span><kbd className="bg-gray-200 px-1 rounded">F5</kbd> Hold</span>
           <span><kbd className="bg-gray-200 px-1 rounded">F6</kbd> Held ({heldSales.length})</span>
+          <span><kbd className="bg-gray-200 px-1 rounded">F7</kbd> Proforma</span>
+          <span><kbd className="bg-gray-200 px-1 rounded">F8</kbd> Layaway</span>
         </div>
       </div>
 
@@ -521,6 +756,13 @@ export default function POSPage() {
           <div className="flex items-center gap-2">
             <ShoppingCart className="w-5 h-5 text-gray-600" />
             <h2 className="font-bold text-gray-800">Cart ({cart.length})</h2>
+            <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
+              priceLevel === 'RETAIL'    ? 'bg-blue-100 text-blue-700' :
+              priceLevel === 'WHOLESALE' ? 'bg-emerald-100 text-emerald-700' :
+                                          'bg-purple-100 text-purple-700'
+            }`}>
+              {PRICE_LEVEL_LABELS[priceLevel]}
+            </span>
           </div>
           <div className="flex gap-1">
             <button
@@ -553,6 +795,26 @@ export default function POSPage() {
             </button>
           </div>
         </div>
+
+        {/* FEFO suggestion banner */}
+        {fefoAlerts.length > 0 && (
+          <div className="mx-3 mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-xl">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-semibold text-amber-800">FEFO Notice — sell by expiry:</p>
+                {fefoAlerts.slice(0, 3).map((s) => (
+                  <p key={s.itemId} className="text-xs text-amber-700 mt-0.5">
+                    {s.itemName}: <span className="font-medium">Lot {s.lotNumber}</span> expires in <span className="font-bold">{s.daysLeft}d</span>
+                  </p>
+                ))}
+                {fefoAlerts.length > 3 && (
+                  <p className="text-xs text-amber-600 mt-0.5">+{fefoAlerts.length - 3} more</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto">
           {cart.length === 0 ? (
@@ -612,6 +874,34 @@ export default function POSPage() {
                     />
                     <span className="text-xs text-gray-400">% off</span>
                   </div>
+                  {/* Read Scale button for WEIGHTED items */}
+                  {item.itemType === 'WEIGHTED' && isSerialSupported() && (
+                    <div className="mt-2">
+                      <button
+                        onClick={async () => {
+                          setScaleReading(true);
+                          setScaleError(null);
+                          try {
+                            const port = await requestScalePort();
+                            const reading = await readWeight(port, 'METTLER_TOLEDO' as ScaleProtocol);
+                            // Set quantity to weight in grams (or kg as decimal)
+                            updateQuantity(item.id, reading.weightGrams / 1000);
+                            if (!reading.stable) setScaleError('Weight unstable — reading may be inaccurate');
+                          } catch (e: any) {
+                            setScaleError(e.message);
+                          } finally {
+                            setScaleReading(false);
+                          }
+                        }}
+                        disabled={scaleReading}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 border border-teal-300 text-teal-700 rounded-lg text-xs font-medium hover:bg-teal-100 disabled:opacity-50"
+                      >
+                        <Scale className="w-3.5 h-3.5" />
+                        {scaleReading ? 'Reading…' : 'Read Scale'}
+                      </button>
+                      {scaleError && <p className="text-xs text-red-500 mt-1">{scaleError}</p>}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -621,8 +911,8 @@ export default function POSPage() {
         <div className="border-t">
           <div className="px-4 py-3 space-y-1.5 text-sm">
             <div className="flex justify-between text-gray-600">
-              <span>Subtotal</span>
-              <span>{formatKES(subtotalCents)}</span>
+              <span>{vatCents > 0 ? 'Subtotal (ex-VAT)' : 'Subtotal'}</span>
+              <span>{formatKES(subtotalCents - vatCents)}</span>
             </div>
             {promoDiscountCents > 0 && (
               <div className="flex justify-between text-green-600 font-medium">
@@ -647,14 +937,21 @@ export default function POSPage() {
             )}
             <div className="flex justify-between font-bold text-base border-t pt-2">
               <span>Total</span>
-              <span className="text-blue-600">{formatKES(totalCents)}</span>
+              <div className="text-right">
+                <span className="text-blue-600">{formatKES(totalCents)}</span>
+                {activeCurrencies.filter((c) => fxRates[c]).map((c) => (
+                  <div key={c} className="text-xs text-gray-400 font-normal">
+                    ≈ {c} {(totalCents / 100 / fxRates[c]).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
           <div className="px-4 pb-4 space-y-2">
             <div className="flex gap-2">
               <button
-                onClick={() => setServiceChargeEnabled(!serviceChargeEnabled)}
+                onClick={() => setServiceChargeEnabled((v) => !v)}
                 className={`flex-1 py-2 text-xs font-medium rounded-lg border transition-colors ${
                   serviceChargeEnabled
                     ? 'bg-green-50 border-green-500 text-green-700'
@@ -662,11 +959,11 @@ export default function POSPage() {
                 }`}
                 title="Toggle service charge (F3)"
               >
-                Service {serviceChargeEnabled ? '✓' : ''}
+                Svc {serviceChargeRate}% {serviceChargeEnabled ? '✓' : ''}
               </button>
             </div>
             <button
-              onClick={() => setShowPayment(true)}
+              onClick={() => void handlePayClick()}
               disabled={cart.length === 0 || checkoutMutation.isPending}
               className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl disabled:opacity-40 transition-colors"
             >
@@ -761,6 +1058,93 @@ export default function POSPage() {
           receipt={receiptData}
           onClose={() => setShowPrintModal(false)}
         />
+      )}
+
+      {/* ── Camera Barcode Scanner ── */}
+      {showCamera && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+          <div className="bg-white rounded-2xl overflow-hidden w-full max-w-sm">
+            <div className="flex items-center justify-between px-4 py-3 border-b">
+              <span className="font-semibold">Scan Barcode</span>
+              <button onClick={stopCamera} className="p-1 rounded hover:bg-gray-100">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="relative bg-black">
+              <video ref={videoRef} className="w-full" playsInline muted />
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="w-48 h-48 border-4 border-blue-400 rounded-lg opacity-70" />
+              </div>
+            </div>
+            {cameraError && (
+              <div className="px-4 py-3 text-sm text-red-600 bg-red-50 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                {cameraError}
+              </div>
+            )}
+            <p className="text-center text-xs text-gray-500 py-2">Point camera at barcode to scan automatically</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Expiry Warning Modal ── */}
+      {showExpiryWarning && expiryWarnings.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-5 h-5 text-orange-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900">Expiry Warning</h3>
+                <p className="text-sm text-gray-500">Some items have expiry issues</p>
+              </div>
+            </div>
+            <div className="space-y-2 mb-5">
+              {expiryWarnings.map((w) => (
+                <div key={w.itemId} className={`flex items-center gap-2 p-2.5 rounded-lg text-sm ${
+                  w.status === 'EXPIRED' ? 'bg-red-50 text-red-700' : 'bg-orange-50 text-orange-700'
+                }`}>
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                  <div>
+                    <span className="font-medium">{w.name}</span>
+                    <span className="ml-1 text-xs">
+                      {w.status === 'EXPIRED'
+                        ? `EXPIRED ${w.expiryDate ? new Date(w.expiryDate).toLocaleDateString() : ''}`
+                        : `Expires ${w.expiryDate ? new Date(w.expiryDate).toLocaleDateString() : 'soon'}`}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {expiryWarnings.some((w) => w.status === 'EXPIRED') ? (
+              <div className="space-y-2">
+                <p className="text-xs text-red-600 text-center">Expired items cannot be sold. Remove them from cart first.</p>
+                <button
+                  onClick={() => setShowExpiryWarning(false)}
+                  className="w-full py-2.5 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200"
+                >
+                  Go Back to Cart
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowExpiryWarning(false)}
+                  className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => { setShowExpiryWarning(false); setShowPayment(true); }}
+                  className="flex-1 py-2.5 bg-orange-500 text-white rounded-xl font-medium hover:bg-orange-600"
+                >
+                  Sell Anyway
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

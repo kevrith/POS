@@ -54,37 +54,41 @@ export class LoyaltyService {
   }
 
   async redeemPoints(customerId: string, points: number, saleId: string) {
-    const customer = await this.prisma.customer.findUnique({
-      where: { id: customerId },
+    // Use $transaction to prevent race conditions (double-spend of loyalty points)
+    return this.prisma.$transaction(async (tx) => {
+      const customer = await tx.customer.findUnique({
+        where: { id: customerId },
+      });
+      if (!customer) throw new Error('Customer not found');
+
+      const program = await tx.loyaltyProgram.findFirst({
+        where: { businessId: customer.businessId, isActive: true },
+      });
+
+      if (!program) throw new Error('No active loyalty program');
+      if (points < program.minRedemption) throw new Error('Below minimum redemption');
+      if (customer.loyaltyPoints < points) throw new Error('Insufficient points');
+
+      const discountCents = Math.floor(points * program.redemptionRate);
+      const newBalance = customer.loyaltyPoints - points;
+
+      await tx.customer.update({
+        where: { id: customerId },
+        data: { loyaltyPoints: newBalance },
+      });
+
+      await tx.loyaltyTransaction.create({
+        data: {
+          customerId,
+          saleId,
+          type: 'REDEEM',
+          points: -points,
+          balanceAfter: newBalance,
+        },
+      });
+
+      return { discountCents, balance: newBalance };
     });
-
-    const program = await this.prisma.loyaltyProgram.findFirst({
-      where: { businessId: customer.businessId, isActive: true },
-    });
-
-    if (!program) throw new Error('No active loyalty program');
-    if (points < program.minRedemption) throw new Error('Below minimum redemption');
-    if (customer.loyaltyPoints < points) throw new Error('Insufficient points');
-
-    const discountCents = Math.floor(points * program.redemptionRate);
-    const newBalance = customer.loyaltyPoints - points;
-
-    await this.prisma.customer.update({
-      where: { id: customerId },
-      data: { loyaltyPoints: newBalance },
-    });
-
-    await this.prisma.loyaltyTransaction.create({
-      data: {
-        customerId,
-        saleId,
-        type: 'REDEEM',
-        points: -points,
-        balanceAfter: newBalance,
-      },
-    });
-
-    return { discountCents, balance: newBalance };
   }
 
   async getCustomerPoints(customerId: string) {
@@ -102,5 +106,49 @@ export class LoyaltyService {
       balance: customer.loyaltyPoints,
       transactions,
     };
+  }
+
+  // ─── Tier CRUD ─────────────────────────────────────────────────────────────
+
+  async createTier(data: {
+    businessId: string;
+    name: string;
+    minPoints: number;
+    multiplier: number;
+    color: string;
+    perksJson?: string;
+  }) {
+    return this.prisma.loyaltyTier.create({ data });
+  }
+
+  async getTiers(businessId: string) {
+    return this.prisma.loyaltyTier.findMany({
+      where: { businessId },
+      orderBy: { minPoints: 'asc' },
+    });
+  }
+
+  async updateTier(id: string, data: Partial<{
+    name: string;
+    minPoints: number;
+    multiplier: number;
+    color: string;
+    perksJson: string;
+  }>) {
+    return this.prisma.loyaltyTier.update({ where: { id }, data });
+  }
+
+  async deleteTier(id: string) {
+    return this.prisma.loyaltyTier.delete({ where: { id } });
+  }
+
+  async getCustomerTier(customerId: string) {
+    const customer = await this.prisma.customer.findUnique({ where: { id: customerId } });
+    if (!customer) return null;
+    const tiers = await this.prisma.loyaltyTier.findMany({
+      where: { businessId: customer.businessId },
+      orderBy: { minPoints: 'desc' },
+    });
+    return tiers.find((t) => customer.loyaltyPoints >= t.minPoints) ?? null;
   }
 }

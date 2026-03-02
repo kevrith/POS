@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus,
@@ -17,9 +17,13 @@ import {
   Upload,
   Printer,
   CheckCircle,
+  AlertCircle,
+  Camera,
 } from 'lucide-react';
+import { BrowserMultiFormatReader } from '@zxing/browser';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
+import { downloadZPL } from '../lib/printer';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -103,12 +107,24 @@ interface ItemVariant {
 interface AdjustmentPayload {
   itemId: string;
   storeId: string;
+  businessId: string;
   quantity: number;
-  reason: string;
+  type: string;
   notes: string;
 }
 
-type ActiveTab = 'items' | 'movements' | 'expiry' | 'batches';
+type ActiveTab = 'items' | 'movements' | 'expiry' | 'batches' | 'low-stock';
+
+// ---------------------------------------------------------------------------
+// Category suggestions by posMode
+// ---------------------------------------------------------------------------
+const CATEGORY_SUGGESTIONS: Record<string, string[]> = {
+  RETAIL:      ['Clothing', 'Electronics', 'Food', 'Beverages', 'Household', 'Stationery', 'Beauty', 'Sports'],
+  HARDWARE:    ['Electrical', 'Plumbing', 'Paint', 'Timber', 'Cement', 'Steel', 'Hardware', 'Tools'],
+  AGROVET:     ['Fertilizers', 'Seeds', 'Pesticides', 'Veterinary', 'Animal Feeds', 'Agrochemicals', 'Irrigation'],
+  CLINIC:      ['Prescription Drugs', 'OTC Medicines', 'Medical Supplies', 'Lab Supplies'],
+  HOSPITALITY: ['Food', 'Beverages', 'Desserts', 'Spirits', 'Wine', 'Soft Drinks'],
+};
 type ExpiryFilter = 'all' | 'expiring_soon' | 'expired';
 
 // ---------------------------------------------------------------------------
@@ -180,10 +196,11 @@ interface AddItemModalProps {
   businessId: string;
   storeId?: string;
   categories: Category[];
+  posMode?: string;
   onClose: () => void;
 }
 
-function AddItemModal({ businessId, storeId, categories, onClose }: AddItemModalProps) {
+function AddItemModal({ businessId, storeId, categories, posMode, onClose }: AddItemModalProps) {
   const qc = useQueryClient();
   const [form, setForm] = useState({
     name: '',
@@ -200,6 +217,31 @@ function AddItemModal({ businessId, storeId, categories, onClose }: AddItemModal
     vatApplicable: false,
   });
   const [error, setError] = useState('');
+  const addItemVideoRef = useRef<HTMLVideoElement>(null);
+  const [showAddItemCamera, setShowAddItemCamera] = useState(false);
+  const [addItemCameraError, setAddItemCameraError] = useState('');
+
+  const startAddItemCamera = useCallback(async (setter: (v: string) => void) => {
+    setAddItemCameraError('');
+    setShowAddItemCamera(true);
+    await new Promise<void>(resolve => setTimeout(resolve, 100));
+    if (!addItemVideoRef.current) return;
+    try {
+      const reader = new BrowserMultiFormatReader();
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      addItemVideoRef.current.srcObject = stream;
+      await addItemVideoRef.current.play();
+      reader.decodeFromStream(stream, addItemVideoRef.current, (result) => {
+        if (result) {
+          stream.getTracks().forEach(t => t.stop());
+          setShowAddItemCamera(false);
+          setter(result.getText());
+        }
+      });
+    } catch (e) {
+      setAddItemCameraError(e instanceof Error ? e.message : 'Camera access denied');
+    }
+  }, []);
 
   const mutation = useMutation({
     mutationFn: (payload: CreateItemPayload) => api.post<InventoryItem>('/items', payload),
@@ -258,23 +300,54 @@ function AddItemModal({ businessId, storeId, categories, onClose }: AddItemModal
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             {field('Name *', <input type="text" value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} className={inputCls} placeholder="Item name" required />)}
-            {field('Barcode', <input type="text" value={form.barcode} onChange={(e) => setForm(f => ({ ...f, barcode: e.target.value }))} className={inputCls} placeholder="Scan or type barcode" />)}
+            {field('Barcode', (
+              <div className="flex gap-2">
+                <input type="text" value={form.barcode} onChange={(e) => setForm(f => ({ ...f, barcode: e.target.value }))} className={inputCls} placeholder="Scan or type barcode" />
+                <button
+                  type="button"
+                  onClick={() => void startAddItemCamera(v => setForm(f => ({ ...f, barcode: v })))}
+                  className="px-2 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg flex-shrink-0"
+                  title="Scan barcode with camera"
+                >
+                  <Camera className="w-4 h-4 text-gray-600" />
+                </button>
+              </div>
+            ))}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             {field('Category', (
-              <div className="relative">
-                <input
-                  type="text"
-                  list="categories-list"
-                  value={form.categoryName}
-                  onChange={(e) => setForm(f => ({ ...f, categoryName: e.target.value }))}
-                  className={inputCls}
-                  placeholder="Select or type new category"
-                />
-                <datalist id="categories-list">
-                  {categories.map((c) => <option key={c.name} value={c.name} />)}
-                </datalist>
+              <div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    list="categories-list"
+                    value={form.categoryName}
+                    onChange={(e) => setForm(f => ({ ...f, categoryName: e.target.value }))}
+                    className={inputCls}
+                    placeholder="Select or type new category"
+                  />
+                  <datalist id="categories-list">
+                    {categories.map((c, i) => <option key={c.name ?? i} value={c.name} />)}
+                  </datalist>
+                </div>
+                {(() => {
+                  const suggestions = CATEGORY_SUGGESTIONS[posMode ?? 'RETAIL'] ?? CATEGORY_SUGGESTIONS['RETAIL'];
+                  return (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {suggestions.map(s => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setForm(f => ({ ...f, categoryName: s }))}
+                          className="text-xs px-2 py-0.5 rounded-full border border-gray-300 text-gray-600 hover:bg-blue-50 hover:border-blue-400 hover:text-blue-700 transition-colors"
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             ))}
             {field('Type', (
@@ -322,6 +395,19 @@ function AddItemModal({ businessId, storeId, categories, onClose }: AddItemModal
           </div>
         </form>
       </div>
+
+      {showAddItemCamera && (
+        <div className="fixed inset-0 bg-black/90 flex flex-col items-center justify-center z-50 p-4">
+          <button onClick={() => setShowAddItemCamera(false)} className="absolute top-4 right-4 text-white p-2 hover:bg-gray-700 rounded">
+            <X className="w-6 h-6" />
+          </button>
+          <div className="w-full max-w-md aspect-video bg-black rounded-lg border-2 border-blue-400 overflow-hidden">
+            <video ref={addItemVideoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          </div>
+          {addItemCameraError && <p className="text-red-400 text-sm mt-2">{addItemCameraError}</p>}
+          <p className="text-white text-sm mt-3">Scan item barcode</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -404,7 +490,7 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
             <div><label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
               <input type="text" list="edit-categories-list" value={form.categoryName} onChange={(e) => setForm(f => ({ ...f, categoryName: e.target.value }))} className={inputCls} />
               <datalist id="edit-categories-list">
-                {categories.map((c) => <option key={c.name} value={c.name} />)}
+                {categories.map((c, i) => <option key={c.name ?? i} value={c.name} />)}
               </datalist>
             </div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
@@ -463,11 +549,12 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
 
 interface AdjustStockModalProps {
   item: InventoryItem;
+  businessId: string;
   storeId?: string;
   onClose: () => void;
 }
 
-function AdjustStockModal({ item, storeId, onClose }: AdjustStockModalProps) {
+function AdjustStockModal({ item, businessId, storeId, onClose }: AdjustStockModalProps) {
   const qc = useQueryClient();
   const [quantity, setQuantity] = useState('');
   const [notes, setNotes] = useState('');
@@ -490,8 +577,9 @@ function AdjustStockModal({ item, storeId, onClose }: AdjustStockModalProps) {
     mutation.mutate({
       itemId: item.id,
       storeId: storeId ?? '',
+      businessId,
       quantity: qty,
-      reason: 'ADJUSTMENT',
+      type: 'ADJUSTMENT',
       notes: notes.trim(),
     });
   }
@@ -996,7 +1084,7 @@ function BarcodeLabelModal({ items, onClose }: { items: Array<{ id: string; name
             </div>
           </div>
         </div>
-        <div className="px-6 pb-6 pt-2 border-t flex gap-3">
+        <div className="px-6 pb-6 pt-2 border-t flex gap-3 flex-wrap">
           <button onClick={onClose} className="flex-1 py-2.5 border rounded-lg text-gray-700 font-medium">Cancel</button>
           <button
             onClick={printLabels}
@@ -1004,6 +1092,20 @@ function BarcodeLabelModal({ items, onClose }: { items: Array<{ id: string; name
             className="flex-1 py-2.5 bg-blue-600 text-white font-bold rounded-lg disabled:opacity-40"
           >
             Print {selected.size} Labels
+          </button>
+          <button
+            onClick={() => {
+              const selectedItems = items.filter(i => selected.has(i.id) && i.barcode);
+              selectedItems.forEach(item => {
+                downloadZPL({ itemName: item.name, barcode: item.barcode!, priceCents: item.retailPriceCents });
+              });
+              if (selectedItems.length === 0) alert('No items with barcodes selected');
+            }}
+            disabled={selected.size === 0}
+            className="flex-1 py-2.5 bg-gray-800 text-white font-bold rounded-lg disabled:opacity-40 text-sm"
+            title="Download ZPL files for Zebra thermal printers"
+          >
+            ↓ ZPL (Zebra)
           </button>
         </div>
       </div>
@@ -1018,9 +1120,10 @@ function BarcodeLabelModal({ items, onClose }: { items: Array<{ id: string; name
 interface ItemsTabProps {
   businessId: string;
   storeId?: string;
+  posMode?: string;
 }
 
-function ItemsTab({ businessId, storeId }: ItemsTabProps) {
+function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
@@ -1053,6 +1156,8 @@ function ItemsTab({ businessId, storeId }: ItemsTabProps) {
   );
 
   const filtered = items.filter((item) => {
+    if (search && !item.name.toLowerCase().includes(search.toLowerCase()) &&
+        !(item.barcode ?? '').toLowerCase().includes(search.toLowerCase())) return false;
     if (categoryFilter && item.category?.name !== categoryFilter) return false;
     if (typeFilter && item.type !== typeFilter) return false;
     return true;
@@ -1080,7 +1185,7 @@ function ItemsTab({ businessId, storeId }: ItemsTabProps) {
             className="border rounded-lg pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
           >
             <option value="">All Categories</option>
-            {categories.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+            {categories.map((c, i) => <option key={c.name ?? i} value={c.name}>{c.name}</option>)}
           </select>
           <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
         </div>
@@ -1209,9 +1314,9 @@ function ItemsTab({ businessId, storeId }: ItemsTabProps) {
         )}
       </div>
 
-      {showAdd && <AddItemModal businessId={businessId} storeId={storeId} categories={categories} onClose={() => setShowAdd(false)} />}
+      {showAdd && <AddItemModal businessId={businessId} storeId={storeId} categories={categories} posMode={posMode} onClose={() => setShowAdd(false)} />}
       {editItem && <EditItemModal item={editItem} categories={categories} onClose={() => setEditItem(null)} />}
-      {adjustItem && <AdjustStockModal item={adjustItem} storeId={storeId} onClose={() => setAdjustItem(null)} />}
+      {adjustItem && <AdjustStockModal item={adjustItem} businessId={businessId} storeId={storeId} onClose={() => setAdjustItem(null)} />}
       {variantItem && <VariantsModal item={variantItem} businessId={businessId} onClose={() => setVariantItem(null)} />}
       {showCsvImport && (
         <CsvImportModal
@@ -1331,33 +1436,52 @@ function MovementsTab({ businessId, storeId }: MovementsTabProps) {
 interface ExpiryTabProps {
   batches: BatchItem[];
   isLoading: boolean;
+  businessId: string;
+  alertDays?: number;
 }
 
-function ExpiryTab({ batches, isLoading }: ExpiryTabProps) {
+function ExpiryTab({ batches, isLoading, businessId, alertDays = 30 }: ExpiryTabProps) {
   const [filter, setFilter] = useState<ExpiryFilter>('all');
   const qc = useQueryClient();
 
   const writeOffMutation = useMutation({
-    mutationFn: (id: string) => api.post<{ ok: boolean }>(`/batch/${id}/recall`, { reason: 'WRITE_OFF' }),
+    mutationFn: (id: string) => api.post<{ ok: boolean }>(`/businesses/${businessId}/batch/${id}/recall`, { reason: 'WRITE_OFF' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['batches'] }),
   });
 
   const itemsWithExpiry = batches.filter((b) => b.expiryDate);
 
+  const expiringSoonCount = itemsWithExpiry.filter((b) => {
+    const d = daysUntilExpiry(b.expiryDate!);
+    return d >= 0 && d <= alertDays;
+  }).length;
+  const expiredCount = itemsWithExpiry.filter((b) => daysUntilExpiry(b.expiryDate!) < 0).length;
+
   const filtered = itemsWithExpiry.filter((b) => {
     const days = daysUntilExpiry(b.expiryDate!);
     if (filter === 'expired') return days < 0;
-    if (filter === 'expiring_soon') return days >= 0 && days <= 30;
+    if (filter === 'expiring_soon') return days >= 0 && days <= alertDays;
     return true;
   });
 
   return (
     <div>
+      {/* Alert banner when items need attention */}
+      {(expiredCount > 0 || expiringSoonCount > 0) && (
+        <div className={`mb-4 p-3 rounded-xl border flex items-center gap-3 text-sm font-medium ${
+          expiredCount > 0 ? 'bg-red-50 border-red-200 text-red-800' : 'bg-amber-50 border-amber-200 text-amber-800'
+        }`}>
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          {expiredCount > 0 && <span>{expiredCount} batch{expiredCount > 1 ? 'es' : ''} <strong>expired</strong></span>}
+          {expiredCount > 0 && expiringSoonCount > 0 && <span className="opacity-40">·</span>}
+          {expiringSoonCount > 0 && <span>{expiringSoonCount} batch{expiringSoonCount > 1 ? 'es' : ''} expiring within <strong>{alertDays} days</strong></span>}
+        </div>
+      )}
       {/* Filter buttons */}
       <div className="flex gap-2 mb-4">
         {([
           { key: 'all', label: 'All' },
-          { key: 'expiring_soon', label: 'Expiring Soon (30 days)' },
+          { key: 'expiring_soon', label: `Expiring Soon (${alertDays}d)` },
           { key: 'expired', label: 'Expired' },
         ] as Array<{ key: ExpiryFilter; label: string }>).map((f) => (
           <button
@@ -1437,13 +1561,14 @@ function ExpiryTab({ batches, isLoading }: ExpiryTabProps) {
 interface BatchesTabProps {
   batches: BatchItem[];
   isLoading: boolean;
+  businessId: string;
 }
 
-function BatchesTab({ batches, isLoading }: BatchesTabProps) {
+function BatchesTab({ batches, isLoading, businessId }: BatchesTabProps) {
   const qc = useQueryClient();
 
   const recallMutation = useMutation({
-    mutationFn: (id: string) => api.post<{ ok: boolean }>(`/batch/${id}/recall`, { reason: 'RECALL' }),
+    mutationFn: (id: string) => api.post<{ ok: boolean }>(`/businesses/${businessId}/batch/${id}/recall`, { reason: 'RECALL' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['batches'] }),
   });
 
@@ -1531,17 +1656,39 @@ export default function InventoryPage() {
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('items');
 
+  const { data: settings } = useQuery<{ expiryAlertDays?: number; posMode?: string }>({
+    queryKey: ['business-settings', businessId],
+    queryFn: () => api.get(`/business/${businessId}/settings`),
+    enabled: !!businessId,
+  });
+  const alertDays = settings?.expiryAlertDays ?? 30;
+  const posMode = settings?.posMode ?? 'RETAIL';
+
+  const { data: lowStockItems = [], isLoading: lowStockLoading } = useQuery<InventoryItem[]>({
+    queryKey: ['low-stock', businessId, storeId],
+    queryFn: () => api.get<InventoryItem[]>(`/items/low-stock?businessId=${businessId}${storeId ? `&storeId=${storeId}` : ''}`),
+    enabled: !!businessId && activeTab === 'low-stock',
+  });
+
   const { data: batches = [], isLoading: batchesLoading } = useQuery<BatchItem[]>({
     queryKey: ['batches', businessId],
-    queryFn: () => api.get<BatchItem[]>(`/batch/list?businessId=${businessId}`),
+    queryFn: () => api.get<BatchItem[]>(`/businesses/${businessId}/batch`),
     enabled: !!businessId && (activeTab === 'expiry' || activeTab === 'batches'),
   });
 
-  const tabs: Array<{ key: ActiveTab; label: string }> = [
+  // Count batches needing attention for the tab badge
+  const expiryAlertCount = batches.filter((b) => {
+    if (!b.expiryDate) return false;
+    const days = daysUntilExpiry(b.expiryDate);
+    return days <= alertDays;
+  }).length;
+
+  const tabs: Array<{ key: ActiveTab; label: string; badge?: number }> = [
     { key: 'items', label: 'Items' },
     { key: 'movements', label: 'Stock Movements' },
-    { key: 'expiry', label: 'Expiry' },
+    { key: 'expiry', label: 'Expiry', badge: expiryAlertCount || undefined },
     { key: 'batches', label: 'Batches' },
+    { key: 'low-stock', label: 'Low Stock', badge: lowStockItems.length || undefined },
   ];
 
   return (
@@ -1560,22 +1707,100 @@ export default function InventoryPage() {
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`px-5 py-2.5 text-sm font-medium transition-colors ${
+            className={`px-5 py-2.5 text-sm font-medium transition-colors flex items-center gap-1.5 ${
               activeTab === tab.key
                 ? 'text-blue-600 border-b-2 border-blue-600 -mb-px'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
             {tab.label}
+            {tab.badge !== undefined && tab.badge > 0 && (
+              <span className="bg-amber-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full leading-none">
+                {tab.badge}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
       {/* Tab Content */}
-      {activeTab === 'items' && <ItemsTab businessId={businessId} storeId={storeId} />}
+      {activeTab === 'items' && <ItemsTab businessId={businessId} storeId={storeId} posMode={posMode} />}
       {activeTab === 'movements' && <MovementsTab businessId={businessId} storeId={storeId} />}
-      {activeTab === 'expiry' && <ExpiryTab batches={batches} isLoading={batchesLoading} />}
-      {activeTab === 'batches' && <BatchesTab batches={batches} isLoading={batchesLoading} />}
+      {activeTab === 'expiry' && <ExpiryTab batches={batches} isLoading={batchesLoading} businessId={businessId} alertDays={alertDays} />}
+      {activeTab === 'batches' && <BatchesTab batches={batches} isLoading={batchesLoading} businessId={businessId} />}
+      {activeTab === 'low-stock' && <LowStockTab items={lowStockItems} isLoading={lowStockLoading} />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Low Stock Tab
+// ---------------------------------------------------------------------------
+
+function LowStockTab({ items, isLoading }: { items: InventoryItem[]; isLoading: boolean }) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="text-center py-16 text-gray-400">
+        <CheckCircle className="w-10 h-10 mx-auto mb-3 text-green-400" />
+        <p className="font-medium">No low stock items</p>
+        <p className="text-sm mt-1">All tracked items are above their reorder level.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm text-gray-500 mb-3">{items.length} item{items.length !== 1 ? 's' : ''} need restocking</p>
+      <div className="border rounded-xl overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 text-left">
+            <tr>
+              <th className="px-4 py-3 font-medium text-gray-600">Item</th>
+              <th className="px-4 py-3 font-medium text-gray-600">Category</th>
+              <th className="px-4 py-3 font-medium text-gray-600 text-center">Current Stock</th>
+              <th className="px-4 py-3 font-medium text-gray-600 text-center">Reorder Level</th>
+              <th className="px-4 py-3 font-medium text-gray-600">Stock Level</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => {
+              const pct = item.reorderPoint && item.reorderPoint > 0
+                ? Math.min(100, Math.round((item.currentStock / item.reorderPoint) * 100))
+                : 0;
+              const isOut = item.currentStock === 0;
+              return (
+                <tr key={item.id} className={`border-t ${isOut ? 'bg-red-50' : 'bg-amber-50'}`}>
+                  <td className="px-4 py-3 font-medium text-gray-800">{item.name}</td>
+                  <td className="px-4 py-3 text-gray-500">{item.category?.name ?? '—'}</td>
+                  <td className="px-4 py-3 text-center">
+                    <span className={`font-bold ${isOut ? 'text-red-600' : 'text-amber-700'}`}>
+                      {item.currentStock} {item.unit ?? 'pcs'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-center text-gray-600">{item.reorderPoint ?? 0} {item.unit ?? 'pcs'}</td>
+                  <td className="px-4 py-3 w-40">
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className={`h-2 rounded-full ${isOut ? 'bg-red-500' : 'bg-amber-500'}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-gray-400 mt-0.5 block">{pct}% of reorder level</span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

@@ -143,6 +143,49 @@ export class NotificationsService {
     });
   }
 
+  async notifyCommissionMilestone(businessId: string, employeeId: string, employeeName: string, pct: number) {
+    await this.prisma.notification.create({
+      data: {
+        businessId,
+        type: 'COMMISSION_MILESTONE',
+        priority: 'LOW',
+        title: `Commission Milestone: ${employeeName}`,
+        body: `${employeeName} has achieved ${pct}% of their commission target this month.`,
+        entityId: employeeId,
+        entityType: 'Employee',
+      },
+    });
+  }
+
+  async notifyCashDiscrepancy(businessId: string, storeId: string, varianceCents: number, cashierId: string) {
+    const sign = varianceCents > 0 ? '+' : '';
+    await this.prisma.notification.create({
+      data: {
+        businessId,
+        type: 'CASH_DISCREPANCY',
+        priority: 'HIGH',
+        title: 'Cash Drawer Discrepancy',
+        body: `Cash drawer closed with variance of ${sign}KES ${(Math.abs(varianceCents) / 100).toFixed(2)}. Please review.`,
+        entityId: storeId,
+        entityType: 'Store',
+      },
+    });
+  }
+
+  async notifyBatchRecall(businessId: string, batchId: string, itemName: string, affectedCount: number) {
+    await this.prisma.notification.create({
+      data: {
+        businessId,
+        type: 'BATCH_RECALL',
+        priority: 'HIGH',
+        title: `Batch Recall: ${itemName}`,
+        body: `Batch has been recalled. ${affectedCount} unit(s) of ${itemName} affected. Please remove from shelves immediately.`,
+        entityId: batchId,
+        entityType: 'Batch',
+      },
+    });
+  }
+
   // ─── SMS / WhatsApp via Africa's Talking ──────────────────────────────────
 
   async sendSMS(businessId: string, phone: string, message: string) {
@@ -183,12 +226,12 @@ export class NotificationsService {
   }
 
   async sendReceiptSMS(businessId: string, phone: string, receiptNumber: string, totalCents: number) {
-    const message = `Thank you for shopping with us!\nReceipt: ${receiptNumber}\nTotal: KES ${(totalCents / 100).toFixed(2)}\nPowered by POS Kenya`;
+    const message = `Thank you for shopping with us!\nReceipt: ${receiptNumber}\nTotal: KES ${(totalCents / 100).toFixed(2)}\nPowered by KASTRA POS`;
     return this.sendSMS(businessId, phone, message);
   }
 
   async sendReceiptWhatsApp(businessId: string, phone: string, receiptNumber: string, totalCents: number) {
-    const message = `*Thank you for your purchase!*\n\nReceipt No: ${receiptNumber}\nTotal: KES ${(totalCents / 100).toFixed(2)}\n\n_Powered by POS Kenya_`;
+    const message = `*Thank you for your purchase!*\n\nReceipt No: ${receiptNumber}\nTotal: KES ${(totalCents / 100).toFixed(2)}\n\n_Powered by KASTRA POS_`;
     return this.sendWhatsApp(businessId, phone, message);
   }
 

@@ -1,10 +1,61 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { WebhooksService } from '../webhooks/webhooks.service';
 import { v4 as uuidv4 } from 'uuid';
+import * as net from 'node:net';
+
+/** Minimal SMTP client using node:net (no external packages). Supports AUTH LOGIN. */
+async function sendSmtpEmail(opts: {
+  host: string; port: number; user: string; pass: string;
+  from: string; to: string; subject: string; text: string;
+}): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection(opts.port, opts.host);
+    let step = 0;
+
+    const enc = (s: string) => Buffer.from(s).toString('base64');
+    const send = (cmd: string) => socket.write(cmd + '\r\n');
+
+    socket.on('data', (chunk) => {
+      const line = chunk.toString().trim();
+      if (step === 0 && line.startsWith('220')) { send(`EHLO ${opts.host}`); step = 1; }
+      else if (step === 1 && line.includes('250')) { send('AUTH LOGIN'); step = 2; }
+      else if (step === 2 && line.startsWith('334')) { send(enc(opts.user)); step = 3; }
+      else if (step === 3 && line.startsWith('334')) { send(enc(opts.pass)); step = 4; }
+      else if (step === 4 && line.startsWith('235')) { send(`MAIL FROM:<${opts.from}>`); step = 5; }
+      else if (step === 5 && line.startsWith('250')) { send(`RCPT TO:<${opts.to}>`); step = 6; }
+      else if (step === 6 && line.startsWith('250')) { send('DATA'); step = 7; }
+      else if (step === 7 && line.startsWith('354')) {
+        const msg = [
+          `From: ${opts.from}`,
+          `To: ${opts.to}`,
+          `Subject: ${opts.subject}`,
+          `Content-Type: text/plain; charset=UTF-8`,
+          '',
+          opts.text,
+          '.',
+        ].join('\r\n');
+        send(msg);
+        step = 8;
+      }
+      else if (step === 8 && line.startsWith('250')) { send('QUIT'); step = 9; }
+      else if (step === 9 && line.startsWith('221')) { socket.end(); resolve(); }
+      else if (line.startsWith('5')) { socket.destroy(); reject(new Error(`SMTP error: ${line}`)); }
+    });
+
+    socket.on('error', reject);
+    socket.setTimeout(10000, () => { socket.destroy(); reject(new Error('SMTP connection timed out')); });
+  });
+}
 
 @Injectable()
 export class SupplierService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(SupplierService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private webhooks: WebhooksService,
+  ) {}
 
   async create(data: {
     businessId: string;
@@ -95,7 +146,7 @@ export class SupplierService {
     });
     const poNumber = `PO-${data.businessId.slice(0, 4).toUpperCase()}-${String(count + 1).padStart(5, '0')}`;
 
-    return this.prisma.purchaseOrder.create({
+    const po = await this.prisma.purchaseOrder.create({
       data: {
         poNumber,
         businessId: data.businessId,
@@ -116,6 +167,17 @@ export class SupplierService {
         grns: { include: { items: true } },
       },
     });
+
+    this.webhooks.dispatch(data.businessId, 'purchase_order.created', {
+      poId: po.id,
+      poNumber: po.poNumber,
+      supplierId: po.supplierId,
+      supplierName: po.supplier.name,
+      totalItems: po.items.length,
+      expectedDelivery: po.expectedDelivery?.toISOString() ?? null,
+    }).catch(() => {});
+
+    return po;
   }
 
   async listPOs(businessId: string, options?: { supplierId?: string; status?: string }) {
@@ -148,7 +210,7 @@ export class SupplierService {
   }
 
   async updatePOStatus(id: string, status: string) {
-    const valid = ['DRAFT', 'SUBMITTED', 'APPROVED', 'CANCELLED'];
+    const valid = ['DRAFT', 'SUBMITTED', 'APPROVED', 'PARTIALLY_RECEIVED', 'RECEIVED', 'CANCELLED'];
     if (!valid.includes(status)) {
       throw new BadRequestException(`Invalid status: ${status}`);
     }
@@ -239,5 +301,189 @@ export class SupplierService {
     });
 
     return grn;
+  }
+
+  // ── Purchase Order Email ──────────────────────────────────────────────────────
+
+  async emailPO(poId: string, recipientEmail: string) {
+    const po = await this.prisma.purchaseOrder.findUnique({
+      where: { id: poId },
+      include: { supplier: true, items: true },
+    });
+    if (!po) throw new NotFoundException('Purchase order not found');
+
+    const [business, itemRecords] = await Promise.all([
+      this.prisma.business.findUnique({ where: { id: po.businessId }, select: { name: true } }),
+      this.prisma.item.findMany({ where: { id: { in: po.items.map((i) => i.itemId) } }, select: { id: true, name: true } }),
+    ]);
+    const itemNameMap = new Map(itemRecords.map((i) => [i.id, i.name]));
+
+    const lineItems = po.items
+      .map((i) => `  - ${itemNameMap.get(i.itemId) ?? i.itemId}  x${i.quantityOrdered}  @ KES ${(i.agreedPriceCents / 100).toFixed(2)}`)
+      .join('\n');
+    const total = po.items.reduce((s, i) => s + i.quantityOrdered * i.agreedPriceCents, 0);
+    const body = [
+      `Dear ${po.supplier.name},`,
+      '',
+      `Please find below our Purchase Order ${po.poNumber}.`,
+      '',
+      lineItems,
+      '',
+      `Total: KES ${(total / 100).toFixed(2)}`,
+      ...(po.notes ? [`Notes: ${po.notes}`, ''] : []),
+      `Issued by: ${business?.name ?? 'Universal POS'}`,
+      `Date: ${new Date().toLocaleDateString('en-KE')}`,
+      '',
+      'Kindly confirm receipt of this order.',
+      '',
+      'Thank you.',
+    ].join('\n');
+
+    const smtpHost = process.env.SMTP_HOST;
+    if (!smtpHost) {
+      this.logger.warn(`[PO EMAIL - no SMTP configured]\nTo: ${recipientEmail}\nSubject: Purchase Order ${po.poNumber}\n\n${body}`);
+      return {
+        success: true,
+        simulated: true,
+        message: 'Email logged to server console (SMTP not configured). Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS env vars to enable delivery.',
+        preview: body,
+      };
+    }
+
+    // Send via raw SMTP using node's built-in net module (no external packages required)
+    try {
+      await sendSmtpEmail({
+        host: smtpHost,
+        port: Number(process.env.SMTP_PORT ?? 587),
+        user: process.env.SMTP_USER ?? '',
+        pass: process.env.SMTP_PASS ?? '',
+        from: process.env.SMTP_FROM ?? `noreply@${smtpHost}`,
+        to: recipientEmail,
+        subject: `Purchase Order ${po.poNumber} — ${business?.name ?? 'Universal POS'}`,
+        text: body,
+      });
+      return { success: true, message: `PO emailed to ${recipientEmail}` };
+    } catch (err: any) {
+      this.logger.error(`PO email failed: ${err.message}`);
+      throw new BadRequestException(`Email delivery failed: ${err.message}`);
+    }
+  }
+
+  // ─── Supplier Credit Notes ─────────────────────────────────────────────────
+
+  async createCreditNote(data: {
+    businessId: string;
+    supplierId: string;
+    amountCents: number;
+    reason: string;
+  }) {
+    const count = await this.prisma.supplierCreditNote.count({
+      where: { businessId: data.businessId },
+    });
+    const creditNumber = `CN-${String(count + 1).padStart(4, '0')}`;
+    return this.prisma.supplierCreditNote.create({
+      data: { ...data, creditNumber },
+      include: { supplier: true },
+    });
+  }
+
+  async getCreditNotes(businessId: string, supplierId?: string) {
+    return this.prisma.supplierCreditNote.findMany({
+      where: { businessId, ...(supplierId && { supplierId }) },
+      include: { supplier: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async applyCreditNote(id: string, poId: string) {
+    return this.prisma.supplierCreditNote.update({
+      where: { id },
+      data: { status: 'APPLIED', appliedToPOId: poId },
+    });
+  }
+
+  async voidCreditNote(id: string) {
+    return this.prisma.supplierCreditNote.update({
+      where: { id },
+      data: { status: 'VOIDED' },
+    });
+  }
+
+  async getOutstandingPOs(businessId: string) {
+    return this.prisma.purchaseOrder.findMany({
+      where: {
+        businessId,
+        status: { in: ['SUBMITTED', 'APPROVED', 'PARTIALLY_RECEIVED'] },
+      },
+      include: {
+        supplier: { select: { name: true } },
+        items: true,
+        grns: { include: { items: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async invoicePO(id: string, invoiceNumber: string) {
+    return this.prisma.purchaseOrder.update({
+      where: { id },
+      data: { invoiceNumber, invoicedAt: new Date() },
+      include: { supplier: true, items: true },
+    });
+  }
+
+  // ── Print PO as plain text ────────────────────────────────────────────────────
+
+  async generatePOText(poId: string): Promise<string> {
+    const po = await this.prisma.purchaseOrder.findUnique({
+      where: { id: poId },
+      include: { supplier: true, items: true },
+    });
+    if (!po) throw new NotFoundException('PO not found');
+
+    const itemIds = po.items.map(i => i.itemId);
+    const itemRecords = await this.prisma.item.findMany({
+      where: { id: { in: itemIds } },
+      select: { id: true, name: true },
+    });
+    const itemMap = new Map(itemRecords.map(i => [i.id, i]));
+
+    const lines: string[] = [];
+    lines.push('PURCHASE ORDER');
+    lines.push('==============');
+    lines.push(`PO Number:   ${po.poNumber}`);
+    lines.push(`Date:        ${po.createdAt.toLocaleDateString('en-KE')}`);
+    if (po.expectedDelivery) lines.push(`Expected:    ${new Date(po.expectedDelivery).toLocaleDateString('en-KE')}`);
+    lines.push(`Supplier:    ${po.supplier.name}`);
+    if ((po.supplier as any).contact) lines.push(`Contact:     ${(po.supplier as any).contact}`);
+    if (po.notes) lines.push(`Notes:       ${po.notes}`);
+    lines.push('');
+    lines.push('ITEMS');
+    lines.push('-----');
+    let total = 0;
+    for (const item of po.items) {
+      const lineTotal = item.quantityOrdered * item.agreedPriceCents;
+      total += lineTotal;
+      const itemName = itemMap.get(item.itemId)?.name ?? item.itemId;
+      lines.push(`${itemName}`);
+      lines.push(`  Qty: ${item.quantityOrdered}  Unit: KES ${(item.agreedPriceCents / 100).toFixed(2)}  Total: KES ${(lineTotal / 100).toFixed(2)}`);
+    }
+    lines.push('');
+    lines.push(`TOTAL: KES ${(total / 100).toFixed(2)}`);
+    lines.push('');
+    lines.push('Authorized Signature: ___________________');
+    lines.push('Date: ___________________');
+    return lines.join('\n');
+  }
+
+  // ── Force-close a partial PO ──────────────────────────────────────────────────
+
+  async closePO(poId: string): Promise<void> {
+    const po = await this.prisma.purchaseOrder.findUnique({ where: { id: poId } });
+    if (!po) throw new NotFoundException('PO not found');
+    await this.prisma.purchaseOrder.update({
+      where: { id: poId },
+      data: { status: 'RECEIVED' },
+    });
   }
 }

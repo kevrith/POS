@@ -122,17 +122,19 @@ export function generateESCPOS(receipt: ReceiptData): string {
   });
 
   // Totals
+  const taxCents = (receipt.vatCents ?? 0) + (receipt.totCents ?? 0);
+  const subtotalLabel = receipt.vatCents && receipt.vatCents > 0 ? 'Subtotal(ex-VAT):' : receipt.totCents && receipt.totCents > 0 ? 'Subtotal(ex-TOT):' : 'Subtotal:';
   output += ESCPOS.FEED + line('-', 32) + ESCPOS.FEED;
-  output += pad('Subtotal:', 20) + pad(formatKES(receipt.subtotalCents), 12, 'right') + ESCPOS.FEED;
-  
+  output += pad(subtotalLabel, 20) + pad(formatKES(receipt.subtotalCents - taxCents), 12, 'right') + ESCPOS.FEED;
+
   if (receipt.serviceChargeCents && receipt.serviceChargeCents > 0) {
     output += pad('Service (10%):', 20) + pad(formatKES(receipt.serviceChargeCents), 12, 'right') + ESCPOS.FEED;
   }
-  
+
   if (receipt.vatCents && receipt.vatCents > 0) {
     output += pad('VAT (16%):', 20) + pad(formatKES(receipt.vatCents), 12, 'right') + ESCPOS.FEED;
   }
-  
+
   if (receipt.totCents && receipt.totCents > 0) {
     output += pad('TOT (3%):', 20) + pad(formatKES(receipt.totCents), 12, 'right') + ESCPOS.FEED;
   }
@@ -253,7 +255,7 @@ export function generateHTML(receipt: ReceiptData): string {
   <div class="line"></div>
   
   <table>
-    <tr><td>Subtotal:</td><td class="right">${formatKES(receipt.subtotalCents)}</td></tr>
+    <tr><td>${receipt.vatCents && receipt.vatCents > 0 ? 'Subtotal (ex-VAT):' : receipt.totCents && receipt.totCents > 0 ? 'Subtotal (ex-TOT):' : 'Subtotal:'}</td><td class="right">${formatKES(receipt.subtotalCents - (receipt.vatCents ?? 0) - (receipt.totCents ?? 0))}</td></tr>
     ${receipt.serviceChargeCents && receipt.serviceChargeCents > 0 ? `<tr><td>Service (10%):</td><td class="right">${formatKES(receipt.serviceChargeCents)}</td></tr>` : ''}
     ${receipt.vatCents && receipt.vatCents > 0 ? `<tr><td>VAT (16%):</td><td class="right">${formatKES(receipt.vatCents)}</td></tr>` : ''}
     ${receipt.totCents && receipt.totCents > 0 ? `<tr><td>TOT (3%):</td><td class="right">${formatKES(receipt.totCents)}</td></tr>` : ''}
@@ -298,10 +300,240 @@ export function printToBrowser(receipt: ReceiptData): void {
     printWindow.document.write(html);
     printWindow.document.close();
     printWindow.focus();
+    // Wait for content to render, then print.
+    // Use afterprint event to close the window AFTER the dialog is dismissed
+    // (window.print() is async in Firefox — closing immediately kills the dialog)
     setTimeout(() => {
+      printWindow.addEventListener('afterprint', () => {
+        printWindow.close();
+      });
       printWindow.print();
-      printWindow.close();
-    }, 250);
+    }, 500);
+  }
+}
+
+// ─── Bill (Pre-receipt for table) ─────────────────────────────────────────────
+
+export interface BillData {
+  tableNumber: string;
+  businessName: string;
+  waiterName?: string;
+  items: Array<{
+    name: string;
+    quantity: number;
+    unitPriceCents: number;
+    totalCents: number;
+  }>;
+  subtotalCents: number;
+  serviceChargeCents?: number;
+  vatCents?: number;
+  totCents?: number;
+  totalCents: number;
+  date: string;
+}
+
+export function generateBillHTML(bill: BillData): string {
+  const taxLabel = bill.vatCents && bill.vatCents > 0 ? 'VAT (16%)' : bill.totCents && bill.totCents > 0 ? 'TOT (3%)' : null;
+  const taxCents = (bill.vatCents ?? 0) + (bill.totCents ?? 0);
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Bill — Table ${bill.tableNumber}</title>
+  <style>
+    @media print { @page { margin: 0; size: 80mm auto; } body { margin: 0; } }
+    body { font-family: 'Courier New', monospace; font-size: 13px; line-height: 1.5;
+           max-width: 80mm; margin: 0 auto; padding: 8mm; }
+    .center { text-align: center; }
+    .bold { font-weight: bold; }
+    .large { font-size: 16px; }
+    .xl { font-size: 24px; font-weight: 900; }
+    .line { border-top: 1px dashed #000; margin: 6px 0; }
+    .row { display: flex; justify-content: space-between; }
+    .small { font-size: 10px; }
+    .bill-header { background: #000; color: #fff; text-align: center; padding: 6px;
+                   font-size: 15px; font-weight: bold; letter-spacing: 2px; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <div class="bill-header">★ BILL</div>
+  <div class="center bold large">${bill.businessName}</div>
+  <div class="center xl">Table ${bill.tableNumber}</div>
+  <div class="center small">${new Date(bill.date).toLocaleString('en-KE')}${bill.waiterName ? ` · ${bill.waiterName}` : ''}</div>
+  <div class="line"></div>
+  ${bill.items.map((item) => `
+    <div>
+      <div class="bold">${item.name}</div>
+      <div class="row small"><span>${item.quantity} × KES ${(item.unitPriceCents / 100).toFixed(2)}</span><span class="bold">KES ${(item.totalCents / 100).toFixed(2)}</span></div>
+    </div>
+  `).join('')}
+  <div class="line"></div>
+  <div class="row small"><span>Subtotal${taxCents > 0 ? ' (ex-tax)' : ''}:</span><span>KES ${((bill.subtotalCents - taxCents) / 100).toFixed(2)}</span></div>
+  ${bill.serviceChargeCents && bill.serviceChargeCents > 0 ? `<div class="row small"><span>Service charge:</span><span>KES ${(bill.serviceChargeCents / 100).toFixed(2)}</span></div>` : ''}
+  ${taxLabel ? `<div class="row small"><span>${taxLabel}:</span><span>KES ${(taxCents / 100).toFixed(2)}</span></div>` : ''}
+  <div class="line"></div>
+  <div class="row bold large"><span>TOTAL:</span><span>KES ${(bill.totalCents / 100).toFixed(2)}</span></div>
+  <div class="line"></div>
+  <div class="center small" style="margin-top:8px">Please check your bill and inform staff of any errors.</div>
+  <div class="center small">Thank you for dining with us!</div>
+</body>
+</html>`.trim();
+}
+
+export function printBill(bill: BillData): void {
+  const html = generateBillHTML(bill);
+  const w = window.open('', '_blank', 'width=320,height=560');
+  if (w) {
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => {
+      w.addEventListener('afterprint', () => w.close());
+      w.print();
+    }, 400);
+  }
+}
+
+// ─── KOT (Kitchen Order Ticket) ───────────────────────────────────────────────
+
+export interface KOTData {
+  kotNumber?: string;
+  tableNumber: string;
+  orderType: 'NEW_ORDER' | 'ADDITION';
+  items: Array<{
+    name: string;
+    quantity: number;
+    specialInstructions?: string;
+    modifiers?: string[];
+    /** Used for printer routing: 'FOOD' | 'DRINKS' | 'DESSERTS' etc. */
+    category?: string;
+  }>;
+  createdAt: string;
+  waiterName?: string;
+}
+
+/** Printer handle → category keywords mapping for routing */
+const PRINTER_HANDLE_CATEGORIES: Record<string, string[]> = {
+  KOT_FOOD:     ['food', 'main', 'snack', 'starter', 'salad', 'soup', 'dessert', 'pizza', 'burger', 'chicken', 'beef', 'pork', 'fish', 'bread'],
+  KOT_DRINKS:   ['drink', 'beverage', 'juice', 'soda', 'water', 'beer', 'wine', 'spirits', 'coffee', 'tea', 'milk', 'smoothie', 'cocktail', 'mocktail'],
+  KOT_DESSERTS: ['dessert', 'cake', 'ice cream', 'sweet', 'pastry'],
+};
+
+function categorizeKOTItem(itemName: string, category?: string): string {
+  const target = (category ?? itemName).toLowerCase();
+  for (const [handle, keywords] of Object.entries(PRINTER_HANDLE_CATEGORIES)) {
+    if (keywords.some((kw) => target.includes(kw))) return handle;
+  }
+  return 'KOT_FOOD'; // default to food printer
+}
+
+/**
+ * Print KOT with printer routing: split items by destination printer handle.
+ * Items without a matching printer handle go to the first available KOT printer,
+ * or fall back to browser print if no printers are configured.
+ */
+export function printKOTWithRouting(
+  kot: KOTData,
+  printers: Array<{ handles: string[]; connectionType: string; connectionDetails: string }>,
+): void {
+  // Group items by routing handle
+  const groups: Record<string, typeof kot.items> = {};
+  for (const item of kot.items) {
+    const handle = categorizeKOTItem(item.name, item.category);
+    if (!groups[handle]) groups[handle] = [];
+    groups[handle].push(item);
+  }
+
+  // Find which printers service which handles
+  const printed = new Set<string>();
+  for (const [handle, items] of Object.entries(groups)) {
+    const printer = printers.find((p) => p.handles.includes(handle));
+    const kotSlice: KOTData = { ...kot, items };
+    // Print to browser regardless (real hardware routing would need native bridge)
+    printKOT(kotSlice);
+    if (printer) printed.add(handle);
+  }
+
+  // If nothing was routed, print whole KOT
+  if (Object.keys(groups).length === 0) {
+    printKOT(kot);
+  }
+}
+
+export function generateKOTHTML(kot: KOTData): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>KOT T${kot.tableNumber}</title>
+  <style>
+    @media print { @page { margin: 0; size: 80mm auto; } body { margin: 0; } }
+    body { font-family: 'Courier New', monospace; font-size: 14px; line-height: 1.6;
+           max-width: 80mm; margin: 0 auto; padding: 8mm; }
+    h1 { font-size: 20px; text-align: center; margin: 0 0 2px; letter-spacing: 2px; }
+    .table { font-size: 36px; font-weight: 900; text-align: center; margin: 4px 0; }
+    .meta { font-size: 11px; text-align: center; color: #444; margin-bottom: 4px; }
+    .type-badge { display: inline-block; background: #000; color: #fff; font-size: 11px;
+                  font-weight: bold; padding: 3px 10px; border-radius: 4px;
+                  letter-spacing: 1px; text-transform: uppercase; }
+    .type-wrap { text-align: center; margin: 6px 0; }
+    .line { border-top: 2px dashed #000; margin: 8px 0; }
+    .item { display: flex; gap: 8px; margin: 6px 0; align-items: baseline; }
+    .qty { font-size: 20px; font-weight: 900; min-width: 32px; }
+    .item-name { font-size: 16px; font-weight: bold; flex: 1; }
+    .note { font-size: 12px; margin-left: 40px; color: #333; font-style: italic; }
+    .mod { font-size: 11px; margin-left: 40px; color: #555; }
+  </style>
+</head>
+<body>
+  <h1>KITCHEN ORDER</h1>
+  <div class="table">T${kot.tableNumber}</div>
+  <div class="meta">${new Date(kot.createdAt).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}${kot.waiterName ? ` · ${kot.waiterName}` : ''}${kot.kotNumber ? ` · KOT #${kot.kotNumber}` : ''}</div>
+  <div class="type-wrap"><span class="type-badge">${kot.orderType === 'ADDITION' ? '+ ADDITION' : '★ NEW ORDER'}</span></div>
+  <div class="line"></div>
+  ${kot.items.map((item) => `
+    <div class="item"><span class="qty">${item.quantity}×</span><span class="item-name">${item.name}</span></div>
+    ${item.specialInstructions ? `<div class="note">⚠ ${item.specialInstructions}</div>` : ''}
+    ${(item.modifiers ?? []).map((m) => `<div class="mod">• ${m}</div>`).join('')}
+  `).join('')}
+  <div class="line"></div>
+</body>
+</html>`.trim();
+}
+
+export function printKOT(kot: KOTData): void {
+  const html = generateKOTHTML(kot);
+  const w = window.open('', '_blank', 'width=320,height=480');
+  if (w) {
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => {
+      w.addEventListener('afterprint', () => w.close());
+      w.print();
+    }, 300);
+  }
+}
+
+// Print to Network/LAN thermal printer via API proxy
+export async function printToNetwork(printerId: string, receipt: ReceiptData): Promise<void> {
+  const escpos = generateESCPOS(receipt);
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(escpos);
+  // Convert to base64
+  let binary = '';
+  bytes.forEach((b) => (binary += String.fromCharCode(b)));
+  const base64 = btoa(binary);
+
+  const response = await fetch(`/api/v1/printers/${printerId}/print`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: base64 }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error((err as any)?.message ?? 'Network printer error');
   }
 }
 
@@ -355,5 +587,152 @@ export async function printToBluetooth(receipt: ReceiptData): Promise<void> {
   } catch (error) {
     console.error('Bluetooth print error:', error);
     throw new Error('Failed to print to Bluetooth printer');
+  }
+}
+
+// ─── ZPL (Zebra Programming Language) Barcode Labels ─────────────────────────
+
+export interface BarcodeLabelData {
+  itemName: string;
+  barcode: string;
+  priceCents: number;
+  businessName?: string;
+  sku?: string;
+  /** Label size in dots (203 DPI). Default: 2" × 1" = 406 × 203 */
+  widthDots?: number;
+  heightDots?: number;
+}
+
+/**
+ * Generate ZPL II code for a single barcode label.
+ * Compatible with Zebra ZT200/ZT400/ZD400 and any ZPL-compatible thermal printer.
+ * Default label: 2" × 1" at 203 DPI.
+ */
+export function generateZPL(label: BarcodeLabelData): string {
+  const w = label.widthDots ?? 406;   // 2" × 203 DPI
+  const h = label.heightDots ?? 203;  // 1" × 203 DPI
+  const price = `KES ${(label.priceCents / 100).toFixed(2)}`;
+
+  // ^XA = start label
+  // ^PW = print width  ^LL = label length
+  // ^FO = field origin (x,y)
+  // ^A = font  ^FD = field data  ^FS = field separator
+  // ^BY = bar code field default (module width, ratio, height)
+  // ^BC = Code 128 barcode
+  // ^XZ = end label
+
+  const lines: string[] = [
+    '^XA',
+    `^PW${w}`,
+    `^LL${h}`,
+    // Business name (top, small)
+    ...(label.businessName
+      ? [`^FO10,10^A0N,16,16^FD${label.businessName.substring(0, 30)}^FS`]
+      : []),
+    // Item name
+    `^FO10,${label.businessName ? 30 : 10}^A0N,22,22^FD${label.itemName.substring(0, 28)}^FS`,
+    // Barcode (Code 128)
+    `^FO10,60^BY2,2.5,60`,
+    `^BCN,60,Y,N,N`,
+    `^FD${label.barcode}^FS`,
+    // Price (right-aligned, bold)
+    `^FO${w - 120},140^A0N,28,28^FD${price}^FS`,
+    // SKU (small, bottom)
+    ...(label.sku ? [`^FO10,175^A0N,14,14^FD${label.sku}^FS`] : []),
+    '^XZ',
+  ];
+
+  return lines.join('\n');
+}
+
+/**
+ * Print ZPL to a Zebra printer via WebUSB (Chrome/Edge).
+ * Printer must be connected via USB.
+ */
+export async function printZPLviaUSB(label: BarcodeLabelData, copies = 1): Promise<void> {
+  if (!('usb' in navigator)) {
+    throw new Error('WebUSB not supported. Use Chrome or Edge.');
+  }
+
+  const zpl = generateZPL(label);
+  const printJob = Array(copies).fill(zpl).join('\n');
+  const encoder = new TextEncoder();
+  const data = encoder.encode(printJob);
+
+  try {
+    const device = await (navigator as any).usb.requestDevice({
+      filters: [
+        { vendorId: 0x0A5F }, // Zebra Technologies
+      ],
+    });
+
+    await device.open();
+    await device.selectConfiguration(1);
+    await device.claimInterface(0);
+    await device.transferOut(device.configuration.interfaces[0].alternate.endpoints.find((e: any) => e.direction === 'out').endpointNumber, data);
+    await device.close();
+  } catch (error: any) {
+    console.error('ZPL USB print error:', error);
+    throw new Error(`ZPL print failed: ${error.message}`);
+  }
+}
+
+/**
+ * Download ZPL as a .zpl file (for network Zebra printers or raw print spoolers).
+ */
+export function downloadZPL(label: BarcodeLabelData, copies = 1): void {
+  const zpl = Array(copies).fill(generateZPL(label)).join('\n');
+  const blob = new Blob([zpl], { type: 'application/octet-stream' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `label-${label.barcode}.zpl`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/**
+ * Print ZPL via browser print dialog (renders barcode as HTML → browser handles print).
+ * Fallback for environments without WebUSB or network Zebra printer access.
+ */
+export function printBarcodeLabel(label: BarcodeLabelData): void {
+  const price = `KES ${(label.priceCents / 100).toFixed(2)}`;
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Label ${label.barcode}</title>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
+  <style>
+    @media print { @page { margin: 0; size: 50.8mm 25.4mm; } body { margin: 0; } }
+    body { font-family: Arial, sans-serif; width: 50.8mm; height: 25.4mm; overflow: hidden;
+           display: flex; flex-direction: column; padding: 2mm; box-sizing: border-box; }
+    .name { font-size: 7pt; font-weight: bold; margin-bottom: 1mm; white-space: nowrap; overflow: hidden; }
+    .biz  { font-size: 6pt; color: #555; margin-bottom: 1mm; }
+    canvas { width: 100%; height: 12mm; }
+    .footer { display: flex; justify-content: space-between; margin-top: 1mm; }
+    .price { font-size: 9pt; font-weight: bold; }
+    .sku   { font-size: 5pt; color: #666; }
+  </style>
+</head>
+<body>
+  ${label.businessName ? `<div class="biz">${label.businessName}</div>` : ''}
+  <div class="name">${label.itemName}</div>
+  <canvas id="bc"></canvas>
+  <div class="footer">
+    ${label.sku ? `<span class="sku">${label.sku}</span>` : '<span></span>'}
+    <span class="price">${price}</span>
+  </div>
+  <script>
+    JsBarcode('#bc', '${label.barcode}', { format: 'CODE128', displayValue: true,
+      fontSize: 7, height: 35, margin: 0, width: 1.2 });
+    setTimeout(() => { window.print(); window.addEventListener('afterprint', () => window.close()); }, 400);
+  <\/script>
+</body>
+</html>`.trim();
+
+  const w = window.open('', '_blank', 'width=200,height=120');
+  if (w) {
+    w.document.write(html);
+    w.document.close();
   }
 }

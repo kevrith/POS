@@ -241,6 +241,25 @@ function ComponentsModal({
         <div className="p-4 border-t flex justify-between items-center">
           <p className="text-sm text-gray-500">{rows.length} component{rows.length !== 1 ? 's' : ''}</p>
           <div className="flex gap-2">
+            {rows.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  const autoPrice = rows.reduce((sum, row) => sum + row.retailPriceCents * row.quantity, 0);
+                  api.patch(`/items/${bundle.id}`, { retailPriceCents: autoPrice })
+                    .then(() => {
+                      saveMutation.mutate();
+                    })
+                    .catch(() => {
+                      saveMutation.mutate();
+                    });
+                }}
+                disabled={saveMutation.isPending}
+                className="text-sm text-blue-600 hover:text-blue-700 underline disabled:opacity-50"
+              >
+                Auto-calculate from components
+              </button>
+            )}
             <button onClick={onClose} className="bg-gray-200 px-4 py-2 rounded text-sm">
               Cancel
             </button>
@@ -412,17 +431,33 @@ function CreateBundleModal({
           </div>
         </div>
 
-        <div className="p-4 border-t flex justify-end gap-2">
-          <button onClick={onClose} className="bg-gray-200 px-4 py-2 rounded text-sm">
-            Cancel
-          </button>
-          <button
-            onClick={() => saveMutation.mutate()}
-            disabled={!selectedItemId || rows.length === 0 || saveMutation.isPending}
-            className="bg-green-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50"
-          >
-            {saveMutation.isPending ? 'Creating…' : 'Create Bundle'}
-          </button>
+        <div className="p-4 border-t flex justify-between items-center">
+          <div>
+            {selectedItemId && rows.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  const autoPrice = rows.reduce((sum, row) => sum + row.retailPriceCents * row.quantity, 0);
+                  api.patch(`/items/${selectedItemId}`, { retailPriceCents: autoPrice }).catch(() => {});
+                }}
+                className="text-sm text-blue-600 hover:text-blue-700 underline"
+              >
+                Auto-calculate from components
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="bg-gray-200 px-4 py-2 rounded text-sm">
+              Cancel
+            </button>
+            <button
+              onClick={() => saveMutation.mutate()}
+              disabled={!selectedItemId || rows.length === 0 || saveMutation.isPending}
+              className="bg-green-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50"
+            >
+              {saveMutation.isPending ? 'Creating…' : 'Create Bundle'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

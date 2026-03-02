@@ -1,7 +1,9 @@
-import { Controller, Post, Body, UseGuards, Req, Get } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
+import { Controller, Post, Body, UseGuards, Req, Get, Redirect } from '@nestjs/common';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
+import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
-import { JwtAuthGuard } from './jwt-auth.guard';
+import { JwtAuthGuard, Public } from './jwt-auth.guard';
+import { SkipSubscriptionCheck } from './subscription.guard';
 import type { Request } from 'express';
 import type { AuthUser } from './auth.service';
 
@@ -24,6 +26,8 @@ interface RegisterDto {
   businessName: string;
 }
 
+@Public()
+@SkipSubscriptionCheck()
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
@@ -37,15 +41,7 @@ export class AuthController {
   @Throttle({ auth: { limit: 20, ttl: 60000 } })
   @Post('login/pin')
   async loginPin(@Body() dto: PinLoginDto) {
-    try {
-      console.log('PIN login attempt:', { pin: dto.pin?.substring(0, 2) + '**', businessId: dto.businessId });
-      const result = await this.authService.loginWithPin(dto.pin, dto.businessId, dto.storeId);
-      console.log('PIN login success:', result.user.name);
-      return result;
-    } catch (error) {
-      console.error('PIN login error:', error.message, error.stack);
-      throw error;
-    }
+    return this.authService.loginWithPin(dto.pin, dto.businessId, dto.storeId);
   }
 
   @Post('register')
@@ -69,5 +65,37 @@ export class AuthController {
   @Get('me')
   async getMe(@Req() req: Request & { user: AuthUser }) {
     return req.user;
+  }
+
+  // ─── Google OAuth ──────────────────────────────────────────────────────────
+
+  /** Browser navigates here to start Google OAuth consent flow. */
+  @SkipThrottle()
+  @Get('google')
+  @UseGuards(AuthGuard('google'))
+  async googleAuth() {
+    // passport initiates redirect — no body needed
+  }
+
+  /** Google redirects back here after user grants permission. */
+  @SkipThrottle()
+  @Get('google/callback')
+  @UseGuards(AuthGuard('google'))
+  @Redirect()
+  async googleCallback(@Req() req: Request & { user: { accessToken: string; user: AuthUser } }) {
+    const { accessToken, user } = req.user;
+    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3001';
+    // Redirect to frontend with token in query string; frontend stores it in sessionStorage
+    return {
+      url: `${frontendUrl}/?oauth_token=${accessToken}&oauth_businessId=${user.businessId}&oauth_role=${user.role}&oauth_name=${encodeURIComponent(user.name)}&oauth_id=${user.id}`,
+    };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('manager-pin/verify')
+  async verifyManagerPin(
+    @Body() dto: { pin: string; businessId: string },
+  ) {
+    return this.authService.verifyManagerPin(dto.pin, dto.businessId);
   }
 }

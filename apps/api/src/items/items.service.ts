@@ -45,11 +45,11 @@ export class ItemsService {
     private inventory: InventoryService,
   ) {}
 
-  async findAll(businessId: string, storeId: string, search?: string) {
+  async findAll(businessId: string, storeId?: string, search?: string) {
     const items = await this.prisma.item.findMany({
       where: {
         businessId,
-        storeId,
+        ...(storeId ? { storeId } : {}),
         deletedAt: null,
         ...(search && {
           OR: [
@@ -61,10 +61,9 @@ export class ItemsService {
       orderBy: { name: 'asc' },
     });
 
-    const stockMap = await this.inventory.getStockLevels(
-      items.map((i) => i.id),
-      storeId,
-    );
+    const stockMap = storeId
+      ? await this.inventory.getStockLevels(items.map((i) => i.id), storeId)
+      : new Map<string, number>();
 
     return items.map((item) => ({
       ...item,
@@ -154,8 +153,10 @@ export class ItemsService {
       where: { businessId, deletedAt: null, category: { not: null } },
       select: { category: true },
       distinct: ['category'],
+      orderBy: { category: 'asc' },
     });
-    return items.map((i, idx) => ({ id: String(idx), name: i.category as string }));
+    // Use the category name itself as the id — it is the unique key (no Category table)
+    return items.map((i) => ({ id: i.category as string, name: i.category as string }));
   }
 
   async createCategory(businessId: string, name: string, _color?: string) {
@@ -289,5 +290,109 @@ export class ItemsService {
       failed: results.filter(r => !r.success).length,
       results,
     };
+  }
+
+  // ── Expiry check for cart items ──────────────────────────────────────────
+
+  async checkCartExpiry(itemIds: string[], storeId: string, businessId: string) {
+    const now = new Date();
+    // Use business expiryAlertDays, fall back to 7
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { expiryAlertDays: true },
+    });
+    const alertDays = business?.expiryAlertDays ?? 7;
+    const warnThreshold = new Date(now.getTime() + alertDays * 24 * 60 * 60 * 1000);
+
+    const items = await this.prisma.item.findMany({
+      where: { id: { in: itemIds }, businessId, trackExpiry: true },
+      include: {
+        batches: {
+          where: { storeId, quantityRemaining: { gt: 0 }, status: 'ACTIVE' },
+          orderBy: { expiryDate: 'asc' }, // FEFO — earliest expiry first
+          take: 1,
+        },
+      },
+    });
+
+    const results = items.map((item) => {
+      const earliest = item.batches[0];
+      if (!earliest?.expiryDate) return { itemId: item.id, name: item.name, status: 'OK' as const };
+
+      const expiry = earliest.expiryDate;
+      if (expiry <= now) {
+        return { itemId: item.id, name: item.name, status: 'EXPIRED' as const, expiryDate: expiry.toISOString(), daysLeft: 0, lotNumber: earliest.lotNumber };
+      }
+      const daysLeft = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      if (expiry <= warnThreshold) {
+        return { itemId: item.id, name: item.name, status: 'EXPIRING_SOON' as const, expiryDate: expiry.toISOString(), daysLeft, lotNumber: earliest.lotNumber };
+      }
+      return { itemId: item.id, name: item.name, status: 'OK' as const, expiryDate: expiry.toISOString(), daysLeft, lotNumber: earliest.lotNumber };
+    });
+
+    return results;
+  }
+
+  /** FEFO: return all batches for given items sorted by expiry date for POS suggestion */
+  async getFEFOSuggestions(itemIds: string[], storeId: string) {
+    const batches = await this.prisma.batch.findMany({
+      where: {
+        itemId: { in: itemIds },
+        storeId,
+        quantityRemaining: { gt: 0 },
+        status: 'ACTIVE',
+        expiryDate: { not: null },
+      },
+      include: { item: { select: { name: true } } },
+      orderBy: { expiryDate: 'asc' },
+    });
+
+    const now = new Date();
+    return batches.map((b) => {
+      const daysLeft = b.expiryDate ? Math.ceil((b.expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : null;
+      return {
+        itemId: b.itemId,
+        itemName: b.item.name,
+        batchId: b.id,
+        lotNumber: b.lotNumber,
+        expiryDate: b.expiryDate?.toISOString() ?? null,
+        daysLeft,
+        qtyRemaining: b.quantityRemaining,
+        status: daysLeft !== null && daysLeft <= 0 ? 'EXPIRED' : daysLeft !== null && daysLeft <= 30 ? 'EXPIRING_SOON' : 'OK',
+      };
+    });
+  }
+
+  /** Get items at or below their reorder level */
+  async getLowStock(businessId: string, storeId: string) {
+    const items = await this.prisma.item.findMany({
+      where: { businessId, storeId, deletedAt: null, trackStock: true, reorderLevel: { gt: 0 } },
+      orderBy: { name: 'asc' },
+    });
+    const stockMap = await this.inventory.getStockLevels(items.map((i) => i.id), storeId);
+    return items
+      .map((item) => ({ ...item, currentStock: stockMap.get(item.id) ?? 0 }))
+      .filter((item) => item.currentStock <= (item.reorderLevel ?? 0));
+  }
+
+  /** Get items expiring within threshold days for inventory badge display */
+  async getExpiringItems(businessId: string, storeId: string, thresholdDays?: number) {
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { expiryAlertDays: true },
+    });
+    const days = thresholdDays ?? business?.expiryAlertDays ?? 30;
+    const threshold = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+
+    return this.prisma.batch.findMany({
+      where: {
+        storeId,
+        quantityRemaining: { gt: 0 },
+        status: 'ACTIVE',
+        expiryDate: { lte: threshold },
+      },
+      include: { item: { select: { name: true, category: true } } },
+      orderBy: { expiryDate: 'asc' },
+    });
   }
 }

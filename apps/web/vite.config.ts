@@ -10,8 +10,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icons/*.png'],
       manifest: {
-        name: 'POS Kenya',
-        short_name: 'POS Kenya',
+        name: 'KASTRA POS',
+        short_name: 'KASTRA POS',
         description: 'Modern Point of Sale system for Kenyan businesses',
         theme_color: '#2563eb',
         background_color: '#ffffff',
@@ -28,7 +28,18 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        navigateFallback: '/offline.html',
+        navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
+          {
+            urlPattern: /^\/api\/v1\/(items|customers)/,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-data-cache',
+              expiration: { maxEntries: 50, maxAgeSeconds: 3600 },
+              networkTimeoutSeconds: 5,
+            },
+          },
           {
             urlPattern: /^\/api\//,
             handler: 'NetworkFirst',

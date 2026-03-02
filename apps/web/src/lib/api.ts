@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL ?? '/api';
+const API_URL = import.meta.env.VITE_API_URL ?? '/api/v1';
 
 // Token stored in memory (module-level) — NOT localStorage per security rules.
 // sessionStorage is acceptable for tab-scoped persistence.
@@ -25,6 +25,7 @@ export function clearToken(): void {
 async function handleResponse<T>(response: Response): Promise<T> {
   if (response.status === 401) {
     clearToken();
+    sessionStorage.removeItem('pos-auth'); // Clear Zustand persisted auth so reload shows login
     window.location.href = '/';
     throw new Error('Session expired');
   }
@@ -93,5 +94,10 @@ export const api = {
     return handleResponse<T>(res);
   },
 };
+
+export function openPdfReport(path: string): void {
+  // Opens the HTML report in a new tab where user can print/save as PDF
+  window.open(`/api/v1${path}`, '_blank');
+}
 
 export default api;

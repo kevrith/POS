@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import { useAuthStore } from '../stores/auth';
 import { X } from 'lucide-react';
+
 
 interface Proforma {
   id: string;
@@ -23,24 +25,32 @@ interface Proforma {
 export default function ProformaPage() {
   const [selectedProforma, setSelectedProforma] = useState<Proforma | null>(null);
   const queryClient = useQueryClient();
+  const user = useAuthStore((s) => s.user);
+  const businessId = user?.businessId ?? '';
 
   const { data: proformas = [], isLoading } = useQuery({
-    queryKey: ['proformas'],
-    queryFn: () => api.get<Proforma[]>('/sales?type=PROFORMA'),
+    queryKey: ['proformas', businessId],
+    queryFn: () => api.get<Proforma[]>(`/sales/proformas?businessId=${businessId}`),
+    enabled: !!businessId,
   });
 
   const convertMutation = useMutation({
-    mutationFn: (proformaId: string) => api.post(`/sales/${proformaId}/convert`, {}),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['proformas'] });
+    mutationFn: (id: string) => api.post(`/sales/proforma/${id}/convert`, {
+      cashierId: user!.id,
+      payments: [{ method: 'CASH', amountCents: (proformas as Proforma[]).find((p) => p.id === id)?.totalCents ?? 0 }],
+    }),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['proformas', businessId] });
       setSelectedProforma(null);
+      alert(`Converted! Receipt: ${data.receiptNumber ?? 'N/A'}`);
     },
+    onError: (err: any) => alert(err?.message ?? 'Conversion failed'),
   });
 
   const cancelMutation = useMutation({
     mutationFn: (proformaId: string) => api.patch(`/sales/${proformaId}`, { status: 'CANCELLED' }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['proformas'] });
+      queryClient.invalidateQueries({ queryKey: ['proformas', businessId] });
       setSelectedProforma(null);
     },
   });
@@ -131,9 +141,9 @@ export default function ProformaPage() {
                         <button
                           onClick={() => convertMutation.mutate(proforma.id)}
                           disabled={convertMutation.isPending}
-                          className="bg-green-600 text-white px-3 py-1 rounded text-sm disabled:opacity-50"
+                          className="px-3 py-1.5 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
                         >
-                          Convert
+                          Convert to Sale
                         </button>
                         <button
                           onClick={() => cancelMutation.mutate(proforma.id)}

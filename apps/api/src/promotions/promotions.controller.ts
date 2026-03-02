@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Patch, Body, Param, Query } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Body, Param, Query } from '@nestjs/common';
 import { PromotionsService } from './promotions.service';
 
 @Controller('promotions')
@@ -53,5 +53,10 @@ export class PromotionsController {
   @Get()
   async getPromotions(@Query('businessId') businessId: string) {
     return this.promotionsService.getPromotions(businessId);
+  }
+
+  @Delete(':id')
+  async deletePromotion(@Param('id') id: string) {
+    return this.promotionsService.deletePromotion(id);
   }
 }

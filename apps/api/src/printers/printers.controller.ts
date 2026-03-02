@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { PrintersService } from './printers.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtAuthGuard, Public } from '../auth/jwt-auth.guard';
 
 @UseGuards(JwtAuthGuard)
 @Controller('printers')
@@ -45,5 +45,11 @@ export class PrintersController {
   @Delete(':id')
   async deletePrinter(@Param('id') id: string) {
     return this.printersService.deletePrinter(id);
+  }
+
+  @Public()
+  @Post(':id/print')
+  async printToNetwork(@Param('id') id: string, @Body() body: { data: string }) {
+    return this.printersService.printToNetwork(id, body.data);
   }
 }

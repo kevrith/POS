@@ -28,6 +28,16 @@ export class TransfersController {
     return this.transfersService.cancelTransfer(id);
   }
 
+  @Patch(':id/approve')
+  async approveTransfer(@Param('id') id: string, @Body('approvedBy') approvedBy: string) {
+    return this.transfersService.approveTransfer(id, approvedBy);
+  }
+
+  @Patch(':id/reject')
+  async rejectTransfer(@Param('id') id: string) {
+    return this.transfersService.rejectTransfer(id);
+  }
+
   @Get(':id')
   async getTransferDetails(@Param('id') id: string) {
     return this.transfersService.getTransferDetails(id);

@@ -34,7 +34,7 @@ export interface ApiItem {
   defaultExpiryDays?: number | null;
   vatApplicable: boolean;
   totApplicable: boolean;
-  category?: { id: string; name: string; color?: string } | null;
+  category?: string | null;  // stored as plain string in DB (e.g. "Food", "Beverages")
 }
 
 export interface HeldSale {

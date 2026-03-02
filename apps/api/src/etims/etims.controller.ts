@@ -15,8 +15,23 @@ export class EtimsController {
     return this.etimsService.voidSale(saleId, reason);
   }
 
+  @Post('amend/:saleId')
+  async submitAmendment(@Param('saleId') saleId: string) {
+    return this.etimsService.submitAmendment(saleId);
+  }
+
   @Get('stock-status')
   async getStockStatus(@Query('businessId') businessId: string) {
     return this.etimsService.getStockStatus(businessId);
+  }
+
+  @Get('pending-count')
+  async getPendingCount(@Query('businessId') businessId: string) {
+    return this.etimsService.getPendingCount(businessId);
+  }
+
+  @Post('batch-submit')
+  async batchSubmit(@Query('businessId') businessId: string) {
+    return this.etimsService.batchSubmit(businessId);
   }
 }

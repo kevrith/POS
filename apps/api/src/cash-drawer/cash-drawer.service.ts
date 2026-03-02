@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class CashDrawerService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationsService: NotificationsService,
+  ) {}
 
   async openSession(data: {
     businessId: string;
@@ -26,8 +30,8 @@ export class CashDrawerService {
     notes?: string;
   }) {
     const varianceCents = data.closingBalanceCents - data.expectedBalanceCents;
-    
-    return this.prisma.cashDrawerSession.update({
+
+    const session = await this.prisma.cashDrawerSession.update({
       where: { id: sessionId },
       data: {
         ...data,
@@ -36,6 +40,17 @@ export class CashDrawerService {
         closedAt: new Date(),
       },
     });
+
+    if (Math.abs(varianceCents) > 500) {
+      this.notificationsService.notifyCashDiscrepancy(
+        session.businessId,
+        session.storeId,
+        varianceCents,
+        session.cashierId,
+      ).catch(() => {});
+    }
+
+    return session;
   }
 
   async getCurrentSession(cashierId: string, storeId: string) {

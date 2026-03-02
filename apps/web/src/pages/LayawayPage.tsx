@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import { useAuthStore } from '../stores/auth';
 
 interface Layaway {
   id: string;
@@ -16,27 +17,21 @@ export default function LayawayPage() {
   const [selectedLayaway, setSelectedLayaway] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const queryClient = useQueryClient();
+  const businessId = useAuthStore((s) => s.user?.businessId ?? '');
 
   const { data: layaways = [], isLoading } = useQuery({
-    queryKey: ['layaways'],
-    queryFn: () => api.get<Layaway[]>('/layaway'),
+    queryKey: ['layaways', businessId],
+    queryFn: () => api.get<Layaway[]>(`/businesses/${businessId}/layaway`),
+    enabled: !!businessId,
   });
 
   const paymentMutation = useMutation({
     mutationFn: ({ layawayId, amountCents }: { layawayId: string; amountCents: number }) =>
-      api.post(`/layaway/${layawayId}/payment`, { amountCents, method: 'CASH' }),
+      api.post(`/businesses/${businessId}/layaway/${layawayId}/payment`, { amountCents, method: 'CASH' }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['layaways'] });
+      queryClient.invalidateQueries({ queryKey: ['layaways', businessId] });
       setSelectedLayaway(null);
       setPaymentAmount('');
-    },
-  });
-
-  const releaseMutation = useMutation({
-    mutationFn: (layawayId: string) => api.post(`/layaway/${layawayId}/release`, {}),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['layaways'] });
-      setSelectedLayaway(null);
     },
   });
 
@@ -124,14 +119,6 @@ export default function LayawayPage() {
                         >
                           Pay
                         </button>
-                        {layaway.remainingCents === 0 && (
-                          <button
-                            onClick={() => releaseMutation.mutate(layaway.id)}
-                            className="bg-green-600 text-white px-3 py-1 rounded text-sm"
-                          >
-                            Release
-                          </button>
-                        )}
                       </div>
                     </td>
                   </tr>

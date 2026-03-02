@@ -1,0 +1,525 @@
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  DollarSign, Plus, CheckCircle, CreditCard, Printer,
+  ChevronLeft, Loader2, Trash2, AlertCircle, Users,
+} from 'lucide-react';
+import { api } from '../lib/api';
+import { useAuthStore } from '../stores/auth';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface Payslip {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  basicSalary: number;
+  housingAllowance: number;
+  transportAllowance: number;
+  otherAllowances: number;
+  grossPay: number;
+  payeAmount: number;
+  nhifAmount: number;
+  nssf1Amount: number;
+  nssf2Amount: number;
+  housingLevyAmount: number;
+  otherDeductions: number;
+  netPay: number;
+  commissionCents: number;
+  status: string;
+}
+
+interface PayrollRun {
+  id: string;
+  businessId: string;
+  month: number;
+  year: number;
+  status: string;
+  totalGrossCents: number;
+  totalNetCents: number;
+  totalDeductionsCents: number;
+  notes?: string;
+  approvedBy?: string;
+  paidAt?: string;
+  createdAt: string;
+  payslips: Payslip[];
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function fmt(cents: number): string {
+  return `KES ${(cents / 100).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+function statusColor(status: string): string {
+  switch (status) {
+    case 'DRAFT':    return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
+    case 'APPROVED': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
+    case 'PAID':     return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
+    default:         return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
+  }
+}
+
+// ─── Print helper ─────────────────────────────────────────────────────────────
+
+function printPayslips(run: PayrollRun) {
+  const monthName = MONTHS[run.month - 1];
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Payslips — ${monthName} ${run.year}</title>
+      <style>
+        body { font-family: Arial, sans-serif; font-size: 12px; color: #111; }
+        h1 { font-size: 16px; margin-bottom: 4px; }
+        .payslip { page-break-after: always; padding: 20px; border: 1px solid #ccc; margin-bottom: 20px; }
+        .payslip:last-child { page-break-after: avoid; }
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        td, th { padding: 6px 8px; border-bottom: 1px solid #eee; text-align: left; }
+        th { background: #f4f4f4; font-weight: bold; }
+        .right { text-align: right; }
+        .total-row td { font-weight: bold; border-top: 2px solid #333; }
+        .section-header { background: #e8e8e8; font-weight: bold; }
+        .net-row td { background: #2563eb; color: white; font-size: 14px; font-weight: bold; }
+      </style>
+    </head>
+    <body>
+    ${run.payslips.map((p) => `
+      <div class="payslip">
+        <h1>PAYSLIP</h1>
+        <p><strong>Period:</strong> ${monthName} ${run.year}</p>
+        <p><strong>Employee:</strong> ${p.employeeName}</p>
+        <p><strong>Status:</strong> ${p.status}</p>
+        <table>
+          <tr class="section-header"><td colspan="2">EARNINGS</td></tr>
+          <tr><td>Basic Salary</td><td class="right">${fmt(p.basicSalary)}</td></tr>
+          ${p.housingAllowance > 0 ? `<tr><td>Housing Allowance</td><td class="right">${fmt(p.housingAllowance)}</td></tr>` : ''}
+          ${p.transportAllowance > 0 ? `<tr><td>Transport Allowance</td><td class="right">${fmt(p.transportAllowance)}</td></tr>` : ''}
+          ${p.commissionCents > 0 ? `<tr><td>Commission</td><td class="right">${fmt(p.commissionCents)}</td></tr>` : ''}
+          ${p.otherAllowances > 0 ? `<tr><td>Other Allowances</td><td class="right">${fmt(p.otherAllowances)}</td></tr>` : ''}
+          <tr class="total-row"><td>GROSS PAY</td><td class="right">${fmt(p.grossPay)}</td></tr>
+
+          <tr class="section-header"><td colspan="2">DEDUCTIONS</td></tr>
+          <tr><td>PAYE (Income Tax)</td><td class="right">${fmt(p.payeAmount)}</td></tr>
+          <tr><td>NHIF</td><td class="right">${fmt(p.nhifAmount)}</td></tr>
+          <tr><td>NSSF Tier 1</td><td class="right">${fmt(p.nssf1Amount)}</td></tr>
+          <tr><td>NSSF Tier 2</td><td class="right">${fmt(p.nssf2Amount)}</td></tr>
+          <tr><td>Affordable Housing Levy (1.5%)</td><td class="right">${fmt(p.housingLevyAmount)}</td></tr>
+          ${p.otherDeductions > 0 ? `<tr><td>Other Deductions</td><td class="right">${fmt(p.otherDeductions)}</td></tr>` : ''}
+          <tr class="total-row"><td>TOTAL DEDUCTIONS</td><td class="right">${fmt(p.payeAmount + p.nhifAmount + p.nssf1Amount + p.nssf2Amount + p.housingLevyAmount + p.otherDeductions)}</td></tr>
+
+          <tr class="net-row"><td>NET PAY</td><td class="right">${fmt(p.netPay)}</td></tr>
+        </table>
+        <p style="margin-top:16px; font-size:10px; color:#666;">This is a computer-generated payslip. No signature required.</p>
+      </div>
+    `).join('')}
+    </body>
+    </html>
+  `;
+
+  const win = window.open('', '_blank');
+  if (win) {
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
+  }
+}
+
+// ─── Payslip Detail Table ─────────────────────────────────────────────────────
+
+function PayslipTable({ payslips }: { payslips: Payslip[] }) {
+  const totals = payslips.reduce(
+    (acc, p) => ({
+      basic: acc.basic + p.basicSalary,
+      housing: acc.housing + p.housingAllowance,
+      transport: acc.transport + p.transportAllowance,
+      commission: acc.commission + p.commissionCents,
+      gross: acc.gross + p.grossPay,
+      paye: acc.paye + p.payeAmount,
+      nhif: acc.nhif + p.nhifAmount,
+      nssf1: acc.nssf1 + p.nssf1Amount,
+      nssf2: acc.nssf2 + p.nssf2Amount,
+      housing_levy: acc.housing_levy + p.housingLevyAmount,
+      net: acc.net + p.netPay,
+    }),
+    { basic: 0, housing: 0, transport: 0, commission: 0, gross: 0, paye: 0, nhif: 0, nssf1: 0, nssf2: 0, housing_levy: 0, net: 0 },
+  );
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="bg-gray-100 dark:bg-gray-700 text-left">
+            <th className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-300">Employee</th>
+            <th className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-300 text-right">Basic</th>
+            <th className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-300 text-right">Allowances</th>
+            <th className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-300 text-right">Commission</th>
+            <th className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-300 text-right">Gross</th>
+            <th className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-300 text-right">PAYE</th>
+            <th className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-300 text-right">NHIF</th>
+            <th className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-300 text-right">NSSF</th>
+            <th className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-300 text-right">Hse Levy</th>
+            <th className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-300 text-right">Net Pay</th>
+            <th className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-300">Status</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+          {payslips.map((p) => (
+            <tr key={p.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+              <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">{p.employeeName}</td>
+              <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-400">{fmt(p.basicSalary)}</td>
+              <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-400">{fmt(p.housingAllowance + p.transportAllowance + p.otherAllowances)}</td>
+              <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-400">{fmt(p.commissionCents)}</td>
+              <td className="px-3 py-2 text-right font-medium text-gray-900 dark:text-white">{fmt(p.grossPay)}</td>
+              <td className="px-3 py-2 text-right text-red-600 dark:text-red-400">{fmt(p.payeAmount)}</td>
+              <td className="px-3 py-2 text-right text-red-600 dark:text-red-400">{fmt(p.nhifAmount)}</td>
+              <td className="px-3 py-2 text-right text-red-600 dark:text-red-400">{fmt(p.nssf1Amount + p.nssf2Amount)}</td>
+              <td className="px-3 py-2 text-right text-red-600 dark:text-red-400">{fmt(p.housingLevyAmount)}</td>
+              <td className="px-3 py-2 text-right font-bold text-green-700 dark:text-green-400">{fmt(p.netPay)}</td>
+              <td className="px-3 py-2">
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${p.status === 'PAID' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'}`}>
+                  {p.status}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="bg-gray-100 dark:bg-gray-700 font-bold border-t-2 border-gray-300 dark:border-gray-600">
+            <td className="px-3 py-2 text-gray-900 dark:text-white">TOTALS</td>
+            <td className="px-3 py-2 text-right text-gray-900 dark:text-white">{fmt(totals.basic)}</td>
+            <td className="px-3 py-2 text-right text-gray-900 dark:text-white">{fmt(totals.housing + totals.transport)}</td>
+            <td className="px-3 py-2 text-right text-gray-900 dark:text-white">{fmt(totals.commission)}</td>
+            <td className="px-3 py-2 text-right text-gray-900 dark:text-white">{fmt(totals.gross)}</td>
+            <td className="px-3 py-2 text-right text-red-700 dark:text-red-400">{fmt(totals.paye)}</td>
+            <td className="px-3 py-2 text-right text-red-700 dark:text-red-400">{fmt(totals.nhif)}</td>
+            <td className="px-3 py-2 text-right text-red-700 dark:text-red-400">{fmt(totals.nssf1 + totals.nssf2)}</td>
+            <td className="px-3 py-2 text-right text-red-700 dark:text-red-400">{fmt(totals.housing_levy)}</td>
+            <td className="px-3 py-2 text-right text-green-700 dark:text-green-400">{fmt(totals.net)}</td>
+            <td />
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+export default function PayrollPage() {
+  const user = useAuthStore(s => s.user);
+  const businessId = user?.businessId ?? '';
+  const queryClient = useQueryClient();
+
+  const now = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [selectedRun, setSelectedRun] = useState<PayrollRun | null>(null);
+  const [error, setError] = useState('');
+
+  const canManage = user?.role === 'OWNER' || user?.role === 'MANAGER';
+
+  // Fetch all payroll runs
+  const { data: runs = [], isLoading } = useQuery<PayrollRun[]>({
+    queryKey: ['payroll-runs', businessId],
+    queryFn: () => api.get(`/hr/payroll?businessId=${businessId}`),
+    enabled: !!businessId,
+  });
+
+  // Generate payroll run
+  const generateMutation = useMutation({
+    mutationFn: () =>
+      api.post<PayrollRun>('/hr/payroll', {
+        businessId,
+        month: selectedMonth,
+        year: selectedYear,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payroll-runs', businessId] });
+      setError('');
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+
+  // Approve
+  const approveMutation = useMutation({
+    mutationFn: (runId: string) =>
+      api.patch<PayrollRun>(`/hr/payroll/${runId}/approve`, { approvedBy: user?.name ?? 'Manager' }),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ['payroll-runs', businessId] });
+      setSelectedRun(updated);
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+
+  // Mark as paid
+  const paidMutation = useMutation({
+    mutationFn: (runId: string) => api.patch<PayrollRun>(`/hr/payroll/${runId}/paid`, {}),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ['payroll-runs', businessId] });
+      setSelectedRun(updated);
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+
+  // Delete
+  const deleteMutation = useMutation({
+    mutationFn: (runId: string) => api.delete<{ deleted: boolean }>(`/hr/payroll/${runId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payroll-runs', businessId] });
+      setSelectedRun(null);
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+
+  // Year options: current year and 2 years back/forward
+  const yearOptions = [selectedYear - 2, selectedYear - 1, selectedYear, selectedYear + 1];
+
+  // ─── Detail view ────────────────────────────────────────────────────────────
+
+  if (selectedRun) {
+    return (
+      <div className="p-4 max-w-full">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <button
+            onClick={() => setSelectedRun(null)}
+            className="flex items-center gap-1 text-blue-600 hover:text-blue-800 dark:text-blue-400"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Back to Payroll Runs
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => printPayslips(selectedRun)}
+              className="flex items-center gap-1 px-3 py-1.5 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm"
+            >
+              <Printer className="w-4 h-4" />
+              Print Payslips
+            </button>
+            {canManage && selectedRun.status === 'DRAFT' && (
+              <button
+                onClick={() => approveMutation.mutate(selectedRun.id)}
+                disabled={approveMutation.isPending}
+                className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm disabled:opacity-50"
+              >
+                {approveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                Approve
+              </button>
+            )}
+            {canManage && selectedRun.status === 'APPROVED' && (
+              <button
+                onClick={() => paidMutation.mutate(selectedRun.id)}
+                disabled={paidMutation.isPending}
+                className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 text-sm disabled:opacity-50"
+              >
+                {paidMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
+                Mark Paid
+              </button>
+            )}
+            {canManage && selectedRun.status === 'DRAFT' && (
+              <button
+                onClick={() => {
+                  if (confirm('Delete this draft payroll run?')) {
+                    deleteMutation.mutate(selectedRun.id);
+                  }
+                }}
+                disabled={deleteMutation.isPending}
+                className="flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white rounded hover:bg-red-700 text-sm disabled:opacity-50"
+              >
+                {deleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Delete
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Run summary */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 mb-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                {MONTHS[selectedRun.month - 1]} {selectedRun.year} Payroll
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                {selectedRun.payslips.length} employee{selectedRun.payslips.length !== 1 ? 's' : ''}
+                {selectedRun.approvedBy ? ` · Approved by ${selectedRun.approvedBy}` : ''}
+                {selectedRun.paidAt ? ` · Paid ${new Date(selectedRun.paidAt).toLocaleDateString()}` : ''}
+              </p>
+            </div>
+            <span className={`px-3 py-1 rounded-full text-sm font-semibold ${statusColor(selectedRun.status)}`}>
+              {selectedRun.status}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-4 mt-4">
+            <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Total Gross</p>
+              <p className="text-lg font-bold text-gray-900 dark:text-white">{fmt(selectedRun.totalGrossCents)}</p>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Total Deductions</p>
+              <p className="text-lg font-bold text-red-600 dark:text-red-400">{fmt(selectedRun.totalDeductionsCents)}</p>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Total Net Pay</p>
+              <p className="text-lg font-bold text-green-700 dark:text-green-400">{fmt(selectedRun.totalNetCents)}</p>
+            </div>
+          </div>
+        </div>
+
+        {error && (
+          <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 mb-4 text-sm">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            {error}
+          </div>
+        )}
+
+        {/* Payslips table */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="font-semibold text-gray-900 dark:text-white">Payslip Breakdown</h3>
+          </div>
+          {selectedRun.payslips.length === 0 ? (
+            <div className="p-8 text-center text-gray-500 dark:text-gray-400">No payslips found.</div>
+          ) : (
+            <PayslipTable payslips={selectedRun.payslips} />
+          )}
+        </div>
+
+        {/* Tax notes */}
+        <div className="mt-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-xs text-blue-700 dark:text-blue-400">
+          <strong>Kenya 2024 Tax Rates Applied:</strong> PAYE (10%–35% brackets, KES 2,400 personal relief) · NHIF (income-based bands) · NSSF Tier 1 (6% of KES 7,000) + Tier 2 (6% of excess up to KES 29,000) · Affordable Housing Levy (1.5% of gross)
+        </div>
+      </div>
+    );
+  }
+
+  // ─── List view ───────────────────────────────────────────────────────────────
+
+  return (
+    <div className="p-4 max-w-full">
+      {/* Page header */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-2">
+          <DollarSign className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Payroll</h1>
+        </div>
+
+        {canManage && (
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {/* Month selector */}
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(Number(e.target.value))}
+              className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+            >
+              {MONTHS.map((m, i) => (
+                <option key={i} value={i + 1}>{m}</option>
+              ))}
+            </select>
+
+            {/* Year selector */}
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+            >
+              {yearOptions.map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+
+            <button
+              onClick={() => generateMutation.mutate()}
+              disabled={generateMutation.isPending}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
+            >
+              {generateMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Plus className="w-4 h-4" />
+              )}
+              Generate Payroll
+            </button>
+          </div>
+        )}
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 mb-4 text-sm">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          {error}
+          <button onClick={() => setError('')} className="ml-auto text-red-500 hover:text-red-700">x</button>
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        </div>
+      ) : runs.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-gray-500 dark:text-gray-400">
+          <DollarSign className="w-12 h-12 mb-3 opacity-30" />
+          <p className="text-lg font-medium">No payroll runs yet</p>
+          <p className="text-sm mt-1">Select a month and year, then click Generate Payroll</p>
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {runs.map((run) => (
+            <div
+              key={run.id}
+              className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => setSelectedRun(run)}
+            >
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                    <DollarSign className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-white">
+                      {MONTHS[run.month - 1]} {run.year}
+                    </h3>
+                    <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                      <Users className="w-3.5 h-3.5" />
+                      {run.payslips.length} employee{run.payslips.length !== 1 ? 's' : ''}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-6">
+                  <div className="text-right">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Gross</p>
+                    <p className="font-semibold text-gray-900 dark:text-white">{fmt(run.totalGrossCents)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Deductions</p>
+                    <p className="font-semibold text-red-600 dark:text-red-400">{fmt(run.totalDeductionsCents)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Net Pay</p>
+                    <p className="font-bold text-green-700 dark:text-green-400">{fmt(run.totalNetCents)}</p>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusColor(run.status)}`}>
+                    {run.status}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Info box */}
+      <div className="mt-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-xs text-amber-700 dark:text-amber-400">
+        <strong>Note:</strong> Employee salary details (basic salary, housing allowance, transport allowance) must be configured on each employee record. Commissions are automatically calculated from sales data for the selected period. Generated payslips use Kenya 2024 statutory deduction rates (PAYE, NHIF, NSSF, Housing Levy).
+      </div>
+    </div>
+  );
+}

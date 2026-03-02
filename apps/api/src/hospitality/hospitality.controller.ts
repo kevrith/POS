@@ -10,9 +10,27 @@ export class HospitalityController {
     return this.hospitalityService.getTables(storeId, status);
   }
 
+  @Post('tables')
+  async createTable(@Body() data: { storeId: string; number: string; capacity: number; floor?: string }) {
+    return this.hospitalityService.createTable(data);
+  }
+
   @Patch('tables/:id/status')
   async updateTableStatus(@Param('id') id: string, @Body('status') status: string) {
     return this.hospitalityService.updateTableStatus(id, status);
+  }
+
+  @Patch('tables/:id')
+  async updateTable(
+    @Param('id') id: string,
+    @Body() dto: { number?: string; capacity?: number; floor?: string | null },
+  ) {
+    return this.hospitalityService.updateTable(id, dto);
+  }
+
+  @Delete('tables/:id')
+  async deleteTable(@Param('id') id: string) {
+    return this.hospitalityService.deleteTable(id);
   }
 
   @Post('orders')
@@ -39,7 +57,7 @@ export class HospitalityController {
     return this.hospitalityService.addOrderItems(id, items);
   }
 
-  @Delete('orders/:id/items')
+  @Post('orders/:id/items/remove')
   async removeOrderItems(@Param('id') id: string, @Body('itemIds') itemIds: string[]) {
     return this.hospitalityService.removeOrderItems(id, itemIds);
   }
@@ -108,5 +126,32 @@ export class HospitalityController {
   @Get('kds/orders')
   async getKDSOrders(@Query('storeId') storeId: string) {
     return this.hospitalityService.getKDSOrders(storeId);
+  }
+
+  // ── Bar Tab Endpoints ──────────────────────────────────────────────────────
+
+  @Get('bar-tabs')
+  getBarTabs(@Query('businessId') businessId: string, @Query('storeId') storeId: string) {
+    return this.hospitalityService.getBarTabs(businessId, storeId);
+  }
+
+  @Post('bar-tabs')
+  createBarTab(@Body() body: { businessId: string; storeId: string; tabName: string; waiterId: string }) {
+    return this.hospitalityService.createBarTab(body.businessId, body.storeId, body.tabName, body.waiterId);
+  }
+
+  @Post('bar-tabs/:id/items')
+  addToBarTab(@Param('id') id: string, @Body() body: { items: any[] }) {
+    return this.hospitalityService.addToBarTab(id, body.items);
+  }
+
+  @Post('bar-tabs/:id/settle')
+  settleBarTab(@Param('id') id: string, @Body() body: { payments: any[] }) {
+    return this.hospitalityService.settleBarTab(id, body.payments);
+  }
+
+  @Post('bar-tabs/:id/close')
+  closeBarTab(@Param('id') id: string) {
+    return this.hospitalityService.closeBarTab(id);
   }
 }

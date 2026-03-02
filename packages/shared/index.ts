@@ -141,6 +141,8 @@ export enum PaymentMethod {
   STORE_CREDIT = 'STORE_CREDIT',
   ROOM_CHARGE = 'ROOM_CHARGE',
   LAYAWAY_DEPOSIT = 'LAYAWAY_DEPOSIT',
+  GIFT_CARD = 'GIFT_CARD',
+  BANK_TRANSFER = 'BANK_TRANSFER',
 }
 
 export enum TaxType {
@@ -213,12 +215,14 @@ export function calculateWeightedPrice(
 
 // ─── TAX UTILS ───────────────────────────────────────────────
 
-export function calculateVAT(subtotalCents: number): number {
-  return Math.round(subtotalCents * 0.16);
+/** Extract the VAT component from a VAT-inclusive amount (16% rate). */
+export function calculateVAT(inclusiveAmountCents: number): number {
+  return Math.round(inclusiveAmountCents * 16 / 116);
 }
 
-export function calculateTOT(grossSaleCents: number): number {
-  return Math.round(grossSaleCents * 0.03);
+/** Extract the TOT component from a TOT-inclusive amount (3% rate). */
+export function calculateTOT(inclusiveAmountCents: number): number {
+  return Math.round(inclusiveAmountCents * 3 / 103);
 }
 
 export function calculateServiceCharge(

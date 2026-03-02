@@ -12,7 +12,8 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Seeding database…');
 
-  // ─── Clean existing data ────────────────────────────────────────────────
+  // ─── Clean existing data (proper order to avoid FK violations) ────────────
+  // Delete in reverse dependency order
   await prisma.inventoryMovement.deleteMany();
   await prisma.saleItem.deleteMany();
   await prisma.payment.deleteMany();
@@ -27,7 +28,6 @@ async function main() {
   await prisma.recipeIngredient.deleteMany();
   await prisma.bundleComponent.deleteMany();
   await prisma.batch.deleteMany();
-  await prisma.item.deleteMany();
   await prisma.table.deleteMany();
   await prisma.tableReservation.deleteMany().catch(() => {});
   await prisma.expense.deleteMany();
@@ -35,11 +35,14 @@ async function main() {
   await prisma.attendanceRecord.deleteMany();
   await prisma.employee.deleteMany();
   await prisma.cashDrawerSession.deleteMany();
-  await prisma.customer.deleteMany();
   await prisma.supplier.deleteMany();
-  await prisma.store.deleteMany();
+  await prisma.customer.deleteMany();
+  await prisma.item.deleteMany();
   await prisma.user.deleteMany();
+  await prisma.store.deleteMany();
   await prisma.business.deleteMany();
+
+  console.log('✅ Cleaned existing data');
 
   // ─── Business ───────────────────────────────────────────────────────────
   const business = await prisma.business.create({

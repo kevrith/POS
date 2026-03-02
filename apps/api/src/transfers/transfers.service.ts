@@ -114,6 +114,41 @@ export class TransfersService {
     return this.getTransferDetails(transferId);
   }
 
+  async approveTransfer(transferId: string, approvedBy: string) {
+    return this.prisma.storeTransfer.update({
+      where: { id: transferId },
+      data: { status: 'APPROVED', approvedBy },
+    });
+  }
+
+  async rejectTransfer(transferId: string) {
+    const transfer = await this.prisma.storeTransfer.findUnique({
+      where: { id: transferId },
+      include: { items: true },
+    });
+
+    await this.prisma.storeTransfer.update({
+      where: { id: transferId },
+      data: { status: 'REJECTED' },
+    });
+
+    for (const item of transfer.items) {
+      await this.prisma.inventoryMovement.create({
+        data: {
+          offlineId: `${transfer.offlineId}-reject-${item.itemId}`,
+          businessId: transfer.businessId,
+          itemId: item.itemId,
+          storeId: transfer.fromStoreId,
+          type: 'TRANSFER',
+          quantity: item.quantity,
+          source: 'TRANSFER_REJECTED',
+        },
+      });
+    }
+
+    return this.getTransferDetails(transferId);
+  }
+
   async getTransferDetails(transferId: string) {
     return this.prisma.storeTransfer.findUnique({
       where: { id: transferId },

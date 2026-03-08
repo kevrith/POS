@@ -5,7 +5,7 @@ import LoginPage from './pages/LoginPage';
 import Layout from './components/Layout';
 
 // Lazy load all pages for code-splitting
-const POSPage = lazy(() => import('./pages/POSPage'));
+const POSPage = lazy(() => import('./pages/POSRouterPage'));
 const ReportsPage = lazy(() => import('./pages/ReportsPage'));
 const InventoryPage = lazy(() => import('./pages/InventoryPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));

@@ -37,7 +37,20 @@ export class HrController {
   async updateEmployee(
     @Param('id') id: string,
     @Query('businessId') businessId: string,
-    @Body() dto: { commissionRate?: number; commissionBasis?: string; salesTargetCents?: number },
+    @Body() dto: {
+      commissionRate?: number;
+      commissionBasis?: string;
+      salesTargetCents?: number;
+      commissionMilestonePercent?: number;
+      employmentType?: string;
+      idNumber?: string;
+      emergencyContact?: string;
+      startDate?: string;
+      name?: string;
+      role?: string;
+      pin?: string;
+      email?: string;
+    },
   ) {
     return this.hrService.updateEmployee(id, businessId, dto);
   }

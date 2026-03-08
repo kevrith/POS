@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, Package, FileText, Truck, ChevronRight, X, Check,
-  AlertCircle, Loader2, RefreshCw, ArrowLeft, Mail,
+  AlertCircle, Loader2, RefreshCw, ArrowLeft, Mail, Pencil,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
@@ -809,6 +809,7 @@ export default function SuppliersPage() {
   const user = useAuthStore((s) => s.user);
   const [tab, setTab] = useState<Tab>('suppliers');
   const [showAddSupplier, setShowAddSupplier] = useState(false);
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [showCreatePO, setShowCreatePO] = useState(false);
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
   const [poStatusFilter, setPOStatusFilter] = useState('ALL');
@@ -887,6 +888,26 @@ export default function SuppliersPage() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['suppliers'] });
       setShowAddSupplier(false);
+      setSupplierForm({ name: '', contact: '', address: '', paymentTerms: '', creditLimit: '' });
+      setFormError('');
+    },
+    onError: (err) => setFormError(err instanceof Error ? err.message : 'Failed'),
+  });
+
+  const updateSupplier = useMutation({
+    mutationFn: () =>
+      api.patch(`/suppliers/${editingSupplier!.id}`, {
+        name: supplierForm.name,
+        contact: supplierForm.contact || undefined,
+        address: supplierForm.address || undefined,
+        paymentTerms: supplierForm.paymentTerms || undefined,
+        creditLimitCents: supplierForm.creditLimit
+          ? Math.round(parseFloat(supplierForm.creditLimit) * 100)
+          : undefined,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['suppliers'] });
+      setEditingSupplier(null);
       setSupplierForm({ name: '', contact: '', address: '', paymentTerms: '', creditLimit: '' });
       setFormError('');
     },
@@ -995,6 +1016,97 @@ export default function SuppliersPage() {
         {/* ── Suppliers Tab ── */}
         {tab === 'suppliers' && (
           <>
+            {/* ── Edit Supplier ── */}
+            {editingSupplier && (
+              <div className="bg-white rounded-2xl border-2 border-blue-200 shadow-sm mb-4 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-bold text-gray-800 flex items-center gap-2">
+                    <Pencil className="w-4 h-4 text-blue-600" />
+                    Edit Supplier — {editingSupplier.name}
+                  </h2>
+                  <button onClick={() => { setEditingSupplier(null); setFormError(''); setSupplierForm({ name: '', contact: '', address: '', paymentTerms: '', creditLimit: '' }); }} className="p-1 hover:bg-gray-100 rounded-lg">
+                    <X className="w-5 h-5 text-gray-500" />
+                  </button>
+                </div>
+                {formError && (
+                  <div className="mb-4 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                    <AlertCircle className="w-4 h-4" /> {formError}
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                    <input
+                      value={supplierForm.name}
+                      onChange={(e) => setSupplierForm({ ...supplierForm, name: e.target.value })}
+                      placeholder="Supplier name"
+                      className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Contact</label>
+                    <input
+                      value={supplierForm.contact}
+                      onChange={(e) => setSupplierForm({ ...supplierForm, contact: e.target.value })}
+                      placeholder="Phone / email"
+                      className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Payment Terms</label>
+                    <select
+                      value={supplierForm.paymentTerms}
+                      onChange={(e) => setSupplierForm({ ...supplierForm, paymentTerms: e.target.value })}
+                      className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select...</option>
+                      <option value="CASH">Cash on Delivery</option>
+                      <option value="NET_7">Net 7 days</option>
+                      <option value="NET_14">Net 14 days</option>
+                      <option value="NET_30">Net 30 days</option>
+                      <option value="NET_60">Net 60 days</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Credit Limit (KES)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={supplierForm.creditLimit}
+                      onChange={(e) => setSupplierForm({ ...supplierForm, creditLimit: e.target.value })}
+                      placeholder="0"
+                      className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                    <input
+                      value={supplierForm.address}
+                      onChange={(e) => setSupplierForm({ ...supplierForm, address: e.target.value })}
+                      placeholder="Physical address"
+                      className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-3 mt-4">
+                  <button
+                    onClick={() => updateSupplier.mutate()}
+                    disabled={!supplierForm.name || updateSupplier.isPending}
+                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium disabled:opacity-40 flex items-center gap-2"
+                  >
+                    {updateSupplier.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    Save Changes
+                  </button>
+                  <button
+                    onClick={() => { setEditingSupplier(null); setFormError(''); setSupplierForm({ name: '', contact: '', address: '', paymentTerms: '', creditLimit: '' }); }}
+                    className="px-6 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
             {showAddSupplier && (
               <div className="bg-white rounded-2xl border shadow-sm mb-4 p-6">
                 <div className="flex items-center justify-between mb-4">
@@ -1127,8 +1239,24 @@ export default function SuppliersPage() {
                             {fmt(s.outstandingBalanceCents)}
                           </span>
                         </td>
-                        <td className="px-4 py-4">
-                          <ChevronRight className="w-4 h-4 text-gray-400" />
+                        <td className="px-4 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => {
+                              setEditingSupplier(s);
+                              setSupplierForm({
+                                name: s.name,
+                                contact: s.contact ?? '',
+                                address: s.address ?? '',
+                                paymentTerms: s.paymentTerms ?? '',
+                                creditLimit: s.creditLimitCents ? String(s.creditLimitCents / 100) : '',
+                              });
+                              setFormError('');
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Edit supplier"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
                         </td>
                       </tr>
                     ))}

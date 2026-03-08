@@ -72,6 +72,7 @@ export default function PaymentModal({
   const [gcError, setGcError] = useState('');
   const [gcLookingUp, setGcLookingUp] = useState(false);
   const [qrImage, setQrImage] = useState<string | null>(null);
+  const [qrDemoMode, setQrDemoMode] = useState(false);
   const [qrLoading, setQrLoading] = useState(false);
   const [qrError, setQrError] = useState('');
   const [roomNumber, setRoomNumber] = useState('');
@@ -172,13 +173,18 @@ export default function PaymentModal({
     setQrLoading(true);
     setQrError('');
     setQrImage(null);
+    setQrDemoMode(false);
     try {
-      const res = await api.post<{ qrCode: string }>('/payments/mpesa/qr', {
+      const res = await api.post<{ qrCode: string | null; demoMode: boolean }>('/payments/mpesa/qr', {
         amountCents: totalCents,
         reference: `POS-${Date.now()}`,
         merchantName: 'POS',
       });
-      setQrImage(res.qrCode);
+      if (res.demoMode) {
+        setQrDemoMode(true);
+      } else {
+        setQrImage(res.qrCode);
+      }
     } catch (err) {
       setQrError(err instanceof Error ? err.message : 'Failed to generate QR code');
     } finally {
@@ -367,67 +373,121 @@ export default function PaymentModal({
 
           {/* ── CASH ── */}
           {method === 'CASH' && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Cash Received (KES)
-                </label>
-                <input
-                  type="number"
-                  value={cashInput}
-                  onChange={(e) => setCashInput(e.target.value)}
-                  placeholder="0"
-                  className="w-full px-4 py-3 border rounded-xl text-xl font-bold focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  autoFocus
-                />
+            <div className="space-y-3">
+              {/* Amount display */}
+              <div className="bg-gray-900 rounded-xl px-4 py-3 text-right">
+                <p className="text-xs text-gray-500 mb-0.5">Cash Received</p>
+                <p className={`text-3xl font-black tabular-nums ${cashCents > 0 ? 'text-white' : 'text-gray-600'}`}>
+                  {cashCents > 0 ? `KES ${(cashCents / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })}` : 'Enter amount'}
+                </p>
               </div>
-              <div className="flex flex-wrap gap-2">
+
+              {/* Summary row */}
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="bg-gray-50 rounded-lg p-2">
+                  <p className="text-xs text-gray-500">Total Due</p>
+                  <p className="text-sm font-bold text-gray-800">{formatKES(totalCents)}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-2">
+                  <p className="text-xs text-gray-500">Received</p>
+                  <p className="text-sm font-bold text-gray-800">{cashCents > 0 ? formatKES(cashCents) : '—'}</p>
+                </div>
+                <div className={`rounded-lg p-2 ${changeCents >= 0 && cashCents > 0 ? 'bg-green-50' : 'bg-gray-50'}`}>
+                  <p className="text-xs text-gray-500">Change</p>
+                  <p className={`text-sm font-bold ${changeCents >= 0 && cashCents > 0 ? 'text-green-700' : 'text-gray-400'}`}>
+                    {cashCents > 0 && changeCents >= 0 ? formatKES(changeCents) : '—'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Quick denomination buttons */}
+              <div className="grid grid-cols-4 gap-1.5">
                 {QUICK_CASH.map((amt) => (
                   <button
                     key={amt}
                     onClick={() => setCashInput(String(amt))}
-                    className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+                    className={`py-2 rounded-lg text-sm font-semibold border transition-colors ${
                       cashCents === amt * 100
                         ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'
+                        : 'bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50'
                     }`}
                   >
-                    {amt}
+                    {amt >= 1000 ? `${amt / 1000}K` : amt}
                   </button>
                 ))}
                 <button
                   onClick={() => setCashInput(String(totalCents / 100))}
-                  className="px-3 py-1.5 rounded-lg text-sm border border-blue-300 text-blue-600 hover:bg-blue-50"
+                  className={`py-2 rounded-lg text-sm font-semibold border transition-colors col-span-1 ${
+                    cashCents === totalCents
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-blue-50 text-blue-700 border-blue-300 hover:bg-blue-100'
+                  }`}
                 >
                   Exact
                 </button>
               </div>
-              {cashCents > 0 && (
-                <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Total</span>
-                    <span className="font-medium">{formatKES(totalCents)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Received</span>
-                    <span className="font-medium">{formatKES(cashCents)}</span>
-                  </div>
-                  <div
-                    className={`flex justify-between font-bold border-t pt-2 text-base ${
-                      changeCents >= 0 ? 'text-green-600' : 'text-red-600'
-                    }`}
+
+              {/* Numpad */}
+              <div className="grid grid-cols-3 gap-1.5">
+                {['7','8','9','4','5','6','1','2','3'].map((k) => (
+                  <button
+                    key={k}
+                    onClick={() => setCashInput((prev) => {
+                      const s = prev === '0' ? k : prev + k;
+                      return s;
+                    })}
+                    className="py-3 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-800 font-bold text-lg transition-colors active:scale-95"
                   >
-                    <span>Change</span>
-                    <span>{formatKES(Math.max(0, changeCents))}</span>
-                  </div>
+                    {k}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setCashInput((prev) => prev.includes('.') ? prev : prev + '.')}
+                  className="py-3 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-800 font-bold text-lg transition-colors active:scale-95"
+                >
+                  .
+                </button>
+                <button
+                  onClick={() => setCashInput((prev) => prev === '0' ? '0' : prev + '0')}
+                  className="py-3 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-800 font-bold text-lg transition-colors active:scale-95"
+                >
+                  0
+                </button>
+                <button
+                  onClick={() => setCashInput((prev) => prev.slice(0, -1) || '')}
+                  className="py-3 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-500 font-bold text-lg transition-colors active:scale-95"
+                >
+                  ⌫
+                </button>
+              </div>
+
+              {/* Short input field for keyboard entry */}
+              <input
+                type="number"
+                value={cashInput}
+                onChange={(e) => setCashInput(e.target.value)}
+                placeholder="Or type amount here…"
+                className="w-full px-3 py-2 border rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                autoFocus
+              />
+
+              {cashCents > 0 && cashCents < totalCents && (
+                <div className="flex items-center gap-2 p-2.5 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  Short by {formatKES(totalCents - cashCents)}
                 </div>
               )}
+
               <button
                 onClick={handleCash}
                 disabled={cashCents < totalCents || isProcessing}
-                className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl disabled:opacity-40 transition-colors"
+                className="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-black text-lg rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                {isProcessing ? 'Processing…' : 'Confirm Cash Payment'}
+                {isProcessing
+                  ? 'Processing…'
+                  : cashCents >= totalCents
+                    ? `Confirm · Change ${formatKES(changeCents)}`
+                    : 'Enter Cash Amount'}
               </button>
             </div>
           )}
@@ -544,7 +604,16 @@ export default function PaymentModal({
                     <p className="text-xs text-teal-600 mt-2">Customer scans with M-Pesa app</p>
                   </>
                 )}
-                {!qrImage && !qrLoading && (
+                {qrDemoMode && !qrLoading && (
+                  <div className="flex flex-col items-center gap-2 py-2">
+                    <div className="text-4xl">📵</div>
+                    <p className="text-sm font-semibold text-amber-700">Demo Mode — No M-Pesa Credentials</p>
+                    <p className="text-xs text-amber-600 max-w-[220px]">
+                      Configure your Safaricom Daraja credentials in Settings → M-Pesa to generate real scannable QR codes.
+                    </p>
+                  </div>
+                )}
+                {!qrImage && !qrDemoMode && !qrLoading && (
                   <>
                     <div className="text-5xl mb-3">📲</div>
                     <p className="text-sm text-teal-700 font-medium">QR code will display here</p>
@@ -559,7 +628,7 @@ export default function PaymentModal({
                 </div>
               )}
               <div className="text-lg font-bold text-gray-800">{formatKES(totalCents)}</div>
-              {!qrImage ? (
+              {!qrImage && !qrDemoMode && (
                 <button
                   onClick={() => void handleQR()}
                   disabled={qrLoading}
@@ -567,21 +636,22 @@ export default function PaymentModal({
                 >
                   {qrLoading ? 'Generating…' : 'Generate QR Code'}
                 </button>
-              ) : (
+              )}
+              {(qrImage || qrDemoMode) && (
                 <div className="space-y-2">
                   <button
                     onClick={() => onComplete([{ method: 'MPESA_QR', amountCents: totalCents }])}
                     disabled={isProcessing}
                     className="w-full py-3.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl disabled:opacity-40 transition-colors"
                   >
-                    {isProcessing ? 'Processing…' : 'Payment Received ✓'}
+                    {isProcessing ? 'Processing…' : qrDemoMode ? 'Simulate Payment ✓' : 'Payment Received ✓'}
                   </button>
                   <button
                     onClick={() => void handleQR()}
                     disabled={qrLoading}
                     className="w-full py-2 text-sm text-teal-600 hover:text-teal-800 underline disabled:opacity-40"
                   >
-                    Regenerate QR
+                    {qrDemoMode ? 'Retry' : 'Regenerate QR'}
                   </button>
                 </div>
               )}

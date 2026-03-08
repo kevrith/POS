@@ -14,6 +14,7 @@ import { useAuthStore } from '../stores/auth';
 import { useThemeStore } from '../stores/theme';
 import { connectSocket, disconnectSocket } from '../lib/socket';
 import SyncStatusBadge, { OfflineBanner } from './SyncStatusBadge';
+import MobileNav from './MobileNav';
 
 interface NavItem {
   to: string;
@@ -227,6 +228,31 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // Keyboard support for lock screen
+  useEffect(() => {
+    if (!isLocked) return;
+    function handleKey(e: KeyboardEvent) {
+      if (e.key >= '0' && e.key <= '9') {
+        setLockPin((p) => {
+          if (p.length >= 6) return p;
+          const next = p + e.key;
+          if (next.length >= 4) setTimeout(() => void handleUnlock(), 0);
+          return next;
+        });
+      } else if (e.key === 'Backspace') {
+        setLockPin((p) => p.slice(0, -1));
+      } else if (e.key === 'Enter') {
+        void handleUnlock();
+      } else if (e.key === 'Escape' || e.key === 'Delete') {
+        setLockPin('');
+        setLockError('');
+      }
+    }
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLocked]);
+
   const userRole = user?.role ?? '';
 
   const isActive = (path: string) =>
@@ -258,13 +284,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   if (isLocked) {
     return (
       <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-gray-900/95 backdrop-blur-md">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-xs p-8 text-center animate-[slideUp_0.2s_ease-out]">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-xs p-8 text-center">
           {/* Icon */}
-          <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-700 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg">
+          <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-700 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
             <Lock className="w-8 h-8 text-white" />
           </div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Session Locked</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Enter your PIN to continue</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {user?.name ? <><span className="font-medium text-gray-700 dark:text-gray-300">{user.name}</span> — </> : ''}
+            enter your PIN to continue
+          </p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 mb-5">
+            You can also type on your keyboard
+          </p>
 
           {/* PIN dots */}
           <div className="flex justify-center gap-3 mb-4">
@@ -286,7 +318,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           )}
 
           {/* PIN pad */}
-          <div className="grid grid-cols-3 gap-2 mb-4">
+          <div className="grid grid-cols-3 gap-2 mb-3">
             {[1,2,3,4,5,6,7,8,9,'C',0,'⌫'].map((k, i) => (
               <button
                 key={i}
@@ -309,6 +341,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </button>
             ))}
           </div>
+
+          {/* Enter button */}
+          <button
+            onClick={() => void handleUnlock()}
+            disabled={lockPin.length < 4}
+            className="w-full h-12 mb-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-30 text-white font-bold rounded-xl transition-all text-sm flex items-center justify-center gap-2"
+          >
+            Unlock  <kbd className="bg-white/20 text-white text-xs px-1.5 py-0.5 rounded font-mono">↵ Enter</kbd>
+          </button>
+
           <button
             onClick={logout}
             className="text-sm text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
@@ -325,7 +367,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <div className="flex h-screen bg-gray-50 dark:bg-gray-950 overflow-hidden">
 
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
-      <aside className="w-56 flex flex-col flex-shrink-0 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800">
+      <aside className="hidden md:flex w-56 flex-col flex-shrink-0 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800">
 
         {/* Brand header */}
         <div className="px-4 pt-5 pb-4 border-b border-gray-100 dark:border-gray-800">
@@ -467,6 +509,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* ── Content area ────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden">
+        <MobileNav />
         <OfflineBanner />
 
         {/* Trial banner */}
@@ -495,7 +538,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-950">
+        <main className="flex-1 overflow-hidden bg-gray-50 dark:bg-gray-950 pb-16 md:pb-0">
           {children}
         </main>
       </div>

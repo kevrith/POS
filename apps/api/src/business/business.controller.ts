@@ -196,4 +196,12 @@ export class BusinessController {
   async getPoleConfig(@Param('id') id: string) {
     return this.businessService.getPoleConfig(id);
   }
+
+  /** Public staff picker — no auth required (only returns id/name/role, no PINs) */
+  @Public()
+  @SkipSubscriptionCheck()
+  @Get(':id/staff')
+  async getStaffList(@Param('id') id: string) {
+    return this.businessService.getStaffList(id);
+  }
 }

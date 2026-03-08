@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Receipt, Ban, Eye, RotateCcw, Printer, MessageSquare, TrendingUp, CheckCircle2, Clock, Calendar } from 'lucide-react';
+import { Receipt, Ban, Eye, RotateCcw, Printer, MessageSquare, TrendingUp, CheckCircle2, Clock, Calendar, X } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import VoidModal from '../components/VoidModal';
@@ -62,10 +62,170 @@ function getSalesDateRange(range: SalesRange, from: string, to: string): { start
   return { startDate: new Date(from).toISOString(), endDate: new Date(to + 'T23:59:59').toISOString() };
 }
 
+function SaleDetailModal({ saleId, businessId, onClose }: { saleId: string; businessId: string; onClose: () => void }) {
+  const { data: sale, isLoading } = useQuery<SaleDetail>({
+    queryKey: ['sale-detail', saleId],
+    queryFn: () => api.get<SaleDetail>(`/sales/${saleId}?businessId=${businessId}`),
+  });
+
+  const formatKES = (cents: number) =>
+    `KES ${(cents / 100).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Sale Details</h2>
+            {sale && <p className="text-sm text-gray-500 dark:text-gray-400">Receipt #{sale.receiptNumber}</p>}
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : sale ? (
+            <div className="space-y-6">
+              {/* Sale Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Date</p>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">
+                    {new Date(sale.createdAt).toLocaleString('en-KE')}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Cashier</p>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">{sale.cashier?.name ?? 'N/A'}</p>
+                </div>
+                {sale.customer && (
+                  <div className="col-span-2">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Customer</p>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                      {sale.customer.name}
+                      {sale.customer.phone && <span className="text-gray-500 ml-2">({sale.customer.phone})</span>}
+                    </p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Status</p>
+                  <span className={`inline-flex px-2.5 py-1 text-xs font-semibold rounded-full ${
+                    sale.status === 'PAID' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
+                    sale.status === 'VOIDED' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' :
+                    'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                  }`}>
+                    {sale.status}
+                  </span>
+                </div>
+                {sale.etimsControlNumber && (
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">KRA Control #</p>
+                    <p className="text-sm font-mono font-medium text-gray-900 dark:text-white">{sale.etimsControlNumber}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Items */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Items</h3>
+                <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 dark:bg-gray-700/50">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">Item</th>
+                        <th className="px-4 py-2 text-center text-xs font-semibold text-gray-500 dark:text-gray-400">Qty</th>
+                        <th className="px-4 py-2 text-right text-xs font-semibold text-gray-500 dark:text-gray-400">Price</th>
+                        <th className="px-4 py-2 text-right text-xs font-semibold text-gray-500 dark:text-gray-400">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                      {sale.items.map((item, i) => (
+                        <tr key={i}>
+                          <td className="px-4 py-3 text-gray-900 dark:text-white">{item.name}</td>
+                          <td className="px-4 py-3 text-center text-gray-600 dark:text-gray-300">{item.quantity}</td>
+                          <td className="px-4 py-3 text-right text-gray-600 dark:text-gray-300">{formatKES(item.unitPriceCents)}</td>
+                          <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-white">{formatKES(item.totalCents)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Totals */}
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600 dark:text-gray-400">Subtotal</span>
+                  <span className="font-medium text-gray-900 dark:text-white">{formatKES(sale.subtotalCents)}</span>
+                </div>
+                {sale.discountCents > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">Discount</span>
+                    <span className="font-medium text-green-600 dark:text-green-400">-{formatKES(sale.discountCents)}</span>
+                  </div>
+                )}
+                {sale.vatCents > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">VAT (16% inclusive)</span>
+                    <span className="font-medium text-gray-500 dark:text-gray-400">{formatKES(sale.vatCents)}</span>
+                  </div>
+                )}
+                {sale.serviceChargeCents > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">Service Charge (10%)</span>
+                    <span className="font-medium text-gray-900 dark:text-white">{formatKES(sale.serviceChargeCents)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-base font-bold border-t border-gray-200 dark:border-gray-700 pt-2">
+                  <span className="text-gray-900 dark:text-white">Total</span>
+                  <span className="text-blue-600 dark:text-blue-400">{formatKES(sale.totalCents)}</span>
+                </div>
+              </div>
+
+              {/* Payments */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Payments</h3>
+                <div className="space-y-2">
+                  {sale.payments.map((payment, i) => (
+                    <div key={i} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">{payment.method}</p>
+                        {payment.reference && <p className="text-xs text-gray-500 dark:text-gray-400">Ref: {payment.reference}</p>}
+                      </div>
+                      <span className="text-sm font-bold text-gray-900 dark:text-white">{formatKES(payment.amountCents)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-center text-gray-500 dark:text-gray-400 py-12">Sale not found</p>
+          )}
+        </div>
+
+        <div className="border-t border-gray-200 dark:border-gray-700 px-6 py-4">
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-medium rounded-xl transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SalesListPage() {
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [showViewModal, setShowViewModal] = useState(false);
   const [showVoidModal, setShowVoidModal] = useState(false);
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
@@ -349,7 +509,10 @@ export default function SalesListPage() {
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-1 flex-wrap">
                         <button
-                          onClick={() => setSelectedSale(sale)}
+                          onClick={() => {
+                            setSelectedSale(sale);
+                            setShowViewModal(true);
+                          }}
                           className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
                           title="View"
                         >
@@ -409,6 +572,18 @@ export default function SalesListPage() {
           </div>
         )}
       </div>
+
+      {/* View Sale Modal */}
+      {showViewModal && selectedSale && (
+        <SaleDetailModal
+          saleId={selectedSale.id}
+          businessId={businessId}
+          onClose={() => {
+            setShowViewModal(false);
+            setSelectedSale(null);
+          }}
+        />
+      )}
 
       {showVoidModal && selectedSale && (
         <VoidModal

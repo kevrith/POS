@@ -17,6 +17,16 @@ if (process.env.SENTRY_DSN) {
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
 
+  // Warn loudly if DATABASE_URL is missing or looks relative — prevents silent auth failures
+  const dbUrl = process.env.DATABASE_URL ?? '';
+  if (!dbUrl) {
+    logger.error('❌ DATABASE_URL is not set! Auth will fail. Set it in apps/api/.env');
+  } else if (!dbUrl.startsWith('file:///') && !dbUrl.startsWith('postgresql') && !dbUrl.startsWith('mysql')) {
+    logger.warn(`⚠️  DATABASE_URL uses a relative path: "${dbUrl}" — login may fail if CWD differs. Use an absolute path (file:///home/...).`);
+  } else {
+    logger.log(`✅ DATABASE_URL: ${dbUrl}`);
+  }
+
   try {
     logger.log('Starting NestJS application...');
     const app = await NestFactory.create(AppModule, {

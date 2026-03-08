@@ -119,10 +119,15 @@ export class SalesService {
     const totCents = store.business.taxType === 'TOT' ? calculateTOT(taxBase) : 0;
     const totalCents = taxBase + serviceChargeCents;
 
-    const receiptNumber = `${store.storeCode}-${new Date().getFullYear()}-${String(store.receiptSequence + 1).padStart(7, '0')}`;
-
     // ── Write transaction (kept minimal: sale + sequence + stock movements) ──
     const sale = await this.prisma.$transaction(async (tx) => {
+      // Atomically increment sequence first so concurrent requests can't share a number
+      const updatedStore = await tx.store.update({
+        where: { id: dto.storeId },
+        data: { receiptSequence: { increment: 1 } },
+      });
+      const receiptNumber = `${updatedStore.storeCode}-${new Date().getFullYear()}-${String(updatedStore.receiptSequence).padStart(7, '0')}`;
+
       const createdSale = await tx.sale.create({
         data: {
           offlineId: uuidv4(),
@@ -154,11 +159,6 @@ export class SalesService {
         include: { items: true, payments: true },
       });
 
-      await tx.store.update({
-        where: { id: dto.storeId },
-        data: { receiptSequence: { increment: 1 } },
-      });
-
       for (const cartItem of dto.items) {
         const item = items.find(i => i.id === cartItem.itemId);
         if (item?.trackStock) {
@@ -188,14 +188,14 @@ export class SalesService {
       action: 'SALE_CREATED',
       entity: 'Sale',
       entityId: sale.id,
-      after: { receiptNumber, totalCents },
+      after: { receiptNumber: sale.receiptNumber, totalCents },
       source: 'POS',
     });
 
     // Fire-and-forget webhook dispatch
     this.webhooks.dispatch(businessId, 'sale.completed', {
       saleId: sale.id,
-      receiptNumber,
+      receiptNumber: sale.receiptNumber,
       totalCents,
       status: sale.status,
       customerId: dto.customerId,
@@ -209,7 +209,7 @@ export class SalesService {
 
     // Send SMS receipt to customer if they have a phone number
     if (dto.customerId) {
-      this.sendSmsReceipt(businessId, dto.customerId, receiptNumber, totalCents).catch(() => {});
+      this.sendSmsReceipt(businessId, dto.customerId, sale.receiptNumber, totalCents).catch(() => {});
     }
 
     // Notify on credit sale overdue

@@ -16,12 +16,33 @@ if [ ! -d "$ROOT_DIR/node_modules" ]; then
   echo ""
 fi
 
-# Kill any existing processes on ports 3000-3003
+# Setup database if missing
+if [ ! -f "$ROOT_DIR/apps/api/dev.db" ] || [ ! -s "$ROOT_DIR/apps/api/dev.db" ]; then
+  echo "🗄️  Setting up database..."
+  
+  # Add DATABASE_URL to root .env if missing
+  if ! grep -q "DATABASE_URL" "$ROOT_DIR/.env" 2>/dev/null; then
+    echo 'DATABASE_URL="file:./apps/api/dev.db"' >> "$ROOT_DIR/.env"
+  fi
+  
+  # Run migrations and seed
+  cd "$ROOT_DIR"
+  export DATABASE_URL="file:./apps/api/dev.db"
+  npx prisma migrate dev --name init --skip-seed
+  npx ts-node prisma/seed.ts
+  
+  echo "✅ Database setup complete!"
+  echo "📋 Login: owner@premiercafe.co.ke / password123"
+  echo ""
+fi
+
+# Kill any existing processes on ports 3000-3003 and 3010
 echo "🧹 Cleaning up existing processes..."
 lsof -ti:3000 | xargs kill -9 2>/dev/null || true
 lsof -ti:3001 | xargs kill -9 2>/dev/null || true
 lsof -ti:3002 | xargs kill -9 2>/dev/null || true
 lsof -ti:3003 | xargs kill -9 2>/dev/null || true
+lsof -ti:3010 | xargs kill -9 2>/dev/null || true
 
 echo ""
 echo "📦 Starting servers..."
@@ -30,8 +51,8 @@ PIDS=()
 
 # Start API (always exists)
 if [ -d "$ROOT_DIR/apps/api" ]; then
-  echo "  • API (NestJS) on port 3000"
-  (cd "$ROOT_DIR/apps/api" && pnpm dev) > /tmp/pos-api.log 2>&1 &
+  echo "  • API (NestJS) on port 3010"
+  (cd "$ROOT_DIR/apps/api" && DATABASE_URL="file://$ROOT_DIR/prisma/dev.db" npm run start:dev) > /tmp/pos-api.log 2>&1 &
   PIDS+=($!)
 fi
 
@@ -64,10 +85,20 @@ sleep 8
 echo ""
 echo "✅ Servers started!"
 echo ""
-echo "📍 API:  http://localhost:3000"
+echo "📍 API:  http://localhost:3010"
 echo "📍 Web:  http://localhost:3001"
 [ -d "$ROOT_DIR/apps/admin" ] && echo "📍 Admin: http://localhost:3002"
 [ -d "$ROOT_DIR/apps/desktop" ] && echo "📍 Desktop: http://localhost:3003"
+echo ""
+echo "📋 Login Credentials:"
+echo "  Email: owner@premiercafe.co.ke"
+echo "  Password: password123"
+echo "  PIN: 1234"
+echo ""
+echo "📋 Other Users:"
+echo "  manager@premiercafe.co.ke / manager123 (PIN: 5678)"
+echo "  cashier@premiercafe.co.ke / cashier123 (PIN: 0000)"
+echo "  waiter@premiercafe.co.ke / waiter123 (PIN: 9999)"
 echo ""
 echo "📋 Logs:"
 echo "  • API:  tail -f /tmp/pos-api.log"

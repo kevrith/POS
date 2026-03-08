@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Users, Clock, Calendar, AlertCircle, TrendingUp, LayoutGrid,
   Loader2, RefreshCw, LogIn, LogOut, X, Plus, Trash2, Edit2,
-  Trophy, Award,
+  Trophy, Award, Eye, EyeOff,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
@@ -16,10 +16,13 @@ interface Employee {
   businessId: string;
   commissionRate: number;
   commissionBasis: string;
+  commissionMilestonePercent?: number;
   salesTargetCents?: number;
   startDate?: string;
   employmentType: string;
-  user: { name: string; email: string; role: string };
+  idNumber?: string;
+  emergencyContact?: string;
+  user: { name: string; email: string | null; role: string };
 }
 
 interface BizUser {
@@ -90,11 +93,12 @@ const LEAVE_TYPES = ['ANNUAL', 'SICK', 'MATERNITY', 'PATERNITY', 'UNPAID', 'EMER
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 const ROLE_COLORS: Record<string, string> = {
-  OWNER: 'bg-purple-100 text-purple-800',
-  MANAGER: 'bg-blue-100 text-blue-800',
-  CASHIER: 'bg-green-100 text-green-800',
-  WAITER: 'bg-orange-100 text-orange-800',
-  KITCHEN: 'bg-red-100 text-red-800',
+  OWNER: 'bg-purple-100 text-purple-700',
+  MANAGER: 'bg-blue-100 text-blue-700',
+  CASHIER: 'bg-emerald-100 text-emerald-700',
+  WAITER: 'bg-amber-100 text-amber-700',
+  KITCHEN: 'bg-orange-100 text-orange-700',
+  ACCOUNTANT: 'bg-indigo-100 text-indigo-700',
 };
 
 function fmtTime(dt: string) {
@@ -380,7 +384,7 @@ function MyShiftCard({ employeeId, storeId }: MyShiftCardProps) {
   );
 }
 
-// ─── Commission Edit Modal ────────────────────────────────────────────────────
+// ─── Edit Employee Panel ──────────────────────────────────────────────────────
 
 const COMMISSION_BASIS_LABELS: Record<string, string> = {
   SALES_VALUE: 'Sales Value (%)',
@@ -388,74 +392,365 @@ const COMMISSION_BASIS_LABELS: Record<string, string> = {
   GROSS_MARGIN: 'Gross Margin (%)',
 };
 
-interface CommissionEditModalProps {
+function empInitials(name: string) {
+  return name.split(' ').slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('');
+}
+
+type EditTab = 'profile' | 'employment' | 'compensation';
+
+function EditEmployeePanel({ employee, businessId, onClose, onSuccess }: {
   employee: Employee;
   businessId: string;
   onClose: () => void;
   onSuccess: () => void;
-}
-
-function CommissionEditModal({ employee, businessId, onClose, onSuccess }: CommissionEditModalProps) {
-  const [rate, setRate] = useState(employee.commissionRate);
-  const [basis, setBasis] = useState(employee.commissionBasis ?? 'SALES_VALUE');
+}) {
+  const qc = useQueryClient();
+  const [tab, setTab] = useState<EditTab>('profile');
   const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  // Profile tab
+  const [name, setName] = useState(employee.user.name);
+  const [role, setRole] = useState(employee.user.role);
+  const [email, setEmail] = useState(employee.user.email ?? '');
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [showPin, setShowPin] = useState(false);
+
+  // Employment tab
+  const [employmentType, setEmploymentType] = useState(employee.employmentType);
+  const [idNumber, setIdNumber] = useState(employee.idNumber ?? '');
+  const [emergencyContact, setEmergencyContact] = useState(employee.emergencyContact ?? '');
+  const [startDate, setStartDate] = useState(
+    employee.startDate ? employee.startDate.substring(0, 10) : ''
+  );
+
+  // Compensation tab
+  const [commissionRate, setCommissionRate] = useState(employee.commissionRate);
+  const [commissionBasis, setCommissionBasis] = useState(employee.commissionBasis ?? 'SALES_VALUE');
+  const [salesTarget, setSalesTarget] = useState(
+    employee.salesTargetCents ? String(employee.salesTargetCents / 100) : ''
+  );
+  const [milestone, setMilestone] = useState(employee.commissionMilestonePercent ?? 0);
+
+  const pinMismatch = confirmPin.length > 0 && newPin !== confirmPin;
 
   const update = useMutation({
-    mutationFn: () =>
-      api.patch(`/hr/employees/${employee.id}?businessId=${businessId}`, {
-        commissionRate: rate,
-        commissionBasis: basis,
-      }),
-    onSuccess: () => { onSuccess(); onClose(); },
-    onError: (err) => setError(err instanceof Error ? err.message : 'Failed'),
+    mutationFn: () => {
+      const payload: Record<string, unknown> = {
+        // Profile
+        name: name.trim(),
+        role,
+        email: email.trim() || undefined,
+        ...(newPin.length >= 4 && !pinMismatch && { pin: newPin }),
+        // Employment
+        employmentType,
+        idNumber: idNumber.trim() || '',
+        emergencyContact: emergencyContact.trim() || '',
+        startDate: startDate || undefined,
+        // Compensation
+        commissionRate,
+        commissionBasis,
+        salesTargetCents: salesTarget ? Math.round(parseFloat(salesTarget) * 100) : 0,
+        commissionMilestonePercent: milestone,
+      };
+      return api.patch(`/hr/employees/${employee.id}?businessId=${businessId}`, payload);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['employees'] });
+      void qc.invalidateQueries({ queryKey: ['biz-users'] });
+      setSaved(true);
+      setTimeout(() => { setSaved(false); onSuccess(); onClose(); }, 800);
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : 'Save failed'),
   });
 
+  const TABS: { key: EditTab; label: string }[] = [
+    { key: 'profile', label: 'Profile & Access' },
+    { key: 'employment', label: 'Employment' },
+    { key: 'compensation', label: 'Compensation' },
+  ];
+
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <div>
-            <h2 className="text-lg font-bold text-gray-800">Commission Settings</h2>
-            <p className="text-sm text-gray-500">{employee.user.name}</p>
+    <div className="fixed inset-0 z-50 flex">
+      {/* Backdrop */}
+      <div className="flex-1 bg-black/40" onClick={onClose} />
+
+      {/* Side panel */}
+      <div className="w-full max-w-lg bg-white flex flex-col shadow-2xl overflow-hidden">
+
+        {/* Header */}
+        <div className="bg-gradient-to-r from-gray-800 to-gray-900 px-6 py-5 text-white flex-shrink-0">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold">Edit Employee</h2>
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10">
+              <X className="w-5 h-5" />
+            </button>
           </div>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100"><X className="w-5 h-5 text-gray-500" /></button>
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-full bg-white/10 border-2 border-white/20 flex items-center justify-center text-lg font-bold flex-shrink-0">
+              {empInitials(name)}
+            </div>
+            <div>
+              <div className="font-bold text-xl leading-tight">{name || employee.user.name}</div>
+              <div className="flex items-center gap-2 mt-1">
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${ROLE_COLORS[role] ?? 'bg-gray-100 text-gray-600'}`}>
+                  {role}
+                </span>
+                <span className="text-xs text-white/50">{employee.employmentType}</span>
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="p-6 space-y-4">
+
+        {/* Tabs */}
+        <div className="flex border-b bg-gray-50 flex-shrink-0">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`flex-1 py-3 text-xs font-semibold transition-colors ${
+                tab === t.key
+                  ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {error && (
             <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-              <AlertCircle className="w-4 h-4" /> {error}
+              <AlertCircle className="w-4 h-4 flex-shrink-0" /> {error}
             </div>
           )}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Commission Basis</label>
-            <select value={basis} onChange={(e) => setBasis(e.target.value)}
-              className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
-              {Object.entries(COMMISSION_BASIS_LABELS).map(([val, label]) => (
-                <option key={val} value={val}>{label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              {basis === 'TRANSACTION_COUNT' ? 'Amount per Transaction (KES)' : 'Rate (%)'}
-            </label>
-            <input type="number" min={0} max={basis === 'TRANSACTION_COUNT' ? 100000 : 100}
-              step={basis === 'TRANSACTION_COUNT' ? 1 : 0.1}
-              value={rate} onChange={(e) => setRate(Number(e.target.value))}
-              className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
-            <p className="text-xs text-gray-400 mt-1">
-              {basis === 'SALES_VALUE' && 'Percentage of total sale value'}
-              {basis === 'GROSS_MARGIN' && 'Percentage of gross margin (revenue - cost)'}
-              {basis === 'TRANSACTION_COUNT' && 'Fixed amount per completed transaction'}
-            </p>
-          </div>
+
+          {/* ── Profile & Access tab ── */}
+          {tab === 'profile' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Full Name *</label>
+                <input value={name} onChange={(e) => setName(e.target.value)}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500" />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Role *</label>
+                <select value={role} onChange={(e) => setRole(e.target.value)}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500">
+                  <option value="CASHIER">Cashier — POS access</option>
+                  <option value="WAITER">Waiter — Hospitality + POS</option>
+                  <option value="KITCHEN">Kitchen Staff — KDS only</option>
+                  <option value="MANAGER">Manager — Full access (no billing)</option>
+                  <option value="ACCOUNTANT">Accountant — Reports + Expenses</option>
+                  <option value="OWNER">Owner — Full admin</option>
+                </select>
+                <p className="text-xs text-gray-400 mt-1">
+                  Changing role takes effect on their next login.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Email Address</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Optional — for email/password login"
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500" />
+              </div>
+
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  Reset PIN
+                  <span className="text-xs font-normal text-gray-400">Leave blank to keep current PIN</span>
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">New PIN (4–6 digits)</label>
+                    <div className="relative">
+                      <input
+                        type={showPin ? 'text' : 'password'}
+                        inputMode="numeric"
+                        maxLength={6}
+                        value={newPin}
+                        onChange={(e) => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder="••••"
+                        className="w-full border rounded-xl px-3 py-2.5 text-sm pr-9 tracking-widest"
+                      />
+                      <button type="button" onClick={() => setShowPin((s) => !s)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400">
+                        {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Confirm New PIN</label>
+                    <input
+                      type={showPin ? 'text' : 'password'}
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={confirmPin}
+                      onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="••••"
+                      className={`w-full border rounded-xl px-3 py-2.5 text-sm tracking-widest ${pinMismatch ? 'border-red-400 bg-red-50' : ''}`}
+                    />
+                    {pinMismatch && <p className="text-xs text-red-500 mt-0.5">PINs don't match</p>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Employment tab ── */}
+          {tab === 'employment' && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Employment Type</label>
+                  <select value={employmentType} onChange={(e) => setEmploymentType(e.target.value)}
+                    className="w-full border rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500">
+                    <option value="PERMANENT">Permanent</option>
+                    <option value="CONTRACT">Contract</option>
+                    <option value="CASUAL">Casual</option>
+                    <option value="INTERN">Intern</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">National ID / Passport</label>
+                  <input value={idNumber} onChange={(e) => setIdNumber(e.target.value)}
+                    placeholder="ID Number"
+                    className="w-full border rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Start Date</label>
+                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500" />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Emergency Contact</label>
+                <input value={emergencyContact} onChange={(e) => setEmergencyContact(e.target.value)}
+                  placeholder="Name: 07XXXXXXXX"
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500" />
+                <p className="text-xs text-gray-400 mt-1">Person to contact in case of emergency</p>
+              </div>
+
+              {/* Summary card */}
+              <div className="bg-gray-50 rounded-xl p-4 space-y-2 border">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Current Record</h3>
+                <div className="grid grid-cols-2 gap-y-2 text-sm">
+                  <span className="text-gray-500">Employee ID</span>
+                  <span className="font-mono text-gray-800 text-xs">{employee.id.substring(0, 12)}…</span>
+                  <span className="text-gray-500">Joined</span>
+                  <span className="text-gray-800">
+                    {employee.startDate
+                      ? new Date(employee.startDate).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' })
+                      : '—'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Compensation tab ── */}
+          {tab === 'compensation' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Commission Basis</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {Object.entries(COMMISSION_BASIS_LABELS).map(([val, label]) => (
+                    <button key={val} onClick={() => setCommissionBasis(val)}
+                      className={`py-2.5 px-2 text-xs font-semibold rounded-xl border-2 transition-all ${
+                        commissionBasis === val
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                      }`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    {commissionBasis === 'TRANSACTION_COUNT' ? 'Amount per Transaction (KES)' : 'Commission Rate (%)'}
+                  </label>
+                  <input type="number" min={0}
+                    max={commissionBasis === 'TRANSACTION_COUNT' ? 100000 : 100}
+                    step={commissionBasis === 'TRANSACTION_COUNT' ? 1 : 0.1}
+                    value={commissionRate}
+                    onChange={(e) => setCommissionRate(Number(e.target.value))}
+                    className="w-full border rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500" />
+                  <p className="text-xs text-gray-400 mt-1">
+                    {commissionBasis === 'SALES_VALUE' && '% of total sale value per transaction'}
+                    {commissionBasis === 'GROSS_MARGIN' && '% of gross margin (revenue − cost)'}
+                    {commissionBasis === 'TRANSACTION_COUNT' && 'Fixed KES amount per completed sale'}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Monthly Sales Target (KES)</label>
+                  <input type="number" min={0} value={salesTarget}
+                    onChange={(e) => setSalesTarget(e.target.value)}
+                    placeholder="0"
+                    className="w-full border rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500" />
+                  <p className="text-xs text-gray-400 mt-1">Used for performance tracking</p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Commission Milestone Notifications (%)
+                </label>
+                <input type="number" min={0} max={100} step={5}
+                  value={milestone}
+                  onChange={(e) => setMilestone(Number(e.target.value))}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500" />
+                <p className="text-xs text-gray-400 mt-1">
+                  Notify when this employee crosses 25%/50%/75%/100% of target. Set 0 to disable.
+                </p>
+              </div>
+
+              {/* Live preview */}
+              {salesTarget && Number(salesTarget) > 0 && commissionRate > 0 && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-2">
+                  <h3 className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Commission Preview</h3>
+                  <div className="grid grid-cols-2 gap-y-1 text-sm">
+                    <span className="text-gray-600">If target hit (KES {Number(salesTarget).toLocaleString()})</span>
+                    <span className="font-bold text-emerald-700">
+                      KES {commissionBasis === 'TRANSACTION_COUNT'
+                        ? '—'
+                        : ((Number(salesTarget) * commissionRate) / 100).toLocaleString('en-KE', { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-        <div className="border-t px-6 py-4 flex gap-3">
-          <button onClick={onClose} className="flex-1 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 font-medium">Cancel</button>
-          <button onClick={() => update.mutate()} disabled={update.isPending}
-            className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold disabled:opacity-40 flex items-center justify-center gap-2">
-            {update.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            Save
+
+        {/* Footer */}
+        <div className="border-t bg-gray-50 px-6 py-4 flex items-center gap-3 flex-shrink-0">
+          <button onClick={onClose}
+            className="flex-1 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-100 font-medium text-sm">
+            Cancel
+          </button>
+          <button
+            onClick={() => { setError(''); update.mutate(); }}
+            disabled={update.isPending || pinMismatch || !name.trim()}
+            className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm disabled:opacity-40 flex items-center justify-center gap-2"
+          >
+            {update.isPending ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</>
+            ) : saved ? (
+              '✓ Saved'
+            ) : (
+              'Save Changes'
+            )}
           </button>
         </div>
       </div>
@@ -464,15 +759,25 @@ function CommissionEditModal({ employee, businessId, onClose, onSuccess }: Commi
 }
 
 // ─── Add Employee Modal ───────────────────────────────────────────────────────
+// Creates a User account + Employee record in one step.
 
-function AddEmployeeModal({ businessId, availableUsers, onClose, onSuccess }: {
+function AddEmployeeModal({ businessId, onClose, onSuccess }: {
   businessId: string;
-  availableUsers: BizUser[];
+  availableUsers?: BizUser[]; // kept for compatibility, not used
   onClose: () => void;
   onSuccess: () => void;
 }) {
   const qc = useQueryClient();
-  const [userId, setUserId] = useState('');
+
+  // User account fields
+  const [name, setName] = useState('');
+  const [role, setRole] = useState('CASHIER');
+  const [pin, setPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [email, setEmail] = useState('');
+  const [showPin, setShowPin] = useState(false);
+
+  // Employee HR fields
   const [idNumber, setIdNumber] = useState('');
   const [employmentType, setEmploymentType] = useState('PERMANENT');
   const [commissionRate, setCommissionRate] = useState('0');
@@ -482,82 +787,183 @@ function AddEmployeeModal({ businessId, availableUsers, onClose, onSuccess }: {
   const [error, setError] = useState('');
 
   const mutation = useMutation({
-    mutationFn: () => api.post(`/hr/employees?businessId=${businessId}`, {
-      userId, idNumber: idNumber || undefined, employmentType,
-      commissionRate: parseFloat(commissionRate) || 0,
-      salesTargetCents: salesTarget ? Math.round(parseFloat(salesTarget) * 100) : 0,
-      startDate, emergencyContact: emergencyContact || undefined,
-    }),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['employees'] }); onSuccess(); },
+    mutationFn: async () => {
+      // 1. Create User account
+      const newUser = await api.post<{ id: string }>(
+        `/business/${businessId}/users`,
+        {
+          name,
+          role,
+          pin: pin || undefined,
+          email: email || undefined,
+          // No password — PIN-only staff
+        },
+      );
+      // 2. Create Employee record linked to the new user
+      await api.post(`/hr/employees?businessId=${businessId}`, {
+        userId: newUser.id,
+        idNumber: idNumber || undefined,
+        employmentType,
+        commissionRate: parseFloat(commissionRate) || 0,
+        salesTargetCents: salesTarget ? Math.round(parseFloat(salesTarget) * 100) : 0,
+        startDate,
+        emergencyContact: emergencyContact || undefined,
+      });
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['employees'] });
+      void qc.invalidateQueries({ queryKey: ['biz-users'] });
+      onSuccess();
+    },
     onError: (e: Error) => setError(e.message),
   });
 
+  const pinMismatch = confirmPin.length > 0 && pin !== confirmPin;
+  const canSubmit = name.trim().length >= 2 && pin.length >= 4 && !pinMismatch;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
-        <div className="flex justify-between items-center">
-          <h2 className="text-lg font-bold">Add Employee</h2>
-          <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
-        </div>
-        {error && <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">{error}</div>}
-        {availableUsers.length === 0 && (
-          <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded">
-            All users already have employee records. Add more users in Settings → Users first.
-          </p>
-        )}
-        <div className="space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">User *</label>
-            <select value={userId} onChange={e => setUserId(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm">
-              <option value="">Select user…</option>
-              {availableUsers.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-y-auto max-h-[90vh]">
+        <div className="p-6 space-y-5">
+          <div className="flex justify-between items-center">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">ID Number</label>
-              <input value={idNumber} onChange={e => setIdNumber(e.target.value)} placeholder="National ID" className="w-full border rounded-lg px-3 py-2 text-sm" />
+              <h2 className="text-lg font-bold">Add Staff Member</h2>
+              <p className="text-sm text-gray-500 mt-0.5">Creates a login account and employee record</p>
             </div>
+            <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
+          </div>
+
+          {error && <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</div>}
+
+          {/* ── Account Section ── */}
+          <div className="bg-blue-50 rounded-xl p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-blue-800 uppercase tracking-wide">Login Account</h3>
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Employment Type</label>
-              <select value={employmentType} onChange={e => setEmploymentType(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm">
-                <option value="PERMANENT">Permanent</option>
-                <option value="CONTRACT">Contract</option>
-                <option value="CASUAL">Casual</option>
-                <option value="INTERN">Intern</option>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
+              <input
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="e.g. Jane Wambui"
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Role *</label>
+              <select value={role} onChange={e => setRole(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm">
+                <option value="CASHIER">Cashier — POS access</option>
+                <option value="WAITER">Waiter — Hospitality + POS</option>
+                <option value="KITCHEN">Kitchen Staff — KDS only</option>
+                <option value="MANAGER">Manager — Full access (no billing)</option>
+                <option value="ACCOUNTANT">Accountant — Reports + Expenses</option>
               </select>
             </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  PIN * <span className="text-gray-400 font-normal">(4–6 digits)</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPin ? 'text' : 'password'}
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={pin}
+                    onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="••••"
+                    className="w-full border rounded-lg px-3 py-2 text-sm pr-9 tracking-widest"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPin(s => !s)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400"
+                  >
+                    {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Confirm PIN</label>
+                <input
+                  type={showPin ? 'text' : 'password'}
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={confirmPin}
+                  onChange={e => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="••••"
+                  className={`w-full border rounded-lg px-3 py-2 text-sm tracking-widest ${pinMismatch ? 'border-red-400 bg-red-50' : ''}`}
+                />
+                {pinMismatch && <p className="text-xs text-red-500 mt-0.5">PINs don't match</p>}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email <span className="text-gray-400 font-normal">(optional — for email login)</span></label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="jane@company.com"
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Commission Rate (%)</label>
-              <input type="number" step="0.1" min="0" value={commissionRate} onChange={e => setCommissionRate(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" />
+
+          {/* ── Employee HR Section ── */}
+          <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">Employment Details</h3>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">National ID</label>
+                <input value={idNumber} onChange={e => setIdNumber(e.target.value)} placeholder="ID Number" className="w-full border rounded-lg px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Employment Type</label>
+                <select value={employmentType} onChange={e => setEmploymentType(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm">
+                  <option value="PERMANENT">Permanent</option>
+                  <option value="CONTRACT">Contract</option>
+                  <option value="CASUAL">Casual</option>
+                  <option value="INTERN">Intern</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Sales Target (KES)</label>
-              <input type="number" min="0" value={salesTarget} onChange={e => setSalesTarget(e.target.value)} placeholder="0" className="w-full border rounded-lg px-3 py-2 text-sm" />
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Commission Rate (%)</label>
+                <input type="number" step="0.1" min="0" value={commissionRate} onChange={e => setCommissionRate(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Sales Target (KES/mo)</label>
+                <input type="number" min="0" value={salesTarget} onChange={e => setSalesTarget(e.target.value)} placeholder="0" className="w-full border rounded-lg px-3 py-2 text-sm" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact</label>
+                <input value={emergencyContact} onChange={e => setEmergencyContact(e.target.value)} placeholder="Name: 07XXXXXXXX" className="w-full border rounded-lg px-3 py-2 text-sm" />
+              </div>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact</label>
-              <input value={emergencyContact} onChange={e => setEmergencyContact(e.target.value)} placeholder="Name: 07XXXXXXXX" className="w-full border rounded-lg px-3 py-2 text-sm" />
-            </div>
+
+          <div className="flex gap-3">
+            <button onClick={onClose} className="flex-1 py-2.5 border rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+            <button
+              onClick={() => mutation.mutate()}
+              disabled={!canSubmit || mutation.isPending}
+              className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
+            >
+              {mutation.isPending ? 'Creating…' : 'Create Staff Member'}
+            </button>
           </div>
-        </div>
-        <div className="flex gap-3 pt-2">
-          <button onClick={onClose} className="flex-1 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
-          <button
-            onClick={() => mutation.mutate()}
-            disabled={!userId || mutation.isPending}
-            className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-          >
-            {mutation.isPending ? 'Saving…' : 'Add Employee'}
-          </button>
         </div>
       </div>
     </div>
@@ -1420,7 +1826,7 @@ export default function HRPage() {
       )}
 
       {editingEmployee && (
-        <CommissionEditModal
+        <EditEmployeePanel
           employee={editingEmployee}
           businessId={businessId}
           onClose={() => setEditingEmployee(null)}

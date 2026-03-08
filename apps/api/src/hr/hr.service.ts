@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class HrService {
@@ -55,17 +56,57 @@ export class HrService {
   }
 
   async updateEmployee(employeeId: string, businessId: string, dto: {
+    // Employee HR fields
     commissionRate?: number;
     commissionBasis?: string;
     salesTargetCents?: number;
+    commissionMilestonePercent?: number;
+    employmentType?: string;
+    idNumber?: string;
+    emergencyContact?: string;
+    startDate?: string;
+    // User account fields (applied to linked User)
+    name?: string;
+    role?: string;
+    pin?: string;   // raw PIN — will be hashed
+    email?: string;
   }) {
-    return this.prisma.employee.updateMany({
+    const employee = await this.prisma.employee.findFirst({
       where: { id: employeeId, businessId },
+    });
+    if (!employee) throw new BadRequestException('Employee not found');
+
+    // Update Employee record
+    await this.prisma.employee.update({
+      where: { id: employeeId },
       data: {
         ...(dto.commissionRate !== undefined && { commissionRate: dto.commissionRate }),
         ...(dto.commissionBasis !== undefined && { commissionBasis: dto.commissionBasis }),
         ...(dto.salesTargetCents !== undefined && { salesTargetCents: dto.salesTargetCents }),
+        ...(dto.commissionMilestonePercent !== undefined && { commissionMilestonePercent: dto.commissionMilestonePercent }),
+        ...(dto.employmentType !== undefined && { employmentType: dto.employmentType }),
+        ...(dto.idNumber !== undefined && { idNumber: dto.idNumber || null }),
+        ...(dto.emergencyContact !== undefined && { emergencyContact: dto.emergencyContact || null }),
+        ...(dto.startDate !== undefined && { startDate: dto.startDate ? new Date(dto.startDate) : null }),
       },
+    });
+
+    // Update linked User account (name, role, PIN, email)
+    const userUpdate: Record<string, unknown> = {};
+    if (dto.name !== undefined) userUpdate.name = dto.name;
+    if (dto.role !== undefined) userUpdate.role = dto.role;
+    if (dto.email !== undefined) userUpdate.email = dto.email || null;
+    if (dto.pin !== undefined && dto.pin.length >= 4) {
+      userUpdate.pinHash = await bcrypt.hash(dto.pin, 10);
+    }
+
+    if (Object.keys(userUpdate).length > 0) {
+      await this.prisma.user.update({ where: { id: employee.userId }, data: userUpdate });
+    }
+
+    return this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      include: { user: { select: { name: true, email: true, role: true } } },
     });
   }
 

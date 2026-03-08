@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import './index.css';
+import './mobile.css';
 import { initTheme } from './stores/theme';
 import { initSyncEngine } from './lib/syncEngine';
 

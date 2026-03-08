@@ -1,27 +1,61 @@
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/auth';
 import type { AuthUser } from '../stores/auth';
-import { Eye, EyeOff, Delete } from 'lucide-react';
+import { Eye, EyeOff, Delete, ChevronLeft, Building2 } from 'lucide-react';
 
 type LoginMode = 'email' | 'pin';
+type PinStep = 'business' | 'staff' | 'pad';
 
 const PIN_DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 'clear', 0, 'del'] as const;
 
+interface StaffMember {
+  id: string;
+  name: string;
+  role: string;
+}
+
+const ROLE_COLORS: Record<string, string> = {
+  OWNER:    'bg-purple-600',
+  MANAGER:  'bg-blue-600',
+  CASHIER:  'bg-emerald-600',
+  WAITER:   'bg-amber-500',
+  KITCHEN:  'bg-orange-500',
+  ACCOUNTANT: 'bg-indigo-600',
+};
+
+function initials(name: string) {
+  return name
+    .split(' ')
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
 export default function LoginPage() {
   const [mode, setMode] = useState<LoginMode>('email');
+
+  // ── Email mode ──────────────────────────────────────────────────────────────
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [totpCode, setTotpCode] = useState('');
   const [showTotp, setShowTotp] = useState(false);
-  const [pin, setPin] = useState('');
-  const [businessId, setBusinessId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // ── PIN mode ─────────────────────────────────────────────────────────────────
+  const [pinStep, setPinStep] = useState<PinStep>('business');
+  const [businessIdInput, setBusinessIdInput] = useState('');
+  const [savedBusinessId, setSavedBusinessId] = useState('');
+  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<StaffMember | null>(null);
+  const [pin, setPin] = useState('');
+  const [pinError, setPinError] = useState('');
+
   const { login, loginWithPin, loginWithOAuth } = useAuthStore();
 
-  // Handle OAuth redirect — backend redirects to /?oauth_token=...
+  // Handle OAuth redirect
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('oauth_token');
@@ -41,10 +75,84 @@ export default function LoginPage() {
       void loginWithOAuth(token, user).catch((err) => {
         setError(err instanceof Error ? err.message : 'OAuth login failed');
       });
-      // Clean up URL
       window.history.replaceState({}, '', '/');
     }
   }, [loginWithOAuth]);
+
+  // On mount: check if businessId is already saved → skip directly to staff grid
+  useEffect(() => {
+    const stored = localStorage.getItem('pos-business-id') ?? '';
+    if (stored) {
+      setSavedBusinessId(stored);
+      setPinStep('staff');
+      void loadStaff(stored);
+    }
+  }, []);
+
+  async function loadStaff(bizId: string) {
+    setStaffLoading(true);
+    setStaff([]);
+    try {
+      const res = await fetch(`/api/v1/business/${bizId}/staff`);
+      if (!res.ok) throw new Error('Not found');
+      const data = (await res.json()) as StaffMember[];
+      setStaff(data);
+    } catch {
+      // Invalid business ID — go back to business step
+      setSavedBusinessId('');
+      localStorage.removeItem('pos-business-id');
+      setPinStep('business');
+    } finally {
+      setStaffLoading(false);
+    }
+  }
+
+  function handleBusinessSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const id = businessIdInput.trim();
+    if (!id) return;
+    localStorage.setItem('pos-business-id', id);
+    setSavedBusinessId(id);
+    setPinStep('staff');
+    void loadStaff(id);
+  }
+
+  function selectStaff(member: StaffMember) {
+    setSelectedUser(member);
+    setPin('');
+    setPinError('');
+    setPinStep('pad');
+  }
+
+  async function handlePinLogin() {
+    if (pin.length < 4 || !selectedUser) return;
+    setError('');
+    setPinError('');
+    setLoading(true);
+    try {
+      await loginWithPin(pin, savedBusinessId);
+    } catch (err) {
+      setPinError(err instanceof Error ? err.message : 'Invalid PIN');
+      setPin('');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handlePinPad(key: typeof PIN_DIGITS[number]) {
+    if (key === 'clear') {
+      setPin('');
+    } else if (key === 'del') {
+      setPin((p) => p.slice(0, -1));
+    } else if (typeof key === 'number' && pin.length < 6) {
+      const next = pin + key.toString();
+      setPin(next);
+      if (next.length >= 4) {
+        // auto-submit after a short delay so user sees the last dot fill
+        setTimeout(() => void handlePinLogin(), 120);
+      }
+    }
+  }
 
   async function handleEmailLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -65,48 +173,21 @@ export default function LoginPage() {
     }
   }
 
-  async function handlePinLogin() {
-    if (pin.length < 4) return;
-    setError('');
-    setLoading(true);
-    try {
-      await loginWithPin(pin, businessId || 'default');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Invalid PIN');
-      setPin('');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function handlePinPad(key: typeof PIN_DIGITS[number]) {
-    if (key === 'clear') {
-      setPin('');
-    } else if (key === 'del') {
-      setPin((p) => p.slice(0, -1));
-    } else if (typeof key === 'number' && pin.length < 6) {
-      const next = pin + key.toString();
-      setPin(next);
-      if (next.length >= 4 && next.length <= 6) {
-        void handlePinLogin();
-      }
-    }
-  }
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 to-blue-900 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 to-blue-900 p-3 xs:p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-8 py-8 text-white text-center">
-          <h1 className="text-3xl font-bold">KASTRA POS</h1>
-          <p className="text-blue-200 text-sm mt-1">Enterprise Point of Sale</p>
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 xs:px-8 py-6 xs:py-8 text-white text-center">
+          <h1 className="text-2xl xs:text-3xl font-bold">KASTRA POS</h1>
+          <p className="text-blue-200 text-xs xs:text-sm mt-1">Enterprise Point of Sale</p>
         </div>
 
         {/* Mode toggle */}
         <div className="flex border-b">
           <button
             onClick={() => { setMode('email'); setError(''); }}
-            className={`flex-1 py-3 text-sm font-medium transition-colors ${
+            className={`flex-1 py-2.5 xs:py-3 text-xs xs:text-sm font-medium transition-colors ${
               mode === 'email'
                 ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
                 : 'text-gray-500 hover:bg-gray-50'
@@ -116,26 +197,26 @@ export default function LoginPage() {
           </button>
           <button
             onClick={() => { setMode('pin'); setError(''); }}
-            className={`flex-1 py-3 text-sm font-medium transition-colors ${
+            className={`flex-1 py-2.5 xs:py-3 text-xs xs:text-sm font-medium transition-colors ${
               mode === 'pin'
                 ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
                 : 'text-gray-500 hover:bg-gray-50'
             }`}
           >
-            PIN Login
+            Staff PIN Login
           </button>
         </div>
 
-        <div className="p-8">
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-              {error}
-            </div>
-          )}
+        <div className="p-6 xs:p-8">
 
-          {/* Email mode */}
+          {/* ── Email mode ─────────────────────────────────────────────────── */}
           {mode === 'email' && (
             <form onSubmit={(e) => void handleEmailLogin(e)} className="space-y-4">
+              {error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  {error}
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
                 <input
@@ -213,65 +294,181 @@ export default function LoginPage() {
             </form>
           )}
 
-          {/* PIN mode */}
+          {/* ── PIN mode ───────────────────────────────────────────────────── */}
           {mode === 'pin' && (
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Business ID (optional)</label>
-                <input
-                  type="text"
-                  value={businessId}
-                  onChange={(e) => setBusinessId(e.target.value)}
-                  className="w-full px-4 py-2 border rounded-xl text-sm focus:ring-2 focus:ring-blue-500"
-                  placeholder="Leave blank for default"
-                />
-              </div>
+            <div>
 
-              {/* PIN display */}
-              <div className="flex justify-center gap-3">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={`w-10 h-10 rounded-full border-2 flex items-center justify-center text-xl font-bold transition-colors ${
-                      i < pin.length
-                        ? 'bg-blue-600 border-blue-600 text-white'
-                        : 'border-gray-300 bg-gray-50'
-                    }`}
-                  >
-                    {i < pin.length ? '●' : ''}
+              {/* Step 1: Enter Business ID */}
+              {pinStep === 'business' && (
+                <form onSubmit={handleBusinessSubmit} className="space-y-5">
+                  <div className="text-center">
+                    <div className="w-14 h-14 rounded-2xl bg-blue-100 flex items-center justify-center mx-auto mb-3">
+                      <Building2 className="w-7 h-7 text-blue-600" />
+                    </div>
+                    <h3 className="font-bold text-gray-800">Enter Business ID</h3>
+                    <p className="text-sm text-gray-500 mt-1">Your owner can find this in Settings</p>
                   </div>
-                ))}
-              </div>
-
-              {/* PIN pad */}
-              <div className="grid grid-cols-3 gap-3">
-                {PIN_DIGITS.map((key, i) => (
+                  <input
+                    type="text"
+                    value={businessIdInput}
+                    onChange={(e) => setBusinessIdInput(e.target.value)}
+                    className="w-full px-4 py-3 border-2 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center font-mono tracking-wider"
+                    placeholder="e.g. biz-001"
+                    autoFocus
+                  />
                   <button
-                    key={i}
-                    onClick={() => handlePinPad(key)}
-                    disabled={loading}
-                    className={`h-14 rounded-xl font-bold text-lg transition-all active:scale-95 ${
-                      key === 'clear'
-                        ? 'bg-red-50 text-red-600 hover:bg-red-100 text-sm'
-                        : key === 'del'
-                          ? 'bg-gray-100 text-gray-600 hover:bg-gray-200 flex items-center justify-center'
-                          : 'bg-gray-100 hover:bg-blue-50 hover:text-blue-600 text-gray-800'
-                    } disabled:opacity-50`}
+                    type="submit"
+                    disabled={!businessIdInput.trim()}
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl disabled:opacity-40 transition-colors"
                   >
-                    {key === 'del' ? <Delete className="w-5 h-5 mx-auto" /> : key === 'clear' ? 'CLEAR' : key}
+                    Continue
                   </button>
-                ))}
-              </div>
+                </form>
+              )}
 
-              <button
-                onClick={() => void handlePinLogin()}
-                disabled={pin.length < 4 || loading}
-                className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl disabled:opacity-40 transition-colors"
-              >
-                {loading ? 'Signing in…' : 'Sign In with PIN'}
-              </button>
+              {/* Step 2: Staff grid (QuickBooks-style) */}
+              {pinStep === 'staff' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-gray-800">Who are you?</h3>
+                    <button
+                      onClick={() => {
+                        localStorage.removeItem('pos-business-id');
+                        setSavedBusinessId('');
+                        setBusinessIdInput('');
+                        setPinStep('business');
+                      }}
+                      className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
+                    >
+                      <Building2 className="w-3 h-3" />
+                      Change Business
+                    </button>
+                  </div>
+
+                  {staffLoading && (
+                    <div className="py-8 flex flex-col items-center gap-2">
+                      <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                      <p className="text-sm text-gray-400">Loading staff…</p>
+                    </div>
+                  )}
+
+                  {!staffLoading && staff.length === 0 && (
+                    <div className="py-8 text-center">
+                      <p className="text-gray-500 text-sm">No staff with PIN found.</p>
+                      <p className="text-gray-400 text-xs mt-1">Ask the owner to set up staff PINs in HR → Staff.</p>
+                    </div>
+                  )}
+
+                  {!staffLoading && staff.length > 0 && (
+                    <div className="grid grid-cols-3 gap-2">
+                      {staff.map((member) => (
+                        <button
+                          key={member.id}
+                          onClick={() => selectStaff(member)}
+                          className="flex flex-col items-center gap-2 p-3 rounded-xl border-2 border-transparent hover:border-blue-300 hover:bg-blue-50 transition-all group"
+                        >
+                          <div
+                            className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-sm ${
+                              ROLE_COLORS[member.role] ?? 'bg-gray-500'
+                            }`}
+                          >
+                            {initials(member.name)}
+                          </div>
+                          <div className="text-center">
+                            <div className="text-xs font-semibold text-gray-700 leading-tight line-clamp-2">
+                              {member.name.split(' ')[0]}
+                            </div>
+                            <div className="text-[10px] text-gray-400 capitalize">{member.role.toLowerCase()}</div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Step 3: PIN numpad */}
+              {pinStep === 'pad' && selectedUser && (
+                <div className="space-y-5">
+                  {/* Back + user identity */}
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => { setPinStep('staff'); setPin(''); setPinError(''); }}
+                      className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <div className="flex items-center gap-3 flex-1">
+                      <div
+                        className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0 ${
+                          ROLE_COLORS[selectedUser.role] ?? 'bg-gray-500'
+                        }`}
+                      >
+                        {initials(selectedUser.name)}
+                      </div>
+                      <div>
+                        <div className="font-bold text-gray-800 text-sm">{selectedUser.name}</div>
+                        <div className="text-xs text-gray-400 capitalize">{selectedUser.role.toLowerCase()}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="text-center text-sm text-gray-600">Enter your PIN</p>
+
+                  {/* PIN dots */}
+                  <div className="flex justify-center gap-3">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`w-9 h-9 rounded-full border-2 flex items-center justify-center transition-all ${
+                          i < pin.length
+                            ? 'bg-blue-600 border-blue-600'
+                            : 'border-gray-300 bg-gray-50'
+                        }`}
+                      >
+                        {i < pin.length && <div className="w-2.5 h-2.5 rounded-full bg-white" />}
+                      </div>
+                    ))}
+                  </div>
+
+                  {pinError && (
+                    <div className="text-center text-sm text-red-600 bg-red-50 py-2 rounded-lg">
+                      {pinError}
+                    </div>
+                  )}
+
+                  {/* Numpad */}
+                  <div className="grid grid-cols-3 gap-2">
+                    {PIN_DIGITS.map((key, i) => (
+                      <button
+                        key={i}
+                        onClick={() => handlePinPad(key)}
+                        disabled={loading}
+                        className={`h-13 py-3.5 rounded-xl font-bold text-lg transition-all active:scale-95 ${
+                          key === 'clear'
+                            ? 'bg-red-50 text-red-600 hover:bg-red-100 text-sm'
+                            : key === 'del'
+                              ? 'bg-gray-100 text-gray-600 hover:bg-gray-200 flex items-center justify-center'
+                              : 'bg-gray-100 hover:bg-blue-50 hover:text-blue-700 text-gray-800'
+                        } disabled:opacity-50`}
+                      >
+                        {key === 'del' ? <Delete className="w-5 h-5 mx-auto" /> : key === 'clear' ? 'CLEAR' : key}
+                      </button>
+                    ))}
+                  </div>
+
+                  {loading && (
+                    <div className="flex items-center justify-center gap-2 text-sm text-blue-600">
+                      <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                      Signing in…
+                    </div>
+                  )}
+                </div>
+              )}
+
             </div>
           )}
+
         </div>
       </div>
     </div>

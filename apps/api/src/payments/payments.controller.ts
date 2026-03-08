@@ -43,12 +43,11 @@ export class PaymentsController {
   async generateQR(
     @Body() body: { amountCents: number; reference: string; merchantName?: string },
   ) {
-    const qrCode = await this.mpesa.generateDynamicQR({
+    return this.mpesa.generateDynamicQR({
       amountCents: body.amountCents,
       reference: body.reference,
       merchantName: body.merchantName ?? 'POS',
     });
-    return { qrCode };
   }
 
   @Post('card')

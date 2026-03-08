@@ -58,9 +58,14 @@ export default function ForecastingPage() {
     try {
       const params = new URLSearchParams({ businessId, days: String(days) });
       if (storeId) params.set('storeId', storeId);
-      const data = await api.get<{ items: ForecastItem[] }>(`/forecasting/demand?${params}`);
-      setForecastData(data.items || []);
-    } catch (e) { console.error(e); }
+      const data = await api.get<{ items: ForecastItem[] } | ForecastItem[]>(`/forecasting/demand?${params}`);
+      // Handle both response formats: { items: [] } or []
+      const items = Array.isArray(data) ? data : (data.items || []);
+      setForecastData(items);
+    } catch (e) { 
+      console.error('Forecast error:', e); 
+      setForecastData([]);
+    }
     setLoading(false);
   };
 
@@ -72,7 +77,11 @@ export default function ForecastingPage() {
       const data = await api.get<{ fastMovers: TopMover[]; slowMovers: TopMover[] }>(`/forecasting/top-movers?${params}`);
       setFastMovers(data.fastMovers || []);
       setSlowMovers(data.slowMovers || []);
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+      console.error('Movers error:', e); 
+      setFastMovers([]);
+      setSlowMovers([]);
+    }
     setLoading(false);
   };
 
@@ -84,7 +93,11 @@ export default function ForecastingPage() {
       const data = await api.get<{ hourly: HourlyPattern[]; daily: DailyPattern[] }>(`/forecasting/seasonal?${params}`);
       setHourly(data.hourly || []);
       setDaily(data.daily || []);
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+      console.error('Seasonal error:', e); 
+      setHourly([]);
+      setDaily([]);
+    }
     setLoading(false);
   };
 

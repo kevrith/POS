@@ -174,10 +174,17 @@ export class MpesaService {
     amountCents: number;
     reference: string;
     merchantName: string;
-  }): Promise<string> {
-    const token = await this.getAccessToken();
-    const shortcode = this.config.getOrThrow<string>('MPESA_SHORTCODE');
+  }): Promise<{ qrCode: string | null; demoMode: boolean }> {
+    const shortcode = this.config.get<string>('MPESA_SHORTCODE');
+    const consumerKey = this.config.get<string>('MPESA_CONSUMER_KEY');
+
+    // No credentials → return demo mode flag (no fake QR — M-Pesa app rejects custom URLs)
+    if (!consumerKey || !shortcode) {
+      return { qrCode: null, demoMode: true };
+    }
+
     const amount = Math.max(1, Math.round(params.amountCents / 100));
+    const token = await this.getAccessToken();
 
     const payload = {
       MerchantName: params.merchantName.slice(0, 30),
@@ -209,7 +216,7 @@ export class MpesaService {
       );
     }
 
-    return result.QRCode!;
+    return { qrCode: result.QRCode!, demoMode: false };
   }
 
   async handleCallback(body: unknown): Promise<void> {

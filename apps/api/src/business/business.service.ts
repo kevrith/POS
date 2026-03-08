@@ -362,4 +362,13 @@ export class BusinessService {
     });
     return business ?? { name: 'KASTRA POS', idleMessage: 'Welcome!', idleLogoUrl: null };
   }
+
+  /** Public staff picker — returns only id/name/role for users who have a PIN set */
+  async getStaffList(businessId: string) {
+    return this.prisma.user.findMany({
+      where: { businessId, pinHash: { not: null } },
+      select: { id: true, name: true, role: true },
+      orderBy: { name: 'asc' },
+    });
+  }
 }

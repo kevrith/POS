@@ -206,13 +206,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     };
   }, [resetTimer]);
 
-  async function handleUnlock() {
-    if (lockPin.length < 4) return;
+  async function handleUnlock(pinValue?: string) {
+    const p = pinValue ?? lockPin;
+    if (p.length < 4) return;
     try {
       const res = await fetch('/api/v1/auth/login/pin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin: lockPin, businessId: user?.businessId }),
+        body: JSON.stringify({ pin: p, businessId: user?.businessId }),
       });
       if (res.ok) {
         setIsLocked(false);
@@ -236,7 +237,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         setLockPin((p) => {
           if (p.length >= 6) return p;
           const next = p + e.key;
-          if (next.length >= 4) setTimeout(() => void handleUnlock(), 0);
+          // Pass next directly to avoid stale-closure issue with `lockPin` state
+          if (next.length >= 4) setTimeout(() => void handleUnlock(next), 0);
           return next;
         });
       } else if (e.key === 'Backspace') {
@@ -328,7 +330,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   else if (lockPin.length < 6) {
                     const next = lockPin + k.toString();
                     setLockPin(next);
-                    if (next.length >= 4) void handleUnlock();
+                    if (next.length >= 4) void handleUnlock(next);
                   }
                 }}
                 className={`h-12 rounded-xl font-semibold text-base transition-all duration-100 active:scale-90 ${

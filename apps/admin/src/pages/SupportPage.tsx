@@ -112,11 +112,12 @@ export default function SupportPage() {
             {/* Summary grid */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
               <MetaItem label="Business" value={bizData.business?.name} />
-              <MetaItem label="Plan" value={bizData.business?.planName} />
+              <MetaItem label="Plan" value={bizData.business?.planName ?? bizData.business?.subscriptionTier ?? '—'} />
               <MetaItem label="Status" value={bizData.business?.subscriptionStatus} />
               <MetaItem label="Trial Ends" value={bizData.business?.trialEndsAt ? new Date(bizData.business.trialEndsAt).toLocaleDateString() : '—'} />
               <MetaItem label="Stores" value={bizData.storeCount ?? 0} />
-              <MetaItem label="Users" value={bizData.userCount ?? 0} />
+              <MetaItem label="Users" value={bizData.userCount ?? bizData.users?.length ?? 0} />
+              <MetaItem label="Items" value={bizData.itemCount ?? 0} />
               <MetaItem label="Sales (30d)" value={bizData.recentSalesCount ?? 0} />
               <MetaItem label="GMV (30d)" value={`KES ${((bizData.recentGMVCents ?? 0) / 100).toLocaleString()}`} />
             </div>

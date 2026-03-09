@@ -81,11 +81,10 @@ export class HrController {
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
   ) {
-    return this.hrService.getAttendance(
-      employeeId,
-      new Date(startDate),
-      new Date(endDate),
-    );
+    const now = new Date();
+    const start = startDate ? new Date(startDate) : new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = endDate ? new Date(endDate) : now;
+    return this.hrService.getAttendance(employeeId, start, end);
   }
 
   @Get('attendance')

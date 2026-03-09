@@ -16,7 +16,7 @@ export default function LoginPage({ onLogin }: Props) {
     setError('');
     try {
       const { token } = await adminApi.login(email, password);
-      setAdminToken(token);
+      setAdminToken(token, email);
       onLogin();
     } catch (err: any) {
       setError(err.message ?? 'Login failed');

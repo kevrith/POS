@@ -39,6 +39,7 @@ const PayrollPage = lazy(() => import('./pages/PayrollPage'));
 const ForecastingPage = lazy(() => import('./pages/ForecastingPage'));
 const ReconciliationPage = lazy(() => import('./pages/ReconciliationPage'));
 const FranchisePage = lazy(() => import('./pages/FranchisePage'));
+const DesktopSetupPage = lazy(() => import('./pages/DesktopSetupPage'));
 
 function PageLoader() {
   return (
@@ -48,8 +49,30 @@ function PageLoader() {
   );
 }
 
+// Extend window type for Tauri (matches DesktopSetupPage declaration)
+declare global { interface Window { __TAURI__?: { invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T> } } }
+
 export default function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
+  // On first Tauri launch: redirect to desktop setup wizard
+  if (
+    window.__TAURI__ &&
+    window.location.pathname !== '/desktop-setup' &&
+    !localStorage.getItem('desktop-setup-done')
+  ) {
+    window.location.replace('/desktop-setup');
+    return null;
+  }
+
+  // Desktop installation wizard — shown on first Tauri launch before setup
+  if (window.location.pathname === '/desktop-setup') {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-slate-900" />}>
+        <DesktopSetupPage />
+      </Suspense>
+    );
+  }
 
   // Pole display is a standalone page — no auth, no layout
   if (window.location.pathname === '/pole-display') {

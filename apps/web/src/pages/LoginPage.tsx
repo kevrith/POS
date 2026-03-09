@@ -124,13 +124,14 @@ export default function LoginPage() {
     setPinStep('pad');
   }
 
-  async function handlePinLogin() {
-    if (pin.length < 4 || !selectedUser) return;
+  async function handlePinLogin(pinValue?: string) {
+    const p = pinValue ?? pin;
+    if (p.length < 4 || !selectedUser) return;
     setError('');
     setPinError('');
     setLoading(true);
     try {
-      await loginWithPin(pin, savedBusinessId);
+      await loginWithPin(p, savedBusinessId);
     } catch (err) {
       setPinError(err instanceof Error ? err.message : 'Invalid PIN');
       setPin('');
@@ -148,8 +149,8 @@ export default function LoginPage() {
       const next = pin + key.toString();
       setPin(next);
       if (next.length >= 4) {
-        // auto-submit after a short delay so user sees the last dot fill
-        setTimeout(() => void handlePinLogin(), 120);
+        // Pass next directly to avoid stale-closure issue with `pin` state
+        setTimeout(() => void handlePinLogin(next), 120);
       }
     }
   }

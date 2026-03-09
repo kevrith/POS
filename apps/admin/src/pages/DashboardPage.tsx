@@ -137,14 +137,23 @@ export default function DashboardPage() {
 
   return (
     <div className="fade-in">
-      {/* Stat Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+      {/* Primary KPI row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+        <StatCard label="Est. MRR"          value={formatKES(stats?.estimatedMRRCents ?? 0)} icon="📈" color={C.green}  bg="rgba(16,185,129,0.12)" sub="Monthly" />
+        <StatCard label="Est. ARR"          value={formatKES(stats?.estimatedARRCents ?? 0)} icon="💹" color={C.cyan}   bg="rgba(6,182,212,0.12)" />
+        <StatCard label="GMV (30d)"         value={formatKES(stats?.gmv30dCents ?? 0)}       icon="💰" color={C.blue}   bg="rgba(59,130,246,0.12)" />
+        <StatCard label="New Signups (30d)" value={stats?.newBusinesses30d ?? 0}            icon="✨" color={C.amber}  bg="rgba(245,158,11,0.12)" />
+        <StatCard label="Referrals Converted" value={stats?.referralsConverted ?? 0}        icon="🔗" color="#06b6d4"  bg="rgba(6,182,212,0.12)" />
+        <StatCard label="Total GMV"         value={formatKES(stats?.totalGMVCents ?? 0)}    icon="🏆" color={C.purple} bg="rgba(139,92,246,0.12)" />
+      </div>
+
+      {/* Secondary stats row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
         <StatCard label="Total Businesses" value={stats?.totalBusinesses ?? 0}   icon="🏢" color={C.blue}   bg="rgba(59,130,246,0.12)" />
         <StatCard label="Active Plans"     value={stats?.activeSubscriptions ?? 0} icon="✅" color={C.green}  bg="rgba(16,185,129,0.12)" />
         <StatCard label="On Trial"         value={stats?.trialBusinesses ?? 0}   icon="⏳" color={C.amber}  bg="rgba(245,158,11,0.12)" />
         <StatCard label="Expired"          value={stats?.expiredBusinesses ?? 0} icon="❌" color={C.red}    bg="rgba(239,68,68,0.12)" />
         <StatCard label="Total Users"      value={stats?.totalUsers ?? 0}        icon="👥" color={C.purple} bg="rgba(139,92,246,0.12)" />
-        <StatCard label="Platform GMV"     value={formatKES(stats?.totalGMVCents ?? 0)} icon="💰" color={C.cyan} bg="rgba(6,182,212,0.12)" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: health ? '1fr 1fr' : '1fr', gap: '1.5rem', marginBottom: '2rem' }}>

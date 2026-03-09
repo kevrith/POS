@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
+import { createHash, randomBytes } from 'crypto';
 
 @Injectable()
 export class SuperAdminService {
@@ -66,6 +67,7 @@ export class SuperAdminService {
   }
 
   async getPlatformStats() {
+    const since30d = new Date(Date.now() - 30 * 86400000);
     const [
       totalBusinesses,
       activeSubscriptions,
@@ -73,6 +75,9 @@ export class SuperAdminService {
       expiredBusinesses,
       totalUsers,
       totalSalesAmount,
+      sales30d,
+      newBusinesses30d,
+      referralsConverted,
     ] = await Promise.all([
       this.prisma.business.count(),
       this.prisma.business.count({ where: { subscriptionStatus: 'ACTIVE' } }),
@@ -80,7 +85,14 @@ export class SuperAdminService {
       this.prisma.business.count({ where: { subscriptionStatus: 'EXPIRED' } }),
       this.prisma.user.count(),
       this.prisma.sale.aggregate({ where: { status: 'PAID' }, _sum: { totalCents: true } }),
+      this.prisma.sale.aggregate({ where: { status: 'PAID', createdAt: { gte: since30d } }, _sum: { totalCents: true } }),
+      this.prisma.business.count({ where: { createdAt: { gte: since30d } } }),
+      this.prisma.referral.count({ where: { status: 'CONVERTED' } }),
     ]);
+
+    // Rough MRR: active businesses × average plan price (KES 3,000/mo)
+    const avgPlanPriceCents = 300000; // KES 3,000
+    const estimatedMRRCents = activeSubscriptions * avgPlanPriceCents;
 
     return {
       totalBusinesses,
@@ -89,6 +101,11 @@ export class SuperAdminService {
       expiredBusinesses,
       totalUsers,
       totalGMVCents: totalSalesAmount._sum.totalCents ?? 0,
+      gmv30dCents: sales30d._sum.totalCents ?? 0,
+      newBusinesses30d,
+      referralsConverted,
+      estimatedMRRCents,
+      estimatedARRCents: estimatedMRRCents * 12,
     };
   }
 
@@ -134,11 +151,47 @@ export class SuperAdminService {
     return { keys, total };
   }
 
-  async createLicenseKey(data: { tier: string; expiresAt?: Date }) {
-    const key = `KPS-${uuidv4().toUpperCase().replace(/-/g, '').slice(0, 20)}`;
+  /**
+   * Build a machine-bound KPS license key.
+   *
+   * Format: KPS-XXXXXXXX-XXXXXXXX-XXXXXXXX  (31 chars, all hex)
+   *   seg1 = 8 random hex chars
+   *   seg2 = 8 random hex chars
+   *   key_slice = seg1 + "-" + seg2[0..7]   (16 chars, matching Rust key[4..20])
+   *   seg3 = sha256(machineId + ":" + key_slice)[0..8]
+   *
+   * If machineId is omitted a random seg3 is used (non-verifiable offline).
+   */
+  private buildLicenseKey(machineId?: string): string {
+    const seg1 = randomBytes(4).toString('hex');
+    const seg2 = randomBytes(4).toString('hex');
+    const keySlice = `${seg1}-${seg2.slice(0, 7)}`; // 16 chars: seg1[8] + '-' + seg2[0..7]
+    let seg3: string;
+    if (machineId) {
+      seg3 = createHash('sha256')
+        .update(`${machineId}:${keySlice}`)
+        .digest('hex')
+        .slice(0, 8);
+    } else {
+      seg3 = randomBytes(4).toString('hex');
+    }
+    return `KPS-${seg1}-${seg2}-${seg3}`;
+  }
+
+  async createLicenseKey(data: { tier: string; expiresAt?: Date; machineId?: string }) {
+    const key = this.buildLicenseKey(data.machineId);
     return this.prisma.licenseKey.create({
-      data: { key, tier: data.tier, expiresAt: data.expiresAt },
+      data: {
+        key,
+        tier: data.tier,
+        expiresAt: data.expiresAt,
+      },
     });
+  }
+
+  /** Generate a machine-bound key without persisting it (preview / CLI use). */
+  generateKeyPreview(machineId: string, tier: string): { key: string; tier: string; machineId: string } {
+    return { key: this.buildLicenseKey(machineId), tier, machineId };
   }
 
   async revokeLicenseKey(id: string) {
@@ -208,7 +261,8 @@ export class SuperAdminService {
   // ── Business Support View ─────────────────────────────────────────────────
 
   async getBusinessData(businessId: string) {
-    const [business, recentSales, users, itemCount] = await Promise.all([
+    const since30d = new Date(Date.now() - 30 * 86400000);
+    const [business, recentSales, users, itemCount, storeCount, recentSalesCount, recentGMV] = await Promise.all([
       this.prisma.business.findUnique({
         where: { id: businessId },
         select: {
@@ -225,22 +279,48 @@ export class SuperAdminService {
         where: { businessId, status: { in: ['PAID', 'AMENDED'] } },
         orderBy: { createdAt: 'desc' },
         take: 10,
-        select: {
-          id: true,
-          receiptNumber: true,
-          totalCents: true,
-          createdAt: true,
-          type: true,
-        },
+        select: { id: true, receiptNumber: true, totalCents: true, createdAt: true, type: true, status: true },
       }),
       this.prisma.user.findMany({
         where: { businessId },
         select: { id: true, name: true, email: true, role: true, createdAt: true },
       }),
       this.prisma.item.count({ where: { businessId, deletedAt: null } }),
+      this.prisma.store.count({ where: { businessId } }),
+      this.prisma.sale.count({ where: { businessId, status: { in: ['PAID', 'AMENDED'] }, createdAt: { gte: since30d } } }),
+      this.prisma.sale.aggregate({ where: { businessId, status: { in: ['PAID', 'AMENDED'] }, createdAt: { gte: since30d } }, _sum: { totalCents: true } }),
     ]);
 
-    return { business, recentSales, users, itemCount };
+    return {
+      business,
+      recentSales,
+      users,
+      itemCount,
+      storeCount,
+      userCount: users.length,
+      recentSalesCount,
+      recentGMVCents: recentGMV._sum.totalCents ?? 0,
+    };
+  }
+
+  async listReferrals(page = 1, limit = 20) {
+    const skip = (page - 1) * limit;
+    const [referrals, total] = await Promise.all([
+      this.prisma.referral.findMany({
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          referrer: { select: { id: true, name: true } },
+        },
+      }),
+      this.prisma.referral.count(),
+    ]);
+    const stats = await this.prisma.referral.groupBy({
+      by: ['status'],
+      _count: { id: true },
+    });
+    return { referrals, total, stats };
   }
 
   // ── Force Update Notifications ────────────────────────────────────────────

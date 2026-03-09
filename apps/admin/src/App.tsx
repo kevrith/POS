@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { getAdminToken, clearAdminToken } from './lib/api';
+import { getAdminToken, getAdminEmail, clearAdminToken } from './lib/api';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import BusinessesPage from './pages/BusinessesPage';
 import LicenseKeysPage from './pages/LicenseKeysPage';
 import SupportPage from './pages/SupportPage';
+import ReferralsPage from './pages/ReferralsPage';
 
-type Page = 'dashboard' | 'businesses' | 'license-keys' | 'support';
+type Page = 'dashboard' | 'businesses' | 'license-keys' | 'support' | 'referrals';
 
 const C = {
   bg: '#0a0f1e',
@@ -44,10 +45,16 @@ const Icons = {
   bolt: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
 };
 
+// Icon paths
+const MoreIcons = {
+  referral: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
+};
+
 const NAV: Array<{ id: Page; label: string; icon: string; color: string }> = [
   { id: 'dashboard',    label: 'Dashboard',     icon: Icons.dashboard,   color: C.accent },
   { id: 'businesses',  label: 'Businesses',    icon: Icons.businesses,  color: C.purple },
   { id: 'license-keys',label: 'License Keys',  icon: Icons.license,     color: C.success },
+  { id: 'referrals',   label: 'Referrals',     icon: MoreIcons.referral, color: '#06b6d4' },
   { id: 'support',     label: 'Support Tools', icon: Icons.support,     color: C.warning },
 ];
 
@@ -166,6 +173,26 @@ export default function App() {
 
         {/* Footer */}
         <div style={{ padding: '0.75rem 0.625rem', borderTop: `1px solid ${C.sidebarBorder}` }}>
+          {/* Admin identity */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '0.5rem',
+            padding: '0.5rem 0.75rem', marginBottom: '4px',
+          }}>
+            <div style={{
+              width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0,
+              background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '0.6875rem', color: '#fff', fontWeight: 800,
+            }}>
+              {getAdminEmail().charAt(0).toUpperCase()}
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: '0.6875rem', color: C.textSecondary, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {getAdminEmail()}
+              </div>
+              <div style={{ fontSize: '0.5625rem', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Super Admin</div>
+            </div>
+          </div>
           <button
             onClick={logout}
             style={{
@@ -173,7 +200,7 @@ export default function App() {
               alignItems: 'center',
               gap: '0.625rem',
               width: '100%',
-              padding: '0.625rem 0.75rem',
+              padding: '0.5rem 0.75rem',
               background: 'transparent',
               color: '#ef4444',
               border: 'none',
@@ -191,13 +218,13 @@ export default function App() {
             }}
           >
             <div style={{
-              width: '30px', height: '30px',
+              width: '28px', height: '28px',
               borderRadius: '8px',
               background: 'rgba(239,68,68,0.1)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               flexShrink: 0,
             }}>
-              <Icon d={Icons.logout} size={14} color="#ef4444" />
+              <Icon d={Icons.logout} size={13} color="#ef4444" />
             </div>
             Sign Out
           </button>
@@ -242,6 +269,7 @@ export default function App() {
           {page === 'dashboard'    && <DashboardPage />}
           {page === 'businesses'   && <BusinessesPage />}
           {page === 'license-keys' && <LicenseKeysPage />}
+          {page === 'referrals'    && <ReferralsPage />}
           {page === 'support'      && <SupportPage />}
         </div>
       </main>

@@ -2,9 +2,10 @@ const API_BASE = '/api/v1/super-admin';
 
 let _token = '';
 
-export function setAdminToken(token: string) {
+export function setAdminToken(token: string, email?: string) {
   _token = token;
   sessionStorage.setItem('admin-token', token);
+  if (email) sessionStorage.setItem('admin-email', email);
 }
 
 export function getAdminToken(): string {
@@ -13,9 +14,14 @@ export function getAdminToken(): string {
   return _token;
 }
 
+export function getAdminEmail(): string {
+  return sessionStorage.getItem('admin-email') ?? 'admin@kastrapos.co.ke';
+}
+
 export function clearAdminToken() {
   _token = '';
   sessionStorage.removeItem('admin-token');
+  sessionStorage.removeItem('admin-email');
 }
 
 async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
@@ -66,6 +72,9 @@ export const adminApi = {
   createLicenseKey: (tier: string, expiresAt?: string) =>
     request<any>('/license-keys', { method: 'POST', body: JSON.stringify({ tier, expiresAt }) }),
 
+  createMachineBoundKey: (machineId: string, tier: string, expiresAt?: string) =>
+    request<any>('/license-keys/machine-bound', { method: 'POST', body: JSON.stringify({ machineId, tier, expiresAt }) }),
+
   revokeKey: (id: string) =>
     request<any>(`/license-keys/${id}/revoke`, { method: 'PATCH' }),
 
@@ -75,4 +84,6 @@ export const adminApi = {
 
   triggerForceUpdate: (version: string, message: string, isRequired: boolean) =>
     request<any>('/force-update', { method: 'POST', body: JSON.stringify({ version, message, isRequired }) }),
+
+  getReferrals: (page = 1) => request<any>(`/referrals?page=${page}&limit=20`),
 };

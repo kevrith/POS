@@ -69,11 +69,30 @@ export class SuperAdminController implements OnModuleInit {
 
   @UseGuards(SuperAdminAuthGuard)
   @Post('license-keys')
-  createKey(@Body() body: { tier: string; expiresAt?: string }) {
+  createKey(@Body() body: { tier: string; expiresAt?: string; machineId?: string }) {
     return this.service.createLicenseKey({
       tier: body.tier,
       expiresAt: body.expiresAt ? new Date(body.expiresAt) : undefined,
+      machineId: body.machineId,
     });
+  }
+
+  /** Generate + save a machine-bound key in one step */
+  @UseGuards(SuperAdminAuthGuard)
+  @Post('license-keys/machine-bound')
+  generateMachineBoundKey(@Body() body: { machineId: string; tier: string; expiresAt?: string }) {
+    return this.service.createLicenseKey({
+      tier: body.tier,
+      machineId: body.machineId,
+      expiresAt: body.expiresAt ? new Date(body.expiresAt) : undefined,
+    });
+  }
+
+  /** Preview a key without saving — useful for testing */
+  @UseGuards(SuperAdminAuthGuard)
+  @Post('license-keys/preview')
+  previewKey(@Body() body: { machineId: string; tier: string }) {
+    return this.service.generateKeyPreview(body.machineId, body.tier);
   }
 
   @UseGuards(SuperAdminAuthGuard)
@@ -112,5 +131,13 @@ export class SuperAdminController implements OnModuleInit {
   @Get('update-check')
   updateCheck() {
     return this.service.checkForUpdate();
+  }
+
+  // ── Referrals ─────────────────────────────────────────────────────────────
+
+  @UseGuards(SuperAdminAuthGuard)
+  @Get('referrals')
+  listReferrals(@Query('page') page = '1', @Query('limit') limit = '20') {
+    return this.service.listReferrals(parseInt(page), parseInt(limit));
   }
 }

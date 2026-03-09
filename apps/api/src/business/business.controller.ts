@@ -197,9 +197,12 @@ export class BusinessController {
     return this.businessService.getPoleConfig(id);
   }
 
-  /** Public staff picker — no auth required (only returns id/name/role, no PINs) */
+  /** Public staff picker — no auth required (only returns id/name/role, no PINs)
+   * Method-level @UseGuards() overrides the class-level JwtAuthGuard+TenantGuard.
+   */
   @Public()
   @SkipSubscriptionCheck()
+  @UseGuards(JwtAuthGuard)
   @Get(':id/staff')
   async getStaffList(@Param('id') id: string) {
     return this.businessService.getStaffList(id);

@@ -333,6 +333,8 @@ export default function POSPage() {
         payments: checkoutMutation.variables ?? [],
         etimsSubmitted: false,
         saleId: result.id,
+        receiptHeader: (businessSettings as any)?.receiptHeader ?? undefined,
+        receiptFooter: (businessSettings as any)?.receiptFooter ?? undefined,
       };
       setReceiptData(receipt);
 

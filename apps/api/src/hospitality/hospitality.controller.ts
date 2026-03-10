@@ -1,4 +1,6 @@
-import { Controller, Post, Get, Patch, Delete, Body, Param, Query } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Body, Param, Query, Req, BadRequestException } from '@nestjs/common';
+import type { Request } from 'express';
+import type { AuthUser } from '../auth/auth.service';
 import { HospitalityService } from './hospitality.service';
 
 @Controller('hospitality')
@@ -67,6 +69,12 @@ export class HospitalityController {
     return this.hospitalityService.requestBill(id);
   }
 
+  /** Cancel an order and reset the table to AVAILABLE (guests left without ordering) */
+  @Post('orders/:id/cancel')
+  async cancelOrder(@Param('id') id: string) {
+    return this.hospitalityService.cancelOrder(id);
+  }
+
   @Get('orders/:id')
   async getOrderDetails(@Param('id') id: string) {
     return this.hospitalityService.getOrderDetails(id);
@@ -119,8 +127,21 @@ export class HospitalityController {
   }
 
   @Patch('kot/:id/status')
-  async updateKOTStatus(@Param('id') id: string, @Body('status') status: string) {
-    return this.hospitalityService.updateKOTStatus(id, status);
+  async updateKOTStatus(
+    @Param('id') id: string,
+    @Body('status') status: string,
+    @Req() req: Request & { user?: AuthUser },
+  ) {
+    const chefId = req.user?.id;
+    return this.hospitalityService.updateKOTStatus(id, status, chefId);
+  }
+
+  @Patch('orders/:id/priority')
+  async setOrderPriority(
+    @Param('id') id: string,
+    @Body() body: { priority: number; isVIP: boolean },
+  ) {
+    return this.hospitalityService.setOrderPriority(id, body.priority, body.isVIP);
   }
 
   @Get('kds/orders')
@@ -153,5 +174,97 @@ export class HospitalityController {
   @Post('bar-tabs/:id/close')
   closeBarTab(@Param('id') id: string) {
     return this.hospitalityService.closeBarTab(id);
+  }
+
+  // ── Hotel Room Endpoints ───────────────────────────────────────────────────
+
+  @Get('hotel-rooms')
+  getHotelRooms(
+    @Query('businessId') businessId: string,
+    @Query('storeId') storeId: string,
+    @Query('status') status?: string,
+  ) {
+    return this.hospitalityService.getHotelRooms(businessId, storeId, status);
+  }
+
+  @Post('hotel-rooms')
+  createHotelRoom(@Body() body: {
+    businessId: string;
+    storeId: string;
+    number: string;
+    type?: string;
+    floor?: string;
+    capacity?: number;
+    pricePerNightCents?: number;
+    amenities?: string[];
+    notes?: string;
+  }) {
+    return this.hospitalityService.createHotelRoom(body);
+  }
+
+  @Patch('hotel-rooms/:id')
+  updateHotelRoom(
+    @Param('id') id: string,
+    @Body() body: {
+      type?: string;
+      floor?: string;
+      capacity?: number;
+      pricePerNightCents?: number;
+      status?: string;
+      amenities?: string[];
+      notes?: string;
+    },
+  ) {
+    return this.hospitalityService.updateHotelRoom(id, body);
+  }
+
+  @Delete('hotel-rooms/:id')
+  deleteHotelRoom(@Param('id') id: string) {
+    return this.hospitalityService.deleteHotelRoom(id);
+  }
+
+  @Get('room-bookings')
+  getRoomBookings(
+    @Query('businessId') businessId: string,
+    @Query('storeId') storeId: string,
+    @Query('status') status?: string,
+  ) {
+    return this.hospitalityService.getRoomBookings(businessId, storeId, status);
+  }
+
+  @Post('room-bookings')
+  createRoomBooking(@Body() body: {
+    businessId: string;
+    storeId: string;
+    roomId: string;
+    guestName: string;
+    guestPhone?: string;
+    guestIdNumber?: string;
+    checkInDate: string;
+    checkOutDate?: string;
+    nightCount: number;
+    depositCents?: number;
+    notes?: string;
+  }) {
+    return this.hospitalityService.createRoomBooking({
+      ...body,
+      checkInDate: new Date(body.checkInDate),
+      checkOutDate: body.checkOutDate ? new Date(body.checkOutDate) : undefined,
+    });
+  }
+
+  @Post('room-bookings/:id/check-in')
+  checkInGuest(@Param('id') id: string) {
+    return this.hospitalityService.checkInGuest(id);
+  }
+
+  @Post('room-bookings/:id/check-out')
+  checkOutGuest(@Param('id') id: string, @Body('payments') payments: Array<{ method: string; amountCents: number }>) {
+    return this.hospitalityService.checkOutGuest(id, payments ?? []);
+  }
+
+  @Post('room-bookings/:id/cancel')
+  cancelRoomBooking(@Param('id') id: string) {
+    return this.hospitalityService.cancelRoomBooking(id);
   }
 }

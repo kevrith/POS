@@ -50,6 +50,8 @@ interface CreateSaleDto {
   /** When provided by the frontend (0 = disabled, >0 = enabled), use it directly.
    *  Falls back to business.serviceChargeRate only when omitted (old clients). */
   serviceChargeCents?: number;
+  /** Hospitality order ID — if provided, mark it PAID and free its table after checkout */
+  orderId?: string;
 }
 
 @Injectable()
@@ -179,6 +181,20 @@ export class SalesService {
 
       return createdSale;
     }, { timeout: 15000 });
+
+    // ── Close hospitality order + free table (if applicable) ──
+    if (dto.orderId) {
+      const order = await this.prisma.order.update({
+        where: { id: dto.orderId },
+        data: { status: 'PAID' },
+      }).catch(() => null);
+      if (order?.tableId) {
+        await this.prisma.table.update({
+          where: { id: order.tableId },
+          data: { status: 'AVAILABLE' },
+        }).catch(() => null);
+      }
+    }
 
     // ── Post-transaction: audit log + webhook dispatch ──
     await this.audit.createEntry({

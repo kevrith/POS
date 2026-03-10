@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Terms of Service — KASTRA POS</title>
+  <meta name="description" content="KASTRA POS Terms of Service. Read our terms for using Kenya's enterprise POS platform, including subscription, billing, and acceptable use policies." />
+  <link rel="icon" type="image/png" href="posfav.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #030712;
+      --bg2: #0a0f1e;
+      --bg3: #0f172a;
+      --border: rgba(255,255,255,.07);
+      --border2: rgba(255,255,255,.12);
+      --blue: #3b82f6;
+      --blue2: #60a5fa;
+      --blue-glow: rgba(59,130,246,.35);
+      --cyan: #06b6d4;
+      --green: #10b981;
+      --amber: #f59e0b;
+      --purple: #8b5cf6;
+      --text: #f1f5f9;
+      --text2: #94a3b8;
+      --text3: #64748b;
+      --radius: 14px;
+      --radius-lg: 20px;
+    }
+    html { scroll-behavior: smooth; font-size: 16px; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; overflow-x: hidden; }
+    a { color: inherit; text-decoration: none; }
+    img { max-width: 100%; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg2); }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+    .container-sm { max-width: 800px; margin: 0 auto; padding: 0 24px; }
+
+    /* Nav */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      background: rgba(3,7,18,.8); backdrop-filter: blur(20px) saturate(180%);
+      border-bottom: 1px solid var(--border);
+      transition: box-shadow .3s;
+    }
+    nav.scrolled { box-shadow: 0 4px 30px rgba(0,0,0,.4); }
+    .nav-inner { height: 68px; display: flex; align-items: center; justify-content: space-between; }
+    .nav-logo { display: flex; align-items: center; gap: 10px; }
+    .nav-logo-text { font-size: 1.125rem; font-weight: 800; letter-spacing: -.3px; }
+    .nav-logo-text span { color: var(--blue2); }
+    .nav-links { display: flex; align-items: center; gap: 32px; list-style: none; }
+    .nav-links a { font-size: .875rem; font-weight: 500; color: var(--text2); transition: color .15s; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-actions { display: flex; align-items: center; gap: 10px; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 24px; border-radius: 10px; font-size: .9375rem; font-weight: 600; cursor: pointer; transition: all .2s; border: none; white-space: nowrap; }
+    .btn-primary { background: var(--blue); color: #fff; box-shadow: 0 0 24px var(--blue-glow); }
+    .btn-primary:hover { background: #2563eb; box-shadow: 0 0 36px var(--blue-glow); transform: translateY(-1px); }
+    .btn-ghost { background: rgba(255,255,255,.06); color: var(--text); border: 1px solid var(--border2); }
+    .btn-ghost:hover { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.2); }
+    .btn-sm { padding: 8px 16px; font-size: .8125rem; border-radius: 8px; }
+    .nav-pill { background: rgba(16,185,129,.12); border: 1px solid rgba(16,185,129,.25); color: var(--green); font-size: .6875rem; font-weight: 700; padding: 3px 10px; border-radius: 100px; letter-spacing: .03em; white-space: nowrap; }
+    @media(max-width: 768px) { .hide-mobile { display: none !important; } }
+
+    /* Hero */
+    .page-hero {
+      padding: 140px 0 72px;
+      background: radial-gradient(ellipse 70% 50% at 50% 0%, rgba(59,130,246,.15) 0%, transparent 70%);
+      border-bottom: 1px solid var(--border);
+      text-align: center;
+    }
+    .page-hero-label { display: inline-flex; align-items: center; gap: 6px; font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--blue2); margin-bottom: 16px; }
+    .page-hero-label::before { content: ''; width: 16px; height: 2px; background: var(--blue); border-radius: 1px; }
+    .page-hero h1 { font-size: clamp(1.75rem, 4vw, 3rem); font-weight: 900; letter-spacing: -.04em; margin-bottom: 16px; line-height: 1.1; }
+    .page-hero p { font-size: 1.0625rem; color: var(--text2); max-width: 560px; margin: 0 auto; line-height: 1.7; }
+    .page-hero-meta { margin-top: 20px; font-size: .8125rem; color: var(--text3); }
+
+    /* Content */
+    .content-wrapper { padding: 72px 0 96px; }
+    .prose h2 { font-size: 1.375rem; font-weight: 800; color: var(--text); margin: 48px 0 16px; letter-spacing: -.02em; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+    .prose h2:first-child { margin-top: 0; }
+    .prose h3 { font-size: 1.0625rem; font-weight: 700; color: var(--text); margin: 28px 0 10px; }
+    .prose p { font-size: .9375rem; color: var(--text2); line-height: 1.75; margin-bottom: 16px; }
+    .prose ul { list-style: none; margin-bottom: 16px; }
+    .prose ul li { font-size: .9375rem; color: var(--text2); line-height: 1.65; padding: 6px 0 6px 24px; position: relative; }
+    .prose ul li::before { content: '→'; position: absolute; left: 0; color: var(--blue2); font-size: .8125rem; font-weight: 700; top: 7px; }
+    .prose a { color: var(--blue2); text-decoration: underline; text-underline-offset: 3px; }
+    .prose a:hover { color: var(--blue); }
+    .prose strong { color: var(--text); font-weight: 600; }
+
+    .info-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px 28px; margin-bottom: 32px; }
+    .info-card.blue { border-color: rgba(59,130,246,.2); background: rgba(59,130,246,.06); }
+    .info-card.red { border-color: rgba(239,68,68,.2); background: rgba(239,68,68,.05); }
+    .info-card.amber { border-color: rgba(245,158,11,.2); background: rgba(245,158,11,.05); }
+    .info-card-title { font-size: .8125rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; }
+    .info-card.blue .info-card-title { color: var(--blue2); }
+    .info-card.red .info-card-title { color: #fca5a5; }
+    .info-card.amber .info-card-title { color: var(--amber); }
+    .info-card p { font-size: .875rem; color: var(--text2); line-height: 1.65; margin: 0; }
+
+    .toc { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px 28px; margin-bottom: 48px; }
+    .toc h3 { font-size: .8125rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text3); margin-bottom: 14px; }
+    .toc ol { list-style: none; display: flex; flex-direction: column; gap: 6px; counter-reset: toc-counter; }
+    .toc ol li { counter-increment: toc-counter; }
+    .toc ol li a { font-size: .875rem; color: var(--text2); transition: color .15s; display: flex; align-items: center; gap: 8px; }
+    .toc ol li a::before { content: counter(toc-counter, decimal-leading-zero); font-size: .6875rem; font-weight: 700; color: var(--text3); min-width: 20px; }
+    .toc ol li a:hover { color: var(--blue2); }
+
+    /* Footer */
+    footer { background: var(--bg2); border-top: 1px solid var(--border); padding: 64px 0 32px; }
+    .footer-top { display: grid; grid-template-columns: 2.5fr 1fr 1fr 1.5fr; gap: 48px; margin-bottom: 48px; }
+    @media(max-width: 900px) { .footer-top { grid-template-columns: 1fr 1fr; } }
+    @media(max-width: 560px) { .footer-top { grid-template-columns: 1fr; } }
+    .footer-brand-logo { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    .footer-brand-name { font-size: 1.0625rem; font-weight: 800; color: var(--text); letter-spacing: -.2px; }
+    .footer-desc { font-size: .875rem; color: var(--text3); line-height: 1.65; max-width: 260px; margin-bottom: 20px; }
+    .footer-social { display: flex; gap: 8px; }
+    .social-btn { width: 34px; height: 34px; border-radius: 8px; background: rgba(255,255,255,.06); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: .875rem; transition: all .2s; }
+    .social-btn:hover { background: rgba(255,255,255,.1); border-color: var(--border2); }
+    .footer-col h4 { font-size: .875rem; font-weight: 700; color: var(--text); margin-bottom: 16px; }
+    .footer-col ul { list-style: none; }
+    .footer-col li { margin-bottom: 10px; }
+    .footer-col a { font-size: .875rem; color: var(--text3); transition: color .15s; }
+    .footer-col a:hover { color: var(--text); }
+    .footer-newsletter input { width: 100%; padding: 10px 14px; background: rgba(255,255,255,.06); border: 1px solid var(--border); border-radius: 9px; color: var(--text); font-size: .875rem; margin-bottom: 8px; outline: none; transition: border-color .2s; font-family: 'Inter', sans-serif; }
+    .footer-newsletter input:focus { border-color: var(--blue); }
+    .footer-newsletter input::placeholder { color: var(--text3); }
+    .footer-bottom { border-top: 1px solid var(--border); padding-top: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+    .footer-copy { font-size: .8125rem; color: var(--text3); }
+    .footer-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+    .fbadge { background: rgba(255,255,255,.05); color: var(--text3); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: .6875rem; font-weight: 600; letter-spacing: .03em; }
+  </style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav id="main-nav">
+  <div class="container nav-inner">
+    <a href="index.html" class="nav-logo">
+      <img src="posfav.png" alt="KASTRA" style="width:34px;height:34px;object-fit:contain;border-radius:9px;">
+      <div class="nav-logo-text">KASTRA<span> POS</span></div>
+    </a>
+    <ul class="nav-links hide-mobile">
+      <li><a href="index.html#features">Features</a></li>
+      <li><a href="index.html#compliance">Compliance</a></li>
+      <li><a href="index.html#pricing">Pricing</a></li>
+      <li><a href="about.html">About</a></li>
+      <li><a href="setup-guide.html">Setup Guide</a></li>
+    </ul>
+    <div class="nav-actions">
+      <span class="nav-pill hide-mobile">✓ KRA eTIMS Ready</span>
+      <a href="http://localhost:3001" class="btn btn-ghost btn-sm">Log in</a>
+      <a href="http://localhost:3001/setup" class="btn btn-primary btn-sm">Start Free →</a>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div class="page-hero">
+  <div class="container">
+    <div class="page-hero-label">Legal</div>
+    <h1>Terms of Service</h1>
+    <p>Please read these terms carefully before using KASTRA POS. By creating an account or using our service, you agree to be bound by these terms.</p>
+    <div class="page-hero-meta">Last updated: March 2026 &nbsp;·&nbsp; Effective: March 2026 &nbsp;·&nbsp; Governing Law: Kenya</div>
+  </div>
+</div>
+
+<!-- Content -->
+<div class="content-wrapper">
+  <div class="container-sm">
+
+    <nav class="toc">
+      <h3>Table of Contents</h3>
+      <ol>
+        <li><a href="#acceptance">Acceptance of Terms</a></li>
+        <li><a href="#service-description">Service Description</a></li>
+        <li><a href="#accounts">Account Responsibilities</a></li>
+        <li><a href="#subscription">Subscription, Billing, and Cancellation</a></li>
+        <li><a href="#prohibited">Prohibited Uses</a></li>
+        <li><a href="#intellectual-property">Intellectual Property</a></li>
+        <li><a href="#data-and-privacy">Data and Privacy</a></li>
+        <li><a href="#availability">Service Availability and Uptime</a></li>
+        <li><a href="#liability">Limitation of Liability</a></li>
+        <li><a href="#kra-disclaimer">KRA Compliance Disclaimer</a></li>
+        <li><a href="#termination">Termination</a></li>
+        <li><a href="#governing-law">Governing Law and Disputes</a></li>
+        <li><a href="#changes">Changes to Terms</a></li>
+        <li><a href="#contact">Contact Us</a></li>
+      </ol>
+    </nav>
+
+    <div class="prose">
+
+      <h2 id="acceptance">1. Acceptance of Terms</h2>
+      <p>These Terms of Service ("Terms") constitute a legally binding agreement between you ("Customer," "you," or "your") and Kastra Systems ("Kastra," "we," "us," or "our"), the operator of the KASTRA POS software-as-a-service platform accessible at kastrapos.co.ke and its associated mobile and desktop applications.</p>
+      <p>By registering for an account, clicking "I Agree," or using any part of the KASTRA POS service, you represent that:</p>
+      <ul>
+        <li>You are at least 18 years of age</li>
+        <li>You have the legal authority to enter into this agreement on behalf of yourself or your organisation</li>
+        <li>You have read, understood, and agree to be bound by these Terms and our <a href="privacy.html">Privacy Policy</a></li>
+      </ul>
+      <p>If you do not agree with any of these terms, you must not use the service.</p>
+
+      <h2 id="service-description">2. Service Description</h2>
+      <p>KASTRA POS is a cloud-based, offline-first point-of-sale and business management platform designed for Kenyan businesses. The service includes:</p>
+      <ul>
+        <li>Point-of-sale transaction processing with KRA eTIMS compliance</li>
+        <li>Inventory management including batch tracking, FEFO, and stock movements</li>
+        <li>Multi-store management with role-based access control</li>
+        <li>M-Pesa Daraja API integration for mobile money payments</li>
+        <li>Paystack card payment processing</li>
+        <li>HR, payroll (Kenya PAYE/NHIF/NSSF), and leave management tools</li>
+        <li>Financial reporting, P&amp;L, and bank reconciliation</li>
+        <li>AI-powered demand forecasting and sales analytics</li>
+        <li>Hospitality mode with table management, KOT routing, and bar tab functionality</li>
+        <li>Offline-first architecture with IndexedDB sync</li>
+        <li>REST API access (subject to plan limits)</li>
+        <li>Native desktop application (Tauri) and mobile applications (iOS/Android)</li>
+      </ul>
+      <p>We reserve the right to modify, enhance, or discontinue features with reasonable notice. Material feature removals will be communicated at least 30 days in advance via email and in-app notification.</p>
+
+      <h2 id="accounts">3. Account Responsibilities</h2>
+
+      <h3>Account Registration</h3>
+      <p>You must provide accurate and complete information when registering your account. You are responsible for keeping your account information current. KASTRA POS accounts are registered per business entity. Sub-accounts (users) may be created for your employees under your organisation's account.</p>
+
+      <h3>Credentials Security</h3>
+      <ul>
+        <li>You are responsible for maintaining the confidentiality of your account password, PIN codes, and API keys</li>
+        <li>You must immediately notify us at <a href="mailto:security@kastrapos.co.ke">security@kastrapos.co.ke</a> if you suspect unauthorised access to your account</li>
+        <li>Kastra Systems is not liable for losses caused by unauthorised access resulting from your failure to protect your credentials</li>
+        <li>We recommend enabling TOTP two-factor authentication, which is available in Settings → Users</li>
+      </ul>
+
+      <h3>Account Owner Responsibilities</h3>
+      <ul>
+        <li>The account Owner (the person who registered the business) is responsible for all activity under the account</li>
+        <li>You are responsible for ensuring all staff users are trained in appropriate use of the system</li>
+        <li>You must not share Owner-level credentials with untrusted parties</li>
+        <li>You are responsible for setting appropriate role-based access for all staff users</li>
+      </ul>
+
+      <h2 id="subscription">4. Subscription, Billing, and Cancellation</h2>
+
+      <div class="info-card blue">
+        <div class="info-card-title">Free Trial</div>
+        <p>All new accounts receive a 30-day free trial with full access to all features on the Pro plan. No credit card is required to start your trial. At the end of the trial period, you must subscribe to continue using the service.</p>
+      </div>
+
+      <h3>Plans and Pricing</h3>
+      <ul>
+        <li><strong>STARTER</strong> — For single-location businesses with up to 3 users and 1 store</li>
+        <li><strong>PRO</strong> — For growing businesses with up to 10 users and 5 stores</li>
+        <li><strong>ENTERPRISE</strong> — Unlimited users and stores for large organisations or franchise networks</li>
+        <li>Current pricing is displayed at <a href="index.html#pricing">kastrapos.co.ke/#pricing</a></li>
+        <li>Annual billing offers a discount vs monthly billing. Lifetime licensing is available as a one-time purchase.</li>
+      </ul>
+
+      <h3>Billing</h3>
+      <ul>
+        <li>Subscriptions are processed through Paystack. We accept card payments (Visa, Mastercard) and MPESA</li>
+        <li>Subscription fees are charged in advance at the start of each billing period (monthly or annual)</li>
+        <li>All prices are in Kenyan Shillings (KES) and include 16% VAT where applicable</li>
+        <li>Failed payments will result in up to 3 retry attempts. After failure, your account will be placed in a grace period of 7 days before suspension</li>
+        <li>You will receive email reminders before any billing event</li>
+      </ul>
+
+      <h3>Cancellation</h3>
+      <ul>
+        <li>You may cancel your subscription at any time from Settings → Subscription</li>
+        <li>Cancellation takes effect at the end of your current billing period. You will retain access until that date.</li>
+        <li>We do not provide refunds for partial billing periods</li>
+        <li>Annual subscriptions may be refunded on a pro-rata basis within the first 30 days if cancellation is due to a documented service failure on our part</li>
+        <li>After cancellation, your data is retained for 90 days before permanent deletion, giving you time to export</li>
+      </ul>
+
+      <h3>Plan Downgrades</h3>
+      <p>If you downgrade to a lower plan and your current usage exceeds the new plan's limits (e.g., more stores or users than the plan allows), you will be given 14 days to bring your account within limits. Features that exceed the plan limit will be read-only until resolved.</p>
+
+      <h2 id="prohibited">5. Prohibited Uses</h2>
+      <p>You agree not to use KASTRA POS for any of the following:</p>
+      <ul>
+        <li>Processing sales for illegal goods or services</li>
+        <li>Falsifying KRA eTIMS records or submitting fraudulent tax invoices</li>
+        <li>Attempting to reverse-engineer, decompile, or extract source code from our software</li>
+        <li>Sharing your account credentials or API keys with third parties not employed by your business</li>
+        <li>Using our API to build a competing point-of-sale product</li>
+        <li>Conducting automated bulk data scraping without prior written consent</li>
+        <li>Circumventing rate limits, authentication, or other security measures</li>
+        <li>Uploading malicious code, viruses, or harmful files to our platform</li>
+        <li>Using the service in a way that could damage, disable, or impair our infrastructure</li>
+        <li>Violating any applicable Kenyan law including the Computer Misuse and Cybercrimes Act 2018</li>
+      </ul>
+      <p>Kastra Systems reserves the right to suspend or terminate accounts that violate these prohibitions without prior notice where the violation poses a risk to the platform or other customers.</p>
+
+      <h2 id="intellectual-property">6. Intellectual Property</h2>
+      <h3>Our Property</h3>
+      <p>The KASTRA POS platform, including its source code, UI design, branding, logos, API specification, documentation, and all associated intellectual property, is owned by Kastra Systems and protected by Kenyan and international copyright law. Nothing in these Terms grants you any ownership rights in our software.</p>
+
+      <h3>Your Data</h3>
+      <p>You retain full ownership of your business data — including your customer records, transaction history, inventory data, and employee records. We claim no ownership over your data. You grant us a limited, non-exclusive licence to store, process, and transmit your data solely for the purpose of providing the service to you.</p>
+
+      <h3>Feedback</h3>
+      <p>If you submit feedback, suggestions, or feature requests to us, you grant Kastra Systems a perpetual, royalty-free, worldwide licence to use that feedback to improve the service. We are not obligated to implement any suggestion.</p>
+
+      <h2 id="data-and-privacy">7. Data and Privacy</h2>
+      <p>Our collection and use of your personal data is governed by our <a href="privacy.html">Privacy Policy</a>, which is incorporated into these Terms by reference. By using the service, you consent to the data practices described in the Privacy Policy.</p>
+      <p>We act as a <strong>Data Processor</strong> for your customer data and as a <strong>Data Controller</strong> for your account data. We comply with the Kenya Data Protection Act 2019 (KDPA). See our <a href="kdpa.html">KDPA Compliance Statement</a> for details.</p>
+
+      <h2 id="availability">8. Service Availability and Uptime</h2>
+      <ul>
+        <li>We target 99.5% monthly uptime for the KASTRA POS API and web application</li>
+        <li>The offline-first architecture means POS functionality continues when internet is unavailable, with data syncing when connectivity is restored</li>
+        <li>Scheduled maintenance windows will be communicated at least 48 hours in advance via email and in-app notification</li>
+        <li>We are not responsible for downtime caused by your internet service provider, Safaricom M-Pesa service outages, or KRA eTIMS API unavailability</li>
+        <li>Critical bugs affecting core POS functionality will be addressed within 4 business hours during Kenya business hours (Mon–Fri, 8am–6pm EAT)</li>
+      </ul>
+
+      <h2 id="liability">9. Limitation of Liability</h2>
+
+      <div class="info-card amber">
+        <div class="info-card-title">Important Notice</div>
+        <p>Please read this section carefully. It limits our legal liability to you in the event of service issues, data loss, or third-party failures.</p>
+      </div>
+
+      <p>To the maximum extent permitted by applicable Kenyan law:</p>
+      <ul>
+        <li>KASTRA POS is provided "as is" and "as available" without warranties of any kind, whether express or implied</li>
+        <li>Kastra Systems shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of the service</li>
+        <li>Our total aggregate liability to you for any claims arising from your use of the service shall not exceed the amount you paid to us in the 3 months immediately preceding the event giving rise to the claim</li>
+        <li>We are not liable for losses arising from M-Pesa, Paystack, or KRA eTIMS service outages that are outside our control</li>
+        <li>We are not liable for data loss resulting from your failure to maintain backups where the backup feature is available in your plan</li>
+        <li>We are not liable for KRA penalties, fines, or assessments arising from incorrect eTIMS configuration that you are responsible for (see KRA Compliance Disclaimer below)</li>
+      </ul>
+      <p>Nothing in these Terms limits liability for death or personal injury caused by negligence, fraud, or any liability that cannot be excluded under Kenyan law.</p>
+
+      <h2 id="kra-disclaimer">10. KRA Compliance Disclaimer</h2>
+
+      <div class="info-card red">
+        <div class="info-card-title">Your Compliance Responsibility</div>
+        <p>KASTRA POS is a tool that facilitates KRA eTIMS compliance. Final responsibility for tax compliance rests with you as the registered taxpayer. You must maintain a valid eTIMS registration with KRA and ensure your BHF ID, TIN, and CMC Key are correctly configured in KASTRA POS.</p>
+      </div>
+
+      <ul>
+        <li>You are solely responsible for registering and maintaining your eTIMS credentials with the Kenya Revenue Authority</li>
+        <li>You are responsible for verifying that eTIMS submissions from KASTRA POS are accepted by KRA — KASTRA POS shows the eTIMS submission status on each receipt</li>
+        <li>KASTRA POS automates eTIMS submission but is not a substitute for tax advice. Consult a qualified tax advisor for complex tax matters</li>
+        <li>You must ensure your items are classified with the correct KRA item codes and tax rates (VAT 16% or TOT 3% as applicable)</li>
+        <li>Kastra Systems is not liable for penalties, interest, or KRA audit findings resulting from incorrect item classification, incorrect tax rates, or failure to maintain a valid eTIMS registration</li>
+        <li>You must retain eTIMS receipts and related records for 5 years as required by the Tax Procedures Act</li>
+      </ul>
+
+      <h2 id="termination">11. Termination</h2>
+      <h3>Termination by You</h3>
+      <p>You may terminate your account at any time by cancelling your subscription (Settings → Subscription) and requesting account deletion via <a href="mailto:legal@kastrapos.co.ke">legal@kastrapos.co.ke</a>. Following termination, your data will be retained for 90 days then permanently deleted, subject to legal retention requirements.</p>
+
+      <h3>Termination by Kastra Systems</h3>
+      <p>We may suspend or terminate your account immediately if:</p>
+      <ul>
+        <li>You breach any material provision of these Terms</li>
+        <li>You fail to pay subscription fees after the grace period</li>
+        <li>We are required to do so by law or court order</li>
+        <li>Your use of the service poses a security risk to other customers</li>
+      </ul>
+      <p>For non-emergency terminations, we will provide 30 days written notice where reasonably possible. Upon termination, you may request a data export within the 90-day retention period.</p>
+
+      <h2 id="governing-law">12. Governing Law and Disputes</h2>
+      <p>These Terms are governed by and construed in accordance with the laws of the Republic of Kenya. Any disputes arising from these Terms or your use of the service shall be subject to the exclusive jurisdiction of the courts of Kenya.</p>
+      <p>Before initiating formal legal proceedings, both parties agree to attempt to resolve disputes through good-faith negotiation for at least 30 days. Disputes that cannot be resolved through negotiation may be referred to mediation under the Nairobi Centre for International Arbitration (NCIA) Rules.</p>
+
+      <h2 id="changes">13. Changes to Terms</h2>
+      <p>We may update these Terms from time to time. When we make material changes, we will notify you by email at least 14 days before the changes take effect and display a prominent notice in the KASTRA POS dashboard. Continued use of the service after the effective date constitutes your acceptance of the updated Terms.</p>
+      <p>If you do not agree to the updated Terms, you must stop using the service and request account cancellation before the effective date.</p>
+
+      <h2 id="contact">14. Contact Us</h2>
+      <p>For legal enquiries, contract questions, or dispute notifications, contact us at:</p>
+      <ul>
+        <li><strong>Email:</strong> <a href="mailto:legal@kastrapos.co.ke">legal@kastrapos.co.ke</a></li>
+        <li><strong>General support:</strong> <a href="mailto:hello@kastrapos.co.ke">hello@kastrapos.co.ke</a></li>
+        <li><strong>Postal:</strong> Kastra Systems, Westlands, Nairobi, Kenya</li>
+      </ul>
+
+    </div>
+  </div>
+</div>
+
+<!-- Footer -->
+<footer>
+  <div class="container">
+    <div class="footer-top">
+      <div>
+        <div class="footer-brand-logo">
+          <img src="posfav.png" alt="KASTRA" style="width:32px;height:32px;object-fit:contain;border-radius:8px;">
+          <div class="footer-brand-name">KASTRA POS</div>
+        </div>
+        <p class="footer-desc">Kenya's most complete KRA eTIMS-compliant point of sale platform. Offline-first, M-Pesa integrated, built for serious business.</p>
+        <div class="footer-social">
+          <a href="#" class="social-btn" title="Twitter/X">𝕏</a>
+          <a href="#" class="social-btn" title="LinkedIn">in</a>
+          <a href="#" class="social-btn" title="WhatsApp">💬</a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <ul>
+          <li><a href="index.html#features">Features</a></li>
+          <li><a href="index.html#pricing">Pricing</a></li>
+          <li><a href="index.html#compliance">Compliance</a></li>
+          <li><a href="setup-guide.html">Setup Guide</a></li>
+          <li><a href="/api/docs">API Docs</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <ul>
+          <li><a href="about.html">About Us</a></li>
+          <li><a href="contact.html">Contact Us</a></li>
+          <li><a href="privacy.html">Privacy Policy</a></li>
+          <li><a href="terms.html">Terms of Service</a></li>
+          <li><a href="kdpa.html">KDPA Statement</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Stay Updated</h4>
+        <p style="font-size:.8125rem;color:var(--text3);margin-bottom:12px;line-height:1.55;">Get product updates, KRA compliance news, and tips for your business.</p>
+        <div class="footer-newsletter">
+          <input type="email" placeholder="your@email.com" />
+          <button class="btn btn-primary" style="width:100%;justify-content:center;">Subscribe</button>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span class="footer-copy">© 2026 Kastra Systems. All rights reserved. Built in 🇰🇪 Kenya.</span>
+      <div class="footer-badges">
+        <span class="fbadge">🇰🇪 Made for Kenya</span>
+        <span class="fbadge">KRA eTIMS Ready</span>
+        <span class="fbadge">KDPA Compliant</span>
+        <span class="fbadge">AES-256 Encrypted</span>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  window.addEventListener('scroll', function() {
+    document.getElementById('main-nav').classList.toggle('scrolled', window.scrollY > 20);
+  });
+</script>
+</body>
+</html>

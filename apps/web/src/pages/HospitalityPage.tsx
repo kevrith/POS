@@ -4,6 +4,7 @@ import {
   Plus, Users, Clock, ChefHat, X, Trash2, Send, Receipt, RefreshCw,
   UtensilsCrossed, ArrowRight, Check, AlertCircle, Loader2,
   ArrowLeftRight, GitMerge, CalendarDays, Zap, Edit2, CheckCircle,
+  BedDouble, KeyRound, LogIn, LogOut, Phone,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
@@ -20,6 +21,9 @@ interface Table {
   status: 'AVAILABLE' | 'OCCUPIED' | 'BILL_REQUESTED' | 'RESERVED';
   floor?: string;
   currentOrderId?: string;
+  hasReadyKOT?: boolean;
+  hasPendingKOT?: boolean;
+  activeKOTCount?: number;
 }
 
 interface OrderItem {
@@ -65,11 +69,16 @@ interface Reservation {
 
 interface KdsItem {
   id: string;
+  kotNumber: number;
   status: string;
   createdAt: string;
+  assignedChef?: { id: string; name: string } | null;
+  estimatedReadyAt?: string;
+  estimatedPrepMinutes?: number;
   order: {
     id: string;
     table: { number: string } | null;
+    waiter?: { id: string; name: string } | null;
     items: Array<{ id: string; name: string; quantity: number; specialInstructions?: string | null }>;
   };
 }
@@ -90,6 +99,47 @@ interface BarTab {
   waiterId?: string;
   createdAt: string;
   items: Array<{ id: string; name: string; quantity: number; unitPriceCents: number; totalCents: number; modifiers?: string }>;
+}
+
+interface HotelRoom {
+  id: string;
+  number: string;
+  type: string;
+  floor?: string;
+  capacity: number;
+  pricePerNightCents: number;
+  status: 'AVAILABLE' | 'OCCUPIED' | 'MAINTENANCE' | 'RESERVED';
+  amenities?: string;
+  notes?: string;
+  bookings: Array<{
+    id: string;
+    guestName: string;
+    guestPhone?: string;
+    actualCheckIn?: string;
+    checkOutDate?: string;
+    nightCount: number;
+    totalAmountCents: number;
+    depositCents: number;
+  }>;
+}
+
+interface RoomBooking {
+  id: string;
+  roomId: string;
+  guestName: string;
+  guestPhone?: string;
+  guestIdNumber?: string;
+  checkInDate: string;
+  checkOutDate?: string;
+  actualCheckIn?: string;
+  actualCheckOut?: string;
+  nightCount: number;
+  pricePerNightCents: number;
+  totalAmountCents: number;
+  depositCents: number;
+  status: string;
+  notes?: string;
+  room?: { number: string; type: string; floor?: string };
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -322,11 +372,13 @@ function ItemPicker({ businessId, storeId, onAdd, onClose }: ItemPickerProps) {
 
 interface ReservationsModalProps {
   storeId: string;
+  businessId: string;
   tables: Table[];
   onClose: () => void;
+  tablePrefix?: string;
 }
 
-function ReservationsModal({ storeId, tables, onClose }: ReservationsModalProps) {
+function ReservationsModal({ storeId, businessId, tables, onClose, tablePrefix = 'T' }: ReservationsModalProps) {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
@@ -362,6 +414,16 @@ function ReservationsModal({ storeId, tables, onClose }: ReservationsModalProps)
     },
   });
 
+  // Phone-number auto-lookup — pre-fills customer name when a known number is typed
+  const phoneTrimmed = form.customerPhone.replace(/\s/g, '');
+  const { data: phoneMatches } = useQuery<Array<{ id: string; name: string; phone?: string }>>({
+    queryKey: ['customer-phone-lookup', businessId, phoneTrimmed],
+    queryFn: () => api.get(`/businesses/${businessId}/customers?search=${encodeURIComponent(phoneTrimmed)}`),
+    enabled: !!businessId && phoneTrimmed.length >= 7,
+    staleTime: 30_000,
+  });
+  const phoneSuggestion = phoneMatches?.length === 1 && !form.customerName ? phoneMatches[0] : null;
+
   const availableTables = tables.filter((t) => t.status === 'AVAILABLE' || t.status === 'RESERVED');
 
   return (
@@ -394,7 +456,7 @@ function ReservationsModal({ storeId, tables, onClose }: ReservationsModalProps)
                   <div>
                     <p className="font-semibold text-gray-800">{res.customerName}</p>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      Table {res.table.number} • {res.partySize} guests
+                      {fmtTable(res.table.number, tablePrefix)} • {res.partySize} guests
                     </p>
                     {res.customerPhone && <p className="text-xs text-gray-500">{res.customerPhone}</p>}
                   </div>
@@ -440,6 +502,16 @@ function ReservationsModal({ storeId, tables, onClose }: ReservationsModalProps)
                     className="w-full px-3 py-2 border rounded-lg text-sm"
                     placeholder="0712 345 678"
                   />
+                  {phoneSuggestion && (
+                    <button
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, customerName: phoneSuggestion.name }))}
+                      className="mt-1 w-full text-left px-2 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700 hover:bg-blue-100 flex items-center gap-1.5"
+                    >
+                      <CheckCircle className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                      <span>Returning guest: <strong>{phoneSuggestion.name}</strong> — tap to fill</span>
+                    </button>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Table *</label>
@@ -450,7 +522,7 @@ function ReservationsModal({ storeId, tables, onClose }: ReservationsModalProps)
                   >
                     <option value="">Select table</option>
                     {availableTables.map((t) => (
-                      <option key={t.id} value={t.id}>Table {t.number} ({t.capacity} seats)</option>
+                      <option key={t.id} value={t.id}>{fmtTable(t.number, tablePrefix)} ({t.capacity} seats)</option>
                     ))}
                   </select>
                 </div>
@@ -608,6 +680,7 @@ function FastFoodPanel({ businessId, storeId, userId, userName, onClose }: FastF
           unitPriceCents: i.unitPriceCents,
         })),
         payments,
+        serviceChargeCents: 0,
       });
 
       void qc.invalidateQueries({ queryKey: ['tables'] });
@@ -746,9 +819,14 @@ interface OrderPanelProps {
   onClose: () => void;
   onRefresh: () => void;
   userName?: string;
+  tablePrefix?: string;
 }
 
-function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh, userName }: OrderPanelProps) {
+function fmtTable(number: string, prefix: string): string {
+  return /\D/.test(number) ? number : `${prefix}${number}`;
+}
+
+function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh, userName, tablePrefix = 'T' }: OrderPanelProps) {
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const [showPicker, setShowPicker] = useState(false);
@@ -772,7 +850,14 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
       return api.get<HospOrder>(`/hospitality/orders/${table.currentOrderId}`);
     },
     enabled: !!table.currentOrderId,
-    refetchInterval: 15000,
+    refetchInterval: 8000,
+  });
+
+  const { data: bizSettings } = useQuery<{ name?: string; receiptHeader?: string; receiptFooter?: string; tablePrefix?: string | null }>({
+    queryKey: ['biz-settings', businessId],
+    queryFn: () => api.get(`/business/${businessId}/settings`),
+    enabled: !!businessId,
+    staleTime: 60_000,
   });
 
   const createOrder = useMutation({
@@ -816,6 +901,16 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
     },
   });
 
+  const markServedMutation = useMutation({
+    mutationFn: (kotId: string) =>
+      api.patch(`/hospitality/kot/${kotId}/status`, { status: 'SERVED' }),
+    onSuccess: () => {
+      void refetchOrder();
+      void qc.invalidateQueries({ queryKey: ['kds'] });
+      void qc.invalidateQueries({ queryKey: ['tables'] });
+    },
+  });
+
   const requestBill = useMutation({
     mutationFn: (orderId: string) =>
       api.post(`/hospitality/orders/${orderId}/request-bill`, {}),
@@ -823,6 +918,25 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
       void refetchOrder();
       void qc.invalidateQueries({ queryKey: ['tables'] });
       onRefresh();
+      // Auto-print bill so waiter can carry it to the table
+      if (activeOrder) {
+        const billItems = activeOrder.items.map((i) => ({
+          name: i.name,
+          quantity: i.quantity,
+          unitPriceCents: i.unitPriceCents,
+          totalCents: i.unitPriceCents * i.quantity,
+        }));
+        printBill({
+          tableNumber: table.number,
+          businessName: bizSettings?.name ?? 'Restaurant',
+          waiterName: userName,
+          items: billItems,
+          subtotalCents: subtotal,
+          totalCents: subtotal,
+          date: new Date().toISOString(),
+          footer: bizSettings?.receiptFooter || undefined,
+        });
+      }
     },
   });
 
@@ -866,16 +980,29 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
           unitPriceCents: i.unitPriceCents,
         })),
         payments,
+        serviceChargeCents: 0, // prices are VAT-inclusive; no service charge added
       });
     },
     onSuccess: () => {
       setShowPayment(false);
       setPayError(null);
       void qc.invalidateQueries({ queryKey: ['tables'] });
+      void qc.invalidateQueries({ queryKey: ['hosp-order', table.id] });
       onRefresh();
       onClose();
     },
     onError: (err) => setPayError(err instanceof Error ? err.message : 'Payment failed'),
+  });
+
+  const cancelOrderMutation = useMutation({
+    mutationFn: (orderId: string) =>
+      api.post(`/hospitality/orders/${orderId}/cancel`, {}),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['tables'] });
+      void qc.invalidateQueries({ queryKey: ['hosp-order', table.id] });
+      onRefresh();
+      onClose();
+    },
   });
 
   const activeOrder = order;
@@ -968,7 +1095,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
         <div className="px-5 py-4 border-b bg-gray-50">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-bold text-gray-800">Table {table.number}</h2>
+              <h2 className="text-xl font-bold text-gray-800">{fmtTable(table.number, tablePrefix)}</h2>
               <p className="text-sm text-gray-500">
                 <Users className="w-3 h-3 inline mr-1" />
                 {table.capacity} seats •{' '}
@@ -1014,8 +1141,28 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
           ) : allItems.length === 0 ? (
             <div className="text-center py-12">
               <UtensilsCrossed className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-              <p className="text-gray-400 text-sm">No items yet</p>
-              <p className="text-gray-400 text-xs mt-1">Add items to start the order</p>
+              <p className="text-gray-400 text-sm font-medium">
+                {table.status === 'AVAILABLE' ? 'Table is available' : 'No items yet'}
+              </p>
+              <p className="text-gray-400 text-xs mt-1">
+                {table.status === 'AVAILABLE'
+                  ? 'Tap "+ Add Items" below to start a new order'
+                  : 'Add items to start the order'}
+              </p>
+              {/* Clear table — for guests who sat but left without ordering */}
+              {activeOrder && table.status === 'OCCUPIED' && allItems.length === 0 && (
+                <button
+                  onClick={() => {
+                    if (confirm('Clear this table? This will cancel the empty order and mark the table as available.')) {
+                      cancelOrderMutation.mutate(activeOrder.id);
+                    }
+                  }}
+                  disabled={cancelOrderMutation.isPending}
+                  className="mt-4 flex items-center gap-1.5 px-4 py-2 mx-auto text-xs font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Clear Table (guests left)
+                </button>
+              )}
             </div>
           ) : (
             <>
@@ -1140,7 +1287,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
               onClick={() => {
                 printBill({
                   tableNumber: table.number,
-                  businessName: user?.businessId ?? 'Restaurant',
+                  businessName: bizSettings?.name ?? 'Restaurant',
                   waiterName: userName,
                   items: activeOrder.items.map((i) => ({
                     name: i.name,
@@ -1148,9 +1295,10 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
                     unitPriceCents: i.unitPriceCents,
                     totalCents: i.unitPriceCents * i.quantity,
                   })),
-                  subtotalCents: activeOrder.totalCents,
-                  totalCents: activeOrder.totalCents,
+                  subtotalCents: subtotal,
+                  totalCents: subtotal,
                   date: new Date().toISOString(),
+                  footer: bizSettings?.receiptFooter || undefined,
                 });
               }}
               className="w-full py-2.5 border-2 border-amber-300 text-amber-700 hover:bg-amber-50 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-colors"
@@ -1167,15 +1315,73 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
               className="w-full py-3.5 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors"
             >
               <ArrowRight className="w-5 h-5" />
-              Take Payment — {fmt(activeOrder.totalCents)}
+              Take Payment — {fmt(subtotal)}
             </button>
           )}
 
+          {/* ── KOT Status tracker (waiter view) ── */}
           {activeOrder?.kots && activeOrder.kots.length > 0 && (
-            <div className="text-xs text-gray-400 text-center">
-              {activeOrder.kots.length} KOT(s) sent •{' '}
-              Last: {activeOrder.kots[activeOrder.kots.length - 1].status}
+            <div className="border border-gray-200 rounded-xl overflow-hidden">
+              <div className="px-3 py-2 bg-gray-50 border-b text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                <ChefHat className="w-3.5 h-3.5" /> Kitchen Status
+              </div>
+              <div className="divide-y">
+                {activeOrder.kots.map((kot) => (
+                  <div key={kot.id} className="flex items-center justify-between px-3 py-2.5 gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                        kot.status === 'READY'       ? 'bg-green-500' :
+                        kot.status === 'IN_PROGRESS' ? 'bg-yellow-400' :
+                        kot.status === 'SERVED'      ? 'bg-gray-300' :
+                                                       'bg-orange-400'
+                      }`} />
+                      <span className="text-xs text-gray-600 truncate">
+                        {kot.type.replace('_', ' ')}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                        kot.status === 'READY'       ? 'bg-green-100 text-green-700' :
+                        kot.status === 'IN_PROGRESS' ? 'bg-yellow-100 text-yellow-700' :
+                        kot.status === 'SERVED'      ? 'bg-gray-100 text-gray-500' :
+                                                       'bg-orange-100 text-orange-700'
+                      }`}>
+                        {kot.status === 'IN_PROGRESS' ? 'Cooking' : kot.status === 'READY' ? 'Ready!' : kot.status === 'SERVED' ? 'Served' : 'Pending'}
+                      </span>
+                      {kot.status === 'READY' && (
+                        <button
+                          onClick={() => markServedMutation.mutate(kot.id)}
+                          disabled={markServedMutation.isPending}
+                          className="flex items-center gap-1 px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg disabled:opacity-50 transition-colors"
+                        >
+                          <CheckCircle className="w-3 h-3" /> Served ✓
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
+          )}
+
+          {/* ── Manager: Force-clear occupied table (guests left mid-service) ── */}
+          {activeOrder && (table.status === 'OCCUPIED' || table.status === 'BILL_REQUESTED') &&
+           activeOrder.items.length > 0 &&
+           (user?.role === 'OWNER' || user?.role === 'MANAGER') && (
+            <button
+              onClick={() => {
+                if (confirm(
+                  `Clear ${fmtTable(table.number, tablePrefix)}? This will void the current order (${activeOrder.items.length} item${activeOrder.items.length !== 1 ? 's' : ''}) and mark the table as available.\n\nUse this only when guests have left without paying.`
+                )) {
+                  cancelOrderMutation.mutate(activeOrder.id);
+                }
+              }}
+              disabled={cancelOrderMutation.isPending}
+              className="w-full py-2 border border-red-200 text-red-600 hover:bg-red-50 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Clear Table (void order)
+            </button>
           )}
         </div>
       </div>
@@ -1206,7 +1412,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
                       disabled={transferOrder.isPending}
                       className="p-3 rounded-xl border-2 border-green-200 bg-green-50 hover:bg-green-100 text-center disabled:opacity-40 transition-colors"
                     >
-                      <div className="font-bold text-green-800">T{t.number}</div>
+                      <div className="font-bold text-green-800">{fmtTable(t.number, tablePrefix)}</div>
                       <div className="text-xs text-green-600">{t.capacity} seats</div>
                     </button>
                   ))}
@@ -1232,7 +1438,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
             </div>
             <div className="p-5">
               <p className="text-sm text-gray-600 mb-3">
-                Merge another table's order into <strong>Table {table.number}</strong>:
+                Merge another table's order into <strong>{fmtTable(table.number, tablePrefix)}</strong>:
               </p>
               {occupiedForMerge.length === 0 ? (
                 <p className="text-sm text-gray-400 text-center py-4">No occupied tables to merge</p>
@@ -1245,14 +1451,14 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
                       disabled={mergeTables.isPending}
                       className="p-3 rounded-xl border-2 border-red-200 bg-red-50 hover:bg-red-100 text-center disabled:opacity-40 transition-colors"
                     >
-                      <div className="font-bold text-red-800">T{t.number}</div>
+                      <div className="font-bold text-red-800">{fmtTable(t.number, tablePrefix)}</div>
                       <div className="text-xs text-red-600">{t.capacity} seats</div>
                     </button>
                   ))}
                 </div>
               )}
               <p className="text-xs text-gray-400 mt-3 text-center">
-                Items from the selected table move into Table {table.number}
+                Items from the selected table move into {fmtTable(table.number, tablePrefix)}
               </p>
             </div>
           </div>
@@ -1270,7 +1476,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
 
       {showPayment && activeOrder && (
         <PaymentModal
-          totalCents={activeOrder.totalCents}
+          totalCents={subtotal}
           onComplete={(payments) => checkout.mutate(payments)}
           onCancel={() => { setShowPayment(false); setPayError(null); }}
           isProcessing={checkout.isPending}
@@ -1286,9 +1492,10 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
 interface KDSViewProps {
   storeId: string;
   onClose: () => void;
+  tablePrefix?: string;
 }
 
-function KDSView({ storeId, onClose }: KDSViewProps) {
+function KDSView({ storeId, onClose, tablePrefix = 'T' }: KDSViewProps) {
   const qc = useQueryClient();
 
   const { data: kdsOrders = [], isLoading } = useQuery<KdsItem[]>({
@@ -1346,7 +1553,7 @@ function KDSView({ storeId, onClose }: KDSViewProps) {
                 >
                   <div className="flex items-center justify-between mb-3">
                     <div>
-                      <span className="text-white font-bold text-lg">T{kds.order.table?.number ?? '?'}</span>
+                      <span className="text-white font-bold text-lg">{kds.order.table?.number ? fmtTable(kds.order.table.number, tablePrefix) : '?'}</span>
                       <span className="ml-2 text-xs text-gray-400">
                         {new Date(kds.createdAt).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}
                       </span>
@@ -1362,6 +1569,16 @@ function KDSView({ storeId, onClose }: KDSViewProps) {
                       </span>
                     </div>
                   </div>
+                  {kds.assignedChef && (
+                    <div className="text-xs text-yellow-600 flex items-center gap-1 mb-2">
+                      <span>👨‍🍳</span> {kds.assignedChef.name}
+                    </div>
+                  )}
+                  {kds.estimatedReadyAt && kds.status === 'IN_PROGRESS' && (
+                    <div className="text-xs text-blue-600 mb-2">
+                      Ready ~{new Date(kds.estimatedReadyAt).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  )}
 
                   <div className="space-y-2 mb-4">
                     {kds.order.items.map((item, idx) => (
@@ -1398,12 +1615,10 @@ function KDSView({ storeId, onClose }: KDSViewProps) {
                       </button>
                     )}
                     {kds.status === 'READY' && (
-                      <button
-                        onClick={() => updateKOT.mutate({ kotId: kds.id, status: 'SERVED' })}
-                        className="flex-1 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
-                      >
-                        Served
-                      </button>
+                      <div className="flex-1 py-2 bg-green-900/30 border border-green-500/40 text-green-400 rounded-lg text-xs font-semibold text-center flex items-center justify-center gap-1.5">
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        At the pass
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1421,7 +1636,7 @@ function KDSView({ storeId, onClose }: KDSViewProps) {
 export default function HospitalityPage() {
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
-  const [view, setView] = useState<'tables' | 'bar-tabs'>('tables');
+  const [view, setView] = useState<'tables' | 'bar-tabs' | 'rooms'>('tables');
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [showKDS, setShowKDS] = useState(false);
   const [showReservations, setShowReservations] = useState(false);
@@ -1430,6 +1645,12 @@ export default function HospitalityPage() {
   const [selectedBarTab, setSelectedBarTab] = useState<BarTab | null>(null);
   const [newTabName, setNewTabName] = useState('');
   const [showNewTabDialog, setShowNewTabDialog] = useState(false);
+  const [selectedRoom, setSelectedRoom] = useState<HotelRoom | null>(null);
+  const [editingRoom, setEditingRoom] = useState<HotelRoom | null>(null);
+  const [editRoomForm, setEditRoomForm] = useState({ number: '', type: 'STANDARD', floor: '', capacity: 2, pricePerNightCents: 0, notes: '' });
+  const [showAddRoomModal, setShowAddRoomModal] = useState(false);
+  const [showBookingModal, setShowBookingModal] = useState<HotelRoom | null>(null);
+  const [showBookingsListModal, setShowBookingsListModal] = useState(false);
 
   const businessId = user?.businessId ?? '';
   const storeId = user?.storeId ?? '';
@@ -1438,8 +1659,21 @@ export default function HospitalityPage() {
     queryKey: ['tables', storeId],
     queryFn: () => api.get<Table[]>(`/hospitality/tables?storeId=${storeId}`),
     enabled: !!storeId,
-    refetchInterval: 30000,
+    refetchInterval: 10000,
   });
+
+  const { data: bizSettings } = useQuery<{ tablePrefix?: string | null }>({
+    queryKey: ['biz-settings', businessId],
+    queryFn: () => api.get(`/business/${businessId}/settings`),
+    enabled: !!businessId,
+    staleTime: 60_000,
+  });
+  const tablePrefix = bizSettings?.tablePrefix ?? 'T';
+
+  function tableLabel(number: string): string {
+    // If the number already contains non-digit characters (e.g. "Tokyo"), show as-is
+    return /\D/.test(number) ? number : `${tablePrefix}${number}`;
+  }
 
   const { data: barTabs = [], refetch: refetchBarTabs } = useQuery<BarTab[]>({
     queryKey: ['bar-tabs', businessId, storeId],
@@ -1464,6 +1698,94 @@ export default function HospitalityPage() {
     mutationFn: (tabId: string) => api.post(`/hospitality/bar-tabs/${tabId}/close`, {}),
     onSuccess: () => { void refetchBarTabs(); setSelectedBarTab(null); },
   });
+
+  // ── Hotel Rooms ─────────────────────────────────────────────────────────────
+
+  const { data: hotelRooms = [], refetch: refetchRooms } = useQuery<HotelRoom[]>({
+    queryKey: ['hotel-rooms', businessId, storeId],
+    queryFn: () => api.get(`/hospitality/hotel-rooms?businessId=${businessId}&storeId=${storeId}`),
+    enabled: !!businessId && view === 'rooms',
+    refetchInterval: 20000,
+  });
+
+  const { data: roomBookings = [] } = useQuery<RoomBooking[]>({
+    queryKey: ['room-bookings', businessId, storeId],
+    queryFn: () => api.get(`/hospitality/room-bookings?businessId=${businessId}&storeId=${storeId}`),
+    enabled: !!businessId && showBookingsListModal,
+  });
+
+  const [addRoomForm, setAddRoomForm] = useState({
+    number: '', type: 'STANDARD', floor: '', capacity: 2, pricePerNightCents: 0, notes: '',
+  });
+
+  const [bookingForm, setBookingForm] = useState({
+    guestName: '', guestPhone: '', guestIdNumber: '',
+    checkInDate: new Date().toISOString().split('T')[0],
+    checkOutDate: '',
+    nightCount: 1,
+    depositCents: 0,
+    notes: '',
+  });
+
+  const createRoomMutation = useMutation({
+    mutationFn: (data: typeof addRoomForm) =>
+      api.post('/hospitality/hotel-rooms', {
+        ...data,
+        businessId,
+        storeId,
+        pricePerNightCents: Math.round(data.pricePerNightCents * 100),
+      }),
+    onSuccess: () => { void refetchRooms(); setShowAddRoomModal(false); setAddRoomForm({ number: '', type: 'STANDARD', floor: '', capacity: 2, pricePerNightCents: 0, notes: '' }); },
+  });
+
+  const updateRoomStatusMutation = useMutation({
+    mutationFn: ({ roomId, status }: { roomId: string; status: string }) =>
+      api.patch(`/hospitality/hotel-rooms/${roomId}`, { status }),
+    onSuccess: () => void refetchRooms(),
+  });
+
+  const updateRoomMutation = useMutation({
+    mutationFn: ({ roomId, data }: { roomId: string; data: typeof editRoomForm }) =>
+      api.patch(`/hospitality/hotel-rooms/${roomId}`, {
+        ...data,
+        pricePerNightCents: Math.round(data.pricePerNightCents * 100),
+      }),
+    onSuccess: () => { void refetchRooms(); setEditingRoom(null); },
+  });
+
+  const createBookingMutation = useMutation({
+    mutationFn: (roomId: string) =>
+      api.post('/hospitality/room-bookings', {
+        ...bookingForm,
+        roomId,
+        businessId,
+        storeId,
+        depositCents: Math.round(bookingForm.depositCents * 100),
+      }),
+    onSuccess: () => { void refetchRooms(); setShowBookingModal(null); setBookingForm({ guestName: '', guestPhone: '', guestIdNumber: '', checkInDate: new Date().toISOString().split('T')[0], checkOutDate: '', nightCount: 1, depositCents: 0, notes: '' }); },
+  });
+
+  const checkInMutation = useMutation({
+    mutationFn: (bookingId: string) => api.post(`/hospitality/room-bookings/${bookingId}/check-in`, {}),
+    onSuccess: () => { void refetchRooms(); setSelectedRoom(null); },
+  });
+
+  const checkOutMutation = useMutation({
+    mutationFn: (bookingId: string) => api.post(`/hospitality/room-bookings/${bookingId}/check-out`, { payments: [] }),
+    onSuccess: () => { void refetchRooms(); setSelectedRoom(null); },
+  });
+
+  const cancelBookingMutation = useMutation({
+    mutationFn: (bookingId: string) => api.post(`/hospitality/room-bookings/${bookingId}/cancel`, {}),
+    onSuccess: () => { void refetchRooms(); setSelectedRoom(null); },
+  });
+
+  const ROOM_STATUS_COLORS: Record<string, string> = {
+    AVAILABLE:   'border-green-300 bg-green-50 dark:bg-green-900/20',
+    OCCUPIED:    'border-blue-400 bg-blue-50 dark:bg-blue-900/20',
+    RESERVED:    'border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20',
+    MAINTENANCE: 'border-red-300 bg-red-50 dark:bg-red-900/20',
+  };
 
   const [showAddTableModal, setShowAddTableModal] = useState(false);
   const [addTableForm, setAddTableForm] = useState({ number: '', capacity: 4, floor: '' });
@@ -1520,7 +1842,7 @@ export default function HospitalityPage() {
           <div className="flex items-center gap-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-800">
-                {view === 'tables' ? 'Table Management' : 'Bar Tabs'}
+                {view === 'tables' ? 'Table Management' : view === 'bar-tabs' ? 'Bar Tabs' : 'Hotel Rooms'}
               </h1>
               {view === 'tables' && (
                 <p className="text-sm text-gray-500 mt-0.5">
@@ -1531,6 +1853,12 @@ export default function HospitalityPage() {
               )}
               {view === 'bar-tabs' && (
                 <p className="text-sm text-gray-500 mt-0.5">{barTabs.length} open tab{barTabs.length !== 1 ? 's' : ''}</p>
+              )}
+              {view === 'rooms' && (
+                <p className="text-sm text-gray-500 mt-0.5">
+                  {hotelRooms.filter(r => r.status === 'AVAILABLE').length} available •{' '}
+                  {hotelRooms.filter(r => r.status === 'OCCUPIED').length} occupied
+                </p>
               )}
             </div>
             <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
@@ -1545,6 +1873,12 @@ export default function HospitalityPage() {
                 className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors ${view === 'bar-tabs' ? 'bg-white dark:bg-gray-600 shadow text-purple-600' : 'text-gray-600 dark:text-gray-300'}`}
               >
                 Bar Tabs
+              </button>
+              <button
+                onClick={() => setView('rooms')}
+                className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors flex items-center gap-1.5 ${view === 'rooms' ? 'bg-white dark:bg-gray-600 shadow text-teal-600' : 'text-gray-600 dark:text-gray-300'}`}
+              >
+                <BedDouble className="w-3.5 h-3.5" /> Rooms
               </button>
             </div>
           </div>
@@ -1657,6 +1991,13 @@ export default function HospitalityPage() {
                     {TABLE_STATUS_LABEL[s]}
                   </span>
                 ))}
+                <span className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
+                  <span className="bg-orange-400 text-white rounded-full px-1.5 py-0.5 text-[10px] font-bold">In Kitchen</span>
+                </span>
+                <span className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
+                  <span className="bg-green-500 text-white rounded-full px-1.5 py-0.5 text-[10px] font-bold animate-pulse">READY</span>
+                  Order ready to serve
+                </span>
               </div>
               {floors.map((floor) => (
                 <div key={floor}>
@@ -1676,7 +2017,7 @@ export default function HospitalityPage() {
                           {/* Status dot */}
                           <div className={`absolute top-3 right-3 w-2.5 h-2.5 rounded-full ${TABLE_DOTS[table.status]}`} />
                           <div className="text-center">
-                            <div className="text-2xl font-black mb-1">T{table.number}</div>
+                            <div className="text-2xl font-black mb-1">{tableLabel(table.number)}</div>
                             <div className="text-xs opacity-70 flex items-center justify-center gap-1">
                               <Users className="w-3 h-3" />
                               {table.capacity}
@@ -1689,10 +2030,22 @@ export default function HospitalityPage() {
                                                                    'bg-blue-100 text-blue-700'}`}>
                               {TABLE_STATUS_LABEL[table.status]}
                             </div>
-                            {table.status === 'OCCUPIED' && (
+                            {table.status === 'OCCUPIED' && !table.hasReadyKOT && !table.hasPendingKOT && (
                               <div className="mt-1 flex items-center justify-center gap-1">
                                 <Clock className="w-3 h-3 opacity-60" />
                                 <span className="text-xs opacity-60">Active</span>
+                              </div>
+                            )}
+                            {table.hasReadyKOT && (
+                              <div className="mt-2 flex items-center justify-center gap-1 bg-green-500 text-white rounded-full px-2 py-0.5 animate-pulse">
+                                <ChefHat className="w-3 h-3" />
+                                <span className="text-xs font-bold">READY</span>
+                              </div>
+                            )}
+                            {!table.hasReadyKOT && table.hasPendingKOT && (
+                              <div className="mt-2 flex items-center justify-center gap-1 bg-orange-400 text-white rounded-full px-2 py-0.5">
+                                <ChefHat className="w-3 h-3" />
+                                <span className="text-xs font-bold">In Kitchen</span>
                               </div>
                             )}
                             {table.status === 'RESERVED' && (
@@ -1858,6 +2211,616 @@ export default function HospitalityPage() {
         </div>
       )}
 
+      {/* ── Hotel Rooms View ──────────────────────────────────────────────────── */}
+      {view === 'rooms' && (
+        <div className="flex-1 overflow-y-auto p-6">
+          {/* Toolbar */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowAddRoomModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 text-sm font-medium"
+              >
+                <Plus className="w-4 h-4" /> Add Room
+              </button>
+              <button
+                onClick={() => setShowBookingsListModal(true)}
+                className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium"
+              >
+                <CalendarDays className="w-4 h-4" /> All Bookings
+              </button>
+            </div>
+            <button onClick={() => void refetchRooms()} className="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100">
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          </div>
+
+          {hotelRooms.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-24 text-gray-400">
+              <BedDouble className="w-16 h-16 mb-4 opacity-20" />
+              <p className="text-lg font-medium">No rooms configured</p>
+              <p className="text-sm mt-1">Click "Add Room" to set up your hotel rooms</p>
+            </div>
+          ) : (
+            (() => {
+              // Group by floor
+              const byFloor: Record<string, HotelRoom[]> = {};
+              hotelRooms.forEach(r => {
+                const floor = r.floor || 'Ground Floor';
+                if (!byFloor[floor]) byFloor[floor] = [];
+                byFloor[floor].push(r);
+              });
+              return Object.entries(byFloor).map(([floor, rooms]) => (
+                <div key={floor} className="mb-6">
+                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                    <KeyRound className="w-3.5 h-3.5" /> {floor}
+                  </h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                    {rooms.map(room => {
+                      const booking = room.bookings[0];
+                      return (
+                        <button
+                          key={room.id}
+                          onClick={() => setSelectedRoom(room)}
+                          className={`relative p-4 rounded-xl border-2 text-left transition-all hover:shadow-md ${ROOM_STATUS_COLORS[room.status] ?? 'border-gray-200 bg-gray-50'}`}
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <span className="text-xl font-bold text-gray-800 dark:text-white">{room.number}</span>
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                              room.status === 'AVAILABLE' ? 'bg-green-100 text-green-700' :
+                              room.status === 'OCCUPIED' ? 'bg-blue-100 text-blue-700' :
+                              room.status === 'RESERVED' ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-red-100 text-red-700'
+                            }`}>{room.status}</span>
+                          </div>
+                          <p className="text-xs text-gray-500">{room.type}</p>
+                          <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                            <Users className="w-3 h-3" /> {room.capacity} guests
+                          </p>
+                          <p className="text-xs font-semibold text-teal-700 mt-1">
+                            KES {(room.pricePerNightCents / 100).toLocaleString('en-KE', { maximumFractionDigits: 0 })}/night
+                          </p>
+                          {booking && (
+                            <p className="text-xs text-blue-600 mt-1 font-medium truncate">{booking.guestName}</p>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ));
+            })()
+          )}
+        </div>
+      )}
+
+      {/* ── Room Detail Panel ─────────────────────────────────────────────────── */}
+      {selectedRoom && (
+        <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
+              <div>
+                <h2 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                  <BedDouble className="w-5 h-5 text-teal-600" />
+                  Room {selectedRoom.number}
+                </h2>
+                <p className="text-sm text-gray-500">{selectedRoom.type} · Capacity: {selectedRoom.capacity}</p>
+              </div>
+              <button onClick={() => setSelectedRoom(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {/* Status badge */}
+              <div className="flex items-center justify-between">
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold ${
+                  selectedRoom.status === 'AVAILABLE' ? 'bg-green-100 text-green-700' :
+                  selectedRoom.status === 'OCCUPIED'  ? 'bg-blue-100 text-blue-700' :
+                  selectedRoom.status === 'RESERVED'  ? 'bg-yellow-100 text-yellow-700' :
+                  'bg-red-100 text-red-700'
+                }`}>
+                  <BedDouble className="w-4 h-4" /> {selectedRoom.status}
+                </span>
+                <span className="text-lg font-bold text-teal-700">
+                  KES {(selectedRoom.pricePerNightCents / 100).toLocaleString('en-KE', { maximumFractionDigits: 0 })}/night
+                </span>
+              </div>
+
+              {/* Active booking info */}
+              {selectedRoom.bookings[0] && (
+                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200">
+                  <p className="text-xs font-semibold text-blue-500 uppercase tracking-wide mb-2">Current Guest</p>
+                  <p className="font-bold text-gray-800 dark:text-white text-lg">{selectedRoom.bookings[0].guestName}</p>
+                  {selectedRoom.bookings[0].guestPhone && (
+                    <p className="text-sm text-gray-500 flex items-center gap-1 mt-0.5">
+                      <Phone className="w-3.5 h-3.5" /> {selectedRoom.bookings[0].guestPhone}
+                    </p>
+                  )}
+                  <div className="grid grid-cols-2 gap-3 mt-3 text-sm">
+                    <div>
+                      <p className="text-gray-400 text-xs">Check-in</p>
+                      <p className="font-medium text-gray-700 dark:text-gray-300">
+                        {selectedRoom.bookings[0].actualCheckIn
+                          ? new Date(selectedRoom.bookings[0].actualCheckIn).toLocaleDateString('en-KE')
+                          : '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400 text-xs">Check-out (planned)</p>
+                      <p className="font-medium text-gray-700 dark:text-gray-300">
+                        {selectedRoom.bookings[0].checkOutDate
+                          ? new Date(selectedRoom.bookings[0].checkOutDate).toLocaleDateString('en-KE')
+                          : '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400 text-xs">Nights</p>
+                      <p className="font-medium text-gray-700 dark:text-gray-300">{selectedRoom.bookings[0].nightCount}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400 text-xs">Total / Deposit</p>
+                      <p className="font-medium text-gray-700 dark:text-gray-300">
+                        KES {(selectedRoom.bookings[0].totalAmountCents / 100).toLocaleString('en-KE', { maximumFractionDigits: 0 })}
+                        {' / '}
+                        KES {(selectedRoom.bookings[0].depositCents / 100).toLocaleString('en-KE', { maximumFractionDigits: 0 })}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {selectedRoom.notes && (
+                <p className="text-sm text-gray-500 italic">{selectedRoom.notes}</p>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="p-4 border-t dark:border-gray-700 space-y-2">
+              {selectedRoom.status === 'AVAILABLE' && (
+                <button
+                  onClick={() => { setShowBookingModal(selectedRoom); setSelectedRoom(null); }}
+                  className="w-full py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold flex items-center justify-center gap-2"
+                >
+                  <LogIn className="w-5 h-5" /> Check In / Reserve
+                </button>
+              )}
+              {selectedRoom.status === 'RESERVED' && selectedRoom.bookings[0] && (
+                <>
+                  <button
+                    onClick={() => checkInMutation.mutate(selectedRoom.bookings[0].id)}
+                    disabled={checkInMutation.isPending}
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {checkInMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogIn className="w-5 h-5" />}
+                    Confirm Check-In
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (confirm('Cancel this reservation?')) cancelBookingMutation.mutate(selectedRoom.bookings[0].id);
+                    }}
+                    disabled={cancelBookingMutation.isPending}
+                    className="w-full py-2.5 border border-red-200 text-red-600 hover:bg-red-50 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    <X className="w-4 h-4" /> Cancel Reservation
+                  </button>
+                </>
+              )}
+              {selectedRoom.status === 'OCCUPIED' && selectedRoom.bookings[0] && (
+                <button
+                  onClick={() => {
+                    if (confirm(`Check out ${selectedRoom.bookings[0].guestName}?\n\nTotal due: KES ${(selectedRoom.bookings[0].totalAmountCents / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`)) {
+                      checkOutMutation.mutate(selectedRoom.bookings[0].id);
+                    }
+                  }}
+                  disabled={checkOutMutation.isPending}
+                  className="w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {checkOutMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogOut className="w-5 h-5" />}
+                  Check Out — KES {(selectedRoom.bookings[0].totalAmountCents / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+                </button>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => {
+                    setEditRoomForm({
+                      number: selectedRoom.number,
+                      type: selectedRoom.type,
+                      floor: selectedRoom.floor ?? '',
+                      capacity: selectedRoom.capacity,
+                      pricePerNightCents: selectedRoom.pricePerNightCents / 100,
+                      notes: selectedRoom.notes ?? '',
+                    });
+                    setEditingRoom(selectedRoom);
+                    setSelectedRoom(null);
+                  }}
+                  className="py-2 text-xs border border-blue-200 text-blue-600 hover:bg-blue-50 rounded-xl flex items-center justify-center gap-1.5"
+                >
+                  <Edit2 className="w-3.5 h-3.5" /> Edit Room
+                </button>
+                {selectedRoom.status !== 'MAINTENANCE' ? (
+                  <button
+                    onClick={() => {
+                      updateRoomStatusMutation.mutate({ roomId: selectedRoom.id, status: 'MAINTENANCE' });
+                      setSelectedRoom(null);
+                    }}
+                    className="py-2 text-xs border border-gray-200 text-gray-500 hover:bg-gray-50 rounded-xl flex items-center justify-center gap-1"
+                  >
+                    Maintenance
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      updateRoomStatusMutation.mutate({ roomId: selectedRoom.id, status: 'AVAILABLE' });
+                      setSelectedRoom(null);
+                    }}
+                    className="py-2 text-xs border border-green-200 text-green-600 hover:bg-green-50 rounded-xl flex items-center justify-center gap-1"
+                  >
+                    Mark Available
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── New Booking Modal ─────────────────────────────────────────────────── */}
+      {showBookingModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
+              <h2 className="text-lg font-bold text-gray-800 dark:text-white">
+                Check In — Room {showBookingModal.number}
+              </h2>
+              <button onClick={() => setShowBookingModal(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-3 text-sm p-3 bg-teal-50 rounded-xl">
+                <div><span className="text-gray-400">Room Type</span><p className="font-semibold">{showBookingModal.type}</p></div>
+                <div><span className="text-gray-400">Rate</span><p className="font-semibold text-teal-700">KES {(showBookingModal.pricePerNightCents / 100).toLocaleString('en-KE', { maximumFractionDigits: 0 })}/night</p></div>
+              </div>
+              {[
+                { label: 'Guest Name *', key: 'guestName', type: 'text', placeholder: 'Full name' },
+                { label: 'Phone Number', key: 'guestPhone', type: 'tel', placeholder: '+254...' },
+                { label: 'ID / Passport', key: 'guestIdNumber', type: 'text', placeholder: 'National ID or passport' },
+              ].map(({ label, key, type, placeholder }) => (
+                <div key={key}>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>
+                  <input
+                    type={type}
+                    value={(bookingForm as Record<string, string | number>)[key] as string}
+                    onChange={e => setBookingForm(f => ({ ...f, [key]: e.target.value }))}
+                    placeholder={placeholder}
+                    className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  />
+                </div>
+              ))}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Check-in Date</label>
+                  <input
+                    type="date"
+                    value={bookingForm.checkInDate}
+                    onChange={e => setBookingForm(f => ({ ...f, checkInDate: e.target.value }))}
+                    className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Check-out Date</label>
+                  <input
+                    type="date"
+                    value={bookingForm.checkOutDate}
+                    onChange={e => {
+                      const nights = bookingForm.checkInDate && e.target.value
+                        ? Math.max(1, Math.ceil((new Date(e.target.value).getTime() - new Date(bookingForm.checkInDate).getTime()) / 86400000))
+                        : 1;
+                      setBookingForm(f => ({ ...f, checkOutDate: e.target.value, nightCount: nights }));
+                    }}
+                    className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nights</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={bookingForm.nightCount}
+                    onChange={e => setBookingForm(f => ({ ...f, nightCount: parseInt(e.target.value) || 1 }))}
+                    className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Deposit (KES)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={bookingForm.depositCents}
+                    onChange={e => setBookingForm(f => ({ ...f, depositCents: parseFloat(e.target.value) || 0 }))}
+                    className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  />
+                </div>
+              </div>
+              <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Room total ({bookingForm.nightCount} night{bookingForm.nightCount !== 1 ? 's' : ''})</span>
+                  <span className="font-bold text-teal-700">KES {((showBookingModal.pricePerNightCents * bookingForm.nightCount) / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notes</label>
+                <textarea
+                  value={bookingForm.notes}
+                  onChange={e => setBookingForm(f => ({ ...f, notes: e.target.value }))}
+                  rows={2}
+                  placeholder="Special requests, preferences..."
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                />
+              </div>
+            </div>
+            <div className="p-4 border-t dark:border-gray-700 grid grid-cols-2 gap-3">
+              <button onClick={() => setShowBookingModal(null)} className="py-2.5 border border-gray-300 text-gray-700 rounded-xl font-semibold text-sm">Cancel</button>
+              <button
+                onClick={() => createBookingMutation.mutate(showBookingModal.id)}
+                disabled={!bookingForm.guestName || createBookingMutation.isPending}
+                className="py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {createBookingMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
+                Check In
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add Room Modal ───────────────────────────────────────────────────── */}
+      {showAddRoomModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-sm shadow-2xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
+              <h2 className="text-lg font-bold text-gray-800 dark:text-white">Add Room</h2>
+              <button onClick={() => setShowAddRoomModal(false)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="p-6 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Room Number *</label>
+                  <input
+                    type="text"
+                    value={addRoomForm.number}
+                    onChange={e => setAddRoomForm(f => ({ ...f, number: e.target.value }))}
+                    placeholder="101, Suite A…"
+                    className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500"
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Floor</label>
+                  <input
+                    type="text"
+                    value={addRoomForm.floor}
+                    onChange={e => setAddRoomForm(f => ({ ...f, floor: e.target.value }))}
+                    placeholder="1st Floor"
+                    className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Type</label>
+                  <select
+                    value={addRoomForm.type}
+                    onChange={e => setAddRoomForm(f => ({ ...f, type: e.target.value }))}
+                    className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500"
+                  >
+                    {['STANDARD','DELUXE','SUITE','EXECUTIVE','PENTHOUSE'].map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Capacity</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={addRoomForm.capacity}
+                    onChange={e => setAddRoomForm(f => ({ ...f, capacity: parseInt(e.target.value) || 1 }))}
+                    className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Price per Night (KES)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={addRoomForm.pricePerNightCents}
+                  onChange={e => setAddRoomForm(f => ({ ...f, pricePerNightCents: parseFloat(e.target.value) || 0 }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
+                <input
+                  type="text"
+                  value={addRoomForm.notes}
+                  onChange={e => setAddRoomForm(f => ({ ...f, notes: e.target.value }))}
+                  placeholder="Ocean view, Non-smoking…"
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button onClick={() => setShowAddRoomModal(false)} className="py-2.5 border border-gray-300 text-gray-700 rounded-xl font-semibold text-sm">Cancel</button>
+                <button
+                  onClick={() => createRoomMutation.mutate(addRoomForm)}
+                  disabled={!addRoomForm.number || createRoomMutation.isPending}
+                  className="py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold text-sm disabled:opacity-50"
+                >
+                  Add Room
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit Room Modal ─────────────────────────────────────────────────── */}
+      {editingRoom && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-sm shadow-2xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
+              <h2 className="text-lg font-bold text-gray-800 dark:text-white">Edit Room {editingRoom.number}</h2>
+              <button onClick={() => setEditingRoom(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="p-6 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Room Number *</label>
+                  <input
+                    type="text"
+                    value={editRoomForm.number}
+                    onChange={e => setEditRoomForm(f => ({ ...f, number: e.target.value }))}
+                    className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Floor</label>
+                  <input
+                    type="text"
+                    value={editRoomForm.floor}
+                    onChange={e => setEditRoomForm(f => ({ ...f, floor: e.target.value }))}
+                    placeholder="1st Floor"
+                    className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Type</label>
+                  <select
+                    value={editRoomForm.type}
+                    onChange={e => setEditRoomForm(f => ({ ...f, type: e.target.value }))}
+                    className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  >
+                    {['STANDARD','DELUXE','SUITE','EXECUTIVE','PENTHOUSE'].map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Capacity</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={editRoomForm.capacity}
+                    onChange={e => setEditRoomForm(f => ({ ...f, capacity: parseInt(e.target.value) || 1 }))}
+                    className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Price per Night (KES)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={editRoomForm.pricePerNightCents}
+                  onChange={e => setEditRoomForm(f => ({ ...f, pricePerNightCents: parseFloat(e.target.value) || 0 }))}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Notes</label>
+                <input
+                  type="text"
+                  value={editRoomForm.notes}
+                  onChange={e => setEditRoomForm(f => ({ ...f, notes: e.target.value }))}
+                  placeholder="Ocean view, Non-smoking…"
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button onClick={() => setEditingRoom(null)} className="py-2.5 border border-gray-300 text-gray-700 rounded-xl font-semibold text-sm dark:border-gray-600 dark:text-gray-300">Cancel</button>
+                <button
+                  onClick={() => updateRoomMutation.mutate({ roomId: editingRoom.id, data: editRoomForm })}
+                  disabled={!editRoomForm.number || updateRoomMutation.isPending}
+                  className="py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {updateRoomMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── All Bookings Modal ───────────────────────────────────────────────── */}
+      {showBookingsListModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
+              <h2 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                <CalendarDays className="w-5 h-5 text-teal-600" /> All Bookings
+              </h2>
+              <button onClick={() => setShowBookingsListModal(false)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {roomBookings.length === 0 ? (
+                <div className="py-16 text-center text-gray-400">
+                  <CalendarDays className="w-10 h-10 mx-auto mb-2 opacity-20" />
+                  <p className="text-sm">No bookings yet</p>
+                </div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0">
+                    <tr>
+                      {['Room','Guest','Phone','Check-in','Check-out','Nights','Total','Status'].map(h => (
+                        <th key={h} className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                    {roomBookings.map(b => (
+                      <tr key={b.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                        <td className="px-4 py-3 font-medium">{b.room?.number}</td>
+                        <td className="px-4 py-3">{b.guestName}</td>
+                        <td className="px-4 py-3 text-gray-500">{b.guestPhone || '—'}</td>
+                        <td className="px-4 py-3 text-gray-500">{new Date(b.checkInDate).toLocaleDateString('en-KE')}</td>
+                        <td className="px-4 py-3 text-gray-500">{b.checkOutDate ? new Date(b.checkOutDate).toLocaleDateString('en-KE') : '—'}</td>
+                        <td className="px-4 py-3 text-center">{b.nightCount}</td>
+                        <td className="px-4 py-3 font-medium text-teal-700">KES {(b.totalAmountCents / 100).toLocaleString('en-KE', { maximumFractionDigits: 0 })}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            b.status === 'CHECKED_IN'  ? 'bg-blue-100 text-blue-700' :
+                            b.status === 'CHECKED_OUT' ? 'bg-green-100 text-green-700' :
+                            b.status === 'RESERVED'    ? 'bg-yellow-100 text-yellow-700' :
+                            b.status === 'CANCELLED'   ? 'bg-red-100 text-red-700' :
+                            'bg-gray-100 text-gray-600'
+                          }`}>{b.status.replace('_', ' ')}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div className="p-4 border-t dark:border-gray-700">
+              <button onClick={() => setShowBookingsListModal(false)} className="w-full py-2.5 border border-gray-300 text-gray-700 rounded-xl font-semibold text-sm">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Order Panel */}
       {selectedTable && (
         <OrderPanel
@@ -1866,6 +2829,7 @@ export default function HospitalityPage() {
           businessId={businessId}
           storeId={storeId}
           userName={user?.name}
+          tablePrefix={tablePrefix}
           onClose={() => setSelectedTable(null)}
           onRefresh={() => {
             void qc.invalidateQueries({ queryKey: ['tables'] });
@@ -1889,14 +2853,16 @@ export default function HospitalityPage() {
       {showReservations && (
         <ReservationsModal
           storeId={storeId}
+          businessId={businessId}
           tables={tables}
+          tablePrefix={tablePrefix}
           onClose={() => setShowReservations(false)}
         />
       )}
 
       {/* KDS View */}
       {showKDS && (
-        <KDSView storeId={storeId} onClose={() => setShowKDS(false)} />
+        <KDSView storeId={storeId} tablePrefix={tablePrefix} onClose={() => setShowKDS(false)} />
       )}
 
       {/* ── Add Table Modal ─────────────────────────────────────────────────── */}

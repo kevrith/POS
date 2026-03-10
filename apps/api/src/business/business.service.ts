@@ -25,6 +25,11 @@ interface UpdateBusinessDto {
   bankAccountNumber?: string;
   bankAccountName?: string;
   bankBranch?: string;
+  idleMessage?: string;
+  idleLogoUrl?: string;
+  tablePrefix?: string;
+  receiptHeader?: string;
+  receiptFooter?: string;
 }
 
 interface CreateStoreDto {
@@ -35,6 +40,7 @@ interface CreateStoreDto {
 interface CreateUserDto {
   name: string;
   email?: string;
+  phone?: string;
   role: UserRole;
   pin?: string;
   password?: string;
@@ -42,6 +48,7 @@ interface CreateUserDto {
 
 interface UpdateUserDto {
   name?: string;
+  phone?: string;
   role?: UserRole;
   pin?: string;
   password?: string;
@@ -168,11 +175,12 @@ export class BusinessService {
         businessId,
         name: dto.name,
         email: dto.email ?? null,
+        phone: dto.phone ?? null,
         role: dto.role,
         passwordHash,
         pinHash,
       },
-      select: { id: true, name: true, email: true, role: true, createdAt: true },
+      select: { id: true, name: true, email: true, phone: true, role: true, createdAt: true },
     });
 
     return user;
@@ -201,11 +209,12 @@ export class BusinessService {
       where: { id: userId },
       data: {
         ...(dto.name !== undefined && { name: dto.name }),
+        ...(dto.phone !== undefined && { phone: dto.phone || null }),
         ...(dto.role !== undefined && { role: dto.role }),
         ...(passwordHash !== undefined && { passwordHash }),
         ...(pinHash !== undefined && { pinHash }),
       },
-      select: { id: true, name: true, email: true, role: true, createdAt: true },
+      select: { id: true, name: true, email: true, phone: true, role: true, createdAt: true },
     });
   }
 

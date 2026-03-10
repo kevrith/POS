@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Setup Guide — Get Started with KASTRA POS</title>
+  <meta name="description" content="Step-by-step guide to set up KASTRA POS for your business — from account creation to your first sale." />
+  <link rel="icon" type="image/png" href="posfav.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #030712; --bg2: #0a0f1e; --bg3: #0f172a;
+      --border: rgba(255,255,255,.07); --border2: rgba(255,255,255,.12);
+      --blue: #3b82f6; --blue2: #60a5fa; --blue-glow: rgba(59,130,246,.3);
+      --green: #10b981; --amber: #f59e0b; --cyan: #06b6d4; --purple: #8b5cf6;
+      --text: #f1f5f9; --text2: #94a3b8; --text3: #64748b;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+    a { color: var(--blue2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+    .container-doc { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+    nav { position: sticky; top: 0; z-index: 100; background: rgba(3,7,18,.85); backdrop-filter: blur(20px); border-bottom: 1px solid var(--border); }
+    .nav-inner { height: 68px; display: flex; align-items: center; justify-content: space-between; }
+    .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .nav-logo-text { font-size: 1.125rem; font-weight: 800; letter-spacing: -.3px; color: var(--text); }
+    .nav-logo-text span { color: var(--blue2); }
+    .nav-links { display: flex; align-items: center; gap: 28px; list-style: none; }
+    .nav-links a { font-size: .875rem; font-weight: 500; color: var(--text2); transition: color .15s; text-decoration: none; }
+    .nav-links a:hover { color: var(--text); }
+    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 9px 20px; border-radius: 9px; font-size: .875rem; font-weight: 600; cursor: pointer; transition: all .2s; border: none; text-decoration: none; }
+    .btn-primary { background: var(--blue); color: #fff; }
+    .btn-primary:hover { background: #2563eb; text-decoration: none; }
+    .btn-ghost { background: rgba(255,255,255,.06); color: var(--text); border: 1px solid var(--border2); }
+    .btn-ghost:hover { background: rgba(255,255,255,.1); text-decoration: none; }
+    @media(max-width:768px) { .hide-mobile { display:none; } }
+
+    /* Page hero */
+    .page-hero { padding: 100px 0 60px; background: radial-gradient(ellipse 70% 50% at 50% 0%, rgba(16,185,129,.1) 0%, transparent 70%); border-bottom: 1px solid var(--border); }
+    .breadcrumb { display: flex; align-items: center; gap: 8px; font-size: .8125rem; color: var(--text3); margin-bottom: 16px; }
+    .breadcrumb a { color: var(--text3); text-decoration: none; }
+    .breadcrumb a:hover { color: var(--text2); }
+    .page-hero h1 { font-size: clamp(1.75rem, 4vw, 2.75rem); font-weight: 900; letter-spacing: -.04em; margin-bottom: 12px; }
+    .page-hero-sub { font-size: 1.0625rem; color: var(--text2); max-width: 560px; }
+    .page-meta { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 20px; }
+    .page-meta-item { font-size: .8125rem; color: var(--text3); display: flex; align-items: center; gap: 6px; }
+    .page-meta-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--green); }
+
+    /* Layout */
+    .guide-layout { display: grid; grid-template-columns: 240px 1fr; gap: 56px; align-items: start; padding: 60px 0 80px; }
+    @media(max-width:900px) { .guide-layout { grid-template-columns: 1fr; } }
+
+    /* TOC */
+    .doc-toc { position: sticky; top: 88px; }
+    .doc-toc h4 { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text3); margin-bottom: 12px; }
+    .doc-toc ul { list-style: none; }
+    .doc-toc li { margin-bottom: 2px; }
+    .doc-toc a { font-size: .8125rem; color: var(--text3); text-decoration: none; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 7px; border-left: 2px solid transparent; transition: all .15s; }
+    .doc-toc a:hover { color: var(--text2); background: rgba(255,255,255,.04); }
+    .doc-toc a.active { color: var(--blue2); border-left-color: var(--blue); background: rgba(59,130,246,.06); }
+    .doc-toc .toc-num { width: 20px; height: 20px; border-radius: 50%; background: var(--bg3); border: 1px solid var(--border2); display: flex; align-items: center; justify-content: center; font-size: .625rem; font-weight: 800; flex-shrink: 0; }
+    .toc-cta { margin-top: 28px; padding: 16px; background: rgba(59,130,246,.07); border: 1px solid rgba(59,130,246,.2); border-radius: 10px; }
+    .toc-cta p { font-size: .8125rem; color: var(--text2); margin-bottom: 10px; line-height: 1.5; }
+
+    /* Steps */
+    .step { margin-bottom: 56px; scroll-margin-top: 90px; }
+    .step-header { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 20px; }
+    .step-num { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1rem; font-weight: 900; color: #fff; flex-shrink: 0; }
+    .step-title-wrap { flex: 1; }
+    .step-title { font-size: 1.25rem; font-weight: 800; color: var(--text); letter-spacing: -.02em; margin-bottom: 4px; }
+    .step-subtitle { font-size: .875rem; color: var(--text3); }
+    .step-body { padding-left: 60px; }
+    .step-body p { font-size: .9375rem; color: var(--text2); line-height: 1.75; margin-bottom: 14px; }
+    .step-body ul, .step-body ol { padding-left: 20px; margin-bottom: 16px; }
+    .step-body li { font-size: .9375rem; color: var(--text2); margin-bottom: 8px; line-height: 1.65; }
+    .step-body strong { color: var(--text); font-weight: 600; }
+    .step-body code { background: var(--bg3); border: 1px solid var(--border2); border-radius: 5px; padding: 2px 7px; font-size: .8125rem; color: var(--cyan); font-family: monospace; }
+    .step-divider { height: 1px; background: var(--border); margin-bottom: 56px; }
+
+    /* Info / tip boxes */
+    .tip-box { background: rgba(16,185,129,.06); border: 1px solid rgba(16,185,129,.2); border-radius: 10px; padding: 14px 18px; margin: 14px 0; display: flex; gap: 10px; }
+    .tip-box .tip-icon { flex-shrink: 0; font-size: 1rem; margin-top: 1px; }
+    .tip-box p { margin: 0; font-size: .875rem; color: var(--text2); line-height: 1.6; }
+    .tip-box strong { color: var(--green); }
+    .warn-box { background: rgba(245,158,11,.06); border: 1px solid rgba(245,158,11,.2); border-radius: 10px; padding: 14px 18px; margin: 14px 0; display: flex; gap: 10px; }
+    .warn-box .tip-icon { flex-shrink: 0; font-size: 1rem; margin-top: 1px; }
+    .warn-box p { margin: 0; font-size: .875rem; color: var(--text2); line-height: 1.6; }
+    .warn-box strong { color: var(--amber); }
+    .info-box { background: rgba(59,130,246,.06); border: 1px solid rgba(59,130,246,.2); border-radius: 10px; padding: 14px 18px; margin: 14px 0; }
+    .info-box p { margin: 0; font-size: .875rem; color: var(--text2); line-height: 1.6; }
+    .info-box strong { color: var(--blue2); }
+
+    /* Keyboard shortcuts */
+    .kbd-table { width: 100%; border-collapse: collapse; margin: 14px 0; }
+    .kbd-table th { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text3); padding: 8px 12px; border-bottom: 1px solid var(--border); text-align: left; }
+    .kbd-table td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,.04); font-size: .875rem; color: var(--text2); vertical-align: middle; }
+    .kbd-table tr:last-child td { border-bottom: none; }
+    kbd { background: var(--bg3); border: 1px solid var(--border2); border-radius: 5px; padding: 3px 8px; font-size: .8125rem; font-family: monospace; color: var(--text); }
+
+    /* Progress bar */
+    .progress-track { display: flex; align-items: center; gap: 0; margin-bottom: 48px; overflow-x: auto; padding-bottom: 4px; }
+    .progress-step { display: flex; align-items: center; flex-shrink: 0; }
+    .progress-dot { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--border2); background: var(--bg2); display: flex; align-items: center; justify-content: center; font-size: .6875rem; font-weight: 800; color: var(--text3); flex-shrink: 0; }
+    .progress-dot.done { background: var(--green); border-color: var(--green); color: #fff; }
+    .progress-dot.active { background: var(--blue); border-color: var(--blue); color: #fff; box-shadow: 0 0 12px var(--blue-glow); }
+    .progress-line { width: 32px; height: 2px; background: var(--border2); flex-shrink: 0; }
+
+    /* Footer */
+    footer { background: var(--bg2); border-top: 1px solid var(--border); padding: 48px 0 28px; }
+    .footer-top { display: grid; grid-template-columns: 2.5fr 1fr 1fr; gap: 48px; margin-bottom: 40px; }
+    @media(max-width:768px) { .footer-top { grid-template-columns: 1fr 1fr; } }
+    .footer-brand-logo { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .footer-brand-name { font-size: 1.0625rem; font-weight: 800; color: var(--text); }
+    .footer-desc { font-size: .875rem; color: var(--text3); line-height: 1.65; max-width: 260px; }
+    .footer-col h4 { font-size: .875rem; font-weight: 700; color: var(--text); margin-bottom: 14px; }
+    .footer-col ul { list-style: none; }
+    .footer-col li { margin-bottom: 9px; }
+    .footer-col a { font-size: .875rem; color: var(--text3); transition: color .15s; text-decoration: none; }
+    .footer-col a:hover { color: var(--text); }
+    .footer-bottom { border-top: 1px solid var(--border); padding-top: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+    .footer-copy { font-size: .8125rem; color: var(--text3); }
+    .footer-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+    .fbadge { background: rgba(255,255,255,.05); color: var(--text3); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: .6875rem; font-weight: 600; }
+  </style>
+</head>
+<body>
+
+<nav id="main-nav">
+  <div class="container nav-inner">
+    <a href="index.html" class="nav-logo">
+      <img src="posfav.png" alt="KASTRA" style="width:34px;height:34px;object-fit:contain;border-radius:9px;">
+      <div class="nav-logo-text">KASTRA<span> POS</span></div>
+    </a>
+    <ul class="nav-links hide-mobile">
+      <li><a href="index.html#features">Features</a></li>
+      <li><a href="index.html#pricing">Pricing</a></li>
+      <li><a href="index.html#faq">FAQ</a></li>
+      <li><a href="about.html">About</a></li>
+    </ul>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <a href="http://localhost:3001" class="btn btn-ghost" style="padding:8px 16px;font-size:.8125rem;">Log in</a>
+      <a href="http://localhost:3001/setup" class="btn btn-primary" style="padding:8px 16px;font-size:.8125rem;">Start Free →</a>
+    </div>
+  </div>
+</nav>
+
+<div class="page-hero">
+  <div class="container-doc">
+    <div class="breadcrumb">
+      <a href="index.html">Home</a>
+      <span>›</span>
+      <span>Setup Guide</span>
+    </div>
+    <h1>Setup Guide</h1>
+    <p class="page-hero-sub">From account creation to your first KRA-compliant sale — follow these 8 steps to get KASTRA POS running for your business.</p>
+    <div class="page-meta">
+      <div class="page-meta-item"><div class="page-meta-dot"></div>~20 minutes to complete</div>
+      <div class="page-meta-item"><div class="page-meta-dot"></div>No technical knowledge required</div>
+      <div class="page-meta-item"><div class="page-meta-dot"></div>Updated March 2026</div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="guide-layout">
+
+    <!-- TOC Sidebar -->
+    <aside class="doc-toc hide-mobile">
+      <h4>Steps</h4>
+      <ul>
+        <li><a href="#step-1"><span class="toc-num">1</span>Create Account</a></li>
+        <li><a href="#step-2"><span class="toc-num">2</span>Business Details</a></li>
+        <li><a href="#step-3"><span class="toc-num">3</span>KRA eTIMS</a></li>
+        <li><a href="#step-4"><span class="toc-num">4</span>M-Pesa</a></li>
+        <li><a href="#step-5"><span class="toc-num">5</span>Inventory</a></li>
+        <li><a href="#step-6"><span class="toc-num">6</span>Staff Users</a></li>
+        <li><a href="#step-7"><span class="toc-num">7</span>Start Selling</a></li>
+        <li><a href="#step-8"><span class="toc-num">8</span>Reports</a></li>
+      </ul>
+      <div class="toc-cta">
+        <p>Haven't signed up yet? Start your 30-day free trial.</p>
+        <a href="http://localhost:3001/setup" class="btn btn-primary" style="width:100%;justify-content:center;font-size:.8125rem;padding:9px 16px;">Create Account →</a>
+      </div>
+    </aside>
+
+    <!-- Steps content -->
+    <div>
+
+      <!-- Step 1 -->
+      <div class="step" id="step-1">
+        <div class="step-header">
+          <div class="step-num" style="background:linear-gradient(135deg,#3b82f6,#1d4ed8);">1</div>
+          <div class="step-title-wrap">
+            <div class="step-title">Create Your Account</div>
+            <div class="step-subtitle">Sign up and register your business — takes 2 minutes</div>
+          </div>
+        </div>
+        <div class="step-body">
+          <p>Visit <a href="http://localhost:3001/setup">/setup</a> and complete the business registration form. You'll need:</p>
+          <ul>
+            <li><strong>Business name</strong> — as registered with the Registrar of Companies</li>
+            <li><strong>Your email address</strong> — this becomes your Owner login</li>
+            <li><strong>Phone number</strong> — for account verification and M-Pesa notifications</li>
+            <li><strong>Password</strong> — minimum 8 characters</li>
+          </ul>
+          <p>After registration, you'll be logged in automatically as the <strong>Owner</strong> — the highest-privilege role. Only the Owner can access Settings, add users, and configure integrations.</p>
+          <div class="tip-box">
+            <span class="tip-icon">💡</span>
+            <p><strong>Tip:</strong> You get a <strong>30-day free trial</strong> with full access to all features on any plan. No credit card is needed to start — you can explore everything before committing.</p>
+          </div>
+        </div>
+      </div>
+      <div class="step-divider"></div>
+
+      <!-- Step 2 -->
+      <div class="step" id="step-2">
+        <div class="step-header">
+          <div class="step-num" style="background:linear-gradient(135deg,#8b5cf6,#6d28d9);">2</div>
+          <div class="step-title-wrap">
+            <div class="step-title">Configure Business Details</div>
+            <div class="step-subtitle">Settings → General — your business profile and tax settings</div>
+          </div>
+        </div>
+        <div class="step-body">
+          <p>Go to <strong>Settings → General</strong> and fill in your business information:</p>
+          <ul>
+            <li><strong>Business Name &amp; Address</strong> — appears on every receipt</li>
+            <li><strong>Store Name &amp; Phone</strong> — shown on receipts and the customer pole display</li>
+            <li><strong>Tax Type:</strong> choose <code>VAT (16%)</code> if VAT-registered, or <code>TOT (3%)</code> for turnover tax. This controls how tax is calculated and displayed on receipts.</li>
+            <li><strong>POS Mode:</strong> <code>RETAIL</code> for standard shops, <code>RESTAURANT</code> for hospitality (tables, KOT), <code>PHARMACY</code> for prescription tracking</li>
+            <li><strong>Receipt Header &amp; Footer</strong> — optional custom messages printed on every receipt</li>
+            <li><strong>Service Charge:</strong> enable for restaurants (default 10%)</li>
+          </ul>
+          <p>Click <strong>Save Settings</strong>. Changes apply immediately to all new receipts.</p>
+          <div class="warn-box">
+            <span class="tip-icon">⚠️</span>
+            <p><strong>Important:</strong> Your tax type (VAT vs TOT) affects eTIMS submissions. Set this correctly before processing your first sale. To change it later you'll need to contact KRA support to update your eTIMS profile.</p>
+          </div>
+        </div>
+      </div>
+      <div class="step-divider"></div>
+
+      <!-- Step 3 -->
+      <div class="step" id="step-3">
+        <div class="step-header">
+          <div class="step-num" style="background:linear-gradient(135deg,#1565c0,#0d47a1);">3</div>
+          <div class="step-title-wrap">
+            <div class="step-title">Configure KRA eTIMS</div>
+            <div class="step-subtitle">Settings → KRA eTIMS — mandatory for VAT-registered businesses</div>
+          </div>
+        </div>
+        <div class="step-body">
+          <p>KASTRA submits every invoice to KRA automatically. To enable this, you need credentials from the KRA iTax portal:</p>
+          <ol>
+            <li>Log in to <a href="https://itax.kra.go.ke" target="_blank" rel="noopener">itax.kra.go.ke</a></li>
+            <li>Navigate to <strong>eTIMS → Device Management → Register Device</strong></li>
+            <li>Register a new Virtual Sales Control Unit (VSCU)</li>
+            <li>Note your <strong>BHF ID</strong> (Branch ID), <strong>TIN</strong> (your KRA PIN), and <strong>CMC Key</strong></li>
+          </ol>
+          <p>Then in KASTRA, go to <strong>Settings → KRA eTIMS</strong> and enter:</p>
+          <ul>
+            <li><strong>BHF ID</strong> — your Branch ID from KRA (e.g. <code>000</code> for head office)</li>
+            <li><strong>TIN</strong> — your KRA PIN (e.g. <code>P051234567M</code>)</li>
+            <li><strong>CMC Key</strong> — the device communication key from KRA</li>
+          </ul>
+          <p>Click <strong>Save &amp; Test Connection</strong>. KASTRA will verify the credentials with KRA. Once confirmed, every checkout will auto-submit to eTIMS.</p>
+          <div class="tip-box">
+            <span class="tip-icon">✅</span>
+            <p><strong>What happens after each sale:</strong> KASTRA submits the invoice in the background. The receipt prints with a KRA control number. If the internet is down, the invoice is queued and submitted automatically when connectivity is restored — the receipt shows a "PENDING KRA SUBMISSION" watermark until then.</p>
+          </div>
+        </div>
+      </div>
+      <div class="step-divider"></div>
+
+      <!-- Step 4 -->
+      <div class="step" id="step-4">
+        <div class="step-header">
+          <div class="step-num" style="background:linear-gradient(135deg,#16a34a,#15803d);">4</div>
+          <div class="step-title-wrap">
+            <div class="step-title">Configure M-Pesa</div>
+            <div class="step-subtitle">Settings → M-Pesa — Safaricom Daraja API credentials</div>
+          </div>
+        </div>
+        <div class="step-body">
+          <p>To accept M-Pesa payments (STK Push and QR), you need a Safaricom Daraja API account:</p>
+          <ol>
+            <li>Register at <a href="https://developer.safaricom.co.ke" target="_blank" rel="noopener">developer.safaricom.co.ke</a></li>
+            <li>Create an app and go live (requires Safaricom business verification)</li>
+            <li>Obtain your <strong>Consumer Key</strong>, <strong>Consumer Secret</strong>, <strong>Business Shortcode</strong>, and <strong>Passkey</strong></li>
+          </ol>
+          <p>In KASTRA go to <strong>Settings → M-Pesa</strong> and enter these credentials. Your M-Pesa keys are <strong>encrypted with AES-256-CBC</strong> before storage — they are never accessible in plaintext after saving.</p>
+          <div class="info-box">
+            <p><strong>Don't have Daraja yet?</strong> You can still use KASTRA — M-Pesa is optional. Cash, bank transfer, Paystack card, and gift cards work without Daraja credentials. You can add M-Pesa later once your Daraja account is approved.</p>
+          </div>
+        </div>
+      </div>
+      <div class="step-divider"></div>
+
+      <!-- Step 5 -->
+      <div class="step" id="step-5">
+        <div class="step-header">
+          <div class="step-num" style="background:linear-gradient(135deg,#f59e0b,#d97706);">5</div>
+          <div class="step-title-wrap">
+            <div class="step-title">Add Your Inventory</div>
+            <div class="step-subtitle">Inventory → Items — manual entry or bulk CSV import</div>
+          </div>
+        </div>
+        <div class="step-body">
+          <p>Add your products and services. There are two ways:</p>
+          <h3 style="font-size:1rem;font-weight:700;color:var(--text);margin:16px 0 8px;">Option A — Manual Entry</h3>
+          <p>Click <strong>Add Item</strong> and fill in:</p>
+          <ul>
+            <li><strong>Item Name &amp; Category</strong></li>
+            <li><strong>Retail Price</strong> (KES) — always enter inclusive of tax</li>
+            <li><strong>Cost Price</strong> — for profit margin calculation</li>
+            <li><strong>Barcode</strong> — scan with a USB scanner or camera, or type manually</li>
+            <li><strong>Track Stock:</strong> enable to deduct quantity on each sale</li>
+            <li><strong>Initial Stock Quantity</strong> — if tracking stock</li>
+          </ul>
+          <h3 style="font-size:1rem;font-weight:700;color:var(--text);margin:16px 0 8px;">Option B — CSV Import (recommended for 10+ items)</h3>
+          <p>Click <strong>Import CSV</strong>. Download the template, fill it with your items, and upload. The importer handles hundreds of items in seconds.</p>
+          <p>Required columns: <code>name</code>, <code>category</code>, <code>retailPriceCents</code>, <code>costPriceCents</code>. Optional: <code>barcode</code>, <code>sku</code>, <code>trackStock</code>, <code>initialStock</code>.</p>
+          <div class="tip-box">
+            <span class="tip-icon">💡</span>
+            <p><strong>Prices in cents:</strong> The CSV uses cents (integer) to avoid decimal rounding. KES 150.00 = <code>15000</code>. KES 299.50 = <code>29950</code>.</p>
+          </div>
+        </div>
+      </div>
+      <div class="step-divider"></div>
+
+      <!-- Step 6 -->
+      <div class="step" id="step-6">
+        <div class="step-header">
+          <div class="step-num" style="background:linear-gradient(135deg,#06b6d4,#0891b2);">6</div>
+          <div class="step-title-wrap">
+            <div class="step-title">Add Staff Users</div>
+            <div class="step-subtitle">Settings → Users — create logins for your team</div>
+          </div>
+        </div>
+        <div class="step-body">
+          <p>KASTRA has 4 built-in roles with different permission levels:</p>
+          <ul>
+            <li><strong>Owner</strong> — full access: settings, users, reports, all data</li>
+            <li><strong>Manager</strong> — POS, inventory, reports, HR; cannot change business settings</li>
+            <li><strong>Cashier</strong> — POS only; logs in with a 4-digit PIN for fast checkout</li>
+            <li><strong>Waiter</strong> — hospitality mode only; manages tables and orders</li>
+          </ul>
+          <p>To add a user: go to <strong>Settings → Users → Add User</strong>. For cashiers, set a <strong>4-digit PIN</strong> — they use PIN login at the POS instead of email/password for speed.</p>
+          <div class="tip-box">
+            <span class="tip-icon">🔐</span>
+            <p><strong>Security tip:</strong> Never share the Owner account with cashiers. Create individual accounts for each staff member — this enables accurate shift reports, commission tracking, and a clean audit trail per employee.</p>
+          </div>
+          <p>For multi-store businesses, use the <strong>Store Assignment</strong> modal to restrict managers and cashiers to their specific branch.</p>
+        </div>
+      </div>
+      <div class="step-divider"></div>
+
+      <!-- Step 7 -->
+      <div class="step" id="step-7">
+        <div class="step-header">
+          <div class="step-num" style="background:linear-gradient(135deg,#10b981,#059669);">7</div>
+          <div class="step-title-wrap">
+            <div class="step-title">Start Selling</div>
+            <div class="step-subtitle">POS — the main sales screen</div>
+          </div>
+        </div>
+        <div class="step-body">
+          <p>Click <strong>POS</strong> in the left navigation. The POS screen has three zones: item grid (left), cart (middle), payment (right).</p>
+          <h3 style="font-size:1rem;font-weight:700;color:var(--text);margin:16px 0 8px;">Adding Items to Cart</h3>
+          <ul>
+            <li><strong>Click</strong> any item in the grid to add 1 unit</li>
+            <li><strong>Barcode scanner:</strong> scan the product barcode — auto-adds to cart</li>
+            <li><strong>Camera scan:</strong> click the camera icon to use your device camera as a scanner</li>
+            <li><strong>Quick quantity:</strong> type <code>3×500</code> in the search bar to add 3 items priced at KES 5.00</li>
+          </ul>
+          <h3 style="font-size:1rem;font-weight:700;color:var(--text);margin:16px 0 8px;">Keyboard Shortcuts</h3>
+          <table class="kbd-table">
+            <thead><tr><th>Key</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr><td><kbd>F1</kbd></td><td>Open payment modal (checkout)</td></tr>
+              <tr><td><kbd>F2</kbd></td><td>Focus search / barcode field</td></tr>
+              <tr><td><kbd>F3</kbd></td><td>Add customer to sale</td></tr>
+              <tr><td><kbd>F4</kbd></td><td>Apply discount to cart</td></tr>
+              <tr><td><kbd>F5</kbd></td><td>Hold / park current sale</td></tr>
+              <tr><td><kbd>F8</kbd></td><td>Void / clear cart</td></tr>
+            </tbody>
+          </table>
+          <h3 style="font-size:1rem;font-weight:700;color:var(--text);margin:16px 0 8px;">Processing Payment</h3>
+          <p>Press <kbd>F1</kbd> or click <strong>Charge KES X</strong>. Choose payment method:</p>
+          <ul>
+            <li><strong>Cash</strong> — enter amount received, system calculates change</li>
+            <li><strong>M-Pesa STK Push</strong> — enter customer phone, they receive a push on their phone</li>
+            <li><strong>M-Pesa QR</strong> — customer scans the on-screen QR code</li>
+            <li><strong>Card (Paystack)</strong> — customer pays via Paystack link</li>
+            <li><strong>Split</strong> — combine any payment methods for one transaction</li>
+          </ul>
+          <p>After payment confirmation, the receipt prints automatically and the eTIMS invoice is submitted to KRA in the background.</p>
+        </div>
+      </div>
+      <div class="step-divider"></div>
+
+      <!-- Step 8 -->
+      <div class="step" id="step-8">
+        <div class="step-header">
+          <div class="step-num" style="background:linear-gradient(135deg,#ec4899,#be185d);">8</div>
+          <div class="step-title-wrap">
+            <div class="step-title">View Reports</div>
+            <div class="step-subtitle">Reports — X/Z-reports, VAT, P&amp;L, and KRA export</div>
+          </div>
+        </div>
+        <div class="step-body">
+          <p>Navigate to <strong>Reports</strong> in the left sidebar. Key reports for daily operations:</p>
+          <ul>
+            <li><strong>X-Report</strong> — mid-shift sales summary without resetting counters. Use this to check sales at any point during the day.</li>
+            <li><strong>Z-Report</strong> — end-of-day report that resets daily counters. Print this at close of business and file with your records.</li>
+            <li><strong>VAT Report</strong> — tax breakdown by period. Required for VAT returns to KRA.</li>
+            <li><strong>P&amp;L Report</strong> — revenue, cost of goods, gross profit, and expenses for a selected date range.</li>
+            <li><strong>KRA Export</strong> — downloads a KRA-formatted JSON or CSV file of all eTIMS-submitted invoices. Use this for your monthly KRA filing.</li>
+          </ul>
+          <p>All report tabs have a <strong>Export CSV</strong> button to download the data for further analysis in Excel or Google Sheets.</p>
+          <div class="tip-box">
+            <span class="tip-icon">📅</span>
+            <p><strong>Automate your reports:</strong> Go to <strong>Settings → Automation</strong> to schedule reports to be emailed to you automatically — daily, weekly, or monthly. Never forget your end-of-month KRA report again.</p>
+          </div>
+          <div style="margin-top:28px;padding:24px;background:var(--bg2);border:1px solid rgba(16,185,129,.2);border-radius:12px;">
+            <p style="font-size:1rem;font-weight:700;color:var(--green);margin-bottom:8px;">🎉 You're all set!</p>
+            <p style="font-size:.9375rem;color:var(--text2);margin-bottom:16px;line-height:1.65;">Your KASTRA POS is now fully configured. You're accepting KRA-compliant sales, collecting M-Pesa payments, and tracking your inventory — all from one platform.</p>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+              <a href="http://localhost:3001/setup" class="btn btn-primary">Start Free Trial →</a>
+              <a href="mailto:support@kastrapos.co.ke" class="btn btn-ghost">Contact Support</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- end steps -->
+  </div><!-- end guide-layout -->
+</div>
+
+<footer>
+  <div class="container">
+    <div class="footer-top">
+      <div>
+        <div class="footer-brand-logo">
+          <img src="posfav.png" alt="KASTRA" style="width:32px;height:32px;object-fit:contain;border-radius:8px;">
+          <div class="footer-brand-name">KASTRA POS</div>
+        </div>
+        <p class="footer-desc">Kenya's most complete KRA eTIMS-compliant point of sale platform. Offline-first, M-Pesa integrated, built for serious business.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Legal</h4>
+        <ul>
+          <li><a href="privacy.html">Privacy Policy</a></li>
+          <li><a href="terms.html">Terms of Service</a></li>
+          <li><a href="kdpa.html">KDPA Statement</a></li>
+          <li><a href="about.html">About Us</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Support</h4>
+        <ul>
+          <li><a href="setup-guide.html">Setup Guide</a></li>
+          <li><a href="index.html#faq">FAQ</a></li>
+          <li><a href="contact.html">Contact Us</a></li>
+          <li><a href="index.html#pricing">Pricing</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span class="footer-copy">© 2026 Kastra Systems. All rights reserved. Built in 🇰🇪 Kenya.</span>
+      <div class="footer-badges">
+        <span class="fbadge">🇰🇪 Made for Kenya</span>
+        <span class="fbadge">KRA eTIMS Ready</span>
+        <span class="fbadge">KDPA Compliant</span>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  window.addEventListener('scroll', function() {
+    document.getElementById('main-nav').classList.toggle('scrolled', window.scrollY > 20);
+  });
+  var sections = document.querySelectorAll('.step');
+  var tocLinks = document.querySelectorAll('.doc-toc a');
+  window.addEventListener('scroll', function() {
+    var scrollY = window.scrollY + 110;
+    sections.forEach(function(s) {
+      if (s.offsetTop <= scrollY && s.offsetTop + s.offsetHeight > scrollY) {
+        tocLinks.forEach(function(l) { l.classList.remove('active'); });
+        var link = document.querySelector('.doc-toc a[href="#' + s.id + '"]');
+        if (link) link.classList.add('active');
+      }
+    });
+  });
+</script>
+</body>
+</html>

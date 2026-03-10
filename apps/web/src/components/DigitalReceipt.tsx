@@ -29,6 +29,8 @@ interface ReceiptData {
   totalCents: number;
   payments: ReceiptPayment[];
   changeCents?: number;
+  receiptHeader?: string;
+  receiptFooter?: string;
 }
 
 interface DigitalReceiptProps {
@@ -189,8 +191,10 @@ export default function DigitalReceipt({ receipt, onClose }: DigitalReceiptProps
 
             {/* Footer */}
             <div className="text-center mt-4 pt-3 border-t border-dashed text-xs text-gray-600">
+              {receipt.receiptHeader && <div className="mb-1 font-medium">{receipt.receiptHeader}</div>}
               <div>Thank you for your business!</div>
-              <div className="mt-2">Powered by Universal POS</div>
+              {receipt.receiptFooter && <div className="mt-1">{receipt.receiptFooter}</div>}
+              <div className="mt-2 text-gray-400">Powered by: Kastra Systems</div>
             </div>
           </div>
         </div>

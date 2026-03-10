@@ -208,11 +208,15 @@ export class PayrollService {
         // commission calculation is best-effort
       }
 
-      // Use salary from employee record if available (stored as salaryBaseCents convention)
-      // The Employee model doesn't have salaryBaseCents yet — default 0, HR can update
-      const salaryBaseCents = (emp as any).salaryBaseCents ?? 0;
-      const housingCents = (emp as any).housingAllowanceCents ?? 0;
-      const transportCents = (emp as any).transportAllowanceCents ?? 0;
+      const salaryBaseCents = emp.salaryBaseCents ?? 0;
+      const housingCents = emp.housingAllowanceCents ?? 0;
+      const transportCents = emp.transportAllowanceCents ?? 0;
+      const otherAllowances = emp.otherAllowancesCents ?? 0;
+      // Recurring deductions (SACCO, loan repayment, etc.)
+      const saccoDeduction = emp.saccoDeductionCents ?? 0;
+      const loanDeduction = emp.loanDeductionCents ?? 0;
+      const otherDeductions = emp.otherDeductionsCents ?? 0;
+      const totalExtraDeductions = saccoDeduction + loanDeduction + otherDeductions;
 
       const calc = this.calculatePayslip({
         salaryBaseCents,
@@ -221,10 +225,11 @@ export class PayrollService {
         commissionCents,
       });
 
-      const deductions = calc.payeAmount + calc.nhifAmount + calc.nssf1Amount + calc.nssf2Amount + calc.housingLevyAmount;
+      const netPayAfterExtra = Math.max(0, calc.netPay - totalExtraDeductions);
+      const deductions = calc.payeAmount + calc.nhifAmount + calc.nssf1Amount + calc.nssf2Amount + calc.housingLevyAmount + totalExtraDeductions;
 
       totalGrossCents += calc.grossPay;
-      totalNetCents += calc.netPay;
+      totalNetCents += netPayAfterExtra;
       totalDeductionsCents += deductions;
 
       payslipData.push({
@@ -233,15 +238,15 @@ export class PayrollService {
         basicSalary: salaryBaseCents,
         housingAllowance: housingCents,
         transportAllowance: transportCents,
-        otherAllowances: 0,
+        otherAllowances,
         grossPay: calc.grossPay,
         payeAmount: calc.payeAmount,
         nhifAmount: calc.nhifAmount,
         nssf1Amount: calc.nssf1Amount,
         nssf2Amount: calc.nssf2Amount,
         housingLevyAmount: calc.housingLevyAmount,
-        otherDeductions: 0,
-        netPay: calc.netPay,
+        otherDeductions: totalExtraDeductions,
+        netPay: netPayAfterExtra,
         commissionCents,
         status: 'PENDING',
       });

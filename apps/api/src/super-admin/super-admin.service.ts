@@ -90,8 +90,8 @@ export class SuperAdminService {
       this.prisma.referral.count({ where: { status: 'CONVERTED' } }),
     ]);
 
-    // Rough MRR: active businesses × average plan price (KES 3,000/mo)
-    const avgPlanPriceCents = 300000; // KES 3,000
+    // Rough MRR: active businesses × average plan price (KES 3,999/mo blended)
+    const avgPlanPriceCents = 399900; // KES 3,999
     const estimatedMRRCents = activeSubscriptions * avgPlanPriceCents;
 
     return {

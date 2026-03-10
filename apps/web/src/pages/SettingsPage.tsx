@@ -108,6 +108,7 @@ function AddUserModal({
   const [form, setForm] = useState({
     name: '',
     email: '',
+    phone: '',
     role: UserRole.CASHIER as string,
     pin: '',
     password: '',
@@ -119,6 +120,7 @@ function AddUserModal({
       api.post(`/business/${businessId}/users`, {
         name: data.name,
         email: data.email || undefined,
+        phone: data.phone || undefined,
         role: data.role,
         pin: data.pin || undefined,
         password: data.password || undefined,
@@ -179,6 +181,22 @@ function AddUserModal({
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
               placeholder="staff@business.co.ke"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              WhatsApp / Phone Number <span className="text-gray-400">(optional)</span>
+            </label>
+            <input
+              type="tel"
+              value={form.phone}
+              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="+254 7XX XXX XXX"
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              Waiters receive a WhatsApp alert when their KOT is ready from the kitchen
+            </p>
           </div>
 
           {needsPin && (
@@ -362,6 +380,9 @@ export default function SettingsPage() {
     bankBranch: '',
     idleMessage: 'Welcome!',
     idleLogoUrl: '',
+    tablePrefix: 'T',
+    receiptHeader: '',
+    receiptFooter: '',
   });
 
   // ─── Multi-currency ────────────────────────────────────────────────────────
@@ -640,6 +661,9 @@ export default function SettingsPage() {
         bankBranch: settings.bankBranch ?? '',
         idleMessage: (settings as any).idleMessage ?? 'Welcome!',
         idleLogoUrl: (settings as any).idleLogoUrl ?? '',
+        tablePrefix: (settings as any).tablePrefix ?? 'T',
+        receiptHeader: (settings as any).receiptHeader ?? '',
+        receiptFooter: (settings as any).receiptFooter ?? '',
       });
       // Populate selected display currencies
       if ((settings as any).displayCurrencies) {
@@ -909,16 +933,18 @@ export default function SettingsPage() {
   ];
 
   return (
-    <div className="p-6 max-w-3xl">
-      <h1 className="text-2xl font-bold mb-6">Settings</h1>
+    <div className="h-full overflow-y-auto">
+      <div className="p-4 md:p-6 max-w-4xl mx-auto">
+      <h1 className="text-2xl font-bold mb-4 md:mb-6">Settings</h1>
 
-      {/* Tabs */}
-      <div className="flex flex-wrap border-b mb-6 gap-0">
+      {/* Tabs — scrollable horizontally on small screens */}
+      <div className="overflow-x-auto -mx-4 md:mx-0 px-4 md:px-0">
+        <div className="flex border-b mb-6 min-w-max md:flex-wrap md:min-w-0">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            className={`flex items-center gap-2 px-3 md:px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
               activeTab === tab.id
                 ? 'text-blue-600 border-blue-600'
                 : 'text-gray-500 border-transparent hover:text-gray-700'
@@ -928,6 +954,7 @@ export default function SettingsPage() {
             {tab.label}
           </button>
         ))}
+        </div>
       </div>
 
       {/* ── General Settings ──────────────────────────────────────────────── */}
@@ -952,8 +979,11 @@ export default function SettingsPage() {
               className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
             >
               <option value="RETAIL">Retail — Standard product sales</option>
-              <option value="HOSPITALITY">Hospitality — Tables, orders, KOT</option>
+              <option value="HOSPITALITY">Hospitality / Restaurant — Tables, orders, KOT</option>
               <option value="FAST_FOOD">Fast Food — Counter service with KOT</option>
+              <option value="SUPERMARKET">Supermarket — High-volume retail</option>
+              <option value="CLINIC">Clinic / Pharmacy — Prescriptions & appointments</option>
+              <option value="SALON">Salon / Spa — Appointments & services</option>
             </select>
           </div>
 
@@ -1097,6 +1127,30 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          {/* ── Table Display Prefix ── */}
+          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">Table Display Prefix</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+              Prefix shown before the table number/name on the floor plan. Use <strong>T</strong> for standard hotels (T1, T2…), leave blank for city names or custom labels that stand on their own (Tokyo, Berlin, Patio…).
+            </p>
+            <div className="flex items-center gap-3">
+              <input
+                type="text"
+                value={form.tablePrefix}
+                onChange={(e) => setForm((f) => ({ ...f, tablePrefix: e.target.value }))}
+                placeholder="T"
+                maxLength={5}
+                className="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+              />
+              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                Preview:
+                <span className="font-bold text-gray-900 dark:text-white text-base">
+                  {(form.tablePrefix || '') + '1'}&nbsp;&nbsp;{(form.tablePrefix || '') + '2'}&nbsp;&nbsp;{(form.tablePrefix || '') + '10'}
+                </span>
+              </div>
+            </div>
+          </div>
+
           {/* ── Pole Display ── */}
           <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Pole Display</h3>
@@ -1127,6 +1181,39 @@ export default function SettingsPage() {
                 )}
                 <p className="text-white text-sm">{form.idleMessage || 'Welcome!'}</p>
                 <p className="text-gray-400 text-xs mt-1">Pole Display Preview</p>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Receipt Customization ── */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Receipt Customization</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Receipt Header (shown above items)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Thank you for choosing us! Follow us @mybusiness"
+                  value={form.receiptHeader}
+                  onChange={(e) => setForm((f) => ({ ...f, receiptHeader: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Receipt Footer (custom note below total)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. No returns after 7 days. Visit us again!"
+                  value={form.receiptFooter}
+                  onChange={(e) => setForm((f) => ({ ...f, receiptFooter: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 text-center text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
+                {form.receiptHeader && <div className="font-medium text-gray-700 dark:text-gray-300">{form.receiptHeader}</div>}
+                <div>Thank you for your business!</div>
+                {form.receiptFooter && <div>{form.receiptFooter}</div>}
+                <div className="text-gray-400">Powered by: Kastra Systems</div>
               </div>
             </div>
           </div>
@@ -1162,7 +1249,7 @@ export default function SettingsPage() {
               fetch current rates from Open Exchange Rates and store them server-side.
             </p>
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {SUPPORTED_CURRENCIES.map((code) => (
               <label key={code} className="flex items-center gap-2 p-2.5 border rounded-lg cursor-pointer hover:bg-blue-50 transition-colors">
                 <input
@@ -1363,7 +1450,7 @@ export default function SettingsPage() {
           {!atLimitS && (
           <div className="bg-white rounded-xl shadow p-6">
             <h3 className="font-semibold mb-4">Add New Store</h3>
-            <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Store Name</label>
                 <input
@@ -1596,7 +1683,7 @@ export default function SettingsPage() {
               Obtain from the Safaricom Daraja portal. Required for M-Pesa STK Push payments.
             </p>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Consumer Key
@@ -1625,7 +1712,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Shortcode (Till/Paybill)
@@ -1830,7 +1917,7 @@ export default function SettingsPage() {
             </div>
 
             {/* Plan grid */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {PLANS.map((plan) => {
                 const isCurrent = currentTier === plan.tier;
                 return (
@@ -1975,7 +2062,7 @@ export default function SettingsPage() {
                 placeholder="e.g. Customer Loyalty"
               />
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Points per KES 1</label>
                 <input
@@ -2051,7 +2138,7 @@ export default function SettingsPage() {
           {showAddTier && (
             <div className="bg-white border rounded-xl p-5 shadow-sm">
               <h4 className="font-medium text-gray-800 mb-4">New Tier</h4>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Name *</label>
                   <input
@@ -2347,7 +2434,7 @@ export default function SettingsPage() {
                 <h3 className="font-semibold">Add Printer</h3>
                 <button onClick={() => setShowAddPrinter(false)}><X className="w-4 h-4 text-gray-400" /></button>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
                   <input
@@ -2597,7 +2684,7 @@ export default function SettingsPage() {
               </label>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Protocol</label>
                 <select
@@ -2730,7 +2817,7 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-2">Events to Subscribe *</label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {[
                       { value: 'sale.completed', label: 'Sale Completed', desc: 'Fires after every paid sale' },
                       { value: 'sale.voided', label: 'Sale Voided', desc: 'Fires when a sale is voided' },
@@ -2911,7 +2998,7 @@ export default function SettingsPage() {
               <Filter className="w-4 h-4 text-gray-500" />
               <h3 className="font-semibold text-gray-800 text-sm">Filter Audit Entries</h3>
             </div>
-            <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">From Date</label>
                 <input
@@ -3247,7 +3334,7 @@ export default function SettingsPage() {
             {showAddSchedule && (
               <div className="mb-6 p-4 border rounded-lg bg-gray-50 space-y-4">
                 <h3 className="font-medium text-gray-800 text-sm">New Report Schedule</h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Report Type</label>
                     <select
@@ -3564,6 +3651,7 @@ export default function SettingsPage() {
           </button>
         </div>
       )}
+      </div>
     </div>
   );
 }

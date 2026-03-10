@@ -6,7 +6,7 @@ import {
   Bell, ChevronDown, ChevronRight, Wallet, Hash, ChefHat, Box, Grid,
   Tag, Gift, Sun, Moon, Monitor, Wand2, ArrowRightLeft, LayoutDashboard,
   AlertTriangle, X, Pill, CalendarClock, TrendingUp, GitBranch, Landmark,
-  Lock,
+  Lock, BedDouble,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
@@ -43,9 +43,9 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
     label: 'Sales',
     items: [
       { to: '/pos', icon: ShoppingCart, label: 'Point of Sale', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
-      { to: '/hospitality', icon: Coffee, label: 'Hospitality', roles: ['OWNER', 'MANAGER', 'WAITER'], businessTypes: ['RESTAURANT'] },
-      { to: '/tables', icon: Grid, label: 'Tables', roles: ['OWNER', 'MANAGER', 'WAITER'], businessTypes: ['RESTAURANT'] },
-      { to: '/kds', icon: Monitor, label: 'Kitchen Display', roles: ['OWNER', 'MANAGER', 'WAITER', 'KITCHEN'], businessTypes: ['RESTAURANT'] },
+      { to: '/hospitality', icon: Coffee, label: 'Hospitality', roles: ['OWNER', 'MANAGER', 'WAITER'], businessTypes: ['HOSPITALITY', 'FAST_FOOD'] },
+      { to: '/tables', icon: Grid, label: 'Tables', roles: ['OWNER', 'MANAGER', 'WAITER'], businessTypes: ['HOSPITALITY'] },
+      { to: '/kds', icon: Monitor, label: 'Kitchen Display', roles: ['OWNER', 'MANAGER', 'WAITER', 'KITCHEN'], businessTypes: ['HOSPITALITY', 'FAST_FOOD'] },
       { to: '/layaway', icon: Layers, label: 'Layaway', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['RETAIL', 'SUPERMARKET'] },
       { to: '/proforma', icon: CreditCard, label: 'Proformas', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
       { to: '/prescriptions', icon: Pill, label: 'Prescriptions', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['CLINIC'] },
@@ -56,7 +56,8 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
     label: 'Operations',
     roles: ['OWNER', 'MANAGER'],
     items: [
-      { to: '/delivery', icon: Truck, label: 'Delivery', businessTypes: ['RESTAURANT', 'RETAIL', 'SUPERMARKET'] },
+      { to: '/delivery', icon: Truck, label: 'Delivery', businessTypes: ['HOSPITALITY', 'FAST_FOOD', 'RETAIL', 'SUPERMARKET'] },
+      { to: '/hotel', icon: BedDouble, label: 'Hotel Integration', roles: ['OWNER', 'MANAGER'], businessTypes: ['HOSPITALITY'] },
     ],
   },
   {
@@ -66,7 +67,7 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
       { to: '/inventory', icon: Package, label: 'Items & Stock' },
       { to: '/batch', icon: Layers, label: 'Batch & Expiry', businessTypes: ['CLINIC', 'SUPERMARKET'] },
       { to: '/serial', icon: Hash, label: 'Serial Tracking', businessTypes: ['RETAIL'] },
-      { to: '/recipe', icon: ChefHat, label: 'Recipes / BOM', businessTypes: ['RESTAURANT'] },
+      { to: '/recipe', icon: ChefHat, label: 'Recipes / BOM', businessTypes: ['HOSPITALITY', 'FAST_FOOD'] },
       { to: '/bundle', icon: Box, label: 'Bundles / Kits' },
       { to: '/suppliers', icon: Truck, label: 'Suppliers & POs' },
       { to: '/transfers', icon: ArrowRightLeft, label: 'Stock Transfers' },
@@ -374,9 +375,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {/* Brand header */}
         <div className="px-4 pt-5 pb-4 border-b border-gray-100 dark:border-gray-800">
           <div className="flex items-center gap-2.5 mb-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shadow-sm flex-shrink-0">
-              <ShoppingCart className="w-4 h-4 text-white" />
-            </div>
+            <img src="/logo.png" alt="KASTRA POS" className="w-8 h-8 rounded-lg object-contain flex-shrink-0" />
             <div>
               <div className="text-sm font-bold text-gray-900 dark:text-white leading-tight">KASTRA POS</div>
               <div className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">Enterprise POS</div>

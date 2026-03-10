@@ -49,6 +49,9 @@ model Business {
   bankBranch                      String?
   idleMessage                     String?  @default("Welcome!")
   idleLogoUrl                     String?
+  tablePrefix                     String?  @default("T")
+  receiptHeader                   String?
+  receiptFooter                   String?
   parentBusinessId                String?
   parentBusiness                  Business?  @relation("FranchiseHierarchy", fields: [parentBusinessId], references: [id])
   franchisees                     Business[] @relation("FranchiseHierarchy")
@@ -87,6 +90,7 @@ model User {
   googleId          String?  @unique
   avatarUrl         String?
   deviceToken       String?
+  phone             String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -94,6 +98,7 @@ model User {
   employee          Employee?
   sales             Sale[]
   orders            Order[]
+  assignedKOTs      KOT[]     @relation("ChefKOTs")
   assignedStores    UserStore[]
 
   @@index([businessId, role])
@@ -147,6 +152,7 @@ model Item {
   totApplicable           Boolean   @default(false)
   barcode                 String?
   category                String?
+  prepTimeMinutes         Int       @default(5)
   unitWeightGrams         Int?
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
@@ -271,6 +277,8 @@ model Order {
   waiterId    String
   status      String    @default("OPEN")
   mode        String    @default("HOSPITALITY")
+  priority    Int       @default(0)
+  isVIP       Boolean   @default(false)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -292,10 +300,21 @@ model Employee {
   idNumber         String?
   emergencyContact String?
   employmentType   String    @default("PERMANENT")
-  commissionRate   Float     @default(0)
-  commissionBasis  String    @default("SALES_VALUE")  // SALES_VALUE | TRANSACTION_COUNT | GROSS_MARGIN
+  commissionRate               Float     @default(0)
+  commissionBasis              String    @default("SALES_VALUE")  // SALES_VALUE | TRANSACTION_COUNT | GROSS_MARGIN
   salesTargetCents             Int?
   commissionMilestonePercent   Float?   @default(0)
+  // Payroll fields
+  salaryBaseCents              Int      @default(0)
+  housingAllowanceCents        Int      @default(0)
+  transportAllowanceCents      Int      @default(0)
+  otherAllowancesCents         Int      @default(0)
+  // Deductions
+  saccoDeductionCents          Int      @default(0)   // SACCO/welfare deduction
+  loanDeductionCents           Int      @default(0)   // salary advance/loan repayment
+  otherDeductionsCents         Int      @default(0)   // any other recurring deduction
+  bankAccountNumber            String?
+  bankName                     String?
   startDate                    DateTime?
   createdAt                    DateTime  @default(now())
   updatedAt                    DateTime  @updatedAt
@@ -921,10 +940,15 @@ model KOT {
   kotNumber   Int
   type        String
   status      String    @default("PENDING")
-  printedAt   DateTime?
-  preparedAt  DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  printedAt            DateTime?
+  preparedAt           DateTime?
+  assignedChefId       String?
+  assignedChef         User?     @relation("ChefKOTs", fields: [assignedChefId], references: [id])
+  estimatedReadyAt     DateTime?
+  estimatedPrepMinutes Int?
+  priority             Int       @default(0)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   order       Order     @relation(fields: [orderId], references: [id])
 
@@ -1238,6 +1262,54 @@ model Payslip {
 
   @@index([payrollRunId])
   @@index([employeeId])
+}
+
+model HotelRoom {
+  id                String        @id @default(cuid())
+  businessId        String
+  storeId           String
+  number            String        // room number, e.g. "101", "Suite A"
+  type              String        @default("STANDARD") // STANDARD | DELUXE | SUITE | EXECUTIVE
+  floor             String?
+  capacity          Int           @default(2)
+  pricePerNightCents Int          @default(0)
+  status            String        @default("AVAILABLE") // AVAILABLE | OCCUPIED | MAINTENANCE | RESERVED
+  amenities         String?       // JSON string: ["WiFi","AC","TV"]
+  notes             String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  bookings          RoomBooking[]
+
+  @@unique([businessId, storeId, number])
+  @@index([businessId, storeId, status])
+}
+
+model RoomBooking {
+  id                String    @id @default(cuid())
+  businessId        String
+  storeId           String
+  roomId            String
+  room              HotelRoom @relation(fields: [roomId], references: [id])
+  guestName         String
+  guestPhone        String?
+  guestIdNumber     String?   // passport / national ID
+  checkInDate       DateTime
+  checkOutDate      DateTime?
+  actualCheckIn     DateTime?
+  actualCheckOut    DateTime?
+  nightCount        Int       @default(1)
+  pricePerNightCents Int      @default(0)
+  totalAmountCents  Int       @default(0)
+  depositCents      Int       @default(0)
+  status            String    @default("RESERVED") // RESERVED | CHECKED_IN | CHECKED_OUT | CANCELLED | NO_SHOW
+  notes             String?
+  orderId           String?   // room service order linked
+  saleId            String?   // checkout sale id
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([businessId, storeId, status])
+  @@index([roomId])
 }
 
 model BankStatement {

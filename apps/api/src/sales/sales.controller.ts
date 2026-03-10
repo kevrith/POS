@@ -18,6 +18,7 @@ interface CheckoutDto {
   discountCents?: number;
   promotionId?: string;
   serviceChargeCents?: number;
+  orderId?: string; // hospitality order — if provided, close it and free the table
 }
 
 interface VoidDto {
@@ -49,6 +50,7 @@ export class SalesController {
       discountCents: dto.discountCents,
       promotionId: dto.promotionId,
       serviceChargeCents: dto.serviceChargeCents,
+      orderId: dto.orderId,
     });
   }
 

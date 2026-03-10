@@ -40,6 +40,7 @@ const ForecastingPage = lazy(() => import('./pages/ForecastingPage'));
 const ReconciliationPage = lazy(() => import('./pages/ReconciliationPage'));
 const FranchisePage = lazy(() => import('./pages/FranchisePage'));
 const DesktopSetupPage = lazy(() => import('./pages/DesktopSetupPage'));
+const HotelPage = lazy(() => import('./pages/HotelPage'));
 
 function PageLoader() {
   return (
@@ -144,6 +145,7 @@ export default function App() {
           <Route path="/forecasting" element={<ForecastingPage />} />
           <Route path="/reconciliation" element={<ReconciliationPage />} />
           <Route path="/franchise" element={<FranchisePage />} />
+          <Route path="/hotel" element={<HotelPage />} />
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/pos" replace />} />
         </Routes>

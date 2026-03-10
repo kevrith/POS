@@ -65,6 +65,16 @@ export class HrService {
     idNumber?: string;
     emergencyContact?: string;
     startDate?: string;
+    // Payroll / salary fields
+    salaryBaseCents?: number;
+    housingAllowanceCents?: number;
+    transportAllowanceCents?: number;
+    otherAllowancesCents?: number;
+    saccoDeductionCents?: number;
+    loanDeductionCents?: number;
+    otherDeductionsCents?: number;
+    bankName?: string;
+    bankAccountNumber?: string;
     // User account fields (applied to linked User)
     name?: string;
     role?: string;
@@ -88,6 +98,16 @@ export class HrService {
         ...(dto.idNumber !== undefined && { idNumber: dto.idNumber || null }),
         ...(dto.emergencyContact !== undefined && { emergencyContact: dto.emergencyContact || null }),
         ...(dto.startDate !== undefined && { startDate: dto.startDate ? new Date(dto.startDate) : null }),
+        // Payroll fields
+        ...(dto.salaryBaseCents !== undefined && { salaryBaseCents: dto.salaryBaseCents }),
+        ...(dto.housingAllowanceCents !== undefined && { housingAllowanceCents: dto.housingAllowanceCents }),
+        ...(dto.transportAllowanceCents !== undefined && { transportAllowanceCents: dto.transportAllowanceCents }),
+        ...(dto.otherAllowancesCents !== undefined && { otherAllowancesCents: dto.otherAllowancesCents }),
+        ...(dto.saccoDeductionCents !== undefined && { saccoDeductionCents: dto.saccoDeductionCents }),
+        ...(dto.loanDeductionCents !== undefined && { loanDeductionCents: dto.loanDeductionCents }),
+        ...(dto.otherDeductionsCents !== undefined && { otherDeductionsCents: dto.otherDeductionsCents }),
+        ...(dto.bankName !== undefined && { bankName: dto.bankName || null }),
+        ...(dto.bankAccountNumber !== undefined && { bankAccountNumber: dto.bankAccountNumber || null }),
       },
     });
 

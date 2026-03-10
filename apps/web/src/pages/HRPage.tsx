@@ -432,6 +432,16 @@ function EditEmployeePanel({ employee, businessId, onClose, onSuccess }: {
     employee.salesTargetCents ? String(employee.salesTargetCents / 100) : ''
   );
   const [milestone, setMilestone] = useState(employee.commissionMilestonePercent ?? 0);
+  // Salary fields
+  const [basicSalary, setBasicSalary] = useState(String((employee as any).salaryBaseCents ? (employee as any).salaryBaseCents / 100 : ''));
+  const [housingAllowance, setHousingAllowance] = useState(String((employee as any).housingAllowanceCents ? (employee as any).housingAllowanceCents / 100 : ''));
+  const [transportAllowance, setTransportAllowance] = useState(String((employee as any).transportAllowanceCents ? (employee as any).transportAllowanceCents / 100 : ''));
+  const [otherAllowances, setOtherAllowances] = useState(String((employee as any).otherAllowancesCents ? (employee as any).otherAllowancesCents / 100 : ''));
+  const [saccoDeduction, setSaccoDeduction] = useState(String((employee as any).saccoDeductionCents ? (employee as any).saccoDeductionCents / 100 : ''));
+  const [loanDeduction, setLoanDeduction] = useState(String((employee as any).loanDeductionCents ? (employee as any).loanDeductionCents / 100 : ''));
+  const [otherDeductions, setOtherDeductions] = useState(String((employee as any).otherDeductionsCents ? (employee as any).otherDeductionsCents / 100 : ''));
+  const [bankName, setBankName] = useState((employee as any).bankName ?? '');
+  const [bankAccount, setBankAccount] = useState((employee as any).bankAccountNumber ?? '');
 
   const pinMismatch = confirmPin.length > 0 && newPin !== confirmPin;
 
@@ -453,6 +463,16 @@ function EditEmployeePanel({ employee, businessId, onClose, onSuccess }: {
         commissionBasis,
         salesTargetCents: salesTarget ? Math.round(parseFloat(salesTarget) * 100) : 0,
         commissionMilestonePercent: milestone,
+        // Salary
+        salaryBaseCents: basicSalary ? Math.round(parseFloat(basicSalary) * 100) : 0,
+        housingAllowanceCents: housingAllowance ? Math.round(parseFloat(housingAllowance) * 100) : 0,
+        transportAllowanceCents: transportAllowance ? Math.round(parseFloat(transportAllowance) * 100) : 0,
+        otherAllowancesCents: otherAllowances ? Math.round(parseFloat(otherAllowances) * 100) : 0,
+        saccoDeductionCents: saccoDeduction ? Math.round(parseFloat(saccoDeduction) * 100) : 0,
+        loanDeductionCents: loanDeduction ? Math.round(parseFloat(loanDeduction) * 100) : 0,
+        otherDeductionsCents: otherDeductions ? Math.round(parseFloat(otherDeductions) * 100) : 0,
+        bankName: bankName.trim() || '',
+        bankAccountNumber: bankAccount.trim() || '',
       };
       return api.patch(`/hr/employees/${employee.id}?businessId=${businessId}`, payload);
     },
@@ -727,6 +747,95 @@ function EditEmployeePanel({ employee, businessId, onClose, onSuccess }: {
                         : ((Number(salesTarget) * commissionRate) / 100).toLocaleString('en-KE', { maximumFractionDigits: 0 })}
                     </span>
                   </div>
+                </div>
+              )}
+
+              {/* Salary & Allowances */}
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  <span className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 text-xs font-bold">₭</span>
+                  Salary & Allowances (KES/month)
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { label: 'Basic Salary', val: basicSalary, set: setBasicSalary },
+                    { label: 'Housing Allowance', val: housingAllowance, set: setHousingAllowance },
+                    { label: 'Transport Allowance', val: transportAllowance, set: setTransportAllowance },
+                    { label: 'Other Allowances', val: otherAllowances, set: setOtherAllowances },
+                  ].map(({ label, val, set }) => (
+                    <div key={label}>
+                      <label className="block text-xs text-gray-500 mb-1">{label}</label>
+                      <input type="number" min={0} value={val} onChange={e => set(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Deductions */}
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  <span className="w-5 h-5 bg-red-100 rounded-full flex items-center justify-center text-red-600 text-xs font-bold">−</span>
+                  Recurring Deductions (KES/month)
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { label: 'SACCO / Welfare', val: saccoDeduction, set: setSaccoDeduction },
+                    { label: 'Loan / Advance', val: loanDeduction, set: setLoanDeduction },
+                    { label: 'Other Deductions', val: otherDeductions, set: setOtherDeductions },
+                  ].map(({ label, val, set }) => (
+                    <div key={label}>
+                      <label className="block text-xs text-gray-500 mb-1">{label}</label>
+                      <input type="number" min={0} value={val} onChange={e => set(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Bank Details */}
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Bank Details (for payslip)</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Bank Name</label>
+                    <input type="text" value={bankName} onChange={e => setBankName(e.target.value)}
+                      placeholder="e.g. KCB Bank"
+                      className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Account Number</label>
+                    <input type="text" value={bankAccount} onChange={e => setBankAccount(e.target.value)}
+                      placeholder="e.g. 1234567890"
+                      className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Gross Pay Preview */}
+              {(Number(basicSalary) > 0 || Number(housingAllowance) > 0 || Number(transportAllowance) > 0) && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                  <h3 className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-2">Payroll Preview</h3>
+                  {(() => {
+                    const gross = (Number(basicSalary) || 0) + (Number(housingAllowance) || 0) + (Number(transportAllowance) || 0) + (Number(otherAllowances) || 0);
+                    const extraDeductions = (Number(saccoDeduction) || 0) + (Number(loanDeduction) || 0) + (Number(otherDeductions) || 0);
+                    const grossCents = Math.round(gross * 100);
+                    // Rough PAYE for preview (simplified brackets)
+                    const paye = grossCents <= 2400000 ? 0 : grossCents <= 3200000 ? Math.round((grossCents - 2400000) * 0.25) : Math.round(800000 * 0.25 + (grossCents - 3200000) * 0.30);
+                    const nhif = grossCents <= 600000 ? 15000 : grossCents <= 1500000 ? 25000 : 35000;
+                    const totalDeductions = paye + nhif + Math.round(extraDeductions * 100);
+                    const net = Math.max(0, grossCents - totalDeductions);
+                    return (
+                      <div className="grid grid-cols-2 gap-y-1 text-sm">
+                        <span className="text-gray-600">Gross Pay</span><span className="font-bold">KES {gross.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</span>
+                        <span className="text-gray-600">Est. PAYE + NHIF</span><span className="text-red-600">− KES {((paye + nhif) / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</span>
+                        {extraDeductions > 0 && <><span className="text-gray-600">Other Deductions</span><span className="text-red-600">− KES {extraDeductions.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</span></>}
+                        <span className="font-semibold text-gray-800 border-t pt-1">Est. Net Pay</span><span className="font-bold text-green-700 border-t pt-1">KES {(net / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>

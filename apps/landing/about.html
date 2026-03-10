@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>About Kastra Systems — Enterprise POS for Kenya</title>
+  <meta name="description" content="We built KASTRA POS to solve real KRA eTIMS compliance challenges for Kenyan businesses. Our mission: enterprise-grade tools for every Kenyan business." />
+  <link rel="icon" type="image/png" href="posfav.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #030712; --bg2: #0a0f1e; --bg3: #0f172a;
+      --border: rgba(255,255,255,.07); --border2: rgba(255,255,255,.12);
+      --blue: #3b82f6; --blue2: #60a5fa; --blue-glow: rgba(59,130,246,.3);
+      --green: #10b981; --amber: #f59e0b; --cyan: #06b6d4; --purple: #8b5cf6;
+      --text: #f1f5f9; --text2: #94a3b8; --text3: #64748b;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+    a { color: var(--blue2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+    .container-md { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+    nav { position: sticky; top: 0; z-index: 100; background: rgba(3,7,18,.85); backdrop-filter: blur(20px); border-bottom: 1px solid var(--border); }
+    .nav-inner { height: 68px; display: flex; align-items: center; justify-content: space-between; }
+    .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .nav-logo-text { font-size: 1.125rem; font-weight: 800; letter-spacing: -.3px; color: var(--text); }
+    .nav-logo-text span { color: var(--blue2); }
+    .nav-links { display: flex; align-items: center; gap: 28px; list-style: none; }
+    .nav-links a { font-size: .875rem; font-weight: 500; color: var(--text2); transition: color .15s; text-decoration: none; }
+    .nav-links a:hover { color: var(--text); }
+    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 9px 20px; border-radius: 9px; font-size: .875rem; font-weight: 600; cursor: pointer; transition: all .2s; border: none; text-decoration: none; }
+    .btn-primary { background: var(--blue); color: #fff; }
+    .btn-primary:hover { background: #2563eb; text-decoration: none; }
+    .btn-ghost { background: rgba(255,255,255,.06); color: var(--text); border: 1px solid var(--border2); }
+    .btn-ghost:hover { background: rgba(255,255,255,.1); text-decoration: none; }
+    @media(max-width:768px) { .hide-mobile { display:none; } .grid-2,.grid-3 { grid-template-columns:1fr; } }
+    .grid-2 { display: grid; grid-template-columns: repeat(2,1fr); gap: 24px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 24px; }
+
+    /* Hero */
+    .page-hero { padding: 120px 0 80px; text-align: center; position: relative; overflow: hidden; }
+    .page-hero::before { content:''; position:absolute; inset:0; background: radial-gradient(ellipse 80% 50% at 50% 0%, rgba(59,130,246,.14) 0%, transparent 65%); }
+    .hero-grid { position:absolute; inset:0; background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px); background-size:64px 64px; mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, black 40%, transparent 100%); }
+    .page-hero .content { position: relative; z-index: 1; }
+    .eyebrow { display: inline-flex; align-items: center; gap: 6px; background: rgba(59,130,246,.1); border: 1px solid rgba(59,130,246,.25); color: var(--blue2); font-size: .75rem; font-weight: 700; padding: 6px 14px; border-radius: 100px; margin-bottom: 24px; letter-spacing: .05em; text-transform: uppercase; }
+    .page-hero h1 { font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 900; letter-spacing: -.04em; line-height: 1.1; margin-bottom: 20px; }
+    .gradient-text { background: linear-gradient(135deg, var(--blue2), var(--cyan)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .page-hero p { font-size: 1.125rem; color: var(--text2); max-width: 580px; margin: 0 auto; line-height: 1.7; }
+
+    /* Sections */
+    section { padding: 80px 0; }
+    .section-label { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--blue2); margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+    .section-label::before { content:''; width:14px; height:2px; background: var(--blue); border-radius:1px; }
+    .section-title { font-size: clamp(1.5rem, 3vw, 2.25rem); font-weight: 800; letter-spacing: -.03em; line-height: 1.2; margin-bottom: 16px; }
+    .section-sub { font-size: 1.0625rem; color: var(--text2); line-height: 1.7; max-width: 560px; }
+    p.body { font-size: 1rem; color: var(--text2); line-height: 1.75; margin-bottom: 18px; }
+
+    /* Cards */
+    .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 28px; }
+    .card:hover { border-color: var(--border2); }
+    .value-icon { font-size: 1.75rem; margin-bottom: 14px; }
+    .card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 8px; color: var(--text); }
+    .card p { font-size: .875rem; color: var(--text2); line-height: 1.6; }
+
+    /* Team */
+    .team-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 16px; padding: 32px; text-align: center; transition: border-color .2s, transform .2s; }
+    .team-card:hover { border-color: var(--border2); transform: translateY(-2px); }
+    .team-avatar { width: 80px; height: 80px; border-radius: 50%; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 900; color: #fff; position: relative; overflow: hidden; }
+    .team-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+    .team-avatar img.hidden { display: none; }
+    .team-avatar img:not(.hidden) ~ .initials { display: none; }
+    .team-avatar .initials { z-index: 1; position: relative; }
+    .team-name { font-size: 1.0625rem; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+    .team-role { font-size: .8125rem; font-weight: 600; color: var(--blue2); margin-bottom: 12px; }
+    .team-bio { font-size: .875rem; color: var(--text2); line-height: 1.6; }
+
+    /* Stats */
+    .about-stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+    @media(max-width:768px) { .about-stats { grid-template-columns: repeat(2,1fr); } }
+    .about-stat { background: var(--bg2); padding: 32px 24px; text-align: center; }
+    .about-stat-num { font-size: 2rem; font-weight: 900; letter-spacing: -.04em; }
+    .about-stat-label { font-size: .8125rem; color: var(--text3); margin-top: 4px; }
+
+    /* CTA */
+    .cta-box { background: linear-gradient(135deg, rgba(59,130,246,.1), rgba(139,92,246,.07)); border: 1px solid rgba(59,130,246,.2); border-radius: 20px; padding: 56px 48px; text-align: center; }
+    .cta-box h2 { font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 900; letter-spacing: -.03em; margin-bottom: 12px; }
+    .cta-box p { color: var(--text2); margin-bottom: 28px; font-size: 1.0625rem; max-width: 440px; margin-left: auto; margin-right: auto; }
+    .cta-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+    /* Footer */
+    footer { background: var(--bg2); border-top: 1px solid var(--border); padding: 48px 0 28px; }
+    .footer-top { display: grid; grid-template-columns: 2.5fr 1fr 1fr; gap: 48px; margin-bottom: 40px; }
+    @media(max-width:768px) { .footer-top { grid-template-columns: 1fr 1fr; } }
+    .footer-brand-logo { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .footer-brand-name { font-size: 1.0625rem; font-weight: 800; color: var(--text); }
+    .footer-desc { font-size: .875rem; color: var(--text3); line-height: 1.65; max-width: 260px; }
+    .footer-col h4 { font-size: .875rem; font-weight: 700; color: var(--text); margin-bottom: 14px; }
+    .footer-col ul { list-style: none; }
+    .footer-col li { margin-bottom: 9px; }
+    .footer-col a { font-size: .875rem; color: var(--text3); transition: color .15s; text-decoration: none; }
+    .footer-col a:hover { color: var(--text); }
+    .footer-bottom { border-top: 1px solid var(--border); padding-top: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+    .footer-copy { font-size: .8125rem; color: var(--text3); }
+    .footer-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+    .fbadge { background: rgba(255,255,255,.05); color: var(--text3); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: .6875rem; font-weight: 600; }
+
+    .reveal { opacity:0; transform:translateY(20px); transition: opacity .6s ease, transform .6s ease; }
+    .reveal.visible { opacity:1; transform:translateY(0); }
+  </style>
+</head>
+<body>
+
+<nav id="main-nav">
+  <div class="container nav-inner">
+    <a href="index.html" class="nav-logo">
+      <img src="posfav.png" alt="KASTRA" style="width:34px;height:34px;object-fit:contain;border-radius:9px;">
+      <div class="nav-logo-text">KASTRA<span> POS</span></div>
+    </a>
+    <ul class="nav-links hide-mobile">
+      <li><a href="index.html#features">Features</a></li>
+      <li><a href="index.html#pricing">Pricing</a></li>
+      <li><a href="index.html#compliance">Compliance</a></li>
+      <li><a href="index.html#faq">FAQ</a></li>
+      <li><a href="contact.html" style="color:var(--blue2);">Contact</a></li>
+    </ul>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <a href="http://localhost:3001" class="btn btn-ghost" style="padding:8px 16px;font-size:.8125rem;">Log in</a>
+      <a href="http://localhost:3001/setup" class="btn btn-primary" style="padding:8px 16px;font-size:.8125rem;">Start Free →</a>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div class="page-hero">
+  <div class="hero-grid"></div>
+  <div class="container content">
+    <div class="eyebrow">🇰🇪 Built in Kenya, for Kenya</div>
+    <h1>We're on a mission to<br/><span class="gradient-text">empower every Kenyan business</span></h1>
+    <p>Kastra Systems builds enterprise-grade tools that make KRA compliance, M-Pesa payments, and multi-store management accessible to every business — from a single kiosk to a national chain.</p>
+  </div>
+</div>
+
+<!-- Story -->
+<section>
+  <div class="container-md">
+    <div class="reveal">
+      <div class="section-label">Our Story</div>
+      <h2 class="section-title">Built to solve a real Kenyan problem</h2>
+      <p class="body">In 2024, the Kenya Revenue Authority made eTIMS compliance mandatory for all VAT-registered businesses. Suddenly, thousands of Kenyan SMEs — from Westlands cafes to Thika hardware stores — needed to submit every invoice to KRA in real time or face penalties of up to <strong style="color:var(--text);">KES 1 million per year</strong>.</p>
+      <p class="body">The existing solutions were either expensive international platforms with no M-Pesa support, or cheap local systems that couldn't handle eTIMS at all. Business owners were stuck doing manual uploads on KRA's portal — hours of extra work every week.</p>
+      <p class="body">Kastra Systems was built to fix this. We created a platform that submits to eTIMS automatically after every single sale — in the background, without any extra steps. Then we added everything else a Kenyan business actually needs: M-Pesa STK Push, offline operation for unreliable internet, FEFO inventory management, full HR and payroll, and multi-store support — all in one system, at a price any Kenyan business can afford.</p>
+      <p class="body">Today, KASTRA POS is one of the most complete business management platforms built specifically for Kenya. From the 80mm thermal printer on your counter to the franchise management dashboard in your headquarters — we've built it all.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Stats -->
+<section style="padding-top:0;">
+  <div class="container-md">
+    <div class="about-stats reveal">
+      <div class="about-stat">
+        <div class="about-stat-num" style="color:var(--blue2);">50+</div>
+        <div class="about-stat-label">Feature Modules</div>
+      </div>
+      <div class="about-stat">
+        <div class="about-stat-num" style="color:var(--green);">KRA</div>
+        <div class="about-stat-label">eTIMS v2.0 Certified</div>
+      </div>
+      <div class="about-stat">
+        <div class="about-stat-num" style="color:var(--amber);">30</div>
+        <div class="about-stat-label">Days Free Trial</div>
+      </div>
+      <div class="about-stat">
+        <div class="about-stat-num" style="color:var(--purple);">2026</div>
+        <div class="about-stat-label">Founded in Nairobi</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Values -->
+<section style="background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);">
+  <div class="container">
+    <div class="section-label reveal" style="justify-content:center;text-align:center;">Our Values</div>
+    <h2 class="section-title reveal" style="text-align:center;margin-bottom:48px;">What we stand for</h2>
+    <div class="grid-3 reveal">
+      <div class="card">
+        <div class="value-icon">🛡️</div>
+        <h3>Compliance-First</h3>
+        <p>We don't treat KRA compliance as an afterthought. eTIMS submission, KDPA data rights, VAT/TOT calculations — these are built into the core of our platform, not bolted on after.</p>
+      </div>
+      <div class="card">
+        <div class="value-icon">📡</div>
+        <h3>Offline-First</h3>
+        <p>Kenya's internet is great — until it isn't. Every feature in KASTRA is designed to work without connectivity. We built offline operation as a core requirement, not a nice-to-have.</p>
+      </div>
+      <div class="card">
+        <div class="value-icon">🇰🇪</div>
+        <h3>Made for Kenya</h3>
+        <p>M-Pesa isn't an integration we added. Kenya PAYE/NHIF/NSSF payroll isn't a plugin. eTIMS isn't a third-party service. These are native, first-class features built by Kenyans for Kenyans.</p>
+      </div>
+      <div class="card" style="margin-top:0;">
+        <div class="value-icon">📈</div>
+        <h3>Grow With You</h3>
+        <p>A single cashier today, 50 branches tomorrow. KASTRA scales with your business — same platform, same data, same team. No migration, no re-training, no new contracts.</p>
+      </div>
+      <div class="card">
+        <div class="value-icon">💰</div>
+        <h3>Honest Pricing</h3>
+        <p>No hidden setup fees. No per-terminal charges. No surprise "compliance add-ons." The price you see is the price you pay — KRA eTIMS, M-Pesa, AI forecasting, and everything else included.</p>
+      </div>
+      <div class="card">
+        <div class="value-icon">🤝</div>
+        <h3>Customer Success</h3>
+        <p>We measure our success by yours. Every support request, every feature request, every bug report shapes the product. Our team speaks your language and understands your business context.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Team -->
+<section>
+  <div class="container">
+    <div class="section-header" style="text-align:center;margin-bottom:48px;">
+      <div class="section-label reveal" style="justify-content:center;">Leadership Team</div>
+      <h2 class="section-title reveal">The people behind KASTRA</h2>
+      <p class="section-sub reveal" style="margin:0 auto;text-align:center;">A team of Kenyan technologists, accountants, and entrepreneurs who've lived the challenges your business faces every day.</p>
+    </div>
+    <div class="grid-3">
+      <div class="team-card reveal">
+        <div class="team-avatar" style="background:linear-gradient(135deg,#3b82f6,#1d4ed8);">
+          <img src="/simon.jpeg" alt="Simon Karuga" onerror="this.classList.add('hidden')">
+          <span class="initials">SK</span>
+        </div>
+        <div class="team-name">SIMON KARUGA</div>
+        <div class="team-role">Chief Executive Officer</div>
+        <p class="team-bio">Former retail chain operator with 12 years building Kenyan SMEs. Experienced the eTIMS compliance pain firsthand — built KASTRA to solve it. Based in Nairobi.</p>
+      </div>
+      <div class="team-card reveal" style="transition-delay:.1s">
+        <div class="team-avatar" style="background:linear-gradient(135deg,#10b981,#059669);">
+          <img src="/kev1.jpg" alt="Kelvin Johnson" onerror="this.classList.add('hidden')">
+          <span class="initials">KJ</span>
+        </div>
+        <div class="team-name">KELVIN JOHNSON</div>
+        <div class="team-role">Chief Technology Officer</div>
+        <p class="team-bio">Full-stack engineer with deep expertise in offline-first PWAs, KRA API integrations, and Safaricom Daraja. Previously built fintech products serving 200K+ Kenyan users.</p>
+      </div>
+      <div class="team-card reveal" style="transition-delay:.2s">
+        <div class="team-avatar" style="background:linear-gradient(135deg,#8b5cf6,#6d28d9);">
+          <img src="team/david-otieno.jpg" alt="David Otieno" onerror="this.classList.add('hidden')">
+          <span class="initials">DO</span>
+        </div>
+        <div class="team-name">David Otieno</div>
+        <div class="team-role">Head of Customer Success</div>
+        <p class="team-bio">Certified Public Accountant (CPA-K) and former KRA eTIMS trainer. Leads onboarding, compliance advisory, and enterprise support. Fluent in Swahili and English.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Why Kenya -->
+<section style="background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);">
+  <div class="container">
+    <div class="grid-2" style="align-items:center;gap:64px;">
+      <div class="reveal">
+        <div class="section-label">Why Kenya?</div>
+        <h2 class="section-title">Designed around the Kenyan business reality</h2>
+        <p class="body">Most POS software is built for Western markets with reliable power and fast broadband. Kenya is different — and we designed for that difference from day one.</p>
+        <div style="display:flex;flex-direction:column;gap:14px;margin-top:24px;">
+          <div style="display:flex;gap:14px;align-items:flex-start;">
+            <div style="width:36px;height:36px;background:rgba(76,175,80,.12);border:1px solid rgba(76,175,80,.25);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;">📶</div>
+            <div>
+              <div style="font-size:.9375rem;font-weight:600;color:var(--text);margin-bottom:4px;">Offline-First Architecture</div>
+              <div style="font-size:.875rem;color:var(--text2);line-height:1.6;">Full IndexedDB storage means zero data loss during outages. Sync happens automatically when connectivity returns — not before your next sale.</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:14px;align-items:flex-start;">
+            <div style="width:36px;height:36px;background:rgba(76,175,80,.12);border:1px solid rgba(76,175,80,.25);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;">💸</div>
+            <div>
+              <div style="font-size:.9375rem;font-weight:600;color:var(--text);margin-bottom:4px;">M-Pesa Native Integration</div>
+              <div style="font-size:.875rem;color:var(--text2);line-height:1.6;">Not a plugin — native Daraja STK Push and Dynamic QR built into every checkout flow. The most used payment method in Kenya is a first-class citizen here.</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:14px;align-items:flex-start;">
+            <div style="width:36px;height:36px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.25);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;">🏛️</div>
+            <div>
+              <div style="font-size:.9375rem;font-weight:600;color:var(--text);margin-bottom:4px;">KRA Compliance by Default</div>
+              <div style="font-size:.875rem;color:var(--text2);line-height:1.6;">Every sale auto-submits to KRA eTIMS. KDPA data rights are built in. Kenya PAYE, NHIF, NSSF payroll calculations are exact — because we verified them against the actual Act.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="reveal" style="transition-delay:.15s;">
+        <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:16px;padding:32px;">
+          <p style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:20px;">Contact Us</p>
+          <div style="display:flex;flex-direction:column;gap:16px;">
+            <div style="display:flex;gap:12px;align-items:center;">
+              <div style="width:36px;height:36px;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.2);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.875rem;flex-shrink:0;">✉️</div>
+              <div>
+                <div style="font-size:.75rem;color:var(--text3);font-weight:600;margin-bottom:2px;">GENERAL ENQUIRIES</div>
+                <a href="mailto:hello@kastrapos.co.ke" style="color:var(--blue2);font-size:.9375rem;font-weight:500;">hello@kastrapos.co.ke</a>
+              </div>
+            </div>
+            <div style="display:flex;gap:12px;align-items:center;">
+              <div style="width:36px;height:36px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.2);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.875rem;flex-shrink:0;">🛠️</div>
+              <div>
+                <div style="font-size:.75rem;color:var(--text3);font-weight:600;margin-bottom:2px;">TECHNICAL SUPPORT</div>
+                <a href="mailto:support@kastrapos.co.ke" style="color:var(--blue2);font-size:.9375rem;font-weight:500;">support@kastrapos.co.ke</a>
+              </div>
+            </div>
+            <div style="display:flex;gap:12px;align-items:center;">
+              <div style="width:36px;height:36px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.875rem;flex-shrink:0;">💼</div>
+              <div>
+                <div style="font-size:.75rem;color:var(--text3);font-weight:600;margin-bottom:2px;">SALES &amp; ENTERPRISE</div>
+                <a href="mailto:sales@kastrapos.co.ke" style="color:var(--blue2);font-size:.9375rem;font-weight:500;">sales@kastrapos.co.ke</a>
+              </div>
+            </div>
+            <div style="display:flex;gap:12px;align-items:center;">
+              <div style="width:36px;height:36px;background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.2);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.875rem;flex-shrink:0;">🔒</div>
+              <div>
+                <div style="font-size:.75rem;color:var(--text3);font-weight:600;margin-bottom:2px;">DATA PROTECTION OFFICER</div>
+                <a href="mailto:dpo@kastrapos.co.ke" style="color:var(--blue2);font-size:.9375rem;font-weight:500;">dpo@kastrapos.co.ke</a>
+              </div>
+            </div>
+            <div style="padding-top:16px;border-top:1px solid var(--border);font-size:.8125rem;color:var(--text3);line-height:1.6;">
+              📍 Nairobi, Kenya &nbsp;·&nbsp; Response within 1 business day
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section>
+  <div class="container">
+    <div class="cta-box reveal">
+      <h2>Ready to see it in action?</h2>
+      <p>Start your 30-day free trial today. Full platform access, no credit card required.</p>
+      <div class="cta-actions">
+        <a href="http://localhost:3001/setup" class="btn btn-primary" style="padding:14px 28px;font-size:1rem;">Start Free Trial →</a>
+        <a href="mailto:sales@kastrapos.co.ke" class="btn btn-ghost" style="padding:14px 28px;font-size:1rem;">Talk to Sales</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-top">
+      <div>
+        <div class="footer-brand-logo">
+          <img src="posfav.png" alt="KASTRA" style="width:32px;height:32px;object-fit:contain;border-radius:8px;">
+          <div class="footer-brand-name">KASTRA POS</div>
+        </div>
+        <p class="footer-desc">Kenya's most complete KRA eTIMS-compliant point of sale platform. Offline-first, M-Pesa integrated, built for serious business.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Legal</h4>
+        <ul>
+          <li><a href="privacy.html">Privacy Policy</a></li>
+          <li><a href="terms.html">Terms of Service</a></li>
+          <li><a href="kdpa.html">KDPA Statement</a></li>
+          <li><a href="about.html">About Us</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Support</h4>
+        <ul>
+          <li><a href="setup-guide.html">Setup Guide</a></li>
+          <li><a href="index.html#faq">FAQ</a></li>
+          <li><a href="contact.html">Contact Us</a></li>
+          <li><a href="index.html#pricing">Pricing</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span class="footer-copy">© 2026 Kastra Systems. All rights reserved. Built in 🇰🇪 Kenya.</span>
+      <div class="footer-badges">
+        <span class="fbadge">🇰🇪 Made for Kenya</span>
+        <span class="fbadge">KRA eTIMS Ready</span>
+        <span class="fbadge">KDPA Compliant</span>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  window.addEventListener('scroll', function() {
+    document.getElementById('main-nav').classList.toggle('scrolled', window.scrollY > 20);
+  });
+  var obs = new IntersectionObserver(function(entries) {
+    entries.forEach(function(e) { if (e.isIntersecting) { e.target.classList.add('visible'); obs.unobserve(e.target); } });
+  }, { threshold: 0.08 });
+  document.querySelectorAll('.reveal').forEach(function(el) { obs.observe(el); });
+</script>
+</body>
+</html>

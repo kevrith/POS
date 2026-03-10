@@ -34,6 +34,8 @@ export interface ReceiptData {
   etimsSubmitted?: boolean;
   notes?: string;
   saleId?: string;
+  receiptHeader?: string;
+  receiptFooter?: string;
 }
 
 // ESC/POS Commands
@@ -170,8 +172,14 @@ export function generateESCPOS(receipt: ReceiptData): string {
 
   // Footer
   output += ESCPOS.FEED + ESCPOS.ALIGN_CENTER;
+  if (receipt.receiptHeader) {
+    output += ESCPOS.FONT_SMALL + receipt.receiptHeader + ESCPOS.FEED + ESCPOS.FONT_NORMAL;
+  }
   output += 'Thank you for your business!' + ESCPOS.FEED;
-  output += 'Powered by Universal POS' + ESCPOS.FEED;
+  if (receipt.receiptFooter) {
+    output += ESCPOS.FONT_SMALL + receipt.receiptFooter + ESCPOS.FEED;
+  }
+  output += ESCPOS.FONT_SMALL + 'Powered by: Kastra Systems' + ESCPOS.FEED + ESCPOS.FONT_NORMAL;
   output += ESCPOS.FEED + ESCPOS.FEED;
 
   // Cut paper
@@ -283,9 +291,11 @@ export function generateHTML(receipt: ReceiptData): string {
   ` : ''}
   
   <div class="line"></div>
+  ${receipt.receiptHeader ? `<div class="center small" style="margin-bottom:4px">${receipt.receiptHeader}</div>` : ''}
   <div class="center small">
     <div>Thank you for your business!</div>
-    <div>Powered by Universal POS</div>
+    ${receipt.receiptFooter ? `<div style="margin-top:4px">${receipt.receiptFooter}</div>` : ''}
+    <div style="margin-top:4px;color:#888">Powered by: Kastra Systems</div>
   </div>
 </body>
 </html>
@@ -325,16 +335,14 @@ export interface BillData {
     totalCents: number;
   }>;
   subtotalCents: number;
-  serviceChargeCents?: number;
-  vatCents?: number;
-  totCents?: number;
   totalCents: number;
   date: string;
+  footer?: string;
 }
 
 export function generateBillHTML(bill: BillData): string {
-  const taxLabel = bill.vatCents && bill.vatCents > 0 ? 'VAT (16%)' : bill.totCents && bill.totCents > 0 ? 'TOT (3%)' : null;
-  const taxCents = (bill.vatCents ?? 0) + (bill.totCents ?? 0);
+  // VAT is inclusive — extract from total (16/116)
+  const vatCents = Math.round(bill.totalCents * 16 / 116);
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -347,10 +355,11 @@ export function generateBillHTML(bill: BillData): string {
     .center { text-align: center; }
     .bold { font-weight: bold; }
     .large { font-size: 16px; }
-    .xl { font-size: 24px; font-weight: 900; }
+    .xl { font-size: 22px; font-weight: 900; }
     .line { border-top: 1px dashed #000; margin: 6px 0; }
     .row { display: flex; justify-content: space-between; }
     .small { font-size: 10px; }
+    .muted { color: #555; }
     .bill-header { background: #000; color: #fff; text-align: center; padding: 6px;
                    font-size: 15px; font-weight: bold; letter-spacing: 2px; margin-bottom: 8px; }
   </style>
@@ -359,23 +368,22 @@ export function generateBillHTML(bill: BillData): string {
   <div class="bill-header">★ BILL</div>
   <div class="center bold large">${bill.businessName}</div>
   <div class="center xl">Table ${bill.tableNumber}</div>
-  <div class="center small">${new Date(bill.date).toLocaleString('en-KE')}${bill.waiterName ? ` · ${bill.waiterName}` : ''}</div>
+  <div class="center small">${new Date(bill.date).toLocaleString('en-KE')}${bill.waiterName ? ` · Served by: ${bill.waiterName}` : ''}</div>
   <div class="line"></div>
   ${bill.items.map((item) => `
-    <div>
+    <div style="margin-bottom:4px">
       <div class="bold">${item.name}</div>
       <div class="row small"><span>${item.quantity} × KES ${(item.unitPriceCents / 100).toFixed(2)}</span><span class="bold">KES ${(item.totalCents / 100).toFixed(2)}</span></div>
     </div>
   `).join('')}
   <div class="line"></div>
-  <div class="row small"><span>Subtotal${taxCents > 0 ? ' (ex-tax)' : ''}:</span><span>KES ${((bill.subtotalCents - taxCents) / 100).toFixed(2)}</span></div>
-  ${bill.serviceChargeCents && bill.serviceChargeCents > 0 ? `<div class="row small"><span>Service charge:</span><span>KES ${(bill.serviceChargeCents / 100).toFixed(2)}</span></div>` : ''}
-  ${taxLabel ? `<div class="row small"><span>${taxLabel}:</span><span>KES ${(taxCents / 100).toFixed(2)}</span></div>` : ''}
+  <div class="row bold large" style="margin-bottom:4px"><span>TOTAL (VAT incl.):</span><span>KES ${(bill.totalCents / 100).toFixed(2)}</span></div>
+  <div class="row small muted"><span>  VAT (16%) included:</span><span>KES ${(vatCents / 100).toFixed(2)}</span></div>
   <div class="line"></div>
-  <div class="row bold large"><span>TOTAL:</span><span>KES ${(bill.totalCents / 100).toFixed(2)}</span></div>
-  <div class="line"></div>
-  <div class="center small" style="margin-top:8px">Please check your bill and inform staff of any errors.</div>
+  ${bill.footer ? `<div class="center small" style="margin-top:6px">${bill.footer}</div>` : ''}
+  <div class="center small" style="margin-top:6px">Please check your bill and inform staff of any errors.</div>
   <div class="center small">Thank you for dining with us!</div>
+  <div class="center small muted" style="margin-top:8px">Powered by: Kastra Systems</div>
 </body>
 </html>`.trim();
 }

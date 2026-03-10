@@ -3,7 +3,7 @@ import { useAuthStore } from '../stores/auth';
 import type { AuthUser } from '../stores/auth';
 import { Eye, EyeOff, Delete, ChevronLeft, Building2 } from 'lucide-react';
 
-type LoginMode = 'email' | 'pin';
+type LoginMode = 'email' | 'pin' | 'register';
 type PinStep = 'business' | 'staff' | 'pad';
 
 const PIN_DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 'clear', 0, 'del'] as const;
@@ -52,6 +52,17 @@ export default function LoginPage() {
   const [selectedUser, setSelectedUser] = useState<StaffMember | null>(null);
   const [pin, setPin] = useState('');
   const [pinError, setPinError] = useState('');
+
+  // ── Register mode ────────────────────────────────────────────────────────────
+  const [regName, setRegName] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regConfirm, setRegConfirm] = useState('');
+  const [regBusiness, setRegBusiness] = useState('');
+  const [showRegPassword, setShowRegPassword] = useState(false);
+  const [regLoading, setRegLoading] = useState(false);
+  const [regError, setRegError] = useState('');
+  const [regSuccess, setRegSuccess] = useState(false);
 
   const { login, loginWithPin, loginWithOAuth } = useAuthStore();
 
@@ -155,6 +166,36 @@ export default function LoginPage() {
     }
   }
 
+  async function handleRegister(e: React.FormEvent) {
+    e.preventDefault();
+    setRegError('');
+    if (regPassword !== regConfirm) {
+      setRegError('Passwords do not match');
+      return;
+    }
+    if (regPassword.length < 8) {
+      setRegError('Password must be at least 8 characters');
+      return;
+    }
+    setRegLoading(true);
+    try {
+      const res = await fetch('/api/v1/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: regName, email: regEmail, password: regPassword, businessName: regBusiness }),
+      });
+      if (!res.ok) {
+        const data = await res.json() as { message?: string };
+        throw new Error(data.message ?? 'Registration failed');
+      }
+      setRegSuccess(true);
+    } catch (err) {
+      setRegError(err instanceof Error ? err.message : 'Registration failed');
+    } finally {
+      setRegLoading(false);
+    }
+  }
+
   async function handleEmailLogin(e: React.FormEvent) {
     e.preventDefault();
     setError('');
@@ -194,7 +235,17 @@ export default function LoginPage() {
                 : 'text-gray-500 hover:bg-gray-50'
             }`}
           >
-            Email + Password
+            Sign In
+          </button>
+          <button
+            onClick={() => { setMode('register'); setRegError(''); setRegSuccess(false); }}
+            className={`flex-1 py-2.5 xs:py-3 text-xs xs:text-sm font-medium transition-colors ${
+              mode === 'register'
+                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                : 'text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            Create Account
           </button>
           <button
             onClick={() => { setMode('pin'); setError(''); }}
@@ -204,11 +255,110 @@ export default function LoginPage() {
                 : 'text-gray-500 hover:bg-gray-50'
             }`}
           >
-            Staff PIN Login
+            Staff PIN
           </button>
         </div>
 
         <div className="p-6 xs:p-8">
+
+          {/* ── Register mode ──────────────────────────────────────────────── */}
+          {mode === 'register' && (
+            regSuccess ? (
+              <div className="py-6 text-center space-y-4">
+                <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+                  <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-800 text-lg">Account created!</h3>
+                  <p className="text-sm text-gray-500 mt-1">Your business account is ready. Sign in to get started.</p>
+                </div>
+                <button
+                  onClick={() => { setMode('email'); setEmail(regEmail); setRegSuccess(false); }}
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors"
+                >
+                  Go to Sign In →
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={(e) => void handleRegister(e)} className="space-y-4">
+                {regError && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{regError}</div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Your Full Name</label>
+                  <input
+                    type="text"
+                    value={regName}
+                    onChange={(e) => setRegName(e.target.value)}
+                    className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Jane Waweru"
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Business Name</label>
+                  <input
+                    type="text"
+                    value={regBusiness}
+                    onChange={(e) => setRegBusiness(e.target.value)}
+                    className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Premier Cafe Ltd"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                  <input
+                    type="email"
+                    value={regEmail}
+                    onChange={(e) => setRegEmail(e.target.value)}
+                    className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="jane@yourbusiness.co.ke"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                  <div className="relative">
+                    <input
+                      type={showRegPassword ? 'text' : 'password'}
+                      value={regPassword}
+                      onChange={(e) => setRegPassword(e.target.value)}
+                      className="w-full px-4 py-3 pr-12 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Min. 8 characters"
+                      required
+                    />
+                    <button type="button" onClick={() => setShowRegPassword(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                      {showRegPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
+                  <input
+                    type={showRegPassword ? 'text' : 'password'}
+                    value={regConfirm}
+                    onChange={(e) => setRegConfirm(e.target.value)}
+                    className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Re-enter password"
+                    required
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={regLoading}
+                  className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl disabled:opacity-50 transition-colors"
+                >
+                  {regLoading ? 'Creating account…' : 'Create Account →'}
+                </button>
+                <p className="text-center text-xs text-gray-400">
+                  Already have an account?{' '}
+                  <button type="button" onClick={() => setMode('email')} className="text-blue-600 font-semibold hover:underline">Sign in</button>
+                </p>
+              </form>
+            )
+          )}
 
           {/* ── Email mode ─────────────────────────────────────────────────── */}
           {mode === 'email' && (

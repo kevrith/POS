@@ -88,6 +88,7 @@ interface CreateItemPayload {
   initialStock: number;
   unit: string;
   vatApplicable: boolean;
+  prepTimeMinutes?: number;
   businessId: string;
   storeId?: string;
 }
@@ -215,6 +216,7 @@ function AddItemModal({ businessId, storeId, categories, posMode, onClose }: Add
     initialStock: '',
     unit: 'pcs',
     vatApplicable: false,
+    prepTimeMinutes: 5,
   });
   const [error, setError] = useState('');
   const addItemVideoRef = useRef<HTMLVideoElement>(null);
@@ -271,6 +273,7 @@ function AddItemModal({ businessId, storeId, categories, posMode, onClose }: Add
       initialStock: form.trackStock ? parseInt(form.initialStock) || 0 : 0,
       unit: form.unit,
       vatApplicable: form.vatApplicable,
+      prepTimeMinutes: form.prepTimeMinutes,
       businessId,
       storeId,
     });
@@ -376,6 +379,10 @@ function AddItemModal({ businessId, storeId, categories, posMode, onClose }: Add
             {form.trackStock && field('Initial Stock', <input type="number" min="0" value={form.initialStock} onChange={(e) => setForm(f => ({ ...f, initialStock: e.target.value }))} className={inputCls} placeholder="0" />)}
           </div>
 
+          <div className="grid grid-cols-2 gap-4">
+            {field('Prep Time (minutes)', <input type="number" min="1" value={form.prepTimeMinutes} onChange={(e) => setForm(f => ({ ...f, prepTimeMinutes: parseInt(e.target.value) || 5 }))} className={inputCls} placeholder="5" />)}
+          </div>
+
           <div className="flex gap-6">
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={form.trackStock} onChange={(e) => setForm(f => ({ ...f, trackStock: e.target.checked }))} className="w-4 h-4 rounded text-blue-600" />
@@ -436,6 +443,7 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
     unit: item.unit ?? 'pcs',
     vatApplicable: item.vatApplicable,
     trackStock: item.trackStock,
+    prepTimeMinutes: (item as any).prepTimeMinutes ?? 5,
   });
   const [error, setError] = useState('');
 
@@ -463,6 +471,7 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
       unit: form.unit,
       vatApplicable: form.vatApplicable,
       trackStock: form.trackStock,
+      prepTimeMinutes: form.prepTimeMinutes,
     });
   }
 
@@ -514,10 +523,15 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
               <input type="number" min="0" step="0.01" value={form.costPrice} onChange={(e) => setForm(f => ({ ...f, costPrice: e.target.value }))} className={inputCls} /></div>
           </div>
 
-          <div><label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
-            <select value={form.unit} onChange={(e) => setForm(f => ({ ...f, unit: e.target.value }))} className={inputCls}>
-              {['pcs', 'kg', 'g', 'litre', 'ml', 'box', 'pack', 'pair', 'set', 'dozen'].map(u => <option key={u} value={u}>{u}</option>)}
-            </select>
+          <div className="grid grid-cols-2 gap-4">
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
+              <select value={form.unit} onChange={(e) => setForm(f => ({ ...f, unit: e.target.value }))} className={inputCls}>
+                {['pcs', 'kg', 'g', 'litre', 'ml', 'box', 'pack', 'pair', 'set', 'dozen'].map(u => <option key={u} value={u}>{u}</option>)}
+              </select>
+            </div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">Prep Time (minutes)</label>
+              <input type="number" min="1" value={form.prepTimeMinutes} onChange={(e) => setForm(f => ({ ...f, prepTimeMinutes: parseInt(e.target.value) || 5 }))} className={inputCls} />
+            </div>
           </div>
 
           <div className="flex gap-6">

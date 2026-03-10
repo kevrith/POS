@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — KASTRA POS</title>
+  <meta name="description" content="KASTRA POS Privacy Policy. Learn how we collect, use, and protect your data under the Kenya Data Protection Act 2019." />
+  <link rel="icon" type="image/png" href="posfav.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #030712;
+      --bg2: #0a0f1e;
+      --bg3: #0f172a;
+      --border: rgba(255,255,255,.07);
+      --border2: rgba(255,255,255,.12);
+      --blue: #3b82f6;
+      --blue2: #60a5fa;
+      --blue-glow: rgba(59,130,246,.35);
+      --cyan: #06b6d4;
+      --green: #10b981;
+      --amber: #f59e0b;
+      --purple: #8b5cf6;
+      --text: #f1f5f9;
+      --text2: #94a3b8;
+      --text3: #64748b;
+      --radius: 14px;
+      --radius-lg: 20px;
+    }
+    html { scroll-behavior: smooth; font-size: 16px; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; overflow-x: hidden; }
+    a { color: inherit; text-decoration: none; }
+    img { max-width: 100%; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg2); }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+    .container-sm { max-width: 800px; margin: 0 auto; padding: 0 24px; }
+
+    /* Nav */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      background: rgba(3,7,18,.8); backdrop-filter: blur(20px) saturate(180%);
+      border-bottom: 1px solid var(--border);
+      transition: box-shadow .3s;
+    }
+    nav.scrolled { box-shadow: 0 4px 30px rgba(0,0,0,.4); }
+    .nav-inner { height: 68px; display: flex; align-items: center; justify-content: space-between; }
+    .nav-logo { display: flex; align-items: center; gap: 10px; }
+    .nav-logo-text { font-size: 1.125rem; font-weight: 800; letter-spacing: -.3px; }
+    .nav-logo-text span { color: var(--blue2); }
+    .nav-links { display: flex; align-items: center; gap: 32px; list-style: none; }
+    .nav-links a { font-size: .875rem; font-weight: 500; color: var(--text2); transition: color .15s; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-actions { display: flex; align-items: center; gap: 10px; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 24px; border-radius: 10px; font-size: .9375rem; font-weight: 600; cursor: pointer; transition: all .2s; border: none; white-space: nowrap; }
+    .btn-primary { background: var(--blue); color: #fff; box-shadow: 0 0 24px var(--blue-glow); }
+    .btn-primary:hover { background: #2563eb; box-shadow: 0 0 36px var(--blue-glow); transform: translateY(-1px); }
+    .btn-ghost { background: rgba(255,255,255,.06); color: var(--text); border: 1px solid var(--border2); }
+    .btn-ghost:hover { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.2); }
+    .btn-sm { padding: 8px 16px; font-size: .8125rem; border-radius: 8px; }
+    .nav-pill { background: rgba(16,185,129,.12); border: 1px solid rgba(16,185,129,.25); color: var(--green); font-size: .6875rem; font-weight: 700; padding: 3px 10px; border-radius: 100px; letter-spacing: .03em; white-space: nowrap; }
+    @media(max-width: 768px) { .hide-mobile { display: none !important; } }
+
+    /* Hero */
+    .page-hero {
+      padding: 140px 0 72px;
+      background: radial-gradient(ellipse 70% 50% at 50% 0%, rgba(59,130,246,.15) 0%, transparent 70%);
+      border-bottom: 1px solid var(--border);
+      text-align: center;
+    }
+    .page-hero-label { display: inline-flex; align-items: center; gap: 6px; font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--blue2); margin-bottom: 16px; }
+    .page-hero-label::before { content: ''; width: 16px; height: 2px; background: var(--blue); border-radius: 1px; }
+    .page-hero h1 { font-size: clamp(1.75rem, 4vw, 3rem); font-weight: 900; letter-spacing: -.04em; margin-bottom: 16px; line-height: 1.1; }
+    .page-hero p { font-size: 1.0625rem; color: var(--text2); max-width: 560px; margin: 0 auto; line-height: 1.7; }
+    .page-hero-meta { margin-top: 20px; font-size: .8125rem; color: var(--text3); }
+
+    /* Content */
+    .content-wrapper { padding: 72px 0 96px; }
+    .prose h2 { font-size: 1.375rem; font-weight: 800; color: var(--text); margin: 48px 0 16px; letter-spacing: -.02em; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+    .prose h2:first-child { margin-top: 0; }
+    .prose h3 { font-size: 1.0625rem; font-weight: 700; color: var(--text); margin: 28px 0 10px; }
+    .prose p { font-size: .9375rem; color: var(--text2); line-height: 1.75; margin-bottom: 16px; }
+    .prose ul { list-style: none; margin-bottom: 16px; }
+    .prose ul li { font-size: .9375rem; color: var(--text2); line-height: 1.65; padding: 6px 0 6px 24px; position: relative; }
+    .prose ul li::before { content: '→'; position: absolute; left: 0; color: var(--blue2); font-size: .8125rem; font-weight: 700; top: 7px; }
+    .prose a { color: var(--blue2); text-decoration: underline; text-underline-offset: 3px; }
+    .prose a:hover { color: var(--blue); }
+
+    .info-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px 28px; margin-bottom: 32px; }
+    .info-card.blue { border-color: rgba(59,130,246,.2); background: rgba(59,130,246,.06); }
+    .info-card.green { border-color: rgba(16,185,129,.2); background: rgba(16,185,129,.05); }
+    .info-card.amber { border-color: rgba(245,158,11,.2); background: rgba(245,158,11,.05); }
+    .info-card-title { font-size: .8125rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; }
+    .info-card.blue .info-card-title { color: var(--blue2); }
+    .info-card.green .info-card-title { color: var(--green); }
+    .info-card.amber .info-card-title { color: var(--amber); }
+    .info-card p { font-size: .875rem; color: var(--text2); line-height: 1.65; margin: 0; }
+
+    .toc { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px 28px; margin-bottom: 48px; }
+    .toc h3 { font-size: .8125rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text3); margin-bottom: 14px; }
+    .toc ol { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+    .toc ol li { counter-increment: toc-counter; }
+    .toc ol li a { font-size: .875rem; color: var(--text2); transition: color .15s; display: flex; align-items: center; gap: 8px; }
+    .toc ol li a::before { content: counter(toc-counter, decimal-leading-zero); font-size: .6875rem; font-weight: 700; color: var(--text3); min-width: 20px; }
+    .toc ol li a:hover { color: var(--blue2); }
+    .toc ol { counter-reset: toc-counter; }
+
+    /* Footer */
+    footer { background: var(--bg2); border-top: 1px solid var(--border); padding: 64px 0 32px; }
+    .footer-top { display: grid; grid-template-columns: 2.5fr 1fr 1fr 1.5fr; gap: 48px; margin-bottom: 48px; }
+    @media(max-width: 900px) { .footer-top { grid-template-columns: 1fr 1fr; } }
+    @media(max-width: 560px) { .footer-top { grid-template-columns: 1fr; } }
+    .footer-brand-logo { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    .footer-brand-name { font-size: 1.0625rem; font-weight: 800; color: var(--text); letter-spacing: -.2px; }
+    .footer-desc { font-size: .875rem; color: var(--text3); line-height: 1.65; max-width: 260px; margin-bottom: 20px; }
+    .footer-social { display: flex; gap: 8px; }
+    .social-btn { width: 34px; height: 34px; border-radius: 8px; background: rgba(255,255,255,.06); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: .875rem; transition: all .2s; }
+    .social-btn:hover { background: rgba(255,255,255,.1); border-color: var(--border2); }
+    .footer-col h4 { font-size: .875rem; font-weight: 700; color: var(--text); margin-bottom: 16px; }
+    .footer-col ul { list-style: none; }
+    .footer-col li { margin-bottom: 10px; }
+    .footer-col a { font-size: .875rem; color: var(--text3); transition: color .15s; }
+    .footer-col a:hover { color: var(--text); }
+    .footer-newsletter input { width: 100%; padding: 10px 14px; background: rgba(255,255,255,.06); border: 1px solid var(--border); border-radius: 9px; color: var(--text); font-size: .875rem; margin-bottom: 8px; outline: none; transition: border-color .2s; font-family: 'Inter', sans-serif; }
+    .footer-newsletter input:focus { border-color: var(--blue); }
+    .footer-newsletter input::placeholder { color: var(--text3); }
+    .footer-bottom { border-top: 1px solid var(--border); padding-top: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+    .footer-copy { font-size: .8125rem; color: var(--text3); }
+    .footer-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+    .fbadge { background: rgba(255,255,255,.05); color: var(--text3); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: .6875rem; font-weight: 600; letter-spacing: .03em; }
+  </style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav id="main-nav">
+  <div class="container nav-inner">
+    <a href="index.html" class="nav-logo">
+      <img src="posfav.png" alt="KASTRA" style="width:34px;height:34px;object-fit:contain;border-radius:9px;">
+      <div class="nav-logo-text">KASTRA<span> POS</span></div>
+    </a>
+    <ul class="nav-links hide-mobile">
+      <li><a href="index.html#features">Features</a></li>
+      <li><a href="index.html#compliance">Compliance</a></li>
+      <li><a href="index.html#pricing">Pricing</a></li>
+      <li><a href="about.html">About</a></li>
+      <li><a href="setup-guide.html">Setup Guide</a></li>
+    </ul>
+    <div class="nav-actions">
+      <span class="nav-pill hide-mobile">✓ KRA eTIMS Ready</span>
+      <a href="http://localhost:3001" class="btn btn-ghost btn-sm">Log in</a>
+      <a href="http://localhost:3001/setup" class="btn btn-primary btn-sm">Start Free →</a>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div class="page-hero">
+  <div class="container">
+    <div class="page-hero-label">Legal</div>
+    <h1>Privacy Policy</h1>
+    <p>We are committed to protecting your personal data and being transparent about how we collect and use it in compliance with the Kenya Data Protection Act 2019.</p>
+    <div class="page-hero-meta">Last updated: March 2026 &nbsp;·&nbsp; Effective: March 2026</div>
+  </div>
+</div>
+
+<!-- Content -->
+<div class="content-wrapper">
+  <div class="container-sm">
+
+    <div class="info-card blue">
+      <div class="info-card-title">Summary</div>
+      <p>KASTRA POS (operated by Kastra Systems) collects minimal personal and business data needed to provide our point-of-sale service. We store your data on Kenya-based servers with AES-256 encryption and never sell your data to third parties. You have full rights under the Kenya Data Protection Act 2019 to access, correct, or delete your data.</p>
+    </div>
+
+    <nav class="toc">
+      <h3>Table of Contents</h3>
+      <ol>
+        <li><a href="#data-collect">Data We Collect</a></li>
+        <li><a href="#how-we-use">How We Use Your Data</a></li>
+        <li><a href="#data-sharing">Data Sharing and Disclosure</a></li>
+        <li><a href="#data-storage">Data Storage and Security</a></li>
+        <li><a href="#your-rights">Your Rights under KDPA 2019</a></li>
+        <li><a href="#data-retention">Data Retention</a></li>
+        <li><a href="#cookies">Cookies and Analytics</a></li>
+        <li><a href="#children">Children's Privacy</a></li>
+        <li><a href="#changes">Changes to This Policy</a></li>
+        <li><a href="#contact">Contact Us</a></li>
+      </ol>
+    </nav>
+
+    <div class="prose">
+
+      <h2 id="data-collect">1. Data We Collect</h2>
+      <p>We collect the following categories of personal and business data when you use KASTRA POS:</p>
+
+      <h3>Account and Identity Data</h3>
+      <ul>
+        <li>Full name, email address, and phone number of account holders and staff users</li>
+        <li>Business name, physical address, KRA PIN, and eTIMS Business House Number (BHF ID)</li>
+        <li>Profile photos and business logos uploaded by users</li>
+        <li>User role and permission level within your organisation</li>
+      </ul>
+
+      <h3>Customer Data</h3>
+      <ul>
+        <li>Customer names and phone numbers (for receipt delivery and loyalty programmes)</li>
+        <li>Email addresses where provided voluntarily by customers</li>
+        <li>Loyalty points balances and transaction history per customer</li>
+        <li>Prescription and appointment records (if you operate in healthcare/pharmacy mode)</li>
+      </ul>
+
+      <h3>Transaction Data</h3>
+      <ul>
+        <li>Sales receipts, line items, quantities, prices, discounts, and payment methods</li>
+        <li>M-Pesa transaction references and Paystack payment confirmations</li>
+        <li>KRA eTIMS invoice numbers (CU invoice number) and VAT/TOT amounts</li>
+        <li>Void, return, and amendment records with reasons and timestamps</li>
+        <li>Proforma invoices and layaway records</li>
+      </ul>
+
+      <h3>Inventory and Business Operations Data</h3>
+      <ul>
+        <li>Product names, barcodes, prices, stock levels, batch numbers, and expiry dates</li>
+        <li>Supplier names and contact details</li>
+        <li>Employee records including names, roles, salaries (for payroll), and attendance</li>
+        <li>Expense records, purchase orders, and bank reconciliation entries</li>
+      </ul>
+
+      <h3>Device and Technical Data</h3>
+      <ul>
+        <li>IP address and browser/device type when you access our web application</li>
+        <li>Error logs and crash reports (sent to our monitoring service, Sentry)</li>
+        <li>API access logs including endpoint, timestamp, and response codes</li>
+        <li>Tauri desktop app: machine identifier used for license binding (stored as a one-way hash)</li>
+      </ul>
+
+      <h3>Payment Credentials (Encrypted)</h3>
+      <ul>
+        <li>M-Pesa Daraja API credentials (Consumer Key, Secret, Passkey) — stored AES-256 encrypted</li>
+        <li>KRA eTIMS CMC Key — stored AES-256 encrypted</li>
+        <li>Africa's Talking SMS/WhatsApp API keys — stored AES-256 encrypted</li>
+      </ul>
+
+      <h2 id="how-we-use">2. How We Use Your Data</h2>
+
+      <h3>Service Delivery</h3>
+      <ul>
+        <li>Processing sales transactions and generating KRA-compliant eTIMS receipts</li>
+        <li>Managing inventory, staff, customers, and suppliers within your account</li>
+        <li>Sending SMS and WhatsApp receipts to your customers via Africa's Talking</li>
+        <li>Triggering M-Pesa STK Push payments and verifying Paystack card transactions</li>
+        <li>Providing offline sync so your data persists when your internet is unavailable</li>
+      </ul>
+
+      <h3>KRA Compliance</h3>
+      <ul>
+        <li>Automatically submitting eTIMS invoices to the Kenya Revenue Authority on your behalf</li>
+        <li>Storing KRA invoice numbers and fiscal data for the required 5-year retention period</li>
+        <li>Generating KRA export files (JSON and CSV) for your VAT/TOT filing</li>
+      </ul>
+
+      <h3>Analytics and Service Improvement</h3>
+      <ul>
+        <li>Aggregated, anonymised usage data to understand which features are most used</li>
+        <li>Error and crash reports to identify and fix technical issues</li>
+        <li>Performance monitoring to ensure our API and database meet service level targets</li>
+      </ul>
+
+      <h3>Communications</h3>
+      <ul>
+        <li>Transactional emails: subscription confirmations, trial expiry notices, payment receipts</li>
+        <li>Scheduled report emails if you configure automated report delivery</li>
+        <li>In-app notifications for compliance alerts (e.g., expiring batch items, budget thresholds)</li>
+        <li>We do not send unsolicited marketing emails without your explicit opt-in</li>
+      </ul>
+
+      <h2 id="data-sharing">3. Data Sharing and Disclosure</h2>
+
+      <p>We do not sell, rent, or trade your personal data. We share data only in these limited circumstances:</p>
+
+      <h3>Service Providers (Sub-processors)</h3>
+      <ul>
+        <li><strong>Kenya Revenue Authority (KRA)</strong> — eTIMS fiscal data transmitted per legal obligation</li>
+        <li><strong>Safaricom (M-Pesa Daraja API)</strong> — transaction initiation and confirmation</li>
+        <li><strong>Paystack</strong> — card payment processing and subscription billing</li>
+        <li><strong>Africa's Talking</strong> — SMS and WhatsApp receipt delivery</li>
+        <li><strong>Resend</strong> — transactional email delivery</li>
+        <li><strong>Sentry</strong> — anonymised error and performance monitoring</li>
+      </ul>
+
+      <h3>Legal Obligations</h3>
+      <ul>
+        <li>We may disclose data when required by law, court order, or government authority</li>
+        <li>KRA fiscal data is transmitted as required by the Tax Procedures Act and eTIMS regulations</li>
+      </ul>
+
+      <h3>Business Transfers</h3>
+      <ul>
+        <li>In the event of a merger or acquisition, your data will be transferred to the acquiring entity with equivalent protections. You will be notified at least 30 days in advance.</li>
+      </ul>
+
+      <h2 id="data-storage">4. Data Storage and Security</h2>
+
+      <div class="info-card green">
+        <div class="info-card-title">Security Measures</div>
+        <p>Your data is stored on servers located in Kenya and protected by AES-256-CBC encryption for sensitive credentials, TLS 1.3 in transit, and rate-limited, authenticated API access. We conduct regular security audits and maintain a tamper-evident audit log for all sensitive operations.</p>
+      </div>
+
+      <ul>
+        <li>All data is stored on servers within Kenya to comply with the KDPA data localisation provisions</li>
+        <li>API credentials (M-Pesa, eTIMS, AT) are encrypted with AES-256-CBC using a unique ENCRYPTION_KEY per deployment</li>
+        <li>Passwords are hashed with bcrypt (cost factor 10+); PINs are hashed with bcrypt</li>
+        <li>All API traffic is encrypted with TLS. HTTP to HTTPS redirects are enforced</li>
+        <li>Database backups are encrypted and retained for 30 days</li>
+        <li>We maintain a tamper-evident audit log of all administrative and financial operations</li>
+        <li>API access is protected by JWT tokens (15-minute expiry) and rate limiting via ThrottlerGuard</li>
+        <li>IP whitelisting is available for API key access in enterprise deployments</li>
+      </ul>
+
+      <h2 id="your-rights">5. Your Rights under KDPA 2019</h2>
+
+      <p>The Kenya Data Protection Act 2019 grants you the following rights regarding your personal data held by KASTRA POS:</p>
+
+      <h3>Right of Access</h3>
+      <p>You have the right to request a copy of all personal data we hold about you. We will respond within 21 days. You can initiate a full data export from <strong>Settings → KDPA → Full Data Export</strong> or by emailing <a href="mailto:privacy@kastrapos.co.ke">privacy@kastrapos.co.ke</a>.</p>
+
+      <h3>Right to Rectification</h3>
+      <p>If any personal data we hold is inaccurate or incomplete, you have the right to have it corrected. Account holders can update most data directly in Settings. For data you cannot update yourself, contact us at <a href="mailto:privacy@kastrapos.co.ke">privacy@kastrapos.co.ke</a>.</p>
+
+      <h3>Right to Erasure (Right to be Forgotten)</h3>
+      <p>You may request deletion of your personal data. We will anonymise your personally identifiable information (replacing names, phone numbers, and emails with hashed tokens) while retaining the minimum transaction records required by KRA for 5 years. Submit a deletion request from <strong>Settings → KDPA → Data Deletion Request</strong> or email <a href="mailto:privacy@kastrapos.co.ke">privacy@kastrapos.co.ke</a>.</p>
+
+      <h3>Right to Data Portability</h3>
+      <p>You have the right to receive your personal data in a machine-readable format. Use <strong>Reports → Full Data Export</strong> to download a complete JSON export of all your business data, or request a structured export via email.</p>
+
+      <h3>Right to Object</h3>
+      <p>You have the right to object to processing of your personal data for direct marketing. You may unsubscribe from marketing communications at any time by emailing <a href="mailto:privacy@kastrapos.co.ke">privacy@kastrapos.co.ke</a> with subject line "Unsubscribe".</p>
+
+      <h3>Right to Restrict Processing</h3>
+      <p>You may request that we restrict processing of your personal data in certain circumstances — for example, while we investigate an accuracy dispute. During restriction, we will store but not use the data.</p>
+
+      <h3>How to Exercise Your Rights</h3>
+      <ul>
+        <li>Email: <a href="mailto:privacy@kastrapos.co.ke">privacy@kastrapos.co.ke</a></li>
+        <li>In-app: Settings → KDPA tab</li>
+        <li>We will respond within 21 days. Complex requests may take up to 30 days with prior notice.</li>
+        <li>We may need to verify your identity before fulfilling a request</li>
+        <li>These rights are subject to legal exceptions, including KRA data retention requirements</li>
+      </ul>
+
+      <h2 id="data-retention">6. Data Retention</h2>
+
+      <div class="info-card amber">
+        <div class="info-card-title">KRA Requirement</div>
+        <p>The Tax Procedures Act requires businesses to retain tax records for a minimum of 5 years. Transaction records submitted to eTIMS are therefore retained for 5 years from the date of the transaction, even if you request data deletion. All other personal data fields are anonymised upon a deletion request.</p>
+      </div>
+
+      <ul>
+        <li><strong>Transaction records (eTIMS fiscal data):</strong> 5 years from transaction date (KRA requirement)</li>
+        <li><strong>Employee and payroll records:</strong> 5 years from date of record (Employment Act requirement)</li>
+        <li><strong>Customer personal data (name, phone, email):</strong> 2 years from last transaction, or on deletion request</li>
+        <li><strong>API access logs:</strong> 90 days rolling retention</li>
+        <li><strong>Error and crash logs:</strong> 30 days rolling retention</li>
+        <li><strong>Account data (after subscription termination):</strong> 90 days grace period, then permanent deletion</li>
+        <li><strong>Database backups:</strong> 30 days rolling; backups older than 30 days are securely deleted</li>
+        <li><strong>Deleted user accounts:</strong> User credentials deleted within 30 days of account deletion request</li>
+      </ul>
+
+      <h2 id="cookies">7. Cookies and Analytics</h2>
+
+      <h3>Essential Cookies</h3>
+      <p>We use session storage (not persistent cookies) for authentication tokens. JWT tokens are stored in sessionStorage and expire after 15 minutes of inactivity for cashier/waiter sessions or 12 hours for PIN sessions. We do not use persistent authentication cookies.</p>
+
+      <h3>Local Storage</h3>
+      <p>Our web application uses browser localStorage and IndexedDB (Dexie.js) for offline data caching. This data stays on your device and is not transmitted except during sync operations. You can clear this data by clearing your browser's site data.</p>
+
+      <h3>Analytics</h3>
+      <p>We use Sentry for error monitoring and performance tracking. Sentry collects anonymised error traces and does not collect personal data beyond IP addresses (which are hashed). We do not use Google Analytics or any advertising trackers.</p>
+
+      <h3>Cookie Preferences</h3>
+      <p>KASTRA POS does not use tracking or advertising cookies. The only browser storage we use is necessary for the application to function. You do not need to consent to any non-essential cookies to use our service.</p>
+
+      <h2 id="children">8. Children's Privacy</h2>
+      <p>KASTRA POS is a business management platform intended for use by businesses and their adult employees. We do not knowingly collect personal data from individuals under the age of 18. If you believe we have inadvertently collected data from a minor, please contact us at <a href="mailto:privacy@kastrapos.co.ke">privacy@kastrapos.co.ke</a> and we will delete it promptly.</p>
+
+      <h2 id="changes">9. Changes to This Policy</h2>
+      <p>We may update this Privacy Policy from time to time. When we make material changes, we will notify you by email (to the account owner's registered email) and by displaying a notice in the KASTRA POS dashboard at least 14 days before the changes take effect. Continued use of the service after the effective date constitutes acceptance of the updated policy.</p>
+      <p>The version history of this policy is maintained and available on request. The date at the top of this page reflects the most recent update.</p>
+
+      <h2 id="contact">10. Contact Us</h2>
+      <p>For any privacy-related queries, data subject access requests, or complaints, contact our Data Protection Officer:</p>
+      <ul>
+        <li><strong>Email:</strong> <a href="mailto:privacy@kastrapos.co.ke">privacy@kastrapos.co.ke</a></li>
+        <li><strong>DPO direct:</strong> <a href="mailto:dpo@kastrapos.co.ke">dpo@kastrapos.co.ke</a></li>
+        <li><strong>Postal:</strong> Kastra Systems, Westlands, Nairobi, Kenya</li>
+        <li><strong>In-app:</strong> Settings → KDPA → Submit Data Request</li>
+      </ul>
+      <p>You also have the right to lodge a complaint with the Office of the Data Protection Commissioner (ODPC) of Kenya at <a href="https://www.odpc.go.ke" target="_blank" rel="noopener">odpc.go.ke</a> if you believe your data rights have been violated.</p>
+
+    </div>
+  </div>
+</div>
+
+<!-- Footer -->
+<footer>
+  <div class="container">
+    <div class="footer-top">
+      <div>
+        <div class="footer-brand-logo">
+          <img src="posfav.png" alt="KASTRA" style="width:32px;height:32px;object-fit:contain;border-radius:8px;">
+          <div class="footer-brand-name">KASTRA POS</div>
+        </div>
+        <p class="footer-desc">Kenya's most complete KRA eTIMS-compliant point of sale platform. Offline-first, M-Pesa integrated, built for serious business.</p>
+        <div class="footer-social">
+          <a href="#" class="social-btn" title="Twitter/X">𝕏</a>
+          <a href="#" class="social-btn" title="LinkedIn">in</a>
+          <a href="#" class="social-btn" title="WhatsApp">💬</a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <ul>
+          <li><a href="index.html#features">Features</a></li>
+          <li><a href="index.html#pricing">Pricing</a></li>
+          <li><a href="index.html#compliance">Compliance</a></li>
+          <li><a href="setup-guide.html">Setup Guide</a></li>
+          <li><a href="/api/docs">API Docs</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <ul>
+          <li><a href="about.html">About Us</a></li>
+          <li><a href="contact.html">Contact Us</a></li>
+          <li><a href="privacy.html">Privacy Policy</a></li>
+          <li><a href="terms.html">Terms of Service</a></li>
+          <li><a href="kdpa.html">KDPA Statement</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Stay Updated</h4>
+        <p style="font-size:.8125rem;color:var(--text3);margin-bottom:12px;line-height:1.55;">Get product updates, KRA compliance news, and tips for your business.</p>
+        <div class="footer-newsletter">
+          <input type="email" placeholder="your@email.com" />
+          <button class="btn btn-primary" style="width:100%;justify-content:center;">Subscribe</button>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span class="footer-copy">© 2026 Kastra Systems. All rights reserved. Built in 🇰🇪 Kenya.</span>
+      <div class="footer-badges">
+        <span class="fbadge">🇰🇪 Made for Kenya</span>
+        <span class="fbadge">KRA eTIMS Ready</span>
+        <span class="fbadge">KDPA Compliant</span>
+        <span class="fbadge">AES-256 Encrypted</span>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  window.addEventListener('scroll', function() {
+    document.getElementById('main-nav').classList.toggle('scrolled', window.scrollY > 20);
+  });
+</script>
+</body>
+</html>

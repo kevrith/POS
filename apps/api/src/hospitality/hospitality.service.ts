@@ -1,16 +1,44 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { v4 as uuidv4 } from 'uuid';
 import { randomUUID } from 'crypto';
 
 @Injectable()
 export class HospitalityService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationsService: NotificationsService,
+  ) {}
 
   async getTables(storeId: string, status?: string) {
-    return this.prisma.table.findMany({
+    const tables = await this.prisma.table.findMany({
       where: { storeId, ...(status && { status }) },
       orderBy: { number: 'asc' },
+      include: {
+        orders: {
+          where: { status: { in: ['OPEN', 'BILL_REQUESTED'] } },
+          include: {
+            kots: {
+              where: { status: { in: ['PENDING', 'IN_PROGRESS', 'READY'] } },
+              select: { id: true, status: true, type: true },
+            },
+          },
+        },
+      },
+    });
+
+    return tables.map((t) => {
+      const openOrder = t.orders[0] ?? null;
+      const kots = t.orders.flatMap((o) => o.kots);
+      return {
+        ...t,
+        orders: undefined,
+        currentOrderId: openOrder?.id ?? null,
+        hasReadyKOT: kots.some((k) => k.status === 'READY'),
+        hasPendingKOT: kots.some((k) => k.status === 'PENDING' || k.status === 'IN_PROGRESS'),
+        activeKOTCount: kots.length,
+      };
     });
   }
 
@@ -109,17 +137,48 @@ export class HospitalityService {
     });
   }
 
+  async cancelOrder(orderId: string) {
+    const order = await this.prisma.order.update({
+      where: { id: orderId },
+      data: { status: 'CANCELLED' },
+    }).catch(() => null);
+    if (order?.tableId) {
+      await this.prisma.table.update({
+        where: { id: order.tableId },
+        data: { status: 'AVAILABLE' },
+      }).catch(() => null);
+    }
+    return { success: true };
+  }
+
   async requestBill(orderId: string) {
-    return this.prisma.order.update({
+    const order = await this.prisma.order.update({
       where: { id: orderId },
       data: { status: 'BILL_REQUESTED' },
     });
+    // Also update the table status so the floor plan shows Bill Due badge
+    if (order.tableId) {
+      await this.prisma.table.update({
+        where: { id: order.tableId },
+        data: { status: 'BILL_REQUESTED' },
+      });
+    }
+    return order;
   }
 
   async getOrderDetails(orderId: string) {
     return this.prisma.order.findUnique({
       where: { id: orderId },
-      include: { items: true, table: true, waiter: true },
+      include: {
+        items: true,
+        table: true,
+        waiter: true,
+        kots: {
+          where: { status: { not: 'SERVED' } },
+          select: { id: true, status: true, type: true, createdAt: true },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
     });
   }
 
@@ -279,6 +338,15 @@ export class HospitalityService {
 
     const kotNumber = order.kots.length + 1;
 
+    // Calculate estimated prep minutes from order items
+    const items = await this.prisma.orderItem.findMany({
+      where: { orderId },
+      include: { item: { select: { prepTimeMinutes: true } } },
+    });
+    const estimatedPrepMinutes = items.length > 0
+      ? Math.max(...items.map(i => i.item?.prepTimeMinutes ?? 5))
+      : 10;
+
     return this.prisma.kOT.create({
       data: {
         orderId,
@@ -286,17 +354,62 @@ export class HospitalityService {
         type,
         status: 'PENDING',
         printedAt: new Date(),
+        estimatedPrepMinutes,
       },
     });
   }
 
-  async updateKOTStatus(kotId: string, status: string) {
-    return this.prisma.kOT.update({
+  async updateKOTStatus(kotId: string, status: string, chefId?: string) {
+    // Get current KOT for prep time
+    const existing = await this.prisma.kOT.findUnique({
       where: { id: kotId },
-      data: {
-        status,
-        ...(status === 'READY' && { preparedAt: new Date() }),
+      select: { estimatedPrepMinutes: true, kotNumber: true },
+    });
+
+    const updateData: Record<string, unknown> = {
+      status,
+      ...(status === 'READY' && { preparedAt: new Date() }),
+      ...(status === 'IN_PROGRESS' && chefId && { assignedChefId: chefId }),
+      ...(status === 'IN_PROGRESS' && {
+        estimatedReadyAt: new Date(Date.now() + (existing?.estimatedPrepMinutes ?? 10) * 60_000),
+      }),
+    };
+
+    const kot = await (this.prisma.kOT.update as any)({
+      where: { id: kotId },
+      data: updateData,
+      include: {
+        order: {
+          include: {
+            waiter: { select: { id: true, name: true, phone: true } },
+            table: { select: { number: true } },
+          },
+        },
       },
+    }) as {
+      id: string; kotNumber: number; status: string;
+      order: { businessId: string; table: { number: string } | null; waiter: { name: string; phone: string | null } };
+    };
+
+    // Send WhatsApp to waiter when order is READY
+    if (status === 'READY' && kot.order?.waiter?.phone) {
+      const tableLabel = kot.order.table ? `Table ${kot.order.table.number}` : 'your order';
+      const message =
+        `🍽️ *Order Ready!*\n\nHi ${kot.order.waiter.name}, ${tableLabel} (KOT #${kot.kotNumber}) is ready to be served.\n\n_KASTRA POS Kitchen_`;
+      void this.notificationsService.sendWhatsApp(
+        kot.order.businessId,
+        kot.order.waiter.phone,
+        message,
+      );
+    }
+
+    return kot;
+  }
+
+  async setOrderPriority(orderId: string, priority: number, isVIP: boolean) {
+    return this.prisma.order.update({
+      where: { id: orderId },
+      data: { priority, isVIP },
     });
   }
 
@@ -304,14 +417,24 @@ export class HospitalityService {
     return this.prisma.kOT.findMany({
       where: {
         order: { storeId },
-        status: { in: ['PENDING', 'IN_PROGRESS'] },
+        status: { in: ['PENDING', 'IN_PROGRESS', 'READY'] },
       },
       include: {
         order: {
-          include: { items: true, table: true },
+          include: {
+            items: { include: { item: { select: { name: true, prepTimeMinutes: true } } } },
+            table: true,
+            waiter: { select: { id: true, name: true } },
+          },
         },
+        assignedChef: { select: { id: true, name: true } },
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [
+        { order: { isVIP: 'desc' } },
+        { order: { priority: 'desc' } },
+        { priority: 'desc' },
+        { createdAt: 'asc' },
+      ],
     });
   }
 
@@ -457,5 +580,202 @@ export class HospitalityService {
       where: { id: tabId },
       data: { status: 'CLOSED' },
     });
+  }
+
+  // ── Hotel Rooms ────────────────────────────────────────────────────────────
+
+  async getHotelRooms(businessId: string, storeId: string, status?: string) {
+    return this.prisma.hotelRoom.findMany({
+      where: { businessId, storeId, ...(status && { status }) },
+      include: {
+        bookings: {
+          where: { status: 'CHECKED_IN' },
+          select: {
+            id: true,
+            guestName: true,
+            guestPhone: true,
+            actualCheckIn: true,
+            checkOutDate: true,
+            nightCount: true,
+            totalAmountCents: true,
+            depositCents: true,
+          },
+          take: 1,
+        },
+      },
+      orderBy: [{ floor: 'asc' }, { number: 'asc' }],
+    });
+  }
+
+  async createHotelRoom(data: {
+    businessId: string;
+    storeId: string;
+    number: string;
+    type?: string;
+    floor?: string;
+    capacity?: number;
+    pricePerNightCents?: number;
+    amenities?: string[];
+    notes?: string;
+  }) {
+    return this.prisma.hotelRoom.create({
+      data: {
+        businessId: data.businessId,
+        storeId: data.storeId,
+        number: data.number,
+        type: data.type ?? 'STANDARD',
+        floor: data.floor,
+        capacity: data.capacity ?? 2,
+        pricePerNightCents: data.pricePerNightCents ?? 0,
+        amenities: data.amenities ? JSON.stringify(data.amenities) : null,
+        notes: data.notes,
+      },
+    });
+  }
+
+  async updateHotelRoom(roomId: string, data: {
+    type?: string;
+    floor?: string;
+    capacity?: number;
+    pricePerNightCents?: number;
+    status?: string;
+    amenities?: string[];
+    notes?: string;
+  }) {
+    return this.prisma.hotelRoom.update({
+      where: { id: roomId },
+      data: {
+        ...data,
+        amenities: data.amenities !== undefined ? JSON.stringify(data.amenities) : undefined,
+      },
+    });
+  }
+
+  async deleteHotelRoom(roomId: string) {
+    const active = await this.prisma.roomBooking.findFirst({
+      where: { roomId, status: { in: ['CHECKED_IN', 'RESERVED'] } },
+    });
+    if (active) throw new BadRequestException('Cannot delete room with active bookings');
+    return this.prisma.hotelRoom.delete({ where: { id: roomId } });
+  }
+
+  async getRoomBookings(businessId: string, storeId: string, status?: string) {
+    return this.prisma.roomBooking.findMany({
+      where: {
+        businessId,
+        storeId,
+        ...(status && { status }),
+      },
+      include: { room: { select: { number: true, type: true, floor: true } } },
+      orderBy: { checkInDate: 'desc' },
+    });
+  }
+
+  async createRoomBooking(data: {
+    businessId: string;
+    storeId: string;
+    roomId: string;
+    guestName: string;
+    guestPhone?: string;
+    guestIdNumber?: string;
+    checkInDate: Date;
+    checkOutDate?: Date;
+    nightCount: number;
+    depositCents?: number;
+    notes?: string;
+  }) {
+    const room = await this.prisma.hotelRoom.findUnique({ where: { id: data.roomId } });
+    if (!room) throw new NotFoundException('Room not found');
+    if (room.status === 'OCCUPIED' || room.status === 'MAINTENANCE') {
+      throw new BadRequestException(`Room is currently ${room.status}`);
+    }
+    const pricePerNight = room.pricePerNightCents;
+    const totalAmountCents = pricePerNight * data.nightCount;
+
+    const [booking] = await this.prisma.$transaction([
+      this.prisma.roomBooking.create({
+        data: {
+          businessId: data.businessId,
+          storeId: data.storeId,
+          roomId: data.roomId,
+          guestName: data.guestName,
+          guestPhone: data.guestPhone,
+          guestIdNumber: data.guestIdNumber,
+          checkInDate: data.checkInDate,
+          checkOutDate: data.checkOutDate,
+          nightCount: data.nightCount,
+          pricePerNightCents: pricePerNight,
+          totalAmountCents,
+          depositCents: data.depositCents ?? 0,
+          status: 'RESERVED',
+          notes: data.notes,
+        },
+      }),
+      this.prisma.hotelRoom.update({
+        where: { id: data.roomId },
+        data: { status: 'RESERVED' },
+      }),
+    ]);
+    return booking;
+  }
+
+  async checkInGuest(bookingId: string) {
+    const booking = await this.prisma.roomBooking.findUnique({ where: { id: bookingId } });
+    if (!booking) throw new NotFoundException('Booking not found');
+    if (booking.status !== 'RESERVED' && booking.status !== 'CHECKED_IN') {
+      throw new BadRequestException('Booking cannot be checked in');
+    }
+
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.roomBooking.update({
+        where: { id: bookingId },
+        data: { status: 'CHECKED_IN', actualCheckIn: new Date() },
+        include: { room: { select: { number: true, type: true } } },
+      }),
+      this.prisma.hotelRoom.update({
+        where: { id: booking.roomId },
+        data: { status: 'OCCUPIED' },
+      }),
+    ]);
+    return updated;
+  }
+
+  async checkOutGuest(bookingId: string, payments: Array<{ method: string; amountCents: number }>) {
+    const booking = await this.prisma.roomBooking.findUnique({
+      where: { id: bookingId },
+      include: { room: true },
+    });
+    if (!booking) throw new NotFoundException('Booking not found');
+    if (booking.status !== 'CHECKED_IN') {
+      throw new BadRequestException('Guest is not checked in');
+    }
+    const checkOut = new Date();
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.roomBooking.update({
+        where: { id: bookingId },
+        data: {
+          status: 'CHECKED_OUT',
+          actualCheckOut: checkOut,
+        },
+      }),
+      this.prisma.hotelRoom.update({
+        where: { id: booking.roomId },
+        data: { status: 'AVAILABLE' },
+      }),
+    ]);
+    return { ...updated, payments };
+  }
+
+  async cancelRoomBooking(bookingId: string) {
+    const booking = await this.prisma.roomBooking.findUnique({ where: { id: bookingId } });
+    if (!booking) throw new NotFoundException('Booking not found');
+    if (booking.status === 'CHECKED_IN') {
+      throw new BadRequestException('Cannot cancel a checked-in booking — use check-out instead');
+    }
+    await this.prisma.$transaction([
+      this.prisma.roomBooking.update({ where: { id: bookingId }, data: { status: 'CANCELLED' } }),
+      this.prisma.hotelRoom.update({ where: { id: booking.roomId }, data: { status: 'AVAILABLE' } }),
+    ]);
+    return { success: true };
   }
 }

@@ -4,9 +4,9 @@ import { EmailService } from '../email/email.service';
 import { createHmac } from 'node:crypto';
 
 export const PLANS = {
-  STARTER: { name: 'Starter', amountKES: 2999, paystackPlanCode: process.env.PAYSTACK_STARTER_PLAN ?? '' },
-  PRO: { name: 'Pro', amountKES: 7999, paystackPlanCode: process.env.PAYSTACK_PRO_PLAN ?? '' },
-  ENTERPRISE: { name: 'Enterprise', amountKES: 19999, paystackPlanCode: process.env.PAYSTACK_ENTERPRISE_PLAN ?? '' },
+  STARTER:    { name: 'Starter',    amountKES: 1499,  paystackPlanCode: process.env.PAYSTACK_STARTER_PLAN    ?? '' },
+  PRO:        { name: 'Pro',        amountKES: 3999,  paystackPlanCode: process.env.PAYSTACK_PRO_PLAN        ?? '' },
+  ENTERPRISE: { name: 'Enterprise', amountKES: 9999,  paystackPlanCode: process.env.PAYSTACK_ENTERPRISE_PLAN ?? '' },
 };
 
 @Injectable()

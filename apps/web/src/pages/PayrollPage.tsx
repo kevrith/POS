@@ -475,7 +475,10 @@ export default function PayrollPage() {
             <div
               key={run.id}
               className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 cursor-pointer hover:shadow-md transition-shadow"
-              onClick={() => setSelectedRun(run)}
+              onClick={async () => {
+                const full = await api.get<PayrollRun>(`/hr/payroll/${run.id}/payslips`);
+                setSelectedRun(full);
+              }}
             >
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div className="flex items-center gap-3">

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "identifier": "co.ke.kastra.pos",
   "build": {
-    "beforeDevCommand": "",
+    "beforeDevCommand": "cd ../../ && npm run dev:web",
     "devUrl": "http://localhost:3001",
     "beforeBuildCommand": "cd ../web && npm run build",
     "frontendDist": "../web/dist"

@@ -119,6 +119,30 @@ export class EmailService {
     });
   }
 
+  async sendLicenseKey(opts: { to: string; businessName: string; plan: string; licenseKey: string; expiresAt?: string | null }) {
+    const expiryText = opts.expiresAt
+      ? `Valid until: <strong>${new Date(opts.expiresAt).toLocaleDateString('en-KE', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>`
+      : `<strong>Lifetime license — never expires</strong>`;
+    return this.send({
+      to: opts.to,
+      subject: `Your KASTRA POS License Key — ${opts.plan} Plan`,
+      html: `
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+          <h2 style="color:#2563eb">KASTRA POS — License Key</h2>
+          <p>Hi ${opts.businessName},</p>
+          <p>Thank you for your payment! Your <strong>${opts.plan}</strong> license key is ready.</p>
+          <div style="background:#f0f9ff;border:2px dashed #2563eb;border-radius:8px;padding:20px;margin:20px 0;text-align:center">
+            <p style="color:#6b7280;font-size:12px;margin:0 0 8px">YOUR LICENSE KEY</p>
+            <code style="font-size:22px;font-weight:bold;color:#1e40af;letter-spacing:0.05em">${opts.licenseKey}</code>
+          </div>
+          <p style="color:#374151">${expiryText}</p>
+          <p>To activate: open the KASTRA POS desktop app → Settings → License → Enter key above.</p>
+          <p>Keep this email safe. If you lose the key, contact support.</p>
+          <p style="color:#6b7280;font-size:12px;margin-top:24px">KASTRA POS — Enterprise POS for Kenyan Businesses</p>
+        </div>`,
+    });
+  }
+
   async sendReferralReward(opts: { to: string; businessName: string; rewardAmount: string; referredBusiness: string }) {
     return this.send({
       to: opts.to,

@@ -52,8 +52,9 @@ export class ItemsController {
     @Query('businessId') businessId: string,
     @Query('storeId') storeId?: string,
     @Query('search') search?: string,
+    @Query('activeOnly') activeOnly?: string,
   ) {
-    return this.items.findAll(businessId, storeId, search);
+    return this.items.findAll(businessId, storeId, search, activeOnly === 'true');
   }
 
   @Get('categories')
@@ -144,6 +145,11 @@ export class ItemsController {
     return this.items.importFromCsv(data.businessId, data.storeId, data.rows);
   }
 
+  @Post('gs1-decode')
+  decodeGS1(@Body('barcode') barcode: string) {
+    return this.items.decodeGS1Barcode(barcode);
+  }
+
   @Post('check-expiry')
   async checkCartExpiry(
     @Body() body: { itemIds: string[]; storeId: string; businessId: string },
@@ -179,6 +185,11 @@ export class ItemsController {
     @Body() dto: Partial<CreateVariantDto>,
   ) {
     return this.items.updateVariant(itemId, variantId, businessId, dto);
+  }
+
+  @Patch(':id/toggle-active')
+  toggleActive(@Param('id') id: string, @Query('businessId') businessId: string) {
+    return this.items.toggleActive(id, businessId);
   }
 
   @Delete(':id')

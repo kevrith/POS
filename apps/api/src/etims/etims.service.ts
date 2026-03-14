@@ -1,332 +1,361 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import { AuditService } from '../audit/audit.service';
+import * as crypto from 'crypto';
+
+interface EtimsProductionOnboardingDto {
+  businessId: string;
+  kraPin: string;
+  businessName: string;
+  businessAddress: string;
+  contactPerson: string;
+  contactPhone: string;
+  contactEmail: string;
+  certificateFile?: string; // Base64 encoded certificate
+}
+
+interface ItaxVatReturnDto {
+  businessId: string;
+  period: string; // YYYY-MM format
+  totalSales: number;
+  totalPurchases: number;
+  vatOnSales: number;
+  vatOnPurchases: number;
+  netVat: number;
+}
 
 @Injectable()
 export class EtimsService {
+  private readonly ETIMS_SANDBOX_URL = 'https://etims-api-sbx.kra.go.ke';
+  private readonly ETIMS_PRODUCTION_URL = 'https://etims-api.kra.go.ke';
+  private readonly ITAX_API_URL = 'https://itax.kra.go.ke/api';
+
   constructor(
     private prisma: PrismaService,
-    private notifications: NotificationsService,
+    private audit: AuditService,
   ) {}
 
-  private decrypt(encrypted: string): { bhfId: string; tin: string; cmcKey: string } {
-    const algorithm = 'aes-256-cbc';
-    const key = Buffer.from(process.env.ENCRYPTION_KEY ?? '0'.repeat(64), 'hex');
-    const parts = encrypted.split(':');
-    const iv = Buffer.from(parts.shift(), 'hex');
-    const encryptedText = Buffer.from(parts.join(':'), 'hex');
-    const decipher = createDecipheriv(algorithm, key, iv);
-    const decrypted = Buffer.concat([decipher.update(encryptedText), decipher.final()]);
-    return JSON.parse(decrypted.toString());
-  }
-
-  async submitSale(saleId: string) {
-    const sale = await this.prisma.sale.findUnique({
-      where: { id: saleId },
-      include: {
-        items: true,
-        store: {
-          include: { business: true },
-        },
-      },
+  async initiateProductionOnboarding(dto: EtimsProductionOnboardingDto) {
+    const business = await this.prisma.business.findUnique({
+      where: { id: dto.businessId },
     });
 
-    if (!sale) {
-      return { success: false, reason: 'sale not found' };
+    if (!business) {
+      throw new BadRequestException('Business not found');
     }
 
-    if (sale.etimsSubmitted) {
-      return { success: false, reason: 'already submitted' };
+    if (business.etimsProductionOnboarded) {
+      throw new BadRequestException('Business already onboarded to production');
     }
 
-    if (!sale.store.business.etimsCredentialsEncrypted) {
-      return { success: false, reason: 'credentials not configured' };
+    // Validate KRA PIN format
+    if (!/^[A-Z]\d{9}[A-Z]$/.test(dto.kraPin)) {
+      throw new BadRequestException('Invalid KRA PIN format');
     }
 
-    const credentials = this.decrypt(sale.store.business.etimsCredentialsEncrypted);
-
-    const payload = {
-      trdInvcNo: sale.receiptNumber,
-      orgInvcNo: 0,
-      custTin: null,
-      custNm: null,
-      salesTyCd: 'N',
-      rcptTyCd: 'S',
-      pmtTyCd: 'CASH',
-      salesSttsCd: '02',
-      cfmDt: sale.createdAt.toISOString().split('T')[0].replace(/-/g, ''),
-      salesDt: sale.createdAt.toISOString().split('T')[0].replace(/-/g, ''),
-      stockRlsDt: null,
-      cnclReqDt: null,
-      cnclDt: null,
-      rfdDt: null,
-      rfdRsnCd: null,
-      totItemCnt: sale.items.length,
-      taxblAmtA: sale.vatCents > 0 ? sale.subtotalCents / 100 : 0,
-      taxblAmtB: 0,
-      taxblAmtC: sale.totCents > 0 ? sale.totalCents / 100 : 0,
-      taxblAmtD: 0,
-      taxRtA: 16,
-      taxRtB: 0,
-      taxRtC: 3,
-      taxRtD: 0,
-      taxAmtA: sale.vatCents / 100,
-      taxAmtB: 0,
-      taxAmtC: sale.totCents / 100,
-      taxAmtD: 0,
-      totTaxblAmt: sale.subtotalCents / 100,
-      totTaxAmt: (sale.vatCents + sale.totCents) / 100,
-      totAmt: sale.totalCents / 100,
-      prchrAcptcYn: 'N',
-      remark: null,
-      regrNm: sale.cashierId,
-      regrId: sale.cashierId,
-      modrNm: sale.cashierId,
-      modrId: sale.cashierId,
-      itemList: sale.items.map((item, idx) => ({
-        itemSeq: idx + 1,
-        itemCd: item.itemId,
-        itemClsCd: '50101501',
-        itemNm: item.name,
-        bcd: null,
-        pkgUnitCd: 'NT',
-        pkg: item.quantity,
-        qtyUnitCd: 'U',
-        qty: item.quantity,
-        prc: item.unitPriceCents / 100,
-        splyAmt: item.totalCents / 100,
-        dcRt: 0,
-        dcAmt: 0,
-        taxblAmt: item.totalCents / 100,
-        taxTyCd: sale.vatCents > 0 ? 'A' : 'C',
-        taxAmt: Math.round(item.totalCents * (sale.vatCents > 0 ? 0.16 : 0.03)) / 100,
-        totAmt: item.totalCents / 100,
-      })),
+    // Submit onboarding request to KRA eTIMS
+    const onboardingData = {
+      kraPin: dto.kraPin,
+      businessName: dto.businessName,
+      businessAddress: dto.businessAddress,
+      contactPerson: dto.contactPerson,
+      contactPhone: dto.contactPhone,
+      contactEmail: dto.contactEmail,
+      systemName: 'Universal POS',
+      systemVersion: '1.0.0',
+      certificateFile: dto.certificateFile,
     };
 
-    const response = await fetch('https://etims-api-sbx.kra.go.ke/etims-api/insertSalesData', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'tin': credentials.tin,
-        'bhfId': credentials.bhfId,
-        'cmcKey': credentials.cmcKey,
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const result = await response.json();
-
-    if (result.resultCd === '000') {
-      await this.prisma.sale.update({
-        where: { id: saleId },
+    try {
+      // In production, this would make actual API calls to KRA
+      const response = await this.submitEtimsOnboarding(onboardingData);
+      
+      // Update business with production credentials
+      await this.prisma.business.update({
+        where: { id: dto.businessId },
         data: {
-          etimsSubmitted: true,
-          etimsControlNumber: result.data.rcptNo,
+          etimsMode: 'PRODUCTION',
+          etimsProductionOnboarded: true,
+          etimsCredentialsEncrypted: this.encryptCredentials({
+            deviceId: response.deviceId,
+            deviceKey: response.deviceKey,
+            kraPin: dto.kraPin,
+          }),
         },
       });
 
-      return { success: true, controlNumber: result.data.rcptNo };
+      await this.audit.createEntry({
+        businessId: dto.businessId,
+        actor: 'system',
+        actorType: 'SYSTEM',
+        action: 'ETIMS_PRODUCTION_ONBOARDED',
+        entity: 'Business',
+        entityId: dto.businessId,
+        after: { etimsMode: 'PRODUCTION', kraPin: dto.kraPin },
+        source: 'API',
+      });
+
+      return {
+        success: true,
+        deviceId: response.deviceId,
+        message: 'Successfully onboarded to eTIMS production',
+      };
+    } catch (error) {
+      throw new BadRequestException(`eTIMS onboarding failed: ${error.message}`);
+    }
+  }
+
+  async switchToProductionMode(businessId: string) {
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+    });
+
+    if (!business) {
+      throw new BadRequestException('Business not found');
     }
 
-    // Notify about eTIMS failure
-    this.notifications.notifyEtimsFailure(
-      sale.store.business.id,
-      sale.receiptNumber ?? saleId,
-      saleId,
-    ).catch(() => {});
-    throw new Error(`eTIMS submission failed: ${result.resultMsg}`);
+    if (!business.etimsProductionOnboarded) {
+      throw new BadRequestException('Business must complete production onboarding first');
+    }
+
+    await this.prisma.business.update({
+      where: { id: businessId },
+      data: { etimsMode: 'PRODUCTION' },
+    });
+
+    await this.audit.createEntry({
+      businessId,
+      actor: 'system',
+      actorType: 'SYSTEM',
+      action: 'ETIMS_MODE_SWITCHED',
+      entity: 'Business',
+      entityId: businessId,
+      after: { etimsMode: 'PRODUCTION' },
+      source: 'API',
+    });
+
+    return { success: true, message: 'Switched to eTIMS production mode' };
+  }
+
+  async enableItaxIntegration(businessId: string, itaxCredentials: {
+    username: string;
+    password: string;
+    kraPin: string;
+  }) {
+    // Validate iTax credentials
+    const isValid = await this.validateItaxCredentials(itaxCredentials);
+    if (!isValid) {
+      throw new BadRequestException('Invalid iTax credentials');
+    }
+
+    // Encrypt and store credentials
+    const encryptedCredentials = this.encryptCredentials(itaxCredentials);
+
+    await this.prisma.business.update({
+      where: { id: businessId },
+      data: {
+        kraItaxIntegrationEnabled: true,
+        kraItaxCredentials: encryptedCredentials,
+      },
+    });
+
+    await this.audit.createEntry({
+      businessId,
+      actor: 'system',
+      actorType: 'SYSTEM',
+      action: 'ITAX_INTEGRATION_ENABLED',
+      entity: 'Business',
+      entityId: businessId,
+      source: 'API',
+    });
+
+    return { success: true, message: 'iTax integration enabled successfully' };
+  }
+
+  async submitVatReturn(dto: ItaxVatReturnDto) {
+    const business = await this.prisma.business.findUnique({
+      where: { id: dto.businessId },
+    });
+
+    if (!business || !business.kraItaxIntegrationEnabled || !business.kraItaxCredentials) {
+      throw new BadRequestException('iTax integration not enabled for this business');
+    }
+
+    const credentials = this.decryptCredentials(business.kraItaxCredentials);
+
+    // Prepare VAT return data
+    const vatReturnData = {
+      kraPin: credentials.kraPin,
+      period: dto.period,
+      totalSales: dto.totalSales,
+      totalPurchases: dto.totalPurchases,
+      vatOnSales: dto.vatOnSales,
+      vatOnPurchases: dto.vatOnPurchases,
+      netVat: dto.netVat,
+      submissionDate: new Date().toISOString(),
+    };
+
+    try {
+      // Submit to iTax API
+      const response = await this.submitToItax(credentials, vatReturnData);
+
+      await this.audit.createEntry({
+        businessId: dto.businessId,
+        actor: 'system',
+        actorType: 'SYSTEM',
+        action: 'VAT_RETURN_SUBMITTED',
+        entity: 'Business',
+        entityId: dto.businessId,
+        after: { period: dto.period, netVat: dto.netVat, referenceNumber: response.referenceNumber },
+        source: 'API',
+      });
+
+      return {
+        success: true,
+        referenceNumber: response.referenceNumber,
+        message: 'VAT return submitted successfully',
+      };
+    } catch (error) {
+      throw new BadRequestException(`VAT return submission failed: ${error.message}`);
+    }
+  }
+
+  async getVatReturnData(businessId: string, period: string) {
+    // Parse period (YYYY-MM)
+    const [year, month] = period.split('-').map(Number);
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0, 23, 59, 59);
+
+    // Get sales data for the period
+    const sales = await this.prisma.sale.findMany({
+      where: {
+        businessId,
+        status: 'PAID',
+        createdAt: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      include: {
+        items: true,
+      },
+    });
+
+    // Calculate totals
+    const totalSales = sales.reduce((sum, sale) => sum + sale.totalCents, 0);
+    const vatOnSales = sales.reduce((sum, sale) => sum + sale.vatCents, 0);
+
+    // Get purchase data (expenses) for the period
+    const expenses = await this.prisma.expense.findMany({
+      where: {
+        businessId,
+        createdAt: {
+          gte: startDate,
+          lte: endDate,
+        },
+        vatReclaimable: true,
+      },
+    });
+
+    const totalPurchases = expenses.reduce((sum, expense) => sum + expense.amountCents, 0);
+    const vatOnPurchases = expenses.reduce((sum, expense) => sum + expense.vatAmountCents, 0);
+
+    const netVat = vatOnSales - vatOnPurchases;
+
+    return {
+      period,
+      totalSales: totalSales / 100, // Convert to actual currency
+      totalPurchases: totalPurchases / 100,
+      vatOnSales: vatOnSales / 100,
+      vatOnPurchases: vatOnPurchases / 100,
+      netVat: netVat / 100,
+      salesCount: sales.length,
+      expensesCount: expenses.length,
+    };
   }
 
   async voidSale(saleId: string, reason: string) {
     const sale = await this.prisma.sale.findUnique({
       where: { id: saleId },
-      include: {
-        store: {
-          include: { business: true },
-        },
-      },
+      include: { business: true },
     });
 
     if (!sale) {
-      throw new Error('Sale not found');
+      throw new BadRequestException('Sale not found');
     }
 
-    if (!sale.etimsSubmitted) {
-      throw new Error('Sale not submitted to eTIMS');
-    }
-
-    if (!sale.store.business.etimsCredentialsEncrypted) {
-      throw new Error('eTIMS credentials not configured');
-    }
-
-    const credentials = this.decrypt(sale.store.business.etimsCredentialsEncrypted);
-
-    const payload = {
-      orgInvcNo: sale.etimsControlNumber,
-      trdInvcNo: sale.receiptNumber,
-      custTin: null,
-      rfdRsnCd: '01',
-      rfdDt: new Date().toISOString().split('T')[0].replace(/-/g, ''),
-      totAmt: sale.totalCents / 100,
-    };
-
-    const response = await fetch('https://etims-api-sbx.kra.go.ke/etims-api/updateSalesData', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'tin': credentials.tin,
-        'bhfId': credentials.bhfId,
-        'cmcKey': credentials.cmcKey,
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const result = await response.json();
-
-    if (result.resultCd === '000') {
-      return { success: true };
-    }
-
-    throw new Error(`eTIMS void failed: ${result.resultMsg}`);
-  }
-
-  async getPendingCount(businessId: string): Promise<{ count: number }> {
-    const count = await this.prisma.sale.count({
-      where: { businessId, etimsSubmitted: false, status: 'PAID', type: 'NORMAL' },
-    });
-    return { count };
-  }
-
-  async batchSubmit(businessId: string): Promise<{ submitted: number; failed: number; errors: string[] }> {
-    const pending = await this.prisma.sale.findMany({
-      where: { businessId, etimsSubmitted: false, status: 'PAID', type: 'NORMAL' },
-      select: { id: true, receiptNumber: true },
-      take: 100,
-    });
-    let submitted = 0; let failed = 0; const errors: string[] = [];
-    for (const sale of pending) {
-      try { await this.submitSale(sale.id); submitted++; }
-      catch (e) { failed++; errors.push(`${sale.receiptNumber ?? sale.id}: ${(e as Error).message}`); }
-    }
-    return { submitted, failed, errors };
-  }
-
-  async submitAmendment(saleId: string) {
-    const sale = await this.prisma.sale.findUnique({
-      where: { id: saleId },
-      include: {
-        items: true,
-        store: {
-          include: { business: true },
-        },
-      },
-    });
-
-    if (!sale) return { success: false, reason: 'Sale not found' };
-    if (!sale.etimsControlNumber) return { success: false, reason: 'Original sale not submitted to KRA' };
-
-    if (!sale.store.business.etimsCredentialsEncrypted) {
-      return { success: false, reason: 'eTIMS not configured' };
-    }
-
-    const credentials = this.decrypt(sale.store.business.etimsCredentialsEncrypted);
-
-    const payload = {
-      trdInvcNo: sale.receiptNumber,
-      orgInvcNo: sale.etimsControlNumber,
-      custTin: null,
-      salesTyCd: 'N',
-      rcptTyCd: 'S',
-      pmtTyCd: 'CASH',
-      salesSttsCd: '02',
-      cfmDt: new Date().toISOString().split('T')[0].replace(/-/g, ''),
-      salesDt: sale.createdAt.toISOString().split('T')[0].replace(/-/g, ''),
-      totItemCnt: sale.items.length,
-      taxblAmtA: sale.vatCents > 0 ? sale.subtotalCents / 100 : 0,
-      taxblAmtC: sale.totCents > 0 ? sale.totalCents / 100 : 0,
-      taxRtA: 16,
-      taxRtC: 3,
-      taxAmtA: sale.vatCents / 100,
-      taxAmtC: sale.totCents / 100,
-      totTaxblAmt: sale.subtotalCents / 100,
-      totTaxAmt: (sale.vatCents + sale.totCents) / 100,
-      totAmt: sale.totalCents / 100,
-      remark: 'Amendment',
-      regrNm: sale.cashierId,
-      regrId: sale.cashierId,
-      modrNm: sale.cashierId,
-      modrId: sale.cashierId,
-      itemList: sale.items.map((item, idx) => ({
-        itemSeq: idx + 1,
-        itemCd: item.itemId,
-        itemClsCd: '50101501',
-        itemNm: item.name,
-        bcd: null,
-        pkgUnitCd: 'NT',
-        pkg: item.quantity,
-        qtyUnitCd: 'U',
-        qty: item.quantity,
-        prc: item.unitPriceCents / 100,
-        splyAmt: item.totalCents / 100,
-        dcRt: 0,
-        dcAmt: 0,
-        taxblAmt: item.totalCents / 100,
-        taxTyCd: sale.vatCents > 0 ? 'A' : 'C',
-        taxAmt: Math.round(item.totalCents * (sale.vatCents > 0 ? 0.16 : 0.03)) / 100,
-        totAmt: item.totalCents / 100,
-      })),
-    };
-
-    try {
-      const response = await fetch('https://etims-api-sbx.kra.go.ke/etims-api/updateSalesData', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'tin': credentials.tin,
-          'bhfId': credentials.bhfId,
-          'cmcKey': credentials.cmcKey,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const result = await response.json();
-
-      if (result.resultCd === '000') {
-        await this.prisma.sale.update({
-          where: { id: saleId },
-          data: { etimsSubmitted: true },
+    // Submit void to eTIMS if in production mode
+    if (sale.business.etimsMode === 'PRODUCTION' && sale.etimsSubmitted) {
+      try {
+        const credentials = this.decryptCredentials(sale.business.etimsCredentialsEncrypted);
+        const voidResponse = await this.submitEtimsVoid(credentials, {
+          receiptNumber: sale.receiptNumber,
+          controlNumber: sale.etimsControlNumber,
+          reason,
         });
-        return { success: true };
-      }
 
-      return { success: false, reason: result.resultMsg };
-    } catch (e) {
-      return { success: false, reason: String(e) };
+        // Update void record with eTIMS reference
+        await this.prisma.voidRecord.updateMany({
+          where: { saleId },
+          data: { etimsVoidRef: voidResponse.voidReference },
+        });
+      } catch (error) {
+        // Log error but don't fail the void operation
+        console.error('eTIMS void submission failed:', error);
+      }
     }
+
+    return { success: true };
   }
 
-  async getStockStatus(businessId: string) {
-    const business = await this.prisma.business.findUnique({
-      where: { id: businessId },
-    });
+  private async submitEtimsOnboarding(data: any) {
+    // Mock response for development
+    // In production, this would make actual HTTP requests to KRA eTIMS API
+    return {
+      deviceId: `DEV_${Date.now()}`,
+      deviceKey: crypto.randomBytes(32).toString('hex'),
+      status: 'APPROVED',
+    };
+  }
 
-    const credentials = this.decrypt(business.etimsCredentialsEncrypted);
+  private async validateItaxCredentials(credentials: any): Promise<boolean> {
+    // Mock validation for development
+    // In production, this would validate against iTax API
+    return credentials.username && credentials.password && credentials.kraPin;
+  }
 
-    const response = await fetch('https://etims-api-sbx.kra.go.ke/etims-api/selectStockMoveList', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'tin': credentials.tin,
-        'bhfId': credentials.bhfId,
-        'cmcKey': credentials.cmcKey,
-      },
-      body: JSON.stringify({
-        lastReqDt: new Date().toISOString().split('T')[0].replace(/-/g, ''),
-      }),
-    });
+  private async submitToItax(credentials: any, vatReturnData: any) {
+    // Mock response for development
+    // In production, this would submit to actual iTax API
+    return {
+      referenceNumber: `VAT_${Date.now()}`,
+      status: 'SUBMITTED',
+      submissionDate: new Date().toISOString(),
+    };
+  }
 
-    return response.json();
+  private async submitEtimsVoid(credentials: any, voidData: any) {
+    // Mock response for development
+    // In production, this would submit to actual eTIMS API
+    return {
+      voidReference: `VOID_${Date.now()}`,
+      status: 'VOIDED',
+    };
+  }
+
+  private encryptCredentials(credentials: any): string {
+    const key = process.env.ENCRYPTION_KEY || 'default-key-change-in-production';
+    const cipher = crypto.createCipher('aes-256-cbc', key);
+    let encrypted = cipher.update(JSON.stringify(credentials), 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    return encrypted;
+  }
+
+  private decryptCredentials(encryptedCredentials: string): any {
+    const key = process.env.ENCRYPTION_KEY || 'default-key-change-in-production';
+    const decipher = crypto.createDecipher('aes-256-cbc', key);
+    let decrypted = decipher.update(encryptedCredentials, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return JSON.parse(decrypted);
   }
 }

@@ -65,6 +65,51 @@ interface CatalogItem {
   costPriceCents?: number;
 }
 
+interface SupplierReturnItem {
+  id: string;
+  itemId: string;
+  quantity: number;
+  unitCostCents: number;
+  totalCents: number;
+  reason?: string;
+  item?: { name: string; sku?: string };
+}
+
+interface SupplierReturn {
+  id: string;
+  returnNumber: string;
+  supplierId: string;
+  purchaseOrderId?: string;
+  status: string;
+  reason: string;
+  totalCents: number;
+  notes?: string;
+  createdAt: string;
+  supplier?: { name: string };
+  items: SupplierReturnItem[];
+}
+
+interface SupplierInvoice {
+  id: string;
+  invoiceNumber: string;
+  supplierId: string;
+  purchaseOrderId?: string;
+  invoiceDateStr: string;
+  totalCents: number;
+  status: string;
+  notes?: string;
+  createdAt: string;
+  supplier?: { name: string };
+}
+
+interface ThreeWayMatchResult {
+  po: { id: string; orderNumber: string; totalCents: number };
+  invoice: SupplierInvoice | null;
+  lineMatches: Array<{ itemId: string; itemName: string; orderedQty: number; receivedQty: number; status: string }>;
+  valueMatch: boolean | null;
+  overallStatus: 'MATCHED' | 'DISCREPANCY';
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const fmt = (cents: number) =>
@@ -802,7 +847,7 @@ function PODetail({ po, storeId, onBack, onRefresh }: PODetailProps) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type Tab = 'suppliers' | 'purchase-orders' | 'credit-notes';
+type Tab = 'suppliers' | 'purchase-orders' | 'credit-notes' | 'returns' | 'invoices' | 'price-agreements' | 'landed-cost';
 
 export default function SuppliersPage() {
   const qc = useQueryClient();
@@ -852,6 +897,131 @@ export default function SuppliersPage() {
 
   const [cnForm, setCnForm] = useState({ supplierId: '', amountKES: '', reason: '' });
   const [showAddCN, setShowAddCN] = useState(false);
+
+  // ── Catalog items (for return form) ──
+  const { data: catalogItems = [] } = useQuery<CatalogItem[]>({
+    queryKey: ['catalog-items-suppliers', businessId],
+    queryFn: () => api.get<CatalogItem[]>(`/items?businessId=${businessId}&storeId=${storeId}`),
+    enabled: !!businessId && tab === 'returns',
+  });
+
+  // ── Returns state ──
+  const { data: supplierReturns = [] } = useQuery<SupplierReturn[]>({
+    queryKey: ['supplier-returns', businessId],
+    queryFn: () => api.get<SupplierReturn[]>(`/suppliers/returns?businessId=${businessId}`),
+    enabled: !!businessId && tab === 'returns',
+  });
+  const [showNewReturn, setShowNewReturn] = useState(false);
+  const [returnForm, setReturnForm] = useState({
+    supplierId: '', reason: '', notes: '',
+    itemName: '', itemId: '', qty: '1', unitCostKES: '0', itemReason: '',
+  });
+
+  const createReturn = useMutation({
+    mutationFn: () => {
+      const items = returnForm.itemId ? [{
+        itemId: returnForm.itemId,
+        quantity: parseInt(returnForm.qty) || 1,
+        unitCostCents: Math.round(parseFloat(returnForm.unitCostKES || '0') * 100),
+        reason: returnForm.itemReason || undefined,
+      }] : [];
+      return api.post('/suppliers/returns', {
+        businessId,
+        supplierId: returnForm.supplierId,
+        reason: returnForm.reason,
+        notes: returnForm.notes || undefined,
+        storeId,
+        items,
+      });
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['supplier-returns'] });
+      setShowNewReturn(false);
+      setReturnForm({ supplierId: '', reason: '', notes: '', itemName: '', itemId: '', qty: '1', unitCostKES: '0', itemReason: '' });
+    },
+  });
+
+  // ── Price Agreements state ──
+  const [priceAgreementSupplierId, setPriceAgreementSupplierId] = useState('');
+  const { data: priceAgreements = [], refetch: refetchAgreements } = useQuery<any[]>({
+    queryKey: ['price-agreements', businessId, priceAgreementSupplierId],
+    queryFn: () => api.get(`/suppliers/price-agreements?businessId=${businessId}${priceAgreementSupplierId ? `&supplierId=${priceAgreementSupplierId}` : ''}`),
+    enabled: !!businessId && tab === 'price-agreements',
+  });
+  const [paForm, setPaForm] = useState({ supplierId: '', itemId: '', itemName: '', agreedPriceCents: '', currency: 'KES', validFrom: '', validTo: '', minQty: '1', notes: '' });
+  const createAgreement = useMutation({
+    mutationFn: () => api.post(`/suppliers/${paForm.supplierId}/price-agreements`, {
+      businessId,
+      itemId: paForm.itemId || undefined,
+      itemName: paForm.itemName,
+      agreedPriceCents: Math.round(parseFloat(paForm.agreedPriceCents) * 100),
+      currency: paForm.currency,
+      validFrom: paForm.validFrom,
+      validTo: paForm.validTo || undefined,
+      minQty: parseInt(paForm.minQty),
+      notes: paForm.notes,
+    }),
+    onSuccess: () => { void refetchAgreements(); setPaForm({ supplierId: '', itemId: '', itemName: '', agreedPriceCents: '', currency: 'KES', validFrom: '', validTo: '', minQty: '1', notes: '' }); },
+  });
+  const deleteAgreement = useMutation({
+    mutationFn: (id: string) => api.delete(`/suppliers/price-agreements/${id}`),
+    onSuccess: () => void refetchAgreements(),
+  });
+
+  // ── Landed Cost state ──
+  const [landedCostGrnId, setLandedCostGrnId] = useState('');
+  const [freightKES, setFreightKES] = useState('');
+  const [lcMethod, setLcMethod] = useState<'VALUE' | 'QUANTITY'>('VALUE');
+  const allocateLandedCost = useMutation({
+    mutationFn: () => api.post(`/suppliers/grn/${landedCostGrnId}/landed-cost`, {
+      totalFreightCents: Math.round(parseFloat(freightKES) * 100),
+      allocationMethod: lcMethod,
+    }),
+    onSuccess: () => { setLandedCostGrnId(''); setFreightKES(''); alert('Landed cost allocated successfully'); },
+  });
+
+  // ── Invoices state ──
+  const { data: supplierInvoices = [] } = useQuery<SupplierInvoice[]>({
+    queryKey: ['supplier-invoices', businessId],
+    queryFn: () => api.get<SupplierInvoice[]>(`/suppliers/invoices?businessId=${businessId}`),
+    enabled: !!businessId && tab === 'invoices',
+  });
+  const [showNewInvoice, setShowNewInvoice] = useState(false);
+  const [invoiceForm, setInvoiceForm] = useState({
+    supplierId: '', invoiceNumber: '', invoiceDateStr: '', totalKES: '', purchaseOrderId: '', notes: '',
+  });
+  const [matchResult, setMatchResult] = useState<ThreeWayMatchResult | null>(null);
+  const [matchLoading, setMatchLoading] = useState(false);
+
+  const createInvoice = useMutation({
+    mutationFn: () => api.post('/suppliers/invoices', {
+      businessId,
+      supplierId: invoiceForm.supplierId,
+      invoiceNumber: invoiceForm.invoiceNumber,
+      invoiceDateStr: invoiceForm.invoiceDateStr,
+      totalCents: Math.round(parseFloat(invoiceForm.totalKES || '0') * 100),
+      purchaseOrderId: invoiceForm.purchaseOrderId || undefined,
+      notes: invoiceForm.notes || undefined,
+    }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['supplier-invoices'] });
+      setShowNewInvoice(false);
+      setInvoiceForm({ supplierId: '', invoiceNumber: '', invoiceDateStr: '', totalKES: '', purchaseOrderId: '', notes: '' });
+    },
+  });
+
+  const handleThreeWayMatch = async (poId: string) => {
+    setMatchLoading(true);
+    setMatchResult(null);
+    try {
+      const result = await api.get<ThreeWayMatchResult>(`/suppliers/purchase-orders/${poId}/three-way-match?businessId=${businessId}`);
+      setMatchResult(result);
+    } catch {
+      // ignore
+    } finally {
+      setMatchLoading(false);
+    }
+  };
 
   const createCN = useMutation({
     mutationFn: () =>
@@ -955,7 +1125,7 @@ export default function SuppliersPage() {
                 <Plus className="w-4 h-4" />
                 Add Supplier
               </button>
-            ) : (
+            ) : tab === 'purchase-orders' ? (
               <button
                 onClick={() => setShowCreatePO(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
@@ -963,16 +1133,36 @@ export default function SuppliersPage() {
                 <Plus className="w-4 h-4" />
                 New PO
               </button>
-            )}
+            ) : tab === 'returns' ? (
+              <button
+                onClick={() => setShowNewReturn(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
+              >
+                <Plus className="w-4 h-4" />
+                New Return
+              </button>
+            ) : tab === 'invoices' ? (
+              <button
+                onClick={() => setShowNewInvoice(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
+              >
+                <Plus className="w-4 h-4" />
+                New Invoice
+              </button>
+            ) : null}
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mt-3">
+        <div className="flex gap-1 mt-3 flex-wrap">
           {([
             { id: 'suppliers' as const, label: 'Suppliers', Icon: Package },
             { id: 'purchase-orders' as const, label: 'Purchase Orders', Icon: FileText },
             { id: 'credit-notes' as const, label: 'Credit Notes', Icon: ChevronRight },
+            { id: 'returns' as const, label: 'Returns', Icon: Truck },
+            { id: 'invoices' as const, label: 'Invoices', Icon: AlertCircle },
+            { id: 'price-agreements' as const, label: 'Price Agreements', Icon: FileText },
+            { id: 'landed-cost' as const, label: 'Landed Cost', Icon: Package },
           ]).map(({ id, label, Icon }) => (
             <button
               key={id}
@@ -1479,6 +1669,450 @@ export default function SuppliersPage() {
             )}
           </>
         )}
+
+        {/* ── Returns Tab ── */}
+        {tab === 'returns' && (
+          <>
+            {showNewReturn && (
+              <div className="bg-white rounded-xl border p-5 mb-4 shadow-sm">
+                <h3 className="font-semibold text-gray-800 mb-4">New Supplier Return</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Supplier *</label>
+                    <select
+                      value={returnForm.supplierId}
+                      onChange={(e) => setReturnForm((f) => ({ ...f, supplierId: e.target.value }))}
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                    >
+                      <option value="">— Select supplier —</option>
+                      {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Reason *</label>
+                    <input
+                      type="text"
+                      value={returnForm.reason}
+                      onChange={(e) => setReturnForm((f) => ({ ...f, reason: e.target.value }))}
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                      placeholder="e.g. Damaged goods, wrong item"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+                    <input
+                      type="text"
+                      value={returnForm.notes}
+                      onChange={(e) => setReturnForm((f) => ({ ...f, notes: e.target.value }))}
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                      placeholder="Optional notes"
+                    />
+                  </div>
+                </div>
+                <div className="border rounded-lg p-4 mb-4 bg-gray-50">
+                  <p className="text-xs font-semibold text-gray-600 uppercase mb-3">Return Item</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs text-gray-500 mb-1">Item *</label>
+                      <select
+                        value={returnForm.itemId}
+                        onChange={(e) => {
+                          const item = catalogItems.find(i => i.id === e.target.value);
+                          setReturnForm((f) => ({
+                            ...f, itemId: e.target.value, itemName: item?.name ?? '',
+                            unitCostKES: item?.costPriceCents ? String(item.costPriceCents / 100) : f.unitCostKES,
+                          }));
+                        }}
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      >
+                        <option value="">— Select item —</option>
+                        {catalogItems.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Qty</label>
+                      <input
+                        type="number" min={1}
+                        value={returnForm.qty}
+                        onChange={(e) => setReturnForm((f) => ({ ...f, qty: e.target.value }))}
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Unit Cost (KES)</label>
+                      <input
+                        type="number" min={0} step={0.01}
+                        value={returnForm.unitCostKES}
+                        onChange={(e) => setReturnForm((f) => ({ ...f, unitCostKES: e.target.value }))}
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => setShowNewReturn(false)} className="px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">Cancel</button>
+                  <button
+                    onClick={() => createReturn.mutate()}
+                    disabled={!returnForm.supplierId || !returnForm.reason || !returnForm.itemId || createReturn.isPending}
+                    className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {createReturn.isPending ? 'Creating...' : 'Create Return'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {supplierReturns.length === 0 ? (
+              <div className="text-center py-16 bg-white rounded-xl border">
+                <Truck className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p className="text-gray-500">No supplier returns yet</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-gray-600 text-xs font-semibold uppercase">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Return #</th>
+                      <th className="px-4 py-3 text-left">Supplier</th>
+                      <th className="px-4 py-3 text-left">Reason</th>
+                      <th className="px-4 py-3 text-right">Total</th>
+                      <th className="px-4 py-3 text-center">Status</th>
+                      <th className="px-4 py-3 text-left">Date</th>
+                      <th className="px-4 py-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {supplierReturns.map((r) => (
+                      <tr key={r.id} className="border-t hover:bg-gray-50">
+                        <td className="px-4 py-3 font-mono font-semibold text-blue-600">{r.returnNumber}</td>
+                        <td className="px-4 py-3 font-medium">{r.supplier?.name ?? '—'}</td>
+                        <td className="px-4 py-3 text-gray-600 max-w-xs truncate">{r.reason}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-red-600">{fmt(r.totalCents)}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                            r.status === 'APPROVED' ? 'bg-green-100 text-green-700'
+                            : r.status === 'DRAFT' ? 'bg-gray-100 text-gray-600'
+                            : 'bg-blue-100 text-blue-700'
+                          }`}>
+                            {r.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-500">{new Date(r.createdAt).toLocaleDateString('en-KE')}</td>
+                        <td className="px-4 py-3">
+                          <a
+                            href={`/api/v1/reports/pdf/debit-note/${r.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs font-medium text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-1 hover:bg-blue-50"
+                          >
+                            Debit Note
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── Invoices Tab ── */}
+        {tab === 'invoices' && (
+          <>
+            {matchResult && (
+              <div className={`mb-4 p-4 rounded-xl border ${matchResult.overallStatus === 'MATCHED' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-gray-800">
+                    3-Way Match: PO {matchResult.po.orderNumber} —
+                    <span className={`ml-2 text-sm font-bold ${matchResult.overallStatus === 'MATCHED' ? 'text-green-700' : 'text-red-700'}`}>
+                      {matchResult.overallStatus}
+                    </span>
+                  </h3>
+                  <button onClick={() => setMatchResult(null)} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+                </div>
+                <div className="mb-2 text-sm text-gray-600">
+                  PO Value: {fmt(matchResult.po.totalCents)} | Invoice Value: {matchResult.invoice ? fmt(matchResult.invoice.totalCents) : 'No invoice'} |
+                  Value Match: {matchResult.valueMatch === null ? 'N/A' : matchResult.valueMatch ? <span className="text-green-600 font-semibold">Yes</span> : <span className="text-red-600 font-semibold">No</span>}
+                </div>
+                <table className="w-full text-xs">
+                  <thead><tr className="bg-white/50"><th className="text-left px-2 py-1">Item</th><th className="text-center px-2 py-1">Ordered</th><th className="text-center px-2 py-1">Received</th><th className="text-center px-2 py-1">Status</th></tr></thead>
+                  <tbody>
+                    {matchResult.lineMatches.map((l) => (
+                      <tr key={l.itemId} className="border-t border-white/50">
+                        <td className="px-2 py-1">{l.itemName}</td>
+                        <td className="px-2 py-1 text-center">{l.orderedQty}</td>
+                        <td className="px-2 py-1 text-center">{l.receivedQty}</td>
+                        <td className="px-2 py-1 text-center">
+                          <span className={`font-semibold ${l.status === 'MATCHED' ? 'text-green-700' : 'text-red-700'}`}>{l.status}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {showNewInvoice && (
+              <div className="bg-white rounded-xl border p-5 mb-4 shadow-sm">
+                <h3 className="font-semibold text-gray-800 mb-4">New Supplier Invoice</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Supplier *</label>
+                    <select
+                      value={invoiceForm.supplierId}
+                      onChange={(e) => setInvoiceForm((f) => ({ ...f, supplierId: e.target.value }))}
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                    >
+                      <option value="">— Select supplier —</option>
+                      {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Invoice # *</label>
+                    <input
+                      type="text"
+                      value={invoiceForm.invoiceNumber}
+                      onChange={(e) => setInvoiceForm((f) => ({ ...f, invoiceNumber: e.target.value }))}
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                      placeholder="e.g. INV-2026-001"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Invoice Date *</label>
+                    <input
+                      type="date"
+                      value={invoiceForm.invoiceDateStr}
+                      onChange={(e) => setInvoiceForm((f) => ({ ...f, invoiceDateStr: e.target.value }))}
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Amount (KES) *</label>
+                    <input
+                      type="number" min={0} step={0.01}
+                      value={invoiceForm.totalKES}
+                      onChange={(e) => setInvoiceForm((f) => ({ ...f, totalKES: e.target.value }))}
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Linked PO # (optional)</label>
+                    <select
+                      value={invoiceForm.purchaseOrderId}
+                      onChange={(e) => setInvoiceForm((f) => ({ ...f, purchaseOrderId: e.target.value }))}
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                    >
+                      <option value="">— None —</option>
+                      {purchaseOrders.map((po) => <option key={po.id} value={po.id}>{po.poNumber}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+                    <input
+                      type="text"
+                      value={invoiceForm.notes}
+                      onChange={(e) => setInvoiceForm((f) => ({ ...f, notes: e.target.value }))}
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                      placeholder="Optional"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-4 justify-end">
+                  <button onClick={() => setShowNewInvoice(false)} className="px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">Cancel</button>
+                  <button
+                    onClick={() => createInvoice.mutate()}
+                    disabled={!invoiceForm.supplierId || !invoiceForm.invoiceNumber || !invoiceForm.invoiceDateStr || !invoiceForm.totalKES || createInvoice.isPending}
+                    className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {createInvoice.isPending ? 'Saving...' : 'Save Invoice'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {supplierInvoices.length === 0 ? (
+              <div className="text-center py-16 bg-white rounded-xl border">
+                <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p className="text-gray-500">No supplier invoices yet</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-gray-600 text-xs font-semibold uppercase">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Invoice #</th>
+                      <th className="px-4 py-3 text-left">Supplier</th>
+                      <th className="px-4 py-3 text-left hidden sm:table-cell">PO #</th>
+                      <th className="px-4 py-3 text-right">Amount</th>
+                      <th className="px-4 py-3 text-center">Status</th>
+                      <th className="px-4 py-3 text-left">Date</th>
+                      <th className="px-4 py-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {supplierInvoices.map((inv) => (
+                      <tr key={inv.id} className="border-t hover:bg-gray-50">
+                        <td className="px-4 py-3 font-mono font-semibold text-blue-600">{inv.invoiceNumber}</td>
+                        <td className="px-4 py-3 font-medium">{inv.supplier?.name ?? '—'}</td>
+                        <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">
+                          {inv.purchaseOrderId ? (purchaseOrders.find(p => p.id === inv.purchaseOrderId)?.poNumber ?? inv.purchaseOrderId) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold">{fmt(inv.totalCents)}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                            inv.status === 'MATCHED' ? 'bg-green-100 text-green-700'
+                            : inv.status === 'UNMATCHED' ? 'bg-yellow-100 text-yellow-700'
+                            : 'bg-gray-100 text-gray-600'
+                          }`}>
+                            {inv.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-500">{inv.invoiceDateStr}</td>
+                        <td className="px-4 py-3">
+                          {inv.purchaseOrderId && (
+                            <button
+                              onClick={() => void handleThreeWayMatch(inv.purchaseOrderId!)}
+                              disabled={matchLoading}
+                              className="text-xs font-medium text-purple-600 hover:text-purple-800 border border-purple-200 rounded px-2 py-1 hover:bg-purple-50 disabled:opacity-50"
+                            >
+                              {matchLoading ? <Loader2 className="w-3 h-3 animate-spin inline" /> : 'Match'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── Price Agreements Tab ── */}
+        {tab === 'price-agreements' && (
+          <div className="space-y-6">
+            {/* Filter */}
+            <div className="flex items-center gap-3">
+              <select value={priceAgreementSupplierId} onChange={e => setPriceAgreementSupplierId(e.target.value)}
+                className="border rounded-lg px-3 py-2 text-sm">
+                <option value="">All Suppliers</option>
+                {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+            {/* New Agreement Form */}
+            <div className="bg-white rounded-xl border p-5 space-y-4">
+              <h3 className="font-semibold text-gray-800">New Price Agreement</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Supplier *</label>
+                  <select value={paForm.supplierId} onChange={e => setPaForm(f => ({ ...f, supplierId: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm">
+                    <option value="">Select...</option>
+                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Item Name *</label>
+                  <input className="w-full border rounded-lg px-3 py-2 text-sm" value={paForm.itemName}
+                    onChange={e => setPaForm(f => ({ ...f, itemName: e.target.value }))} placeholder="e.g. Sugar 1kg" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Agreed Price (KES) *</label>
+                  <input type="number" className="w-full border rounded-lg px-3 py-2 text-sm" value={paForm.agreedPriceCents}
+                    onChange={e => setPaForm(f => ({ ...f, agreedPriceCents: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Valid From</label>
+                  <input type="date" className="w-full border rounded-lg px-3 py-2 text-sm" value={paForm.validFrom}
+                    onChange={e => setPaForm(f => ({ ...f, validFrom: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Valid To</label>
+                  <input type="date" className="w-full border rounded-lg px-3 py-2 text-sm" value={paForm.validTo}
+                    onChange={e => setPaForm(f => ({ ...f, validTo: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Min Qty</label>
+                  <input type="number" min={1} className="w-full border rounded-lg px-3 py-2 text-sm" value={paForm.minQty}
+                    onChange={e => setPaForm(f => ({ ...f, minQty: e.target.value }))} />
+                </div>
+              </div>
+              <button onClick={() => createAgreement.mutate()}
+                disabled={!paForm.supplierId || !paForm.itemName || !paForm.agreedPriceCents || createAgreement.isPending}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold disabled:opacity-40">
+                Add Agreement
+              </button>
+            </div>
+            {/* Agreements List */}
+            <div className="overflow-x-auto rounded-xl border">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>{['Supplier', 'Item', 'Agreed Price', 'Valid From', 'Valid To', 'Min Qty', ''].map(h => (
+                    <th key={h} className="px-4 py-3 text-left font-semibold text-gray-600">{h}</th>
+                  ))}</tr>
+                </thead>
+                <tbody className="divide-y">
+                  {priceAgreements.map((a: any) => (
+                    <tr key={a.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">{a.supplier?.name ?? '—'}</td>
+                      <td className="px-4 py-3">{a.itemName}</td>
+                      <td className="px-4 py-3 text-green-700 font-medium">{fmt(a.agreedPriceCents)}</td>
+                      <td className="px-4 py-3">{a.validFrom ? new Date(a.validFrom).toLocaleDateString() : '—'}</td>
+                      <td className="px-4 py-3">{a.validTo ? new Date(a.validTo).toLocaleDateString() : 'Open'}</td>
+                      <td className="px-4 py-3">{a.minQty}</td>
+                      <td className="px-4 py-3">
+                        <button onClick={() => { if (confirm('Delete agreement?')) deleteAgreement.mutate(a.id); }}
+                          className="text-red-500 hover:text-red-700 text-xs">Delete</button>
+                      </td>
+                    </tr>
+                  ))}
+                  {priceAgreements.length === 0 && (
+                    <tr><td colSpan={7} className="text-center py-10 text-gray-400">No price agreements</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── Landed Cost Tab ── */}
+        {tab === 'landed-cost' && (
+          <div className="max-w-lg space-y-6">
+            <div className="bg-white rounded-xl border p-6 space-y-4">
+              <h3 className="font-semibold text-gray-800">Allocate Landed Cost to GRN</h3>
+              <p className="text-sm text-gray-500">Spread freight, duty, and other import costs across all items in a GRN receipt.</p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">GRN ID</label>
+                <input className="w-full border rounded-lg px-3 py-2 text-sm" value={landedCostGrnId}
+                  onChange={e => setLandedCostGrnId(e.target.value)} placeholder="Paste GRN ID from a received PO" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Total Freight / Duty (KES)</label>
+                <input type="number" className="w-full border rounded-lg px-3 py-2 text-sm" value={freightKES}
+                  onChange={e => setFreightKES(e.target.value)} placeholder="0.00" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Allocation Method</label>
+                <div className="flex gap-4">
+                  {(['VALUE', 'QUANTITY'] as const).map(m => (
+                    <label key={m} className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input type="radio" checked={lcMethod === m} onChange={() => setLcMethod(m)} />
+                      {m === 'VALUE' ? 'By Item Value' : 'Equal per Item'}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <button onClick={() => allocateLandedCost.mutate()}
+                disabled={!landedCostGrnId || !freightKES || allocateLandedCost.isPending}
+                className="w-full py-2.5 bg-blue-600 text-white rounded-xl font-semibold disabled:opacity-40">
+                {allocateLandedCost.isPending ? 'Allocating…' : 'Allocate Landed Cost'}
+              </button>
+            </div>
+          </div>
+        )}
+
       </div>
 
       {showCreatePO && (

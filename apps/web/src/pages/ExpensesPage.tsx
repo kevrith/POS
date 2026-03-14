@@ -3,11 +3,21 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, DollarSign, CheckCircle, XCircle, Clock, Filter,
   X, Loader2, AlertCircle, TrendingDown, RefreshCw, Target, Trash2,
+  FileText, ShieldCheck, Users, Download,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+interface ApprovalStep {
+  id: string;
+  level: number;
+  approverId: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  comment?: string;
+  actionAt?: string;
+}
 
 interface Expense {
   id: string;
@@ -21,7 +31,10 @@ interface Expense {
   approvedBy?: string;
   isRecurring?: boolean;
   receiptPhotoUrl?: string;
+  vatReclaimable?: boolean;
+  vatAmountCents?: number;
   createdAt: string;
+  approvalSteps?: ApprovalStep[];
 }
 
 interface CategorySummary {
@@ -39,6 +52,19 @@ interface BudgetRow {
   actualCents?: number;
   varianceCents?: number;
   pctUsed?: number;
+}
+
+interface VATReclaimSummary {
+  count: number;
+  totalCents: number;
+  vatCents: number;
+  expenses: Expense[];
+}
+
+interface BusinessUser {
+  id: string;
+  name: string;
+  role: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -86,6 +112,20 @@ function dateRangeForPeriod(period: string): { start: string; end: string } {
   return { start: `${now.getFullYear()}-01-01`, end };
 }
 
+function downloadCsv(filename: string, rows: string[][]): void {
+  const content = rows
+    .map((row) => row.map((cell) => {
+      const s = String(cell ?? '');
+      return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
+    }).join(','))
+    .join('\r\n');
+  const blob = new Blob(['\uFEFF' + content], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ─── Add Expense Modal ────────────────────────────────────────────────────────
 
 interface AddExpenseModalProps {
@@ -105,6 +145,7 @@ function AddExpenseModal({ businessId, storeId, userId, onClose, onSuccess }: Ad
     isRecurring: false,
     recurringDay: 1,
     receiptPhotoUrl: '',
+    vatReclaimable: false,
   });
   const [error, setError] = useState('');
 
@@ -122,6 +163,10 @@ function AddExpenseModal({ businessId, storeId, userId, onClose, onSuccess }: Ad
         isRecurring: form.isRecurring,
         recurringDay: form.isRecurring ? form.recurringDay : undefined,
         receiptPhotoUrl: form.receiptPhotoUrl || undefined,
+        vatReclaimable: form.vatReclaimable,
+        vatAmountCents: form.vatReclaimable
+          ? Math.round(Math.round(parseFloat(form.amountStr || '0') * 100) * 16 / 116)
+          : 0,
       }),
     onSuccess: () => { onSuccess(); onClose(); },
     onError: (err) => setError(err instanceof Error ? err.message : 'Failed to save expense'),
@@ -182,6 +227,21 @@ function AddExpenseModal({ businessId, storeId, userId, onClose, onSuccess }: Ad
               className="w-full border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none" />
           </div>
 
+          {/* VAT Reclaimable toggle */}
+          <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20">
+            <input type="checkbox" checked={form.vatReclaimable}
+              onChange={(e) => setForm({ ...form, vatReclaimable: e.target.checked })}
+              className="w-4 h-4 rounded border-gray-300 text-green-600" />
+            <div>
+              <span className="text-sm font-semibold text-green-800 dark:text-green-300">VAT Reclaimable</span>
+              {form.vatReclaimable && amountCents > 0 && (
+                <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">
+                  Estimated input VAT: KES {(Math.round(amountCents * 16 / 116) / 100).toFixed(2)}
+                </p>
+              )}
+            </div>
+          </label>
+
           <label className="flex items-center gap-3 cursor-pointer">
             <input type="checkbox" checked={form.isRecurring}
               onChange={(e) => setForm({ ...form, isRecurring: e.target.checked })}
@@ -238,6 +298,87 @@ function AddExpenseModal({ businessId, storeId, userId, onClose, onSuccess }: Ad
             className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold disabled:opacity-40 flex items-center justify-center gap-2 transition-colors">
             {create.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
             Add Expense
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Request Approval Modal ───────────────────────────────────────────────────
+
+interface RequestApprovalModalProps {
+  expense: Expense;
+  businessId: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function RequestApprovalModal({ expense, businessId, onClose, onSuccess }: RequestApprovalModalProps) {
+  const [approver1, setApprover1] = useState('');
+  const [approver2, setApprover2] = useState('');
+  const [error, setError] = useState('');
+
+  const { data: users = [] } = useQuery<BusinessUser[]>({
+    queryKey: ['business-users-approval', businessId],
+    queryFn: () => api.get<BusinessUser[]>(`/business/${businessId}/users`),
+    enabled: !!businessId,
+  });
+
+  const managers = users.filter(u => u.role === 'MANAGER' || u.role === 'OWNER');
+
+  const submit = useMutation({
+    mutationFn: async () => {
+      if (!approver1) throw new Error('Select at least one approver');
+      await api.post(`/expenses/${expense.id}/request-approval`, { approverId: approver1, level: 1 });
+      if (approver2) {
+        await api.post(`/expenses/${expense.id}/request-approval`, { approverId: approver2, level: 2 });
+      }
+    },
+    onSuccess: () => { onSuccess(); onClose(); },
+    onError: (err) => setError(err instanceof Error ? err.message : 'Failed'),
+  });
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-sm shadow-2xl border border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-blue-500" />
+            Request Approval
+          </h2>
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700">
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+        <div className="p-6 space-y-4">
+          {error && <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-xl text-sm">{error}</div>}
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Expense: <strong className="text-gray-800 dark:text-white">{fmt(expense.amountCents)} – {expense.category}</strong>
+          </p>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Level 1 Approver *</label>
+            <select value={approver1} onChange={e => setApprover1(e.target.value)}
+              className="w-full border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+              <option value="">Select manager...</option>
+              {managers.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Level 2 Approver (optional)</label>
+            <select value={approver2} onChange={e => setApprover2(e.target.value)}
+              className="w-full border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+              <option value="">None</option>
+              {managers.filter(u => u.id !== approver1).map(u => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="border-t border-gray-100 dark:border-gray-700 px-6 py-4 flex gap-3">
+          <button onClick={onClose} className="flex-1 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 font-semibold">Cancel</button>
+          <button onClick={() => submit.mutate()} disabled={!approver1 || submit.isPending}
+            className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold disabled:opacity-40 flex items-center justify-center gap-2">
+            {submit.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+            Submit
           </button>
         </div>
       </div>
@@ -332,7 +473,7 @@ function SetBudgetModal({ businessId, month, year, existing, onClose, onSuccess 
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type MainTab = 'expenses' | 'budgets';
+type MainTab = 'expenses' | 'budgets' | 'vat-reclaim';
 
 export default function ExpensesPage() {
   const qc = useQueryClient();
@@ -344,10 +485,12 @@ export default function ExpensesPage() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [editBudget, setEditBudget] = useState<BudgetRow | undefined>();
+  const [approvalExpense, setApprovalExpense] = useState<Expense | null>(null);
 
   const now = new Date();
   const [budgetMonth, setBudgetMonth] = useState(now.getMonth() + 1);
   const [budgetYear, setBudgetYear] = useState(now.getFullYear());
+  const [vatMonth, setVatMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
 
   const businessId = user?.businessId ?? '';
   const storeId = user?.storeId ?? '';
@@ -385,6 +528,20 @@ export default function ExpensesPage() {
     enabled: !!businessId && mainTab === 'budgets',
   });
 
+  // VAT reclaim start/end from vatMonth
+  const [vatY, vatM] = vatMonth.split('-').map(Number);
+  const vatStart = `${vatMonth}-01`;
+  const vatEnd = new Date(vatY, vatM, 0).toISOString().split('T')[0];
+
+  const { data: vatReclaim, isLoading: vatLoading } = useQuery<VATReclaimSummary>({
+    queryKey: ['vat-reclaim', businessId, vatMonth],
+    queryFn: () =>
+      api.get<VATReclaimSummary>(
+        `/expenses/vat-reclaim?businessId=${businessId}&startDate=${vatStart}&endDate=${vatEnd}`,
+      ),
+    enabled: !!businessId && mainTab === 'vat-reclaim',
+  });
+
   const deleteBudget = useMutation({
     mutationFn: (id: string) => api.delete(`/budgets/${id}?businessId=${businessId}`),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['budgets-vs-actual'] }),
@@ -400,11 +557,31 @@ export default function ExpensesPage() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['expenses'] }),
   });
 
+  const approveStep = useMutation({
+    mutationFn: ({ stepId, comment }: { stepId: string; comment?: string }) =>
+      api.patch(`/expenses/approval-steps/${stepId}/approve`, { comment }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['expenses'] }),
+  });
+
+  const rejectStep = useMutation({
+    mutationFn: ({ stepId, comment }: { stepId: string; comment: string }) =>
+      api.patch(`/expenses/approval-steps/${stepId}/reject`, { comment }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['expenses'] }),
+  });
+
   const totalCents = expenses.reduce((s, e) => s + e.amountCents, 0);
   const approvedCents = expenses.filter((e) => e.approvalStatus === 'APPROVED').reduce((s, e) => s + e.amountCents, 0);
   const pendingCount = expenses.filter((e) => e.approvalStatus === 'PENDING').length;
+  const vatBadgeCount = expenses.filter((e) => e.vatReclaimable).length;
   const maxCategory = categorySummary.length > 0 ? Math.max(...categorySummary.map((c) => c.totalCents)) : 0;
   const categoriesWithoutBudget = CATEGORIES.filter((c) => !budgetVsActual.some((b) => b.category === c));
+
+  // My pending approval steps
+  const myPendingSteps = expenses.flatMap(e =>
+    (e.approvalSteps ?? [])
+      .filter(s => s.approverId === userId && s.status === 'PENDING')
+      .map(s => ({ ...s, expense: e }))
+  );
 
   return (
     <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900">
@@ -469,6 +646,20 @@ export default function ExpensesPage() {
             <Target className="w-4 h-4" />
             Budgets
           </button>
+          <button onClick={() => setMainTab('vat-reclaim')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+              mainTab === 'vat-reclaim'
+                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+            }`}>
+            <ShieldCheck className="w-4 h-4" />
+            VAT Reclaim
+            {vatBadgeCount > 0 && (
+              <span className="bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 text-xs px-1.5 py-0.5 rounded-full">
+                {vatBadgeCount}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Period tabs (only for expenses) */}
@@ -494,7 +685,7 @@ export default function ExpensesPage() {
         {mainTab === 'expenses' && (
           <>
             {/* Stats */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
               <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Total</p>
@@ -523,7 +714,47 @@ export default function ExpensesPage() {
                 </div>
                 <p className="text-xl font-bold text-blue-700 dark:text-blue-400">{expenses.length}</p>
               </div>
+              <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-4 cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors" onClick={() => setMainTab('vat-reclaim')}>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">VAT Reclaim</p>
+                  <ShieldCheck className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
+                </div>
+                <p className="text-xl font-bold text-emerald-700 dark:text-emerald-400">
+                  {fmt(expenses.filter(e => e.vatReclaimable && e.approvalStatus === 'APPROVED').reduce((s, e) => s + Math.round(e.amountCents * 16 / 116), 0))}
+                </p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{vatBadgeCount} reclaimable</p>
+              </div>
             </div>
+
+            {/* My pending approval steps */}
+            {myPendingSteps.length > 0 && (
+              <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-2xl p-5">
+                <h2 className="font-bold text-purple-800 dark:text-purple-300 mb-3 flex items-center gap-2">
+                  <Users className="w-5 h-5" />
+                  Pending Your Approval ({myPendingSteps.length})
+                </h2>
+                <div className="space-y-2">
+                  {myPendingSteps.map(({ id, level, expense }) => (
+                    <div key={id} className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-xl px-4 py-3 border border-purple-100 dark:border-purple-700">
+                      <div>
+                        <p className="font-semibold text-gray-800 dark:text-white text-sm">{expense.category} — {fmt(expense.amountCents)}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{expense.description} &bull; Level {level} approval</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => approveStep.mutate({ stepId: id })} disabled={approveStep.isPending}
+                          className="p-1.5 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg">
+                          <CheckCircle className="w-5 h-5" />
+                        </button>
+                        <button onClick={() => rejectStep.mutate({ stepId: id, comment: 'Rejected' })} disabled={rejectStep.isPending}
+                          className="p-1.5 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg">
+                          <XCircle className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Category breakdown */}
             {categorySummary.length > 0 && (
@@ -599,70 +830,88 @@ export default function ExpensesPage() {
                       <th className="text-left px-4 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden sm:table-cell">Method</th>
                       <th className="text-right px-4 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Amount</th>
                       <th className="text-center px-4 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Status</th>
-                      {isManager && (
-                        <th className="text-center px-4 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Actions</th>
-                      )}
+                      <th className="text-center px-4 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Chain</th>
+                      <th className="text-center px-4 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                    {expenses.map((expense) => (
-                      <tr key={expense.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                        <td className="px-6 py-4">
-                          <div className="text-sm font-medium text-gray-800 dark:text-gray-200">
-                            {new Date(expense.createdAt).toLocaleDateString('en-KE', { day: '2-digit', month: 'short' })}
-                          </div>
-                          {expense.isRecurring && (
-                            <div className="text-xs text-purple-600 dark:text-purple-400 mt-0.5">&#8635; Recurring</div>
-                          )}
-                        </td>
-                        <td className="px-4 py-4">
-                          <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">{expense.category}</span>
-                        </td>
-                        <td className="px-4 py-4 hidden md:table-cell">
-                          <p className="text-sm text-gray-600 dark:text-gray-400 truncate max-w-xs">{expense.description}</p>
-                        </td>
-                        <td className="px-4 py-4 hidden sm:table-cell">
-                          <span className="text-sm text-gray-600 dark:text-gray-400">{expense.paidBy}</span>
-                        </td>
-                        <td className="px-4 py-4 text-right">
-                          <span className="font-bold text-gray-900 dark:text-white">{fmt(expense.amountCents)}</span>
-                        </td>
-                        <td className="px-4 py-4 text-center">
-                          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${STATUS_STYLES[expense.approvalStatus]}`}>
-                            {expense.approvalStatus}
-                          </span>
-                        </td>
-                        {isManager && (
-                          <td className="px-4 py-4 text-center">
-                            {expense.approvalStatus === 'PENDING' && (
-                              <div className="flex items-center justify-center gap-2">
-                                <button
-                                  onClick={() => approve.mutate(expense.id)}
-                                  disabled={approve.isPending}
-                                  title="Approve"
-                                  className="p-1.5 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
-                                >
-                                  <CheckCircle className="w-5 h-5" />
-                                </button>
-                                <button
-                                  onClick={() => reject.mutate(expense.id)}
-                                  disabled={reject.isPending}
-                                  title="Reject"
-                                  className="p-1.5 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                                >
-                                  <XCircle className="w-5 h-5" />
-                                </button>
-                              </div>
-                            )}
-                            {expense.approvalStatus !== 'PENDING' && (
-                              <span className="text-xs text-gray-400 dark:text-gray-500">
-                                {expense.approvedBy ? `by ${expense.approvedBy.slice(0, 8)}` : '—'}
-                              </span>
+                    {expenses.map((expense) => {
+                      const steps = expense.approvalSteps ?? [];
+                      const approvedSteps = steps.filter(s => s.status === 'APPROVED').length;
+                      return (
+                        <tr key={expense.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                              {new Date(expense.createdAt).toLocaleDateString('en-KE', { day: '2-digit', month: 'short' })}
+                            </div>
+                            {expense.isRecurring && (
+                              <div className="text-xs text-purple-600 dark:text-purple-400 mt-0.5">&#8635; Recurring</div>
                             )}
                           </td>
-                        )}
-                      </tr>
-                    ))}
+                          <td className="px-4 py-4">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">{expense.category}</span>
+                              {expense.vatReclaimable && (
+                                <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded font-bold">VAT</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 hidden md:table-cell">
+                            <p className="text-sm text-gray-600 dark:text-gray-400 truncate max-w-xs">{expense.description}</p>
+                          </td>
+                          <td className="px-4 py-4 hidden sm:table-cell">
+                            <span className="text-sm text-gray-600 dark:text-gray-400">{expense.paidBy}</span>
+                          </td>
+                          <td className="px-4 py-4 text-right">
+                            <span className="font-bold text-gray-900 dark:text-white">{fmt(expense.amountCents)}</span>
+                          </td>
+                          <td className="px-4 py-4 text-center">
+                            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${STATUS_STYLES[expense.approvalStatus]}`}>
+                              {expense.approvalStatus}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-center">
+                            {steps.length > 0 ? (
+                              <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">
+                                {approvedSteps}/{steps.length} steps
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="flex items-center justify-center gap-1">
+                              {isManager && expense.approvalStatus === 'PENDING' && (
+                                <>
+                                  <button onClick={() => approve.mutate(expense.id)} disabled={approve.isPending}
+                                    title="Approve" className="p-1.5 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg">
+                                    <CheckCircle className="w-4 h-4" />
+                                  </button>
+                                  <button onClick={() => reject.mutate(expense.id)} disabled={reject.isPending}
+                                    title="Reject" className="p-1.5 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg">
+                                    <XCircle className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
+                              {!isManager && expense.approvalStatus === 'PENDING' && (
+                                <button onClick={() => setApprovalExpense(expense)}
+                                  title="Request multi-level approval"
+                                  className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg">
+                                  <ShieldCheck className="w-4 h-4" />
+                                </button>
+                              )}
+                              {/* PDF download */}
+                              <button
+                                onClick={() => window.open(`/api/v1/reports/pdf/expense-report?employeeId=${expense.submittedBy}&month=${new Date(expense.createdAt).toISOString().slice(0,7)}`, '_blank')}
+                                title="Download PDF report"
+                                className="p-1.5 text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg">
+                                <FileText className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -828,6 +1077,120 @@ export default function ExpensesPage() {
             )}
           </>
         )}
+
+        {/* ── VAT RECLAIM TAB ── */}
+        {mainTab === 'vat-reclaim' && (
+          <>
+            {/* Month picker */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Month</label>
+                <input type="month" value={vatMonth} onChange={e => setVatMonth(e.target.value)}
+                  className="border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" />
+              </div>
+            </div>
+
+            {vatLoading ? (
+              <div className="flex items-center justify-center py-20 gap-3">
+                <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+              </div>
+            ) : vatReclaim ? (
+              <>
+                {/* Summary cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-5">
+                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Eligible Expenses</p>
+                    <p className="text-2xl font-bold text-green-700 dark:text-green-400">{vatReclaim.count}</p>
+                  </div>
+                  <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-5">
+                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Total VAT-Reclaimable</p>
+                    <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">{fmt(vatReclaim.totalCents)}</p>
+                  </div>
+                  <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-5">
+                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Input VAT (16/116)</p>
+                    <p className="text-2xl font-bold text-purple-700 dark:text-purple-400">{fmt(vatReclaim.vatCents)}</p>
+                  </div>
+                </div>
+
+                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                  <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                    <div>
+                      <h2 className="font-bold text-gray-800 dark:text-white">VAT Reclaim Summary — {vatMonth}</h2>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Approved expenses with VAT reclaimable flag</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (!vatReclaim.expenses.length) return;
+                        downloadCsv(`vat-reclaim-${vatMonth}.csv`, [
+                          ['Date', 'Category', 'Description', 'Gross Amount (KES)', 'Input VAT (KES)', 'Method'],
+                          ...vatReclaim.expenses.map(e => [
+                            new Date(e.createdAt).toLocaleDateString('en-KE'),
+                            e.category,
+                            e.description,
+                            (e.amountCents / 100).toFixed(2),
+                            (Math.round(e.amountCents * 16 / 116) / 100).toFixed(2),
+                            e.paidBy,
+                          ]),
+                          ['', '', 'TOTAL', (vatReclaim.totalCents / 100).toFixed(2), (vatReclaim.vatCents / 100).toFixed(2), ''],
+                        ]);
+                      }}
+                      className="flex items-center gap-2 px-3 py-1.5 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold">
+                      <Download className="w-4 h-4" />
+                      Export iTax CSV
+                    </button>
+                  </div>
+
+                  {vatReclaim.expenses.length === 0 ? (
+                    <div className="py-12 text-center text-gray-400 dark:text-gray-500">
+                      <ShieldCheck className="w-10 h-10 mx-auto mb-3 opacity-40" />
+                      <p className="font-medium">No VAT-reclaimable expenses for this period</p>
+                      <p className="text-sm mt-1">Mark expenses as VAT Reclaimable when adding them</p>
+                    </div>
+                  ) : (
+                    <table className="w-full">
+                      <thead className="bg-gray-50 dark:bg-gray-700/50">
+                        <tr>
+                          <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Date</th>
+                          <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Category</th>
+                          <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase hidden md:table-cell">Description</th>
+                          <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Gross</th>
+                          <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Input VAT</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                        {vatReclaim.expenses.map(e => (
+                          <tr key={e.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                            <td className="px-5 py-3 text-sm text-gray-700 dark:text-gray-300">
+                              {new Date(e.createdAt).toLocaleDateString('en-KE', { day: '2-digit', month: 'short' })}
+                            </td>
+                            <td className="px-4 py-3 text-sm font-medium text-gray-800 dark:text-white">{e.category}</td>
+                            <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 hidden md:table-cell truncate max-w-xs">{e.description}</td>
+                            <td className="px-4 py-3 text-sm font-semibold text-gray-800 dark:text-white text-right">{fmt(e.amountCents)}</td>
+                            <td className="px-4 py-3 text-sm font-bold text-green-600 dark:text-green-400 text-right">
+                              {fmt(Math.round(e.amountCents * 16 / 116))}
+                            </td>
+                          </tr>
+                        ))}
+                        <tr className="bg-green-50 dark:bg-green-900/20 font-bold">
+                          <td colSpan={3} className="px-5 py-3 text-sm text-gray-700 dark:text-gray-300">TOTAL</td>
+                          <td className="px-4 py-3 text-sm text-right text-gray-800 dark:text-white">{fmt(vatReclaim.totalCents)}</td>
+                          <td className="px-4 py-3 text-sm text-right text-green-700 dark:text-green-400">{fmt(vatReclaim.vatCents)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 text-sm text-blue-700 dark:text-blue-300">
+                  <strong>iTax Filing Note:</strong> Use the "Export iTax CSV" button to download a formatted file for your VAT return.
+                  Input VAT is calculated as 16/116 of the gross (VAT-inclusive) expense amount.
+                  File by the 20th of the following month via KRA iTax portal.
+                </div>
+              </>
+            ) : null}
+          </>
+        )}
+
       </div>
 
       {/* Modals */}
@@ -849,6 +1212,15 @@ export default function ExpensesPage() {
           existing={editBudget}
           onClose={() => { setShowBudgetModal(false); setEditBudget(undefined); }}
           onSuccess={() => void refetchBudgets()}
+        />
+      )}
+
+      {approvalExpense && (
+        <RequestApprovalModal
+          expense={approvalExpense}
+          businessId={businessId}
+          onClose={() => setApprovalExpense(null)}
+          onSuccess={() => void refetch()}
         />
       )}
     </div>

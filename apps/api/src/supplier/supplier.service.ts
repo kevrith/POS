@@ -486,4 +486,318 @@ export class SupplierService {
       data: { status: 'RECEIVED' },
     });
   }
+
+  // ── Supplier Returns ──────────────────────────────────────────────────────────
+
+  async createSupplierReturn(businessId: string, data: {
+    supplierId: string;
+    purchaseOrderId?: string;
+    reason: string;
+    notes?: string;
+    storeId: string;
+    items: Array<{ itemId: string; quantity: number; unitCostCents: number; reason?: string }>;
+  }) {
+    const count = await this.prisma.supplierReturn.count({ where: { businessId } });
+    const returnNumber = `RTS-${String(count + 1).padStart(4, '0')}`;
+    const totalCents = data.items.reduce((s, i) => s + i.quantity * i.unitCostCents, 0);
+
+    const supplierReturn = await this.prisma.supplierReturn.create({
+      data: {
+        businessId,
+        supplierId: data.supplierId,
+        purchaseOrderId: data.purchaseOrderId,
+        returnNumber,
+        reason: data.reason,
+        notes: data.notes,
+        totalCents,
+        items: {
+          create: data.items.map(i => ({
+            itemId: i.itemId,
+            quantity: i.quantity,
+            unitCostCents: i.unitCostCents,
+            totalCents: i.quantity * i.unitCostCents,
+            reason: i.reason,
+          })),
+        },
+      },
+      include: { items: true },
+    });
+
+    // Reverse inventory
+    for (const item of data.items) {
+      await this.prisma.inventoryMovement.create({
+        data: {
+          businessId,
+          storeId: data.storeId,
+          itemId: item.itemId,
+          type: 'ADJUSTMENT',
+          quantity: -item.quantity,
+          source: `Supplier Return ${returnNumber}: ${data.reason}`,
+          offlineId: `rts-${supplierReturn.id}-${item.itemId}`,
+        },
+      });
+    }
+    return supplierReturn;
+  }
+
+  async getSupplierReturns(businessId: string, supplierId?: string) {
+    return this.prisma.supplierReturn.findMany({
+      where: { businessId, ...(supplierId ? { supplierId } : {}) },
+      include: {
+        items: true,
+        supplier: { select: { name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async updateReturnStatus(returnId: string, status: string) {
+    return this.prisma.supplierReturn.update({ where: { id: returnId }, data: { status } });
+  }
+
+  // ── Supplier Invoices ──────────────────────────────────────────────────────────
+
+  async createSupplierInvoice(businessId: string, data: {
+    supplierId: string;
+    purchaseOrderId?: string;
+    invoiceNumber: string;
+    invoiceDateStr: string;
+    totalCents: number;
+    notes?: string;
+  }) {
+    return this.prisma.supplierInvoice.create({ data: { businessId, ...data } });
+  }
+
+  async getSupplierInvoices(businessId: string, supplierId?: string) {
+    return this.prisma.supplierInvoice.findMany({
+      where: { businessId, ...(supplierId ? { supplierId } : {}) },
+      include: { supplier: { select: { name: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async updateInvoiceStatus(invoiceId: string, status: string) {
+    return this.prisma.supplierInvoice.update({ where: { id: invoiceId }, data: { status } });
+  }
+
+  async threeWayMatch(businessId: string, purchaseOrderId: string) {
+    const po = await this.prisma.purchaseOrder.findUnique({
+      where: { id: purchaseOrderId },
+      include: { items: true },
+    });
+    if (!po) throw new NotFoundException('PO not found');
+
+    // GRN items via GRN records linked to this PO
+    const grns = await this.prisma.gRN.findMany({
+      where: { poId: purchaseOrderId },
+      include: { items: true },
+    });
+    const receivedQty = new Map<string, number>();
+    for (const grn of grns) {
+      for (const gi of grn.items) {
+        // Find the poItem to get itemId
+        const poItem = po.items.find(p => p.id === gi.poItemId);
+        if (poItem) {
+          receivedQty.set(poItem.itemId, (receivedQty.get(poItem.itemId) ?? 0) + gi.quantityReceived);
+        }
+      }
+    }
+
+    // Get item names
+    const itemIds = po.items.map(p => p.itemId);
+    const items = await this.prisma.item.findMany({ where: { id: { in: itemIds } }, select: { id: true, name: true } });
+    const itemMap = new Map(items.map(i => [i.id, i.name]));
+
+    const invoice = await this.prisma.supplierInvoice.findFirst({
+      where: { businessId, purchaseOrderId },
+    });
+
+    const lineMatches = po.items.map(poi => {
+      const received = receivedQty.get(poi.itemId) ?? 0;
+      const status = received === poi.quantityOrdered ? 'MATCHED' : received < poi.quantityOrdered ? 'SHORT' : 'EXCESS';
+      return { itemId: poi.itemId, itemName: itemMap.get(poi.itemId) ?? poi.itemId, orderedQty: poi.quantityOrdered, receivedQty: received, status };
+    });
+
+    const poValueCents = po.items.reduce((s, i) => s + i.quantityOrdered * i.agreedPriceCents, 0);
+    const invoiceValueCents = invoice?.totalCents ?? null;
+    const valueMatch = invoiceValueCents !== null ? Math.abs(poValueCents - invoiceValueCents) < 100 : null;
+    const overallStatus = lineMatches.every(l => l.status === 'MATCHED') && (valueMatch === true || valueMatch === null) ? 'MATCHED' : 'DISCREPANCY';
+
+    if (invoice && overallStatus === 'MATCHED') {
+      await this.prisma.supplierInvoice.update({ where: { id: invoice.id }, data: { status: 'MATCHED' } });
+    }
+
+    return { po: { id: po.id, orderNumber: po.poNumber, totalCents: poValueCents }, invoice, lineMatches, valueMatch, overallStatus };
+  }
+
+  // ── Supplier Price Agreements ─────────────────────────────────────────────
+
+  async listPriceAgreements(supplierId: string, businessId: string) {
+    return this.prisma.supplierPriceAgreement.findMany({
+      where: { supplierId, businessId, isActive: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async createPriceAgreement(supplierId: string, dto: {
+    businessId: string;
+    itemId: string;
+    agreedPriceCents: number;
+    minQuantity?: number;
+    effectiveTo?: string;
+    notes?: string;
+  }) {
+    return this.prisma.supplierPriceAgreement.create({
+      data: {
+        supplierId,
+        businessId: dto.businessId,
+        itemId: dto.itemId,
+        agreedPriceCents: dto.agreedPriceCents,
+        minQuantity: dto.minQuantity ?? 1,
+        effectiveTo: dto.effectiveTo ? new Date(dto.effectiveTo) : undefined,
+        notes: dto.notes,
+      },
+    });
+  }
+
+  async deactivatePriceAgreement(id: string) {
+    return this.prisma.supplierPriceAgreement.update({
+      where: { id },
+      data: { isActive: false },
+    });
+  }
+
+  // ── Landed Cost Allocation ────────────────────────────────────────────────────
+
+  async allocateLandedCost(
+    grnId: string,
+    totalFreightCents: number,
+    method: 'PROPORTIONAL' | 'EQUAL' = 'PROPORTIONAL',
+  ) {
+    const grn = await this.prisma.gRN.findUnique({
+      where: { id: grnId },
+      include: {
+        items: true,
+        po: { include: { items: true } },
+      },
+    });
+    if (!grn) throw new NotFoundException('GRN not found');
+
+    // Map poItemId → agreedPriceCents for value-based allocation
+    const poItemMap = new Map(grn.po.items.map(pi => [pi.id, pi.agreedPriceCents]));
+
+    const totalValue = grn.items.reduce((s, i) => {
+      const unitCost = poItemMap.get(i.poItemId) ?? 0;
+      return s + i.quantityReceived * unitCost;
+    }, 0);
+
+    for (const item of grn.items) {
+      let landedCostCents: number;
+      if (method === 'PROPORTIONAL' && totalValue > 0) {
+        const unitCost = poItemMap.get(item.poItemId) ?? 0;
+        const itemValue = item.quantityReceived * unitCost;
+        landedCostCents = Math.round(totalFreightCents * itemValue / totalValue);
+      } else {
+        landedCostCents = Math.round(totalFreightCents / grn.items.length);
+      }
+      await this.prisma.gRNItem.update({
+        where: { id: item.id },
+        data: { landedCostCents },
+      });
+    }
+
+    await this.prisma.gRN.update({
+      where: { id: grnId },
+      data: { landedCostAllocated: true, freightCents: totalFreightCents },
+    });
+
+    return { success: true, grnId, totalFreightCents, method, itemsUpdated: grn.items.length };
+  }
+
+  // ── Price Agreements (cross-business view) ────────────────────────────────────
+
+  async getPriceAgreements(businessId: string, supplierId?: string) {
+    return this.prisma.supplierPriceAgreement.findMany({
+      where: { businessId, ...(supplierId ? { supplierId } : {}) },
+      include: { item: { select: { name: true, sku: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async deletePriceAgreement(id: string) {
+    return this.prisma.supplierPriceAgreement.delete({ where: { id } });
+  }
+
+  // ── Auto-reorder PO from reorder points ────────────────────────────────────
+
+  async autoReorderCheck(businessId: string, storeId: string, supplierId?: string) {
+    // Find items at or below reorder level with positive reorderQty
+    const items = await this.prisma.item.findMany({
+      where: {
+        businessId,
+        storeId,
+        deletedAt: null,
+        isActive: true,
+        trackStock: true,
+        reorderLevel: { gt: 0 },
+        reorderQty: { gt: 0 },
+      },
+    });
+
+    const triggered: Array<{ itemId: string; name: string; reorderQty: number; currentStock: number; reorderLevel: number }> = [];
+
+    for (const item of items) {
+      const agg = await this.prisma.inventoryMovement.aggregate({
+        where: { itemId: item.id, storeId },
+        _sum: { quantity: true },
+      });
+      const stock = agg._sum.quantity ?? 0;
+      if (stock <= (item.reorderLevel ?? 0)) {
+        triggered.push({
+          itemId: item.id,
+          name: item.name,
+          reorderQty: item.reorderQty,
+          currentStock: stock,
+          reorderLevel: item.reorderLevel ?? 0,
+        });
+      }
+    }
+
+    if (triggered.length === 0) {
+      return { message: 'No items below reorder point', posCreated: null };
+    }
+
+    // Resolve default supplier
+    let resolvedSupplierId = supplierId;
+    if (!resolvedSupplierId) {
+      const defaultSupplier = await this.prisma.supplier.findFirst({ where: { businessId } });
+      if (!defaultSupplier) {
+        return { message: 'Items need reordering but no supplier found', triggered, posCreated: null };
+      }
+      resolvedSupplierId = defaultSupplier.id;
+    }
+
+    // Create a PO for all triggered items
+    const poNumber = `AUTO-${Date.now()}`;
+    const po = await this.prisma.purchaseOrder.create({
+      data: {
+        businessId,
+        supplierId: resolvedSupplierId,
+        poNumber,
+        status: 'DRAFT',
+        expectedDelivery: new Date(Date.now() + 7 * 86400000),
+        items: {
+          create: triggered.map((t) => ({
+            itemId: t.itemId,
+            quantityOrdered: t.reorderQty,
+            agreedPriceCents: 0,
+          })),
+        },
+      },
+      include: { items: true },
+    });
+
+    this.logger.log(`Auto-reorder PO ${poNumber} created for ${triggered.length} items (${businessId})`);
+    return { message: `Auto-reorder PO created: ${poNumber}`, triggered, posCreated: po };
+  }
 }

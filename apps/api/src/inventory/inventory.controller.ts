@@ -41,4 +41,9 @@ export class InventoryController {
     await this.inventory.createMovement(dto);
     return { success: true };
   }
+
+  @Get('variant-stock')
+  getVariantStockLevel(@Query('variantId') variantId: string, @Query('storeId') storeId: string) {
+    return this.inventory.getVariantStockLevel(variantId, storeId);
+  }
 }

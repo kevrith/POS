@@ -118,7 +118,7 @@ function MiniBar({ values, color = '#3b82f6' }: { values: number[]; color?: stri
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 
 function KpiCard({
-  label, value, sub, icon: Icon, trend, trendLabel, accent, bars,
+  label, value, sub, icon: Icon, trend, trendLabel, accent, bars, valueColor,
 }: {
   label: string;
   value: string;
@@ -128,6 +128,7 @@ function KpiCard({
   trendLabel?: string;
   accent: string;
   bars?: number[];
+  valueColor?: string;
 }) {
   const up = trend !== undefined && trend >= 0;
   return (
@@ -139,7 +140,7 @@ function KpiCard({
         </div>
       </div>
       <div>
-        <p className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">{value}</p>
+        <p className={`text-2xl font-black tracking-tight ${valueColor ?? 'text-gray-900 dark:text-white'}`}>{value}</p>
         {sub && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{sub}</p>}
       </div>
       <div className="flex items-center justify-between">
@@ -435,8 +436,9 @@ export default function OwnerDashboardPage() {
                 label="Net Profit"
                 value={netProfit !== undefined ? formatKES(netProfit) : '—'}
                 sub={profitMargin !== null ? `${profitMargin.toFixed(1)}% margin` : undefined}
-                icon={TrendingUp}
-                accent="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
+                icon={netProfit !== undefined && netProfit < 0 ? TrendingDown : TrendingUp}
+                accent={netProfit !== undefined && netProfit < 0 ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'}
+                valueColor={netProfit !== undefined && netProfit < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}
                 bars={revBars}
               />
               <KpiCard
@@ -445,6 +447,7 @@ export default function OwnerDashboardPage() {
                 sub="Operating costs"
                 icon={CreditCard}
                 accent="bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
+                valueColor="text-red-600 dark:text-red-400"
               />
               <KpiCard
                 label="Best Store"

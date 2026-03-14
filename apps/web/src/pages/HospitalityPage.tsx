@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, Users, Clock, ChefHat, X, Trash2, Send, Receipt, RefreshCw,
   UtensilsCrossed, ArrowRight, Check, AlertCircle, Loader2,
   ArrowLeftRight, GitMerge, CalendarDays, Zap, Edit2, CheckCircle,
-  BedDouble, KeyRound, LogIn, LogOut, Phone,
+  BedDouble, KeyRound, LogIn, LogOut, Phone, FileText,
+  Sparkles, Wrench,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
@@ -24,6 +25,7 @@ interface Table {
   hasReadyKOT?: boolean;
   hasPendingKOT?: boolean;
   activeKOTCount?: number;
+  coverCount?: number;
 }
 
 interface OrderItem {
@@ -35,6 +37,9 @@ interface OrderItem {
   specialInstructions?: string;
   modifiers?: string | string[];
   kotSent?: boolean;
+  course?: string;
+  firedAt?: string | null;
+  seatNumber?: number;
 }
 
 interface HospOrder {
@@ -45,6 +50,8 @@ interface HospOrder {
   items: OrderItem[];
   createdAt: string;
   kots?: Array<{ id: string; status: string; type: string; createdAt: string }>;
+  coverCount?: number;
+  tableNotes?: string;
 }
 
 interface MenuItem {
@@ -53,6 +60,7 @@ interface MenuItem {
   retailPriceCents: number;
   category?: string;
   sku?: string;
+  allergens?: string; // JSON array string
 }
 
 interface Reservation {
@@ -90,6 +98,8 @@ type PendingItem = {
   unitPriceCents: number;
   specialInstructions?: string;
   modifiers?: string[];
+  course?: string;
+  seatNumber?: number;
 };
 
 interface BarTab {
@@ -109,6 +119,7 @@ interface HotelRoom {
   capacity: number;
   pricePerNightCents: number;
   status: 'AVAILABLE' | 'OCCUPIED' | 'MAINTENANCE' | 'RESERVED';
+  housekeepingStatus: 'CLEAN' | 'DIRTY' | 'INSPECTED' | 'OUT_OF_ORDER';
   amenities?: string;
   notes?: string;
   bookings: Array<{
@@ -120,6 +131,7 @@ interface HotelRoom {
     nightCount: number;
     totalAmountCents: number;
     depositCents: number;
+    status: string;
   }>;
 }
 
@@ -140,6 +152,38 @@ interface RoomBooking {
   status: string;
   notes?: string;
   room?: { number: string; type: string; floor?: string };
+}
+
+interface FolioCharge {
+  id: string;
+  type: string;
+  description: string;
+  amountCents: number;
+  quantity: number;
+  totalCents: number;
+  date: string;
+  postedBy?: string;
+}
+
+interface GuestFolio extends RoomBooking {
+  folioCharges: FolioCharge[];
+  folioTotal: number;
+  balanceDue: number;
+  roomRateTotal: number;
+  room: { number: string; type: string; floor?: string };
+}
+
+interface HotelDashboard {
+  total: number;
+  occupied: number;
+  available: number;
+  reserved: number;
+  maintenance: number;
+  occupancyPct: number;
+  todayArrivals: number;
+  todayDepartures: number;
+  dirtyRooms: number;
+  monthlyRevenueCents: number;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -204,16 +248,25 @@ const TABLE_STATUS_LABEL: Record<Table['status'], string> = {
 interface ItemPickerProps {
   businessId: string;
   storeId: string;
-  onAdd: (item: MenuItem, qty: number, note: string, modifiers: string[]) => void;
+  coverCount?: number;
+  onAdd: (item: MenuItem, qty: number, note: string, modifiers: string[], course: string, seatNumber: number) => void;
   onClose: () => void;
 }
 
-function ItemPicker({ businessId, storeId, onAdd, onClose }: ItemPickerProps) {
+const COURSE_OPTIONS = [
+  { value: 'STARTER', label: 'Starter', color: 'bg-blue-600 text-white border-blue-600', inactive: 'bg-white text-blue-600 border-blue-300 hover:border-blue-500' },
+  { value: 'MAIN',    label: 'Main',    color: 'bg-green-600 text-white border-green-600', inactive: 'bg-white text-green-600 border-green-300 hover:border-green-500' },
+  { value: 'DESSERT', label: 'Dessert', color: 'bg-purple-600 text-white border-purple-600', inactive: 'bg-white text-purple-600 border-purple-300 hover:border-purple-500' },
+];
+
+function ItemPicker({ businessId, storeId, coverCount = 1, onAdd, onClose }: ItemPickerProps) {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<MenuItem | null>(null);
   const [qty, setQty] = useState(1);
   const [note, setNote] = useState('');
   const [activeMods, setActiveMods] = useState<Set<string>>(new Set());
+  const [course, setCourse] = useState('MAIN');
+  const [selectedSeat, setSelectedSeat] = useState(1);
 
   const { data: items = [], isLoading } = useQuery<MenuItem[]>({
     queryKey: ['menu-items', businessId, storeId],
@@ -327,6 +380,46 @@ function ItemPicker({ businessId, storeId, onAdd, onClose }: ItemPickerProps) {
               />
             </div>
 
+            {/* Course selector */}
+            <div>
+              <p className="text-xs text-gray-500 mb-1.5">Course:</p>
+              <div className="flex gap-2">
+                {COURSE_OPTIONS.map((c) => (
+                  <button
+                    key={c.value}
+                    onClick={() => setCourse(c.value)}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border-2 transition-all ${
+                      course === c.value ? c.color : c.inactive
+                    }`}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Seat selector */}
+            {coverCount > 1 && (
+              <div>
+                <p className="text-xs text-gray-500 mb-1.5">Assign to seat:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {Array.from({ length: coverCount }, (_, i) => i + 1).map((seat) => (
+                    <button
+                      key={seat}
+                      onClick={() => setSelectedSeat(seat)}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold border-2 transition-all ${
+                        selectedSeat === seat
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                      }`}
+                    >
+                      Guest {seat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Modifier chips */}
             <div>
               <p className="text-xs text-gray-500 mb-1.5">Modifiers:</p>
@@ -349,11 +442,12 @@ function ItemPicker({ businessId, storeId, onAdd, onClose }: ItemPickerProps) {
 
             <button
               onClick={() => {
-                onAdd(selected, qty, note, Array.from(activeMods));
+                onAdd(selected, qty, note, Array.from(activeMods), course, selectedSeat);
                 setSelected(null);
                 setNote('');
                 setQty(1);
                 setActiveMods(new Set());
+                setCourse('MAIN');
               }}
               className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
             >
@@ -388,6 +482,7 @@ function ReservationsModal({ storeId, businessId, tables, onClose, tablePrefix =
     partySize: '2',
     reservationTime: '',
     notes: '',
+    depositAmount: '',
   });
 
   const { data: reservations = [], isLoading } = useQuery<Reservation[]>({
@@ -405,12 +500,13 @@ function ReservationsModal({ storeId, businessId, tables, onClose, tablePrefix =
         partySize: parseInt(form.partySize, 10),
         reservationTime: new Date(form.reservationTime).toISOString(),
         notes: form.notes.trim() || undefined,
+        depositCents: form.depositAmount ? Math.round(parseFloat(form.depositAmount) * 100) : 0,
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['reservations'] });
       void qc.invalidateQueries({ queryKey: ['tables'] });
       setShowForm(false);
-      setForm({ tableId: '', customerName: '', customerPhone: '', partySize: '2', reservationTime: '', notes: '' });
+      setForm({ tableId: '', customerName: '', customerPhone: '', partySize: '2', reservationTime: '', notes: '', depositAmount: '' });
     },
   });
 
@@ -473,6 +569,11 @@ function ReservationsModal({ storeId, businessId, tables, onClose, tablePrefix =
                 </div>
                 {res.notes && (
                   <p className="text-xs text-amber-700 mt-2 bg-amber-50 px-2 py-1 rounded">{res.notes}</p>
+                )}
+                {(res as any).depositCents > 0 && (
+                  <p className="text-xs text-green-700 mt-1 bg-green-50 px-2 py-1 rounded">
+                    Deposit: KES {((res as any).depositCents / 100).toFixed(2)}
+                  </p>
                 )}
               </div>
             ))
@@ -553,6 +654,18 @@ function ReservationsModal({ storeId, businessId, tables, onClose, tablePrefix =
                     onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
                     className="w-full px-3 py-2 border rounded-lg text-sm"
                     placeholder="Birthday, window seat, allergies..."
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs text-gray-500 mb-1">Deposit Amount (KES)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.depositAmount}
+                    onChange={(e) => setForm((f) => ({ ...f, depositAmount: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                    placeholder="0.00 — leave blank if no deposit"
                   />
                 </div>
               </div>
@@ -809,6 +922,343 @@ function FastFoodPanel({ businessId, storeId, userId, userName, onClose }: FastF
   );
 }
 
+// ─── Split Bill Modal ─────────────────────────────────────────────────────────
+
+const GUEST_COLORS = [
+  { btn: 'bg-blue-600 text-white border-blue-600', btnOff: 'border-blue-300 text-blue-700 hover:bg-blue-50', item: 'border-blue-400 bg-blue-50', badge: 'bg-blue-100 text-blue-700' },
+  { btn: 'bg-green-600 text-white border-green-600', btnOff: 'border-green-300 text-green-700 hover:bg-green-50', item: 'border-green-400 bg-green-50', badge: 'bg-green-100 text-green-700' },
+  { btn: 'bg-purple-600 text-white border-purple-600', btnOff: 'border-purple-300 text-purple-700 hover:bg-purple-50', item: 'border-purple-400 bg-purple-50', badge: 'bg-purple-100 text-purple-700' },
+  { btn: 'bg-orange-600 text-white border-orange-600', btnOff: 'border-orange-300 text-orange-700 hover:bg-orange-50', item: 'border-orange-400 bg-orange-50', badge: 'bg-orange-100 text-orange-700' },
+  { btn: 'bg-pink-600 text-white border-pink-600', btnOff: 'border-pink-300 text-pink-700 hover:bg-pink-50', item: 'border-pink-400 bg-pink-50', badge: 'bg-pink-100 text-pink-700' },
+  { btn: 'bg-teal-600 text-white border-teal-600', btnOff: 'border-teal-300 text-teal-700 hover:bg-teal-50', item: 'border-teal-400 bg-teal-50', badge: 'bg-teal-100 text-teal-700' },
+];
+
+interface SplitBillModalProps {
+  order: HospOrder;
+  table: Table;
+  tablePrefix: string;
+  businessId: string;
+  storeId: string;
+  userId: string;
+  bizSettings?: { name?: string; receiptFooter?: string };
+  onClose: () => void;
+  onAllPaid: () => void;
+}
+
+function SplitBillModal({ order, table, tablePrefix, businessId, storeId, userId, onClose, onAllPaid }: SplitBillModalProps) {
+  const qc = useQueryClient();
+
+  // Derive initial guest count from existing seat assignments or order cover count
+  const initGuestCount = useMemo(() => {
+    const maxSeat = Math.max(...order.items.map((i) => i.seatNumber ?? 0), 0);
+    return Math.max(maxSeat, order.coverCount ?? 1, 2);
+  }, [order]);
+
+  const [guestCount, setGuestCount] = useState(initGuestCount);
+  const [activeGuest, setActiveGuest] = useState(1);
+
+  // Map item id → assigned guest number (0 = unassigned)
+  const [assignments, setAssignments] = useState<Record<string, number>>(() =>
+    Object.fromEntries(order.items.map((i) => [i.id, i.seatNumber && i.seatNumber > 0 ? i.seatNumber : 0])),
+  );
+
+  const [step, setStep] = useState<'assign' | 'checkout'>('assign');
+  const [subOrders, setSubOrders] = useState<Array<{ guestNum: number; orderId: string; items: OrderItem[]; total: number; paid: boolean }>>([]);
+  const [payingGuest, setPayingGuest] = useState<number | null>(null);
+  const [payError, setPayError] = useState<string | null>(null);
+  const [isBusy, setIsBusy] = useState(false);
+
+  const guestGroups = useMemo(() => {
+    const groups: Record<number, OrderItem[]> = {};
+    for (let g = 1; g <= guestCount; g++) groups[g] = [];
+    for (const item of order.items) {
+      const g = assignments[item.id] ?? 0;
+      if (g > 0) groups[g] = [...(groups[g] ?? []), item];
+    }
+    return groups;
+  }, [order.items, assignments, guestCount]);
+
+  const unassigned = order.items.filter((i) => !assignments[i.id] || assignments[i.id] === 0);
+  const allAssigned = unassigned.length === 0;
+  const guestTotal = (g: number) => (guestGroups[g] ?? []).reduce((s, i) => s + i.unitPriceCents * i.quantity, 0);
+  const orderTotal = order.items.reduce((s, i) => s + i.unitPriceCents * i.quantity, 0);
+
+  function toggleAssign(itemId: string) {
+    setAssignments((prev) => ({ ...prev, [itemId]: activeGuest }));
+  }
+
+  async function handleCreateSplits() {
+    setIsBusy(true);
+    setPayError(null);
+    try {
+      const usedGuests = Array.from({ length: guestCount }, (_, i) => i + 1).filter(
+        (g) => (guestGroups[g] ?? []).length > 0,
+      );
+      const splits = usedGuests.map((g) => ({ itemIds: (guestGroups[g] ?? []).map((i) => i.id) }));
+      const newOrders = await api.post<Array<{ id: string }>>(`/hospitality/orders/${order.id}/split`, { splits });
+      setSubOrders(
+        usedGuests.map((g, idx) => ({
+          guestNum: g,
+          orderId: newOrders[idx].id,
+          items: guestGroups[g] ?? [],
+          total: guestTotal(g),
+          paid: false,
+        })),
+      );
+      setStep('checkout');
+    } catch (err) {
+      setPayError(err instanceof Error ? err.message : 'Failed to split bill');
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function handleGuestPayment(payments: Array<{ method: string; amountCents: number; reference?: string }>, subOrder: (typeof subOrders)[0]) {
+    setPayError(null);
+    try {
+      await api.post('/sales/checkout', {
+        storeId, businessId, cashierId: userId,
+        type: 'NORMAL', priceLevel: 'RETAIL',
+        orderId: subOrder.orderId,
+        items: subOrder.items.map((i) => ({ itemId: i.itemId, name: i.name, quantity: i.quantity, unitPriceCents: i.unitPriceCents })),
+        payments, serviceChargeCents: 0,
+      });
+      const updated = subOrders.map((o) => (o.orderId === subOrder.orderId ? { ...o, paid: true } : o));
+      setSubOrders(updated);
+      setPayingGuest(null);
+      if (updated.every((o) => o.paid)) {
+        await api.post(`/hospitality/orders/${order.id}/cancel`, {});
+        void qc.invalidateQueries({ queryKey: ['tables'] });
+        onAllPaid();
+      }
+    } catch (err) {
+      setPayError(err instanceof Error ? err.message : 'Payment failed');
+    }
+  }
+
+  const payingSubOrder = payingGuest !== null ? subOrders.find((o) => o.guestNum === payingGuest) : null;
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
+        <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col">
+
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-4 border-b">
+            <div className="flex items-center gap-2">
+              <Users className="w-5 h-5 text-blue-600" />
+              <div>
+                <h3 className="font-bold text-gray-800">
+                  Split Bill — {fmtTable(table.number, tablePrefix)}
+                </h3>
+                <p className="text-xs text-gray-500">
+                  {step === 'assign' ? 'Tap a guest, then tap items to assign' : `${subOrders.filter(o => o.paid).length}/${subOrders.length} paid`}
+                </p>
+              </div>
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full">
+              <X className="w-4 h-4 text-gray-500" />
+            </button>
+          </div>
+
+          {step === 'assign' && (
+            <>
+              {/* Guest count + selector */}
+              <div className="px-5 pt-4 pb-3 border-b space-y-3 bg-gray-50">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-gray-600">Guests:</span>
+                  <div className="flex items-center border rounded-lg overflow-hidden bg-white">
+                    <button
+                      onClick={() => setGuestCount((g) => Math.max(2, g - 1))}
+                      className="px-3 py-1 text-gray-600 hover:bg-gray-100 font-bold text-lg"
+                    >−</button>
+                    <span className="px-4 py-1 font-bold text-base">{guestCount}</span>
+                    <button
+                      onClick={() => setGuestCount((g) => Math.min(10, g + 1))}
+                      className="px-3 py-1 text-gray-600 hover:bg-gray-100 font-bold text-lg"
+                    >+</button>
+                  </div>
+                  <span className="text-xs text-gray-400 ml-auto">Total: {fmt(orderTotal)}</span>
+                </div>
+
+                {/* Guest buttons */}
+                <div className="flex flex-wrap gap-2">
+                  {Array.from({ length: guestCount }, (_, i) => i + 1).map((g) => {
+                    const c = GUEST_COLORS[(g - 1) % GUEST_COLORS.length];
+                    const count = (guestGroups[g] ?? []).length;
+                    const total = guestTotal(g);
+                    return (
+                      <button
+                        key={g}
+                        onClick={() => setActiveGuest(g)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold border-2 transition-all ${
+                          activeGuest === g ? c.btn : c.btnOff
+                        }`}
+                      >
+                        Guest {g}
+                        {count > 0 && (
+                          <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
+                            activeGuest === g ? 'bg-white/30 text-inherit' : c.badge
+                          }`}>
+                            {fmt(total)}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Items list */}
+              <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
+                {unassigned.length > 0 && (
+                  <p className="text-xs font-semibold text-red-500 mb-1">
+                    {unassigned.length} item{unassigned.length !== 1 ? 's' : ''} not assigned yet — tap to assign to Guest {activeGuest}
+                  </p>
+                )}
+                {order.items.map((item) => {
+                  const assignedTo = assignments[item.id] ?? 0;
+                  const isActive = assignedTo === activeGuest;
+                  const c = assignedTo > 0 ? GUEST_COLORS[(assignedTo - 1) % GUEST_COLORS.length] : null;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => toggleAssign(item.id)}
+                      className={`w-full flex items-center justify-between p-3 rounded-xl border-2 text-left transition-all ${
+                        isActive
+                          ? (GUEST_COLORS[(activeGuest - 1) % GUEST_COLORS.length].item)
+                          : assignedTo > 0
+                          ? 'border-gray-200 bg-white hover:border-gray-300'
+                          : 'border-dashed border-gray-300 bg-gray-50 hover:border-blue-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        {assignedTo > 0 && c ? (
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${c.badge}`}>
+                            G{assignedTo}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400 px-2 py-0.5 border border-dashed border-gray-300 rounded-full flex-shrink-0">
+                            ?
+                          </span>
+                        )}
+                        <span className="text-sm text-gray-800 truncate">{item.quantity}× {item.name}</span>
+                      </div>
+                      <span className="text-sm font-bold text-gray-700 flex-shrink-0 ml-2">
+                        {fmt(item.unitPriceCents * item.quantity)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Per-guest totals summary */}
+              <div className="px-5 py-3 bg-gray-50 border-t grid grid-cols-3 gap-2">
+                {Array.from({ length: guestCount }, (_, i) => i + 1).map((g) => {
+                  const c = GUEST_COLORS[(g - 1) % GUEST_COLORS.length];
+                  return (
+                    <div key={g} className="text-center">
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${c.badge}`}>Guest {g}</span>
+                      <p className="text-sm font-bold text-gray-800 mt-0.5">{fmt(guestTotal(g))}</p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {payError && (
+                <div className="mx-5 mb-2 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />{payError}
+                </div>
+              )}
+
+              <div className="p-5 border-t">
+                <button
+                  onClick={() => void handleCreateSplits()}
+                  disabled={isBusy || !allAssigned}
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors"
+                >
+                  {isBusy ? <Loader2 className="w-5 h-5 animate-spin" /> : <ArrowRight className="w-5 h-5" />}
+                  {allAssigned
+                    ? `Create ${Array.from({length: guestCount}, (_,i)=>i+1).filter(g=>(guestGroups[g]??[]).length>0).length} Separate Bills`
+                    : `Assign ${unassigned.length} remaining item${unassigned.length !== 1 ? 's' : ''} first`}
+                </button>
+              </div>
+            </>
+          )}
+
+          {step === 'checkout' && (
+            <>
+              <div className="flex-1 overflow-y-auto p-5 space-y-3">
+                {subOrders.map((sub) => {
+                  const c = GUEST_COLORS[(sub.guestNum - 1) % GUEST_COLORS.length];
+                  return (
+                    <div key={sub.guestNum} className={`border-2 rounded-xl overflow-hidden ${sub.paid ? 'border-green-300' : c.item.replace('bg-', 'border-').split(' ')[0] + ' border-opacity-60'}`}>
+                      <div className={`flex items-center justify-between px-4 py-2.5 ${sub.paid ? 'bg-green-100' : c.badge.replace('text-', 'bg-').split(' ')[0].replace('bg-', 'bg-').split('-').slice(0,-1).join('-') + '-50'} border-b`}>
+                        <span className="font-semibold text-sm text-gray-800 flex items-center gap-2">
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${c.badge}`}>Guest {sub.guestNum}</span>
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-gray-800">{fmt(sub.total)}</span>
+                          {sub.paid && (
+                            <span className="text-xs font-semibold text-green-700 bg-green-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <Check className="w-3 h-3" /> PAID
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="px-4 py-2 bg-white divide-y divide-gray-100">
+                        {sub.items.map((item) => (
+                          <div key={item.id} className="flex justify-between text-sm py-1.5">
+                            <span className="text-gray-700">{item.quantity}× {item.name}</span>
+                            <span className="text-gray-600 font-medium">{fmt(item.unitPriceCents * item.quantity)}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {!sub.paid && (
+                        <div className="px-4 py-3 border-t">
+                          <button
+                            onClick={() => setPayingGuest(sub.guestNum)}
+                            className="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg text-sm flex items-center justify-center gap-2 transition-colors"
+                          >
+                            <ArrowRight className="w-4 h-4" />
+                            Take Payment — {fmt(sub.total)}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {payError && (
+                <div className="mx-5 mb-2 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />{payError}
+                </div>
+              )}
+
+              <div className="p-5 border-t">
+                <p className="text-center text-sm text-gray-500">
+                  {subOrders.filter((o) => o.paid).length} of {subOrders.length} guests paid
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {payingSubOrder && (
+        <PaymentModal
+          totalCents={payingSubOrder.total}
+          onComplete={(payments) => void handleGuestPayment(payments, payingSubOrder)}
+          onCancel={() => { setPayingGuest(null); setPayError(null); }}
+          isProcessing={false}
+          error={payError}
+        />
+      )}
+    </>
+  );
+}
+
 // ─── Order Panel ──────────────────────────────────────────────────────────────
 
 interface OrderPanelProps {
@@ -834,7 +1284,11 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
   const [payError, setPayError] = useState<string | null>(null);
   const [showTransfer, setShowTransfer] = useState(false);
   const [showMerge, setShowMerge] = useState(false);
+  const [showSplitBill, setShowSplitBill] = useState(false);
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
+  const [coverCount, setCoverCount] = useState(1);
+  const [voidingItemId, setVoidingItemId] = useState<string | null>(null);
+  const [voidReason, setVoidReason] = useState('');
 
   const { data: printers = [] } = useQuery<Array<{ id: string; handles: string[]; connectionType: string; connectionDetails: string }>>({
     queryKey: ['printers', storeId],
@@ -842,6 +1296,15 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
     enabled: !!storeId,
     staleTime: 5 * 60_000,
   });
+
+  // Load menu items to get allergen info for order items display
+  const { data: menuItemsForAllergens = [] } = useQuery<MenuItem[]>({
+    queryKey: ['menu-items', businessId, storeId],
+    queryFn: () => api.get<MenuItem[]>(`/items?businessId=${businessId}&storeId=${storeId}&active=true`),
+    enabled: !!businessId,
+    staleTime: 5 * 60_000,
+  });
+  const allergenLookup = new Map(menuItemsForAllergens.map(i => [i.id, i.allergens ?? '[]']));
 
   const { data: order, isLoading: orderLoading, refetch: refetchOrder } = useQuery<HospOrder | null>({
     queryKey: ['hosp-order', table.id],
@@ -868,6 +1331,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
         storeId,
         tableId: table.id,
         waiterId: user?.id ?? '',
+        coverCount,
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['tables'] });
@@ -878,7 +1342,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
 
   const addItems = useMutation({
     mutationFn: (vars: { orderId: string; items: PendingItem[] }) =>
-      api.post(`/hospitality/orders/${vars.orderId}/items`, { items: vars.items }),
+      api.post<OrderItem[]>(`/hospitality/orders/${vars.orderId}/items`, { items: vars.items }),
     onSuccess: () => {
       setPendingItems([]);
       void refetchOrder();
@@ -892,9 +1356,20 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
     onSuccess: () => void refetchOrder(),
   });
 
+  const voidItemMutation = useMutation({
+    mutationFn: ({ orderId, itemId, reason }: { orderId: string; itemId: string; reason: string }) =>
+      api.patch(`/hospitality/orders/${orderId}/items/${itemId}/void`, { reason, managerId: user?.id ?? '' }),
+    onSuccess: () => {
+      setVoidingItemId(null);
+      setVoidReason('');
+      void refetchOrder();
+      void qc.invalidateQueries({ queryKey: ['hospitality-orders'] });
+    },
+  });
+
   const sendKOTMutation = useMutation({
-    mutationFn: (vars: { orderId: string; type: string }) =>
-      api.post(`/hospitality/orders/${vars.orderId}/kot`, { type: vars.type }),
+    mutationFn: (vars: { orderId: string; type: string; itemIds?: string[] }) =>
+      api.post(`/hospitality/orders/${vars.orderId}/kot`, { type: vars.type, itemIds: vars.itemIds }),
     onSuccess: () => {
       void refetchOrder();
       void qc.invalidateQueries({ queryKey: ['kds'] });
@@ -1018,10 +1493,16 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
     (t) => t.id !== table.id && t.status === 'OCCUPIED' && t.currentOrderId,
   );
 
-  function handleAddFromPicker(item: MenuItem, qty: number, note: string, modifiers: string[]) {
+  const fireCourse = useMutation({
+    mutationFn: ({ orderId, course }: { orderId: string; course: string }) =>
+      api.post(`/hospitality/orders/${orderId}/fire-course`, { course }),
+    onSuccess: () => void refetchOrder(),
+  });
+
+  function handleAddFromPicker(item: MenuItem, qty: number, note: string, modifiers: string[], course: string, seatNumber: number) {
     setPendingItems((prev) => {
       const existing = prev.find(
-        (p) => p.itemId === item.id && !p.specialInstructions && !note && modifiers.length === 0,
+        (p) => p.itemId === item.id && !p.specialInstructions && !note && modifiers.length === 0 && p.course === course && (p.seatNumber ?? 1) === seatNumber,
       );
       if (existing) {
         return prev.map((p) => p === existing ? { ...p, quantity: p.quantity + qty } : p);
@@ -1033,6 +1514,8 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
         unitPriceCents: item.retailPriceCents,
         specialInstructions: note || undefined,
         modifiers: modifiers.length > 0 ? modifiers : undefined,
+        course,
+        seatNumber,
       }];
     });
     setShowPicker(false);
@@ -1045,18 +1528,22 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
     let orderType: 'NEW_ORDER' | 'ADDITION';
     let kotItems: Array<{ name: string; quantity: number; specialInstructions?: string; modifiers?: string[] }>;
 
+    let kotItemIds: string[] | undefined;
+
     if (!activeOrder) {
       const newOrder = await createOrder.mutateAsync();
       orderId = newOrder.id;
       orderType = 'NEW_ORDER';
       kotItems = pendingItems;
       if (pendingItems.length > 0) {
-        await addItems.mutateAsync({ orderId, items: pendingItems });
+        const created = await addItems.mutateAsync({ orderId, items: pendingItems });
+        kotItemIds = created.map((i) => i.id);
       }
     } else {
       orderId = activeOrder.id;
       if (pendingItems.length > 0) {
-        await addItems.mutateAsync({ orderId, items: pendingItems });
+        const created = await addItems.mutateAsync({ orderId, items: pendingItems });
+        kotItemIds = created.map((i) => i.id);
         orderType = 'ADDITION';
         kotItems = pendingItems;
       } else {
@@ -1070,7 +1557,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
       }
     }
 
-    await sendKOTMutation.mutateAsync({ orderId, type: orderType });
+    await sendKOTMutation.mutateAsync({ orderId, type: orderType, itemIds: kotItemIds });
 
     // Auto-print KOT
     const kotData: KOTData = {
@@ -1085,7 +1572,8 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
 
   const isBusy =
     createOrder.isPending || addItems.isPending || sendKOTMutation.isPending ||
-    requestBill.isPending || checkout.isPending || transferOrder.isPending || mergeTables.isPending;
+    requestBill.isPending || checkout.isPending || transferOrder.isPending || mergeTables.isPending ||
+    fireCourse.isPending;
 
   return (
     <>
@@ -1104,7 +1592,23 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
                   table.status === 'OCCUPIED' ? 'text-red-600' :
                   table.status === 'BILL_REQUESTED' ? 'text-yellow-600' : 'text-blue-600'
                 }`}>{table.status.replace('_', ' ')}</span>
+                {activeOrder?.coverCount != null && activeOrder.coverCount > 0 && (
+                  <span className="ml-2 text-blue-600 font-medium">• {activeOrder.coverCount} covers</span>
+                )}
               </p>
+              {!activeOrder && (
+                <div className="flex items-center gap-2 mt-2">
+                  <label className="text-xs text-gray-500 whitespace-nowrap">Covers/Guests:</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="99"
+                    value={coverCount}
+                    onChange={(e) => setCoverCount(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-16 px-2 py-1 border rounded text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-1">
               {activeOrder && table.status === 'OCCUPIED' && (
@@ -1166,53 +1670,151 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
             </div>
           ) : (
             <>
-              {activeOrder?.items.map((item) => {
-                const pricedMods = parsePricedModifiers(item.modifiers);
-                return (
-                  <div key={item.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-gray-800">{item.quantity}×</span>
-                        <span className="text-sm text-gray-700 truncate">{item.name}</span>
-                        <Check className="w-3 h-3 text-green-500 flex-shrink-0" aria-label="Sent to kitchen" />
-                      </div>
-                      {item.specialInstructions && (
-                        <p className="text-xs text-amber-600 mt-0.5 ml-6">{item.specialInstructions}</p>
-                      )}
-                      {pricedMods.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1 ml-6">
-                          {pricedMods.map((m, mi) => (
-                            <span key={mi} className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">
-                              {m.name}{m.priceCents ? ` +KES ${(m.priceCents / 100).toFixed(2)}` : ''}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <span className="text-sm font-bold text-gray-800 whitespace-nowrap">
-                      {fmt(item.unitPriceCents * item.quantity)}
-                    </span>
-                    {table.status !== 'BILL_REQUESTED' && (
-                      <button
-                        onClick={() => activeOrder && removeItem.mutate({ orderId: activeOrder.id, itemId: item.id })}
-                        className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
+              {(() => {
+                // Group committed items by course
+                const courseOrder = ['STARTER', 'MAIN', 'DESSERT'];
+                const items = activeOrder?.items ?? [];
+                const grouped = courseOrder.reduce<Record<string, typeof items>>((acc, c) => {
+                  const courseItems = items.filter(i => (i.course ?? 'MAIN') === c);
+                  if (courseItems.length > 0) acc[c] = courseItems;
+                  return acc;
+                }, {});
+                const courseLabelMap: Record<string, string> = { STARTER: 'Starter', MAIN: 'Main', DESSERT: 'Dessert' };
+                const courseBadgeMap: Record<string, string> = {
+                  STARTER: 'bg-blue-100 text-blue-700',
+                  MAIN: 'bg-green-100 text-green-700',
+                  DESSERT: 'bg-purple-100 text-purple-700',
+                };
 
+                return Object.entries(grouped).map(([course, courseItems]) => {
+                  const allFired = courseItems.every(i => i.firedAt);
+                  const anyUnfired = courseItems.some(i => !i.firedAt);
+                  return (
+                    <div key={course} className="mb-3">
+                      {/* Course group header */}
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${courseBadgeMap[course]}`}>
+                          {courseLabelMap[course]}
+                        </span>
+                        {activeOrder && anyUnfired && table.status === 'OCCUPIED' && (
+                          <button
+                            onClick={() => fireCourse.mutate({ orderId: activeOrder.id, course })}
+                            disabled={fireCourse.isPending}
+                            className="flex items-center gap-1 px-2.5 py-1 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold rounded-lg disabled:opacity-50 transition-colors"
+                          >
+                            <Send className="w-3 h-3" /> Fire {courseLabelMap[course]}
+                          </button>
+                        )}
+                        {allFired && (
+                          <span className="text-xs font-semibold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200">
+                            FIRED
+                          </span>
+                        )}
+                      </div>
+                      {courseItems.map((item) => {
+                        const pricedMods = parsePricedModifiers(item.modifiers);
+                        const itemAllergens: string[] = (() => { try { return JSON.parse(allergenLookup.get(item.itemId) ?? '[]') as string[]; } catch { return []; } })();
+                        return (
+                          <div key={item.id} className={`flex items-start gap-3 p-3 rounded-xl mb-1 ${item.firedAt ? 'bg-orange-50 border border-orange-200' : 'bg-gray-50'}`}>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm font-semibold text-gray-800">{item.quantity}×</span>
+                                <span className="text-sm text-gray-700 truncate">{item.name}</span>
+                                <Check className="w-3 h-3 text-green-500 flex-shrink-0" aria-label="Sent to kitchen" />
+                                {item.seatNumber != null && item.seatNumber > 0 && (
+                                  <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">
+                                    G{item.seatNumber}
+                                  </span>
+                                )}
+                                {item.firedAt && (
+                                  <span className="text-[10px] font-bold bg-orange-200 text-orange-800 px-1.5 py-0.5 rounded-full">FIRED</span>
+                                )}
+                              </div>
+                              {item.specialInstructions && (
+                                <p className="text-xs text-amber-600 mt-0.5 ml-6">{item.specialInstructions}</p>
+                              )}
+                              {pricedMods.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1 ml-6">
+                                  {pricedMods.map((m, mi) => (
+                                    <span key={mi} className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">
+                                      {m.name}{m.priceCents ? ` +KES ${(m.priceCents / 100).toFixed(2)}` : ''}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              {itemAllergens.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1 ml-6">
+                                  {itemAllergens.map((a) => (
+                                    <span key={a} className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+                                      a === 'NUTS' ? 'bg-red-100 text-red-700' :
+                                      a === 'DAIRY' ? 'bg-orange-100 text-orange-700' :
+                                      a === 'GLUTEN' ? 'bg-yellow-100 text-yellow-700' :
+                                      a === 'SHELLFISH' ? 'bg-blue-100 text-blue-700' :
+                                      'bg-pink-100 text-pink-700'
+                                    }`}>{a}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            <span className="text-sm font-bold text-gray-800 whitespace-nowrap">
+                              {fmt(item.unitPriceCents * item.quantity)}
+                            </span>
+                            {table.status !== 'BILL_REQUESTED' && (
+                              <button
+                                onClick={() => activeOrder && removeItem.mutate({ orderId: activeOrder.id, itemId: item.id })}
+                                className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                            {(user?.role === 'MANAGER' || user?.role === 'OWNER') && (
+                              <button
+                                onClick={() => setVoidingItemId(item.id)}
+                                className="p-1 rounded text-red-400 hover:text-red-600 hover:bg-red-50"
+                                title="Void this item (with reason)"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                });
+              })()}
+
+              {pendingItems.length > 0 && (
+                <div className="flex items-center gap-2 mt-2 mb-1">
+                  <span className="text-xs font-bold text-orange-600 uppercase tracking-wide">
+                    Not yet sent to kitchen ({pendingItems.length})
+                  </span>
+                  <div className="flex-1 h-px bg-orange-200" />
+                </div>
+              )}
               {pendingItems.map((item, idx) => {
                 const pendingMods = parsePricedModifiers(item.modifiers);
+                const courseBadgeMap: Record<string, string> = {
+                  STARTER: 'bg-blue-100 text-blue-700',
+                  MAIN: 'bg-green-100 text-green-700',
+                  DESSERT: 'bg-purple-100 text-purple-700',
+                };
+                const itemCourse = item.course ?? 'MAIN';
                 return (
                 <div key={idx} className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-semibold text-amber-700">{item.quantity}×</span>
                       <span className="text-sm text-amber-800 truncate">{item.name}</span>
                       <span className="text-xs bg-amber-200 text-amber-700 px-1.5 py-0.5 rounded">pending</span>
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${courseBadgeMap[itemCourse]}`}>
+                        {itemCourse.charAt(0) + itemCourse.slice(1).toLowerCase()}
+                      </span>
+                      {item.seatNumber != null && item.seatNumber > 0 && (
+                        <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">
+                          G{item.seatNumber}
+                        </span>
+                      )}
                     </div>
                     {item.specialInstructions && (
                       <p className="text-xs text-amber-600 mt-0.5 ml-6">{item.specialInstructions}</p>
@@ -1264,10 +1866,16 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
             <button
               onClick={() => void handleSendKOT()}
               disabled={isBusy}
-              className="w-full py-3 bg-orange-500 hover:bg-orange-600 disabled:opacity-40 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors"
+              className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-40 ${
+                hasPendingItems
+                  ? 'bg-orange-500 hover:bg-orange-600 text-white ring-2 ring-orange-300 ring-offset-1'
+                  : 'bg-orange-400 hover:bg-orange-500 text-white'
+              }`}
             >
               {isBusy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-              {hasPendingItems ? `Send KOT (${pendingItems.length} items)` : 'Re-send KOT'}
+              {hasPendingItems
+                ? `Send ${pendingItems.length} New Item${pendingItems.length !== 1 ? 's' : ''} to Kitchen`
+                : 'Re-send All to Kitchen'}
             </button>
           )}
 
@@ -1305,6 +1913,17 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
             >
               <Receipt className="w-4 h-4" />
               Print Bill
+            </button>
+          )}
+
+          {activeOrder && (table.status === 'OCCUPIED' || table.status === 'BILL_REQUESTED') && activeOrder.items.length > 0 && (
+            <button
+              onClick={() => setShowSplitBill(true)}
+              disabled={isBusy}
+              className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors"
+            >
+              <Users className="w-5 h-5" />
+              Split Bill by Guest
             </button>
           )}
 
@@ -1469,8 +2088,28 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
         <ItemPicker
           businessId={businessId}
           storeId={storeId}
+          coverCount={activeOrder?.coverCount ?? coverCount}
           onAdd={handleAddFromPicker}
           onClose={() => setShowPicker(false)}
+        />
+      )}
+
+      {showSplitBill && activeOrder && (
+        <SplitBillModal
+          order={activeOrder}
+          table={table}
+          tablePrefix={tablePrefix}
+          businessId={businessId}
+          storeId={storeId}
+          userId={user?.id ?? ''}
+          bizSettings={bizSettings}
+          onClose={() => setShowSplitBill(false)}
+          onAllPaid={() => {
+            setShowSplitBill(false);
+            void qc.invalidateQueries({ queryKey: ['tables'] });
+            onRefresh();
+            onClose();
+          }}
         />
       )}
 
@@ -1482,6 +2121,42 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
           isProcessing={checkout.isPending}
           error={payError}
         />
+      )}
+
+      {/* ── Void Item Modal ───────────────────────────────────────────────── */}
+      {voidingItemId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-2xl">
+            <h3 className="text-base font-bold mb-1">Void Item</h3>
+            <p className="text-sm text-gray-500 mb-3">Enter reason for voiding this item:</p>
+            <textarea
+              value={voidReason}
+              onChange={e => setVoidReason(e.target.value)}
+              className="w-full border rounded-lg p-2.5 text-sm resize-none focus:ring-2 focus:ring-red-400 focus:border-transparent"
+              rows={2}
+              placeholder="e.g. Customer changed mind, Wrong item..."
+              autoFocus
+            />
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => { setVoidingItemId(null); setVoidReason(''); }}
+                className="flex-1 py-2 border rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (!voidReason.trim() || !activeOrder) return;
+                  voidItemMutation.mutate({ orderId: activeOrder.id, itemId: voidingItemId, reason: voidReason });
+                }}
+                disabled={!voidReason.trim() || voidItemMutation.isPending || !activeOrder}
+                className="flex-1 py-2 bg-red-600 text-white rounded-lg text-sm font-medium disabled:opacity-40 hover:bg-red-700"
+              >
+                {voidItemMutation.isPending ? 'Voiding...' : 'Void Item'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
@@ -1651,6 +2326,15 @@ export default function HospitalityPage() {
   const [showAddRoomModal, setShowAddRoomModal] = useState(false);
   const [showBookingModal, setShowBookingModal] = useState<HotelRoom | null>(null);
   const [showBookingsListModal, setShowBookingsListModal] = useState(false);
+  const [showFolioModal, setShowFolioModal] = useState<string | null>(null); // bookingId
+  const [showCheckoutInvoice, setShowCheckoutInvoice] = useState<GuestFolio | null>(null);
+  const [showHousekeepingModal, setShowHousekeepingModal] = useState(false);
+  const [roomDetailTab, setRoomDetailTab] = useState<'info' | 'folio'>('info');
+  const [folioAddForm, setFolioAddForm] = useState({ type: 'OTHER', description: '', amountCents: 0, quantity: 1 });
+  const [showHappyHourModal, setShowHappyHourModal] = useState(false);
+  const [happyHourForm, setHappyHourForm] = useState({ name: '', discountPct: 10, startHour: 17, startMinute: 0, endHour: 19, endMinute: 0, appliesTo: 'ALL' });
+  const [roomsSubTab, setRoomsSubTab] = useState<'rooms' | 'analytics'>('rooms');
+  const [revPASHDate, setRevPASHDate] = useState(new Date().toISOString().split('T')[0]);
 
   const businessId = user?.businessId ?? '';
   const storeId = user?.storeId ?? '';
@@ -1714,6 +2398,87 @@ export default function HospitalityPage() {
     enabled: !!businessId && showBookingsListModal,
   });
 
+  const { data: hotelDashboard } = useQuery<HotelDashboard>({
+    queryKey: ['hotel-dashboard', businessId, storeId],
+    queryFn: () => api.get(`/hospitality/hotel-dashboard?businessId=${businessId}&storeId=${storeId}`),
+    enabled: !!businessId && view === 'rooms',
+    refetchInterval: 30000,
+  });
+
+  const { data: currentFolio, refetch: refetchFolio } = useQuery<GuestFolio>({
+    queryKey: ['guest-folio', showFolioModal],
+    queryFn: () => api.get(`/hospitality/room-bookings/${showFolioModal}/folio`),
+    enabled: !!showFolioModal,
+  });
+
+  interface RevPASHData {
+    date: string;
+    totalRevenueCents: number;
+    totalSeats: number;
+    openHours: number;
+    availableSeatHours: number;
+    revPASHCents: number;
+    revPASH: number;
+    saleCount: number;
+    avgCheckCents: number;
+    tableCount: number;
+  }
+
+  const { data: revPASHData, isLoading: revPASHLoading, refetch: refetchRevPASH } = useQuery<RevPASHData>({
+    queryKey: ['revpash', businessId, storeId, revPASHDate],
+    queryFn: () => api.get<RevPASHData>(`/hospitality/revpash?businessId=${businessId}&storeId=${storeId}&date=${revPASHDate}`),
+    enabled: !!businessId && view === 'rooms' && roomsSubTab === 'analytics',
+  });
+
+  // ── Happy Hours ──────────────────────────────────────────────────────────────
+
+  interface HappyHour {
+    id: string;
+    name: string;
+    discountPct: number;
+    startHour: number;
+    startMinute: number;
+    endHour: number;
+    endMinute: number;
+    appliesTo: string;
+  }
+
+  const { data: happyHours = [], refetch: refetchHappyHours } = useQuery<HappyHour[]>({
+    queryKey: ['happy-hours', businessId],
+    queryFn: () => api.get<HappyHour[]>(`/hospitality/happy-hours?businessId=${businessId}`),
+    enabled: !!businessId,
+  });
+
+  const { data: activeDiscount } = useQuery<{ discountPct: number }>({
+    queryKey: ['active-discount', businessId],
+    queryFn: () => api.get<{ discountPct: number }>(`/hospitality/happy-hours/active-discount?businessId=${businessId}`),
+    enabled: !!businessId,
+    refetchInterval: 60_000,
+  });
+
+  const createHappyHourMutation = useMutation({
+    mutationFn: (data: typeof happyHourForm) => api.post('/hospitality/happy-hours', { ...data, businessId, storeId }),
+    onSuccess: () => {
+      void refetchHappyHours();
+      setHappyHourForm({ name: '', discountPct: 10, startHour: 17, startMinute: 0, endHour: 19, endMinute: 0, appliesTo: 'ALL' });
+    },
+  });
+
+  const deleteHappyHourMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/hospitality/happy-hours/${id}`),
+    onSuccess: () => void refetchHappyHours(),
+  });
+
+  const { data: housekeepingQueue = [], refetch: refetchHousekeeping } = useQuery<Array<{
+    id: string; number: string; floor?: string; type: string;
+    status: string; housekeepingStatus: string;
+    lastGuest: { guestName: string; actualCheckOut?: string; status: string } | null;
+  }>>({
+    queryKey: ['housekeeping', businessId, storeId],
+    queryFn: () => api.get(`/hospitality/housekeeping?businessId=${businessId}&storeId=${storeId}`),
+    enabled: !!businessId && showHousekeepingModal,
+  });
+
   const [addRoomForm, setAddRoomForm] = useState({
     number: '', type: 'STANDARD', floor: '', capacity: 2, pricePerNightCents: 0, notes: '',
   });
@@ -1770,14 +2535,45 @@ export default function HospitalityPage() {
     onSuccess: () => { void refetchRooms(); setSelectedRoom(null); },
   });
 
-  const checkOutMutation = useMutation({
-    mutationFn: (bookingId: string) => api.post(`/hospitality/room-bookings/${bookingId}/check-out`, { payments: [] }),
-    onSuccess: () => { void refetchRooms(); setSelectedRoom(null); },
-  });
-
   const cancelBookingMutation = useMutation({
     mutationFn: (bookingId: string) => api.post(`/hospitality/room-bookings/${bookingId}/cancel`, {}),
     onSuccess: () => { void refetchRooms(); setSelectedRoom(null); },
+  });
+
+  const checkOutWithFolioMutation = useMutation({
+    mutationFn: async (bookingId: string) => {
+      const result = await api.post<GuestFolio>(`/hospitality/room-bookings/${bookingId}/check-out`, { payments: [] });
+      return result;
+    },
+    onSuccess: (data) => {
+      void refetchRooms();
+      setSelectedRoom(null);
+      setShowFolioModal(null);
+      setShowCheckoutInvoice(data);
+    },
+  });
+
+  const addFolioChargeMutation = useMutation({
+    mutationFn: ({ bookingId, charge }: { bookingId: string; charge: typeof folioAddForm }) =>
+      api.post(`/hospitality/room-bookings/${bookingId}/folio`, {
+        ...charge,
+        amountCents: Math.round(charge.amountCents * 100),
+      }),
+    onSuccess: () => {
+      void refetchFolio();
+      setFolioAddForm({ type: 'OTHER', description: '', amountCents: 0, quantity: 1 });
+    },
+  });
+
+  const removeFolioChargeMutation = useMutation({
+    mutationFn: (chargeId: string) => api.delete(`/hospitality/folio-charges/${chargeId}`),
+    onSuccess: () => void refetchFolio(),
+  });
+
+  const updateHousekeepingMutation = useMutation({
+    mutationFn: ({ roomId, status }: { roomId: string; status: string }) =>
+      api.patch(`/hospitality/hotel-rooms/${roomId}/housekeeping`, { status }),
+    onSuccess: () => { void refetchRooms(); void refetchHousekeeping(); },
   });
 
   const ROOM_STATUS_COLORS: Record<string, string> = {
@@ -1905,6 +2701,14 @@ export default function HospitalityPage() {
               Fast Food
             </button>
             <button
+              onClick={() => setShowHappyHourModal(true)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg font-medium text-sm transition-colors"
+              title="Happy Hours"
+            >
+              <Sparkles className="w-4 h-4" />
+              Happy Hours
+            </button>
+            <button
               onClick={() => setShowKDS(true)}
               className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors"
             >
@@ -1949,6 +2753,14 @@ export default function HospitalityPage() {
           </div>
         )}
       </div>
+
+      {/* Happy Hour Active Banner */}
+      {activeDiscount && activeDiscount.discountPct > 0 && (
+        <div className="mx-6 mt-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 flex items-center gap-2 text-amber-800 text-sm font-medium">
+          <Sparkles className="w-4 h-4 text-amber-500 flex-shrink-0" />
+          <span>Happy Hour active! {activeDiscount.discountPct}% discount on applicable items</span>
+        </div>
+      )}
 
       {/* Table Grid */}
       {view === 'tables' && <div className="flex-1 overflow-y-auto p-6">
@@ -2034,6 +2846,12 @@ export default function HospitalityPage() {
                               <div className="mt-1 flex items-center justify-center gap-1">
                                 <Clock className="w-3 h-3 opacity-60" />
                                 <span className="text-xs opacity-60">Active</span>
+                              </div>
+                            )}
+                            {table.status !== 'AVAILABLE' && table.coverCount != null && table.coverCount > 0 && (
+                              <div className="mt-1 flex items-center justify-center gap-1">
+                                <Users className="w-3 h-3 opacity-70" />
+                                <span className="text-xs opacity-70">{table.coverCount} covers</span>
                               </div>
                             )}
                             {table.hasReadyKOT && (
@@ -2214,9 +3032,158 @@ export default function HospitalityPage() {
       {/* ── Hotel Rooms View ──────────────────────────────────────────────────── */}
       {view === 'rooms' && (
         <div className="flex-1 overflow-y-auto p-6">
+          {/* Sub-tabs: Rooms | Analytics */}
+          <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-5">
+            <button
+              onClick={() => setRoomsSubTab('rooms')}
+              className={`px-4 py-1.5 text-sm rounded-md font-medium transition-colors ${roomsSubTab === 'rooms' ? 'bg-white shadow text-teal-700' : 'text-gray-600 hover:text-gray-800'}`}
+            >
+              Rooms
+            </button>
+            <button
+              onClick={() => setRoomsSubTab('analytics')}
+              className={`px-4 py-1.5 text-sm rounded-md font-medium transition-colors ${roomsSubTab === 'analytics' ? 'bg-white shadow text-indigo-700' : 'text-gray-600 hover:text-gray-800'}`}
+            >
+              Hotel Analytics
+            </button>
+          </div>
+
+          {/* RevPASH Analytics panel */}
+          {roomsSubTab === 'analytics' && (
+            <div className="space-y-5">
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium text-gray-700">Date:</label>
+                <input
+                  type="date"
+                  value={revPASHDate}
+                  onChange={(e) => setRevPASHDate(e.target.value)}
+                  className="px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                />
+                <button
+                  onClick={() => void refetchRevPASH()}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium transition-colors"
+                >
+                  Refresh
+                </button>
+              </div>
+              {revPASHLoading ? (
+                <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 text-indigo-500 animate-spin" /></div>
+              ) : revPASHData ? (
+                <div className="space-y-4">
+                  {/* Main RevPASH card */}
+                  <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl p-6 text-white shadow-lg">
+                    <div className="text-sm font-medium opacity-80 mb-1">RevPASH — Revenue per Available Seat-Hour</div>
+                    <div className="text-5xl font-black tracking-tight">
+                      KES {revPASHData.revPASH.toFixed(2)}
+                    </div>
+                    <div className="text-sm opacity-70 mt-2">
+                      {revPASHDate} • {revPASHData.openHours}h operating • {revPASHData.totalSeats} seats
+                    </div>
+                  </div>
+                  {/* Metric cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    <div className="bg-white rounded-xl border p-4 text-center">
+                      <div className="text-2xl font-bold text-green-600">
+                        KES {(revPASHData.totalRevenueCents / 100).toLocaleString('en-KE', { minimumFractionDigits: 0 })}
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">Revenue Today</div>
+                    </div>
+                    <div className="bg-white rounded-xl border p-4 text-center">
+                      <div className="text-2xl font-bold text-blue-600">{revPASHData.saleCount}</div>
+                      <div className="text-xs text-gray-400 mt-1">Table Orders</div>
+                    </div>
+                    <div className="bg-white rounded-xl border p-4 text-center">
+                      <div className="text-2xl font-bold text-purple-600">
+                        KES {(revPASHData.avgCheckCents / 100).toLocaleString('en-KE', { minimumFractionDigits: 0 })}
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">Avg Check Size</div>
+                    </div>
+                    <div className="bg-white rounded-xl border p-4 text-center">
+                      <div className="text-2xl font-bold text-teal-600">{revPASHData.tableCount}</div>
+                      <div className="text-xs text-gray-400 mt-1">Tables</div>
+                    </div>
+                    <div className="bg-white rounded-xl border p-4 text-center">
+                      <div className="text-2xl font-bold text-amber-600">{revPASHData.totalSeats}</div>
+                      <div className="text-xs text-gray-400 mt-1">Total Seats</div>
+                    </div>
+                    <div className="bg-white rounded-xl border p-4 text-center">
+                      <div className="text-2xl font-bold text-gray-700">{revPASHData.availableSeatHours ?? revPASHData.totalSeats * revPASHData.openHours}</div>
+                      <div className="text-xs text-gray-400 mt-1">Seat-Hours Available</div>
+                    </div>
+                  </div>
+                  {/* Hotel occupancy from dashboard */}
+                  {hotelDashboard && (
+                    <div className="bg-white rounded-xl border p-4">
+                      <h3 className="font-semibold text-gray-800 mb-3 text-sm">Hotel Occupancy</h3>
+                      <div className="flex items-center gap-4">
+                        <div className="text-4xl font-black text-teal-600">{hotelDashboard.occupancyPct}%</div>
+                        <div className="flex-1">
+                          <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-teal-500 rounded-full transition-all"
+                              style={{ width: `${hotelDashboard.occupancyPct}%` }}
+                            />
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {hotelDashboard.occupied} of {hotelDashboard.total} rooms occupied
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-16 text-gray-400">
+                  <p>No data for this date. Select a date and click Refresh.</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {roomsSubTab === 'rooms' && <>
+          {/* Dashboard Stats */}
+          {hotelDashboard && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mb-5">
+              <div className="bg-white rounded-xl border p-3 text-center">
+                <div className="text-2xl font-bold text-blue-600">{hotelDashboard.occupancyPct}%</div>
+                <div className="text-xs text-gray-400 mt-0.5">Occupancy</div>
+              </div>
+              <div className="bg-white rounded-xl border p-3 text-center">
+                <div className="text-2xl font-bold text-green-600">{hotelDashboard.available}</div>
+                <div className="text-xs text-gray-400 mt-0.5">Available</div>
+              </div>
+              <div className="bg-white rounded-xl border p-3 text-center">
+                <div className="text-2xl font-bold text-blue-600">{hotelDashboard.occupied}</div>
+                <div className="text-xs text-gray-400 mt-0.5">Occupied</div>
+              </div>
+              <div className="bg-white rounded-xl border p-3 text-center">
+                <div className="text-2xl font-bold text-yellow-500">{hotelDashboard.reserved}</div>
+                <div className="text-xs text-gray-400 mt-0.5">Reserved</div>
+              </div>
+              <div className="bg-white rounded-xl border p-3 text-center">
+                <div className="text-2xl font-bold text-teal-600">{hotelDashboard.todayArrivals}</div>
+                <div className="text-xs text-gray-400 mt-0.5">Arrivals Today</div>
+              </div>
+              <div className="bg-white rounded-xl border p-3 text-center">
+                <div className="text-2xl font-bold text-purple-600">{hotelDashboard.todayDepartures}</div>
+                <div className="text-xs text-gray-400 mt-0.5">Departures</div>
+              </div>
+              <div className="bg-white rounded-xl border p-3 text-center">
+                <div className={`text-2xl font-bold ${hotelDashboard.dirtyRooms > 0 ? 'text-red-500' : 'text-gray-400'}`}>{hotelDashboard.dirtyRooms}</div>
+                <div className="text-xs text-gray-400 mt-0.5">Dirty Rooms</div>
+              </div>
+              <div className="bg-white rounded-xl border p-3 text-center">
+                <div className="text-2xl font-bold text-emerald-600">
+                  {(hotelDashboard.monthlyRevenueCents / 100).toLocaleString('en-KE', { maximumFractionDigits: 0 })}
+                </div>
+                <div className="text-xs text-gray-400 mt-0.5">Rev. This Month (KES)</div>
+              </div>
+            </div>
+          )}
+
           {/* Toolbar */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex gap-2">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <div className="flex gap-2 flex-wrap">
               <button
                 onClick={() => setShowAddRoomModal(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 text-sm font-medium"
@@ -2228,6 +3195,15 @@ export default function HospitalityPage() {
                 className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium"
               >
                 <CalendarDays className="w-4 h-4" /> All Bookings
+              </button>
+              <button
+                onClick={() => setShowHousekeepingModal(true)}
+                className="flex items-center gap-2 px-4 py-2 border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-50 text-sm font-medium"
+              >
+                <Sparkles className="w-4 h-4" /> Housekeeping
+                {(hotelDashboard?.dirtyRooms ?? 0) > 0 && (
+                  <span className="bg-amber-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">{hotelDashboard!.dirtyRooms}</span>
+                )}
               </button>
             </div>
             <button onClick={() => void refetchRooms()} className="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100">
@@ -2242,135 +3218,303 @@ export default function HospitalityPage() {
               <p className="text-sm mt-1">Click "Add Room" to set up your hotel rooms</p>
             </div>
           ) : (
-            (() => {
-              // Group by floor
-              const byFloor: Record<string, HotelRoom[]> = {};
-              hotelRooms.forEach(r => {
-                const floor = r.floor || 'Ground Floor';
-                if (!byFloor[floor]) byFloor[floor] = [];
-                byFloor[floor].push(r);
-              });
-              return Object.entries(byFloor).map(([floor, rooms]) => (
-                <div key={floor} className="mb-6">
-                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                    <KeyRound className="w-3.5 h-3.5" /> {floor}
-                  </h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-                    {rooms.map(room => {
-                      const booking = room.bookings[0];
-                      return (
-                        <button
-                          key={room.id}
-                          onClick={() => setSelectedRoom(room)}
-                          className={`relative p-4 rounded-xl border-2 text-left transition-all hover:shadow-md ${ROOM_STATUS_COLORS[room.status] ?? 'border-gray-200 bg-gray-50'}`}
-                        >
-                          <div className="flex items-start justify-between mb-2">
-                            <span className="text-xl font-bold text-gray-800 dark:text-white">{room.number}</span>
-                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                              room.status === 'AVAILABLE' ? 'bg-green-100 text-green-700' :
-                              room.status === 'OCCUPIED' ? 'bg-blue-100 text-blue-700' :
-                              room.status === 'RESERVED' ? 'bg-yellow-100 text-yellow-700' :
-                              'bg-red-100 text-red-700'
-                            }`}>{room.status}</span>
-                          </div>
-                          <p className="text-xs text-gray-500">{room.type}</p>
-                          <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-                            <Users className="w-3 h-3" /> {room.capacity} guests
-                          </p>
-                          <p className="text-xs font-semibold text-teal-700 mt-1">
-                            KES {(room.pricePerNightCents / 100).toLocaleString('en-KE', { maximumFractionDigits: 0 })}/night
-                          </p>
-                          {booking && (
-                            <p className="text-xs text-blue-600 mt-1 font-medium truncate">{booking.guestName}</p>
-                          )}
-                        </button>
-                      );
-                    })}
+            <>
+              {(() => {
+                // Group by floor
+                const byFloor: Record<string, HotelRoom[]> = {};
+                hotelRooms.forEach(r => {
+                  const floor = r.floor || 'Ground Floor';
+                  if (!byFloor[floor]) byFloor[floor] = [];
+                  byFloor[floor].push(r);
+                });
+                return Object.entries(byFloor).map(([floor, rooms]) => (
+                  <div key={floor} className="mb-6">
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                      <KeyRound className="w-3.5 h-3.5" /> {floor}
+                    </h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                      {rooms.map(room => {
+                        const booking = room.bookings[0];
+                        return (
+                          <button
+                            key={room.id}
+                            onClick={() => { setSelectedRoom(room); setRoomDetailTab('info'); }}
+                            className={`relative p-4 rounded-xl border-2 text-left transition-all hover:shadow-md ${ROOM_STATUS_COLORS[room.status] ?? 'border-gray-200 bg-gray-50'}`}
+                          >
+                            <div className="flex items-start justify-between mb-2">
+                              <span className="text-xl font-bold text-gray-800 dark:text-white">{room.number}</span>
+                              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                room.status === 'AVAILABLE' ? 'bg-green-100 text-green-700' :
+                                room.status === 'OCCUPIED' ? 'bg-blue-100 text-blue-700' :
+                                room.status === 'RESERVED' ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-red-100 text-red-700'
+                              }`}>{room.status}</span>
+                            </div>
+                            <p className="text-xs text-gray-500">{room.type}</p>
+                            <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                              <Users className="w-3 h-3" /> {room.capacity} guests
+                            </p>
+                            <p className="text-xs font-semibold text-teal-700 mt-1">
+                              KES {(room.pricePerNightCents / 100).toLocaleString('en-KE', { maximumFractionDigits: 0 })}/night
+                            </p>
+                            {booking && (
+                              <p className="text-xs text-blue-600 mt-1 font-medium truncate">{booking.guestName}</p>
+                            )}
+                            {/* Housekeeping badge */}
+                            {room.housekeepingStatus === 'DIRTY' && (
+                              <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-orange-400" title="Needs cleaning" />
+                            )}
+                            {room.housekeepingStatus === 'INSPECTED' && (
+                              <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-green-400" title="Inspected & ready" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ));
-            })()
+                ));
+                })()}
+            </>
           )}
+          </>}
         </div>
       )}
 
       {/* ── Room Detail Panel ─────────────────────────────────────────────────── */}
       {selectedRoom && (
         <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] flex flex-col">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-lg shadow-2xl max-h-[92vh] flex flex-col">
+            {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
               <div>
                 <h2 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
                   <BedDouble className="w-5 h-5 text-teal-600" />
                   Room {selectedRoom.number}
                 </h2>
-                <p className="text-sm text-gray-500">{selectedRoom.type} · Capacity: {selectedRoom.capacity}</p>
+                <p className="text-sm text-gray-500">{selectedRoom.type} · Capacity: {selectedRoom.capacity} · Floor: {selectedRoom.floor ?? 'Ground'}</p>
               </div>
               <button onClick={() => setSelectedRoom(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              {/* Status badge */}
-              <div className="flex items-center justify-between">
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold ${
-                  selectedRoom.status === 'AVAILABLE' ? 'bg-green-100 text-green-700' :
-                  selectedRoom.status === 'OCCUPIED'  ? 'bg-blue-100 text-blue-700' :
-                  selectedRoom.status === 'RESERVED'  ? 'bg-yellow-100 text-yellow-700' :
-                  'bg-red-100 text-red-700'
-                }`}>
-                  <BedDouble className="w-4 h-4" /> {selectedRoom.status}
-                </span>
-                <span className="text-lg font-bold text-teal-700">
-                  KES {(selectedRoom.pricePerNightCents / 100).toLocaleString('en-KE', { maximumFractionDigits: 0 })}/night
-                </span>
-              </div>
 
-              {/* Active booking info */}
-              {selectedRoom.bookings[0] && (
-                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200">
-                  <p className="text-xs font-semibold text-blue-500 uppercase tracking-wide mb-2">Current Guest</p>
-                  <p className="font-bold text-gray-800 dark:text-white text-lg">{selectedRoom.bookings[0].guestName}</p>
-                  {selectedRoom.bookings[0].guestPhone && (
-                    <p className="text-sm text-gray-500 flex items-center gap-1 mt-0.5">
-                      <Phone className="w-3.5 h-3.5" /> {selectedRoom.bookings[0].guestPhone}
-                    </p>
+            {/* Tabs — only show when occupied */}
+            {selectedRoom.status === 'OCCUPIED' && selectedRoom.bookings[0] && (
+              <div className="flex border-b dark:border-gray-700 px-6">
+                {(['info', 'folio'] as const).map(tab => (
+                  <button
+                    key={tab}
+                    onClick={() => {
+                      setRoomDetailTab(tab);
+                      if (tab === 'folio') setShowFolioModal(selectedRoom.bookings[0].id);
+                    }}
+                    className={`py-2.5 px-4 text-sm font-medium border-b-2 -mb-px capitalize ${roomDetailTab === tab ? 'border-teal-500 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                  >
+                    {tab === 'folio' ? <span className="flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> Guest Folio</span> : 'Room Info'}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {/* INFO TAB */}
+              {roomDetailTab === 'info' && (
+                <>
+                  {/* Status + Housekeeping row */}
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold ${
+                      selectedRoom.status === 'AVAILABLE' ? 'bg-green-100 text-green-700' :
+                      selectedRoom.status === 'OCCUPIED'  ? 'bg-blue-100 text-blue-700' :
+                      selectedRoom.status === 'RESERVED'  ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      <BedDouble className="w-4 h-4" /> {selectedRoom.status}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                        selectedRoom.housekeepingStatus === 'CLEAN' ? 'bg-green-50 text-green-600 border border-green-200' :
+                        selectedRoom.housekeepingStatus === 'DIRTY' ? 'bg-orange-50 text-orange-600 border border-orange-200' :
+                        selectedRoom.housekeepingStatus === 'INSPECTED' ? 'bg-blue-50 text-blue-600 border border-blue-200' :
+                        'bg-red-50 text-red-600 border border-red-200'
+                      }`}>
+                        <Sparkles className="w-3 h-3 inline mr-1" />
+                        {selectedRoom.housekeepingStatus}
+                      </span>
+                      <span className="text-lg font-bold text-teal-700">
+                        KES {(selectedRoom.pricePerNightCents / 100).toLocaleString('en-KE', { maximumFractionDigits: 0 })}/night
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Housekeeping quick update */}
+                  <div className="flex gap-1.5 flex-wrap">
+                    {(['CLEAN', 'DIRTY', 'INSPECTED', 'OUT_OF_ORDER'] as const).map(hs => (
+                      <button
+                        key={hs}
+                        onClick={() => updateHousekeepingMutation.mutate({ roomId: selectedRoom.id, status: hs })}
+                        disabled={selectedRoom.housekeepingStatus === hs}
+                        className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-colors disabled:opacity-40 ${
+                          hs === 'CLEAN' ? 'border-green-200 text-green-700 hover:bg-green-50' :
+                          hs === 'DIRTY' ? 'border-orange-200 text-orange-700 hover:bg-orange-50' :
+                          hs === 'INSPECTED' ? 'border-blue-200 text-blue-700 hover:bg-blue-50' :
+                          'border-red-200 text-red-700 hover:bg-red-50'
+                        }`}
+                      >{hs}</button>
+                    ))}
+                  </div>
+
+                  {/* Active booking info */}
+                  {selectedRoom.bookings[0] && (
+                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200">
+                      <p className="text-xs font-semibold text-blue-500 uppercase tracking-wide mb-2">Current Guest</p>
+                      <p className="font-bold text-gray-800 dark:text-white text-lg">{selectedRoom.bookings[0].guestName}</p>
+                      {selectedRoom.bookings[0].guestPhone && (
+                        <p className="text-sm text-gray-500 flex items-center gap-1 mt-0.5">
+                          <Phone className="w-3.5 h-3.5" /> {selectedRoom.bookings[0].guestPhone}
+                        </p>
+                      )}
+                      <div className="grid grid-cols-2 gap-3 mt-3 text-sm">
+                        <div>
+                          <p className="text-gray-400 text-xs">Check-in</p>
+                          <p className="font-medium text-gray-700 dark:text-gray-300">
+                            {selectedRoom.bookings[0].actualCheckIn
+                              ? new Date(selectedRoom.bookings[0].actualCheckIn).toLocaleDateString('en-KE')
+                              : '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-400 text-xs">Check-out (planned)</p>
+                          <p className="font-medium text-gray-700 dark:text-gray-300">
+                            {selectedRoom.bookings[0].checkOutDate
+                              ? new Date(selectedRoom.bookings[0].checkOutDate).toLocaleDateString('en-KE')
+                              : '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-400 text-xs">Nights</p>
+                          <p className="font-medium text-gray-700 dark:text-gray-300">{selectedRoom.bookings[0].nightCount}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-400 text-xs">Deposit Paid</p>
+                          <p className="font-medium text-gray-700 dark:text-gray-300">
+                            KES {(selectedRoom.bookings[0].depositCents / 100).toLocaleString('en-KE', { maximumFractionDigits: 0 })}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   )}
-                  <div className="grid grid-cols-2 gap-3 mt-3 text-sm">
-                    <div>
-                      <p className="text-gray-400 text-xs">Check-in</p>
-                      <p className="font-medium text-gray-700 dark:text-gray-300">
-                        {selectedRoom.bookings[0].actualCheckIn
-                          ? new Date(selectedRoom.bookings[0].actualCheckIn).toLocaleDateString('en-KE')
-                          : '—'}
-                      </p>
+
+                  {selectedRoom.notes && (
+                    <p className="text-sm text-gray-500 italic">{selectedRoom.notes}</p>
+                  )}
+                </>
+              )}
+
+              {/* FOLIO TAB */}
+              {roomDetailTab === 'folio' && currentFolio && (
+                <div className="space-y-4">
+                  {/* Folio summary */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-gray-50 rounded-xl p-3 text-center border">
+                      <p className="text-xs text-gray-400">Room Rate</p>
+                      <p className="font-bold text-gray-700">{fmt(currentFolio.roomRateTotal)}</p>
                     </div>
-                    <div>
-                      <p className="text-gray-400 text-xs">Check-out (planned)</p>
-                      <p className="font-medium text-gray-700 dark:text-gray-300">
-                        {selectedRoom.bookings[0].checkOutDate
-                          ? new Date(selectedRoom.bookings[0].checkOutDate).toLocaleDateString('en-KE')
-                          : '—'}
-                      </p>
+                    <div className="bg-gray-50 rounded-xl p-3 text-center border">
+                      <p className="text-xs text-gray-400">Total Charges</p>
+                      <p className="font-bold text-gray-700">{fmt(currentFolio.folioTotal)}</p>
                     </div>
-                    <div>
-                      <p className="text-gray-400 text-xs">Nights</p>
-                      <p className="font-medium text-gray-700 dark:text-gray-300">{selectedRoom.bookings[0].nightCount}</p>
+                    <div className="bg-teal-50 rounded-xl p-3 text-center border border-teal-200">
+                      <p className="text-xs text-teal-500">Balance Due</p>
+                      <p className="font-bold text-teal-700">{fmt(currentFolio.balanceDue)}</p>
                     </div>
-                    <div>
-                      <p className="text-gray-400 text-xs">Total / Deposit</p>
-                      <p className="font-medium text-gray-700 dark:text-gray-300">
-                        KES {(selectedRoom.bookings[0].totalAmountCents / 100).toLocaleString('en-KE', { maximumFractionDigits: 0 })}
-                        {' / '}
-                        KES {(selectedRoom.bookings[0].depositCents / 100).toLocaleString('en-KE', { maximumFractionDigits: 0 })}
-                      </p>
+                  </div>
+
+                  {/* Charge list */}
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Folio Items</p>
+                    {currentFolio.folioCharges.length === 0 ? (
+                      <p className="text-sm text-gray-400 text-center py-4">No charges yet. Room rate is added at checkout.</p>
+                    ) : (
+                      <div className="divide-y border rounded-xl overflow-hidden">
+                        {currentFolio.folioCharges.map(charge => (
+                          <div key={charge.id} className="flex items-center justify-between px-3 py-2.5 hover:bg-gray-50">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                                  charge.type === 'ROOM_RATE' ? 'bg-blue-50 text-blue-600' :
+                                  charge.type === 'FOOD_BEVERAGE' ? 'bg-green-50 text-green-600' :
+                                  charge.type === 'MINIBAR' ? 'bg-purple-50 text-purple-600' :
+                                  charge.type === 'LAUNDRY' ? 'bg-cyan-50 text-cyan-600' :
+                                  'bg-gray-100 text-gray-600'
+                                }`}>{charge.type.replace('_', ' ')}</span>
+                                <span className="text-xs text-gray-400">{new Date(charge.date).toLocaleDateString('en-KE')}</span>
+                              </div>
+                              <p className="text-sm text-gray-700 truncate">{charge.description}</p>
+                              {charge.quantity > 1 && <p className="text-xs text-gray-400">{charge.quantity} × {fmt(charge.amountCents)}</p>}
+                            </div>
+                            <div className="flex items-center gap-2 ml-3">
+                              <span className="font-semibold text-sm text-gray-800">{fmt(charge.totalCents)}</span>
+                              {charge.type !== 'ROOM_RATE' && (
+                                <button
+                                  onClick={() => removeFolioChargeMutation.mutate(charge.id)}
+                                  className="text-red-400 hover:text-red-600 p-1"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Add charge form */}
+                  <div className="bg-gray-50 rounded-xl p-4 border space-y-3">
+                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Add Charge</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <select
+                        value={folioAddForm.type}
+                        onChange={e => setFolioAddForm(f => ({ ...f, type: e.target.value }))}
+                        className="border rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-gray-700 dark:border-gray-600"
+                      >
+                        {['FOOD_BEVERAGE', 'MINIBAR', 'LAUNDRY', 'TRANSPORT', 'OTHER'].map(t => (
+                          <option key={t} value={t}>{t.replace('_', ' ')}</option>
+                        ))}
+                      </select>
+                      <input
+                        type="number" min={1}
+                        value={folioAddForm.quantity}
+                        onChange={e => setFolioAddForm(f => ({ ...f, quantity: parseInt(e.target.value) || 1 }))}
+                        placeholder="Qty"
+                        className="border rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-gray-700 dark:border-gray-600"
+                      />
+                    </div>
+                    <input
+                      type="text"
+                      value={folioAddForm.description}
+                      onChange={e => setFolioAddForm(f => ({ ...f, description: e.target.value }))}
+                      placeholder="Description (e.g. Breakfast for 2)"
+                      className="w-full border rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-gray-700 dark:border-gray-600"
+                    />
+                    <div className="flex gap-2">
+                      <input
+                        type="number" min={0} step={0.01}
+                        value={folioAddForm.amountCents || ''}
+                        onChange={e => setFolioAddForm(f => ({ ...f, amountCents: parseFloat(e.target.value) || 0 }))}
+                        placeholder="Amount (KES)"
+                        className="flex-1 border rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-gray-700 dark:border-gray-600"
+                      />
+                      <button
+                        onClick={() => addFolioChargeMutation.mutate({ bookingId: showFolioModal!, charge: folioAddForm })}
+                        disabled={!folioAddForm.description || folioAddForm.amountCents <= 0 || addFolioChargeMutation.isPending}
+                        className="px-4 py-1.5 bg-teal-600 text-white rounded-lg text-sm font-semibold disabled:opacity-50 hover:bg-teal-700"
+                      >
+                        {addFolioChargeMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add'}
+                      </button>
                     </div>
                   </div>
                 </div>
-              )}
-
-              {selectedRoom.notes && (
-                <p className="text-sm text-gray-500 italic">{selectedRoom.notes}</p>
               )}
             </div>
 
@@ -2408,15 +3552,15 @@ export default function HospitalityPage() {
               {selectedRoom.status === 'OCCUPIED' && selectedRoom.bookings[0] && (
                 <button
                   onClick={() => {
-                    if (confirm(`Check out ${selectedRoom.bookings[0].guestName}?\n\nTotal due: KES ${(selectedRoom.bookings[0].totalAmountCents / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`)) {
-                      checkOutMutation.mutate(selectedRoom.bookings[0].id);
-                    }
+                    setShowFolioModal(selectedRoom.bookings[0].id);
+                    setRoomDetailTab('folio');
+                    checkOutWithFolioMutation.mutate(selectedRoom.bookings[0].id);
                   }}
-                  disabled={checkOutMutation.isPending}
+                  disabled={checkOutWithFolioMutation.isPending}
                   className="w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  {checkOutMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogOut className="w-5 h-5" />}
-                  Check Out — KES {(selectedRoom.bookings[0].totalAmountCents / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+                  {checkOutWithFolioMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogOut className="w-5 h-5" />}
+                  Check Out & Generate Invoice
                 </button>
               )}
               <div className="grid grid-cols-2 gap-2">
@@ -2445,7 +3589,7 @@ export default function HospitalityPage() {
                     }}
                     className="py-2 text-xs border border-gray-200 text-gray-500 hover:bg-gray-50 rounded-xl flex items-center justify-center gap-1"
                   >
-                    Maintenance
+                    <Wrench className="w-3.5 h-3.5 inline mr-1" />Maintenance
                   </button>
                 ) : (
                   <button
@@ -2459,6 +3603,168 @@ export default function HospitalityPage() {
                   </button>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Checkout Invoice Modal ────────────────────────────────────────────── */}
+      {showCheckoutInvoice && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
+              <h2 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                <Receipt className="w-5 h-5 text-green-600" /> Checkout Invoice
+              </h2>
+              <button onClick={() => setShowCheckoutInvoice(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-5" id="checkout-invoice-print">
+              {/* Hotel / Room info */}
+              <div className="text-center pb-4 border-b">
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">HOTEL CHECKOUT</p>
+                <p className="text-gray-500 mt-1">Room {showCheckoutInvoice.room?.number} · {showCheckoutInvoice.room?.type}</p>
+              </div>
+
+              {/* Guest info */}
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-gray-400 text-xs uppercase tracking-wide">Guest</p>
+                  <p className="font-semibold text-gray-800 dark:text-white">{showCheckoutInvoice.guestName}</p>
+                  {showCheckoutInvoice.guestPhone && <p className="text-gray-500">{showCheckoutInvoice.guestPhone}</p>}
+                </div>
+                <div>
+                  <p className="text-gray-400 text-xs uppercase tracking-wide">Stay</p>
+                  <p className="font-semibold text-gray-800 dark:text-white">
+                    {showCheckoutInvoice.nightCount} night{showCheckoutInvoice.nightCount !== 1 ? 's' : ''}
+                  </p>
+                  <p className="text-gray-500 text-xs">
+                    {showCheckoutInvoice.actualCheckIn ? new Date(showCheckoutInvoice.actualCheckIn).toLocaleDateString('en-KE') : '—'}
+                    {' → '}
+                    {new Date().toLocaleDateString('en-KE')}
+                  </p>
+                </div>
+              </div>
+
+              {/* Itemized folio */}
+              <div>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Charges</p>
+                <div className="divide-y border rounded-xl overflow-hidden">
+                  {(showCheckoutInvoice.folioCharges ?? []).map(charge => (
+                    <div key={charge.id} className="flex items-center justify-between px-3 py-2.5">
+                      <div>
+                        <p className="text-sm text-gray-700">{charge.description}</p>
+                        {charge.quantity > 1 && (
+                          <p className="text-xs text-gray-400">{charge.quantity} × {fmt(charge.amountCents)}</p>
+                        )}
+                      </div>
+                      <span className="font-semibold text-sm text-gray-800">{fmt(charge.totalCents)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Summary */}
+              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Total Charges</span>
+                  <span className="font-semibold">{fmt((showCheckoutInvoice as GuestFolio).folioTotal ?? showCheckoutInvoice.totalAmountCents)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Deposit Paid</span>
+                  <span className="font-semibold text-green-600">− {fmt(showCheckoutInvoice.depositCents)}</span>
+                </div>
+                <div className="flex justify-between pt-2 border-t">
+                  <span className="font-bold text-gray-800 dark:text-white">Balance Due</span>
+                  <span className="font-bold text-xl text-teal-700">{fmt((showCheckoutInvoice as GuestFolio).balanceDue ?? Math.max(0, showCheckoutInvoice.totalAmountCents - showCheckoutInvoice.depositCents))}</span>
+                </div>
+              </div>
+
+              <p className="text-center text-xs text-gray-400">Thank you for your stay. Please visit us again!</p>
+            </div>
+            <div className="p-4 border-t dark:border-gray-700 grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setShowCheckoutInvoice(null)}
+                className="py-2.5 border border-gray-300 text-gray-700 rounded-xl font-semibold text-sm"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2"
+              >
+                <Receipt className="w-4 h-4" /> Print Invoice
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Housekeeping Modal ────────────────────────────────────────────────── */}
+      {showHousekeepingModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[88vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
+              <h2 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-amber-500" /> Housekeeping Queue
+              </h2>
+              <button onClick={() => setShowHousekeepingModal(false)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto divide-y dark:divide-gray-700">
+              {housekeepingQueue.length === 0 ? (
+                <p className="text-center text-gray-400 py-12">All rooms are clean!</p>
+              ) : (
+                housekeepingQueue.map(room => (
+                  <div key={room.id} className="flex items-center justify-between px-6 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center font-bold text-blue-700 text-sm">
+                        {room.number}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-800 dark:text-white text-sm">Room {room.number}</p>
+                        <p className="text-xs text-gray-500">{room.type} · {room.floor ?? 'Ground Floor'}</p>
+                        {room.lastGuest?.status === 'CHECKED_OUT' && (
+                          <p className="text-xs text-gray-400">
+                            Last guest: {room.lastGuest.guestName}
+                            {room.lastGuest.actualCheckOut
+                              ? ` · checked out ${new Date(room.lastGuest.actualCheckOut).toLocaleDateString('en-KE')}`
+                              : ''}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                        room.housekeepingStatus === 'CLEAN'     ? 'bg-green-100 text-green-700' :
+                        room.housekeepingStatus === 'DIRTY'     ? 'bg-orange-100 text-orange-700' :
+                        room.housekeepingStatus === 'INSPECTED' ? 'bg-blue-100 text-blue-700' :
+                        'bg-red-100 text-red-700'
+                      }`}>{room.housekeepingStatus}</span>
+                      {(['CLEAN', 'INSPECTED'] as const).map(hs => (
+                        <button
+                          key={hs}
+                          onClick={() => updateHousekeepingMutation.mutate({ roomId: room.id, status: hs })}
+                          disabled={room.housekeepingStatus === hs}
+                          className="text-xs px-3 py-1 border rounded-lg disabled:opacity-40 hover:bg-gray-100 text-gray-600 font-medium"
+                        >
+                          Mark {hs}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="p-4 border-t dark:border-gray-700 flex justify-between items-center">
+              <p className="text-xs text-gray-400">
+                {housekeepingQueue.filter(r => r.housekeepingStatus === 'DIRTY').length} room(s) need cleaning
+              </p>
+              <button onClick={() => void refetchHousekeeping()} className="text-sm text-teal-600 hover:underline flex items-center gap-1">
+                <RefreshCw className="w-3.5 h-3.5" /> Refresh
+              </button>
             </div>
           </div>
         </div>
@@ -3091,6 +4397,129 @@ export default function HospitalityPage() {
                   {deleteTableMutation.isPending ? 'Removing…' : 'Remove Table'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Happy Hours Modal ────────────────────────────────────────────────── */}
+      {showHappyHourModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-amber-500" />
+                <h2 className="text-lg font-bold text-gray-800">Happy Hours</h2>
+              </div>
+              <button onClick={() => setShowHappyHourModal(false)} className="p-2 rounded-full hover:bg-gray-100">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {/* Existing happy hours */}
+              {happyHours.length === 0 ? (
+                <p className="text-center text-gray-400 py-4 text-sm">No happy hours configured yet</p>
+              ) : (
+                <div className="space-y-2">
+                  {happyHours.map((hh) => (
+                    <div key={hh.id} className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                      <div>
+                        <p className="font-semibold text-gray-800 text-sm">{hh.name}</p>
+                        <p className="text-xs text-amber-700 mt-0.5">
+                          {String(hh.startHour).padStart(2,'0')}:{String(hh.startMinute).padStart(2,'0')} – {String(hh.endHour).padStart(2,'0')}:{String(hh.endMinute).padStart(2,'0')}
+                          {' · '}{hh.discountPct}% off{' · '}{hh.appliesTo}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => deleteHappyHourMutation.mutate(hh.id)}
+                        disabled={deleteHappyHourMutation.isPending}
+                        className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Add form */}
+              <div className="border-2 border-dashed border-amber-200 rounded-xl p-4 space-y-3">
+                <h3 className="font-semibold text-sm text-gray-700">Add Happy Hour</h3>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Name *</label>
+                  <input
+                    type="text"
+                    value={happyHourForm.name}
+                    onChange={e => setHappyHourForm(f => ({ ...f, name: e.target.value }))}
+                    placeholder="e.g. Evening Happy Hour"
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Start Time</label>
+                    <input
+                      type="time"
+                      value={`${String(happyHourForm.startHour).padStart(2,'0')}:${String(happyHourForm.startMinute).padStart(2,'0')}`}
+                      onChange={e => {
+                        const [h, m] = e.target.value.split(':').map(Number);
+                        setHappyHourForm(f => ({ ...f, startHour: h, startMinute: m }));
+                      }}
+                      className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">End Time</label>
+                    <input
+                      type="time"
+                      value={`${String(happyHourForm.endHour).padStart(2,'0')}:${String(happyHourForm.endMinute).padStart(2,'0')}`}
+                      onChange={e => {
+                        const [h, m] = e.target.value.split(':').map(Number);
+                        setHappyHourForm(f => ({ ...f, endHour: h, endMinute: m }));
+                      }}
+                      className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Discount %</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={happyHourForm.discountPct}
+                      onChange={e => setHappyHourForm(f => ({ ...f, discountPct: Number(e.target.value) }))}
+                      className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Applies To</label>
+                    <select
+                      value={happyHourForm.appliesTo}
+                      onChange={e => setHappyHourForm(f => ({ ...f, appliesTo: e.target.value }))}
+                      className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400"
+                    >
+                      <option value="ALL">All Items</option>
+                      <option value="DRINKS">Drinks</option>
+                      <option value="FOOD">Food</option>
+                    </select>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    if (!happyHourForm.name.trim()) return;
+                    createHappyHourMutation.mutate(happyHourForm);
+                  }}
+                  disabled={!happyHourForm.name.trim() || createHappyHourMutation.isPending}
+                  className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium text-sm disabled:opacity-40 transition-colors"
+                >
+                  {createHappyHourMutation.isPending ? 'Adding...' : 'Add Happy Hour'}
+                </button>
+              </div>
+            </div>
+            <div className="p-4 border-t">
+              <button onClick={() => setShowHappyHourModal(false)} className="w-full py-2.5 border rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50">Close</button>
             </div>
           </div>
         </div>

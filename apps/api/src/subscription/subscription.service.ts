@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
-import { createHmac } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 
 export const PLANS = {
   STARTER:    { name: 'Starter',    amountKES: 1499,  paystackPlanCode: process.env.PAYSTACK_STARTER_PLAN    ?? '' },
@@ -119,6 +119,44 @@ export class SubscriptionService {
       },
     });
     this.logger.log(`Business ${businessId} activated on ${tier} plan`);
+
+    // Auto-generate a license key for the paying customer
+    try {
+      await this.generateAndSendLicenseKey(businessId, tier);
+    } catch (err: any) {
+      this.logger.error(`Failed to generate license key for ${businessId}: ${err.message}`);
+    }
+  }
+
+  private async generateAndSendLicenseKey(businessId: string, tier: keyof typeof PLANS) {
+    // Generate a KPS-XXXX-XXXX-XXXX format key
+    const segments = Array.from({ length: 3 }, () => randomBytes(2).toString('hex').toUpperCase());
+    const key = `KPS-${segments[0]}-${segments[1]}-${segments[2]}`;
+
+    // 1 year expiry for paid plans
+    const expiresAt = new Date(Date.now() + 365 * 86400000);
+
+    await this.prisma.licenseKey.create({
+      data: { key, tier, businessId, isActive: true, expiresAt },
+    });
+
+    // Send the key via email
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      include: { users: { where: { role: 'OWNER' }, take: 1 } },
+    });
+    const ownerEmail = business?.users[0]?.email;
+    if (ownerEmail) {
+      await this.email.sendLicenseKey({
+        to: ownerEmail,
+        businessName: business!.name,
+        plan: PLANS[tier]?.name ?? tier,
+        licenseKey: key,
+        expiresAt: expiresAt.toISOString(),
+      });
+    }
+
+    this.logger.log(`License key ${key} generated and emailed to ${ownerEmail ?? 'unknown'} for business ${businessId}`);
   }
 
   /** Handle Paystack webhook events */

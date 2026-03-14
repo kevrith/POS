@@ -203,6 +203,70 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Pricing Plans */}
+      <div style={{ background: C.card, border: `1px solid ${C.cardBorder}`, borderRadius: '14px', padding: '1.5rem', marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+          <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: C.text }}>Pricing Plans</h3>
+          <span style={{ fontSize: '0.75rem', color: C.textMuted }}>KES / month</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+          {[
+            {
+              name: 'Starter', price: 'KES 1,499', color: C.textSecondary, accent: 'rgba(100,116,139,0.12)',
+              features: ['POS Sales', 'Inventory Management', 'Basic Reports', 'M-Pesa Payments', '1 Store / 3 Users'],
+            },
+            {
+              name: 'Pro', price: 'KES 3,999', color: C.blue, accent: 'rgba(59,130,246,0.12)',
+              features: ['Everything in Starter', 'Multi-Store (5)', 'Advanced Reports', 'Scheduled Email Reports', 'Webhooks & API Access', '10 Users'],
+              popular: true,
+            },
+            {
+              name: 'Enterprise', price: 'KES 9,999', color: C.purple, accent: 'rgba(139,92,246,0.12)',
+              features: ['Everything in Pro', 'KRA eTIMS Integration', 'Hospitality Module', 'HR Management', 'Accounting Integrations', 'Unlimited Stores & Users', 'Priority Support'],
+            },
+          ].map(plan => (
+            <div key={plan.name} style={{
+              background: '#0a0f1e',
+              border: `1px solid ${plan.popular ? plan.color + '60' : C.cardBorder}`,
+              borderRadius: '12px', padding: '1.25rem',
+              position: 'relative', overflow: 'hidden',
+            }}>
+              {plan.popular && (
+                <div style={{
+                  position: 'absolute', top: '0', right: '0',
+                  background: C.blue, color: '#fff', fontSize: '0.625rem', fontWeight: 700,
+                  padding: '3px 10px', borderBottomLeftRadius: '8px', letterSpacing: '0.06em',
+                }}>
+                  POPULAR
+                </div>
+              )}
+              <div style={{ fontSize: '0.8125rem', color: C.textMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.375rem' }}>
+                {plan.name}
+              </div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: plan.color, letterSpacing: '-0.03em', marginBottom: '1rem' }}>
+                {plan.price}
+                <span style={{ fontSize: '0.75rem', color: C.textMuted, fontWeight: 500, letterSpacing: 0 }}>/mo</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                {plan.features.map(f => (
+                  <div key={f} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', color: C.textSecondary }}>
+                    <span style={{ color: plan.color, fontSize: '0.625rem' }}>✓</span>
+                    {f}
+                  </div>
+                ))}
+              </div>
+              <div style={{
+                marginTop: '1rem', padding: '0.5rem', borderRadius: '8px',
+                background: plan.accent, textAlign: 'center',
+                fontSize: '0.6875rem', color: plan.color, fontWeight: 700,
+              }}>
+                {stats?.planBreakdown?.[plan.name.toUpperCase()] ?? 0} active businesses
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Recent signups */}
       <div style={{ background: C.card, border: `1px solid ${C.cardBorder}`, borderRadius: '14px', overflow: 'hidden' }}>
         <div style={{ padding: '1.25rem 1.5rem', borderBottom: `1px solid ${C.cardBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

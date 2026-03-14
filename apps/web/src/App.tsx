@@ -41,6 +41,19 @@ const ReconciliationPage = lazy(() => import('./pages/ReconciliationPage'));
 const FranchisePage = lazy(() => import('./pages/FranchisePage'));
 const DesktopSetupPage = lazy(() => import('./pages/DesktopSetupPage'));
 const HotelPage = lazy(() => import('./pages/HotelPage'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const StocktakePage = lazy(() => import('./pages/StocktakePage'));
+const DamagedGoodsPage = lazy(() => import('./pages/DamagedGoodsPage'));
+const WaitlistPage = lazy(() => import('./pages/WaitlistPage'));
+const ChannelManagerPage = lazy(() => import('./pages/ChannelManagerPage'));
+const ChequesPage = lazy(() => import('./pages/ChequesPage'));
+const LedgerPage = lazy(() => import('./pages/LedgerPage'));
+const PaymentLinksPage = lazy(() => import('./pages/PaymentLinksPage'));
+const RFQPage = lazy(() => import('./pages/RFQPage'));
+const KioskPage = lazy(() => import('./pages/KioskPage'));
+const ReservationWidgetPage = lazy(() => import('./pages/ReservationWidgetPage'));
+const SecuritySettingsPage = lazy(() => import('./pages/SecuritySettingsPage'));
+const DeliveryManagementPage = lazy(() => import('./pages/DeliveryManagementPage'));
 
 function PageLoader() {
   return (
@@ -75,6 +88,24 @@ export default function App() {
     );
   }
 
+  // Online reservation widget — public embeddable, no auth
+  if (window.location.pathname === '/reservation-widget') {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-blue-50" />}>
+        <ReservationWidgetPage />
+      </Suspense>
+    );
+  }
+
+  // Kiosk mode — standalone, no auth required
+  if (window.location.pathname === '/kiosk') {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-gray-100" />}>
+        <KioskPage />
+      </Suspense>
+    );
+  }
+
   // Pole display is a standalone page — no auth, no layout
   if (window.location.pathname === '/pole-display') {
     return (
@@ -101,7 +132,9 @@ export default function App() {
     <Layout>
       <Suspense fallback={<PageLoader />}>
         <Routes>
-          <Route path="/" element={<Navigate to="/pos" replace />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/stocktake" element={<StocktakePage />} />
           {/* Sales */}
           <Route path="/pos" element={<POSPage />} />
           <Route path="/hospitality" element={<HospitalityPage />} />
@@ -146,6 +179,20 @@ export default function App() {
           <Route path="/reconciliation" element={<ReconciliationPage />} />
           <Route path="/franchise" element={<FranchisePage />} />
           <Route path="/hotel" element={<HotelPage />} />
+          {/* Inventory - extended */}
+          <Route path="/damaged-goods" element={<DamagedGoodsPage />} />
+          <Route path="/stocktake" element={<StocktakePage />} />
+          <Route path="/rfq" element={<RFQPage />} />
+          {/* Hospitality - extended */}
+          <Route path="/waitlist" element={<WaitlistPage />} />
+          <Route path="/channel-manager" element={<ChannelManagerPage />} />
+          {/* Finance - extended */}
+          <Route path="/cheques" element={<ChequesPage />} />
+          <Route path="/ledger" element={<LedgerPage />} />
+          <Route path="/payment-links" element={<PaymentLinksPage />} />
+          {/* Security & Delivery */}
+          <Route path="/security-settings" element={<SecuritySettingsPage />} />
+          <Route path="/delivery-management" element={<DeliveryManagementPage />} />
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/pos" replace />} />
         </Routes>

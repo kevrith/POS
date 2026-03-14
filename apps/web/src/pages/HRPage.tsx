@@ -1081,7 +1081,7 @@ function AddEmployeeModal({ businessId, onClose, onSuccess }: {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type Tab = 'overview' | 'employees' | 'attendance' | 'leave' | 'commissions' | 'shifts' | 'performance';
+type Tab = 'overview' | 'employees' | 'attendance' | 'leave' | 'commissions' | 'shifts' | 'performance' | 'contracts' | 'disciplinary';
 
 export default function HRPage() {
   const qc = useQueryClient();
@@ -1237,7 +1237,29 @@ export default function HRPage() {
     { id: 'commissions', label: 'Commissions', icon: TrendingUp },
     { id: 'shifts', label: 'Shifts', icon: LayoutGrid },
     { id: 'performance', label: 'Performance', icon: Award },
+    { id: 'contracts', label: 'Contracts', icon: AlertCircle },
+    { id: 'disciplinary', label: 'Disciplinary', icon: AlertCircle },
   ];
+
+  // Contracts tab data
+  const { data: expiringContracts = [] } = useQuery<any[]>({
+    queryKey: ['expiring-contracts', businessId],
+    queryFn: () => api.get(`/hr/contracts/expiring?businessId=${businessId}&days=60`),
+    enabled: !!businessId && tab === 'contracts',
+  });
+
+  // Disciplinary records data
+  const [disciplinaryEmpId, setDisciplinaryEmpId] = useState('');
+  const [discForm, setDiscForm] = useState({ type: 'WARNING', incidentDate: new Date().toISOString().split('T')[0], description: '', actionTaken: '' });
+  const { data: disciplinaryRecords = [], refetch: refetchDisc } = useQuery<any[]>({
+    queryKey: ['disciplinary', businessId, disciplinaryEmpId],
+    queryFn: () => api.get(`/disciplinary?businessId=${businessId}${disciplinaryEmpId ? `&employeeId=${disciplinaryEmpId}` : ''}`),
+    enabled: !!businessId && tab === 'disciplinary',
+  });
+  const createDiscMutation = useMutation({
+    mutationFn: (data: any) => api.post('/disciplinary', data),
+    onSuccess: () => { void refetchDisc(); setDiscForm({ type: 'WARNING', incidentDate: new Date().toISOString().split('T')[0], description: '', actionTaken: '' }); },
+  });
 
   return (
     <div className="h-full flex flex-col bg-gray-50">
@@ -1899,6 +1921,115 @@ export default function HRPage() {
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── Contracts tab ── */}
+        {tab === 'contracts' && (
+          <div className="p-6 space-y-4">
+            <h2 className="text-lg font-bold text-gray-800 dark:text-white">Expiring Contracts (next 60 days)</h2>
+            {expiringContracts.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">No expiring contracts in the next 60 days</div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-gray-50 dark:bg-gray-800">
+                    <tr>{['Employee', 'Contract Type', 'End Date', 'Days Left'].map(h => (
+                      <th key={h} className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-gray-300">{h}</th>
+                    ))}</tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                    {expiringContracts.map((c: any) => {
+                      const daysLeft = Math.ceil((new Date(c.contractEndDate).getTime() - Date.now()) / 86400000);
+                      return (
+                        <tr key={c.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                          <td className="px-4 py-3 font-medium text-gray-800 dark:text-white">{c.user?.name}</td>
+                          <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{c.contractType}</td>
+                          <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{new Date(c.contractEndDate).toLocaleDateString()}</td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${daysLeft <= 14 ? 'bg-red-100 text-red-700' : daysLeft <= 30 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
+                              {daysLeft}d
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Disciplinary tab ── */}
+        {tab === 'disciplinary' && (
+          <div className="p-6 space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* New Record Form */}
+              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 space-y-4">
+                <h3 className="font-semibold text-gray-800 dark:text-white">New Record</h3>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Employee</label>
+                  <select value={disciplinaryEmpId} onChange={e => setDisciplinaryEmpId(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                    <option value="">All employees</option>
+                    {employees.map(e => <option key={e.id} value={e.id}>{e.user.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Type</label>
+                  <select value={discForm.type} onChange={e => setDiscForm(f => ({ ...f, type: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                    {['WARNING', 'FINAL_WARNING', 'SUSPENSION', 'PIP', 'TERMINATION'].map(t => <option key={t} value={t}>{t.replace('_', ' ')}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Incident Date</label>
+                  <input type="date" value={discForm.incidentDate} onChange={e => setDiscForm(f => ({ ...f, incidentDate: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+                  <textarea rows={3} value={discForm.description} onChange={e => setDiscForm(f => ({ ...f, description: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Action Taken</label>
+                  <textarea rows={2} value={discForm.actionTaken} onChange={e => setDiscForm(f => ({ ...f, actionTaken: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                </div>
+                <button
+                  onClick={() => createDiscMutation.mutate({ businessId, employeeId: disciplinaryEmpId || employees[0]?.id, ...discForm, issuedBy: user?.id })}
+                  disabled={!discForm.description || !discForm.actionTaken || createDiscMutation.isPending}
+                  className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold disabled:opacity-40 flex items-center justify-center gap-2">
+                  {createDiscMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  Record Action
+                </button>
+              </div>
+              {/* Records List */}
+              <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div className="px-5 py-4 border-b dark:border-gray-700 font-semibold text-gray-800 dark:text-white">Records</div>
+                {disciplinaryRecords.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">No disciplinary records</div>
+                ) : (
+                  <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                    {disciplinaryRecords.map((r: any) => (
+                      <div key={r.id} className="px-5 py-4">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-bold mr-2 ${r.type === 'TERMINATION' ? 'bg-red-100 text-red-700' : r.type === 'FINAL_WARNING' || r.type === 'SUSPENSION' ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700'}`}>{r.type}</span>
+                            <span className="text-sm font-medium text-gray-800 dark:text-white">{r.employee?.user?.name}</span>
+                          </div>
+                          <span className="text-xs text-gray-400">{new Date(r.incidentDate).toLocaleDateString()}</span>
+                        </div>
+                        <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{r.description}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">Action: {r.actionTaken}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

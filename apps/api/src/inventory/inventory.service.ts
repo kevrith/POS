@@ -106,6 +106,14 @@ export class InventoryService {
     });
   }
 
+  async getVariantStockLevel(variantId: string, storeId: string) {
+    const movements = await this.prisma.inventoryMovement.findMany({
+      where: { variantId, storeId },
+    });
+    const stock = movements.reduce((s, m) => s + m.quantity, 0);
+    return { variantId, storeId, stock };
+  }
+
   async getMovementHistory(
     itemId: string,
     storeId: string,

@@ -4,6 +4,7 @@ import { AppModule } from './app.module';
 import { Logger, VersioningType } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { IoAdapter } from '@nestjs/platform-socket.io';
+import helmet from 'helmet';
 
 // Initialize Sentry before anything else so all errors are captured
 if (process.env.SENTRY_DSN) {
@@ -36,6 +37,12 @@ async function bootstrap() {
 
     // Enable Socket.IO adapter for WebSocket/LAN sync support
     app.useWebSocketAdapter(new IoAdapter(app));
+
+    // Security headers (HSTS, XSS protection, content-type sniff prevention, etc.)
+    app.use(helmet({
+      contentSecurityPolicy: false, // disabled to allow Swagger UI
+      crossOriginEmbedderPolicy: false,
+    }));
 
     logger.log('Enabling CORS...');
     app.enableCors({

@@ -1,43 +1,131 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Controller, Post, Get, Put, Body, Param, Query, UseGuards, Patch } from '@nestjs/common';
 import { DeliveryService } from './delivery.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { TenantGuard } from '../auth/tenant.guard';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, TenantGuard)
 @Controller('delivery')
 export class DeliveryController {
-  constructor(private svc: DeliveryService) {}
+  constructor(private deliveryService: DeliveryService) {}
 
-  @Get()
-  findAll(
+  @Get('orders')
+  async getDeliveryOrders(
     @Query('businessId') businessId: string,
-    @Query('storeId') storeId: string,
+    @Query('storeId') storeId?: string,
     @Query('status') status?: string,
+    @Query('search') search?: string,
   ) {
-    return this.svc.findAll(businessId, storeId, status);
+    return this.deliveryService.getDeliveryOrders(businessId, storeId, status, search);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.svc.findOne(id);
+  // Alias: GET /delivery?businessId=...&storeId=...&status=...
+  @Get()
+  async listDeliveries(
+    @Query('businessId') businessId: string,
+    @Query('storeId') storeId?: string,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+  ) {
+    const result = await this.deliveryService.getDeliveryOrders(businessId, storeId, status, search);
+    return result.data;
   }
 
-  @Post()
-  create(@Body() dto: any) {
-    return this.svc.create(dto);
+  @Post('orders')
+  async createDeliveryOrder(@Body() dto: any) {
+    return this.deliveryService.createDeliveryOrder(dto);
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: any) {
-    return this.svc.update(id, dto);
+  @Get('orders/:orderNumber/track')
+  async getDeliveryTracking(@Param('orderNumber') orderNumber: string) {
+    return this.deliveryService.getDeliveryTracking(orderNumber);
   }
 
-  @Patch(':id/assign')
-  assign(@Param('id') id: string, @Body() body: { driverId: string }) {
-    return this.svc.assign(id, body.driverId);
+  @Put('orders/:id/assign-driver')
+  async assignDriver(
+    @Param('id') deliveryOrderId: string,
+    @Body() dto: { driverId: string; businessId: string },
+  ) {
+    return this.deliveryService.assignDriver(deliveryOrderId, dto.driverId, dto.businessId);
   }
 
-  @Delete(':id')
-  cancel(@Param('id') id: string) {
-    return this.svc.cancel(id);
+  @Put('orders/:id/delivered')
+  async markDelivered(
+    @Param('id') deliveryOrderId: string,
+    @Body() dto: { businessId: string; proofPhotoUrl?: string },
+  ) {
+    return this.deliveryService.markDelivered(deliveryOrderId, dto.businessId, dto.proofPhotoUrl);
+  }
+
+  @Put('orders/:id/reschedule')
+  async rescheduleDelivery(
+    @Param('id') deliveryOrderId: string,
+    @Body() dto: { newScheduledAt: string; reason: string },
+  ) {
+    return this.deliveryService.rescheduleDelivery(deliveryOrderId, dto.newScheduledAt, dto.reason);
+  }
+
+  @Post('driver-location')
+  async updateDriverLocation(@Body() dto: any) {
+    return this.deliveryService.updateDriverLocation(dto);
+  }
+
+  @Get('driver-locations/:driverId')
+  async getDriverLocations(
+    @Param('driverId') driverId: string,
+    @Query('since') since?: string,
+  ) {
+    return this.deliveryService.getDriverLocations(driverId, since);
+  }
+
+  @Post('zones')
+  async createDeliveryZone(@Body() dto: any) {
+    return this.deliveryService.createDeliveryZone(dto);
+  }
+
+  @Get('zones')
+  async getDeliveryZones(@Query('businessId') businessId: string) {
+    return this.deliveryService.getDeliveryZones(businessId);
+  }
+
+  @Post('courier/push')
+  async pushToCourier(@Body() dto: any) {
+    return this.deliveryService.pushToCourier(dto);
+  }
+
+  @Get('sla-report')
+  async getDeliverySLAReport(
+    @Query('businessId') businessId: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    return this.deliveryService.getDeliverySLAReport(businessId, startDate, endDate);
+  }
+
+  @Put('orders/:id/failed')
+  async markFailed(
+    @Param('id') id: string,
+    @Body() dto: { reason: string },
+  ) {
+    return this.deliveryService.markFailed(id, dto.reason);
+  }
+
+  @Post('orders/:id/tracking-link')
+  async sendTrackingLink(@Param('id') id: string) {
+    return this.deliveryService.sendCustomerTrackingLink(id);
+  }
+
+  @Post('calc-fee')
+  async calcFee(@Body() dto: { businessId: string; lat: number; lng: number }) {
+    return this.deliveryService.calcDeliveryFee(dto.businessId, dto.lat, dto.lng);
+  }
+
+  @Get('couriers')
+  async getCouriers(@Query('businessId') businessId: string) {
+    return this.deliveryService.getCourierIntegrations(businessId);
+  }
+
+  @Post('couriers')
+  async saveCourier(@Body() dto: any) {
+    return this.deliveryService.saveCourierIntegration(dto);
   }
 }

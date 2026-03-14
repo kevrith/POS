@@ -52,19 +52,26 @@ import { DeliveryModule } from './delivery/delivery.module';
 import { PortalModule } from './portal/portal.module';
 import { EventsModule } from './events/events.module';
 import { FranchiseModule } from './franchise/franchise.module';
+import { StocktakeModule } from './stocktake/stocktake.module';
+import { DamagedGoodsModule } from './damaged-goods/damaged-goods.module';
+import { WaitlistModule } from './waitlist/waitlist.module';
+import { ChannelManagerModule } from './channel-manager/channel-manager.module';
+import { HousekeepingModule } from './housekeeping/housekeeping.module';
+import { DisciplinaryModule } from './disciplinary/disciplinary.module';
+import { RFQModule } from './rfq/rfq.module';
+import { ChequeModule } from './cheque/cheque.module';
+import { LedgerModule } from './ledger/ledger.module';
+import { PaymentLinksModule } from './payment-links/payment-links.module';
+import { SecurityModule } from './security/security.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([
-      // Login / register — protect against brute force
-      { name: 'auth', ttl: 60000, limit: 10 },
-      // M-Pesa STK push — Safaricom rate-limits at ~5 req/min per shortcode
-      { name: 'mpesa', ttl: 60000, limit: 5 },
-      // General writes (POST/PATCH/DELETE) — GET requests are always skipped
-      // by AppThrottlerGuard so this only applies to mutating operations.
-      { name: 'general', ttl: 60000, limit: 300 },
+      // Single global throttler for writes (GET requests are skipped by AppThrottlerGuard).
+      // Sensitive endpoints (login, M-Pesa) override this with a stricter limit via @Throttle.
+      { name: 'default', ttl: 60000, limit: 300 },
     ]),
     // Infrastructure
     EmailModule,
@@ -114,6 +121,17 @@ import { FranchiseModule } from './franchise/franchise.module';
     PortalModule,
     EventsModule,
     FranchiseModule,
+    StocktakeModule,
+    DamagedGoodsModule,
+    WaitlistModule,
+    ChannelManagerModule,
+    HousekeepingModule,
+    DisciplinaryModule,
+    RFQModule,
+    ChequeModule,
+    LedgerModule,
+    PaymentLinksModule,
+    SecurityModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AppThrottlerGuard },

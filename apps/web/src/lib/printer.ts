@@ -29,9 +29,11 @@ export interface ReceiptData {
     reference?: string;
   }>;
   changeCents?: number;
+  tipCents?: number;
   kraQRCode?: string;
   kraControlNumber?: string;
   etimsSubmitted?: boolean;
+  voided?: boolean;
   notes?: string;
   saleId?: string;
   receiptHeader?: string;
@@ -80,8 +82,15 @@ function line(char: string = '-', width: number = 32): string {
 export function generateESCPOS(receipt: ReceiptData): string {
   let output = ESCPOS.INIT;
 
+  // VOID watermark
+  if (receipt.voided) {
+    output += ESCPOS.ALIGN_CENTER + ESCPOS.BOLD_ON + ESCPOS.DOUBLE_HEIGHT;
+    output += '*** VOID ***' + ESCPOS.FEED;
+    output += ESCPOS.NORMAL_SIZE + ESCPOS.BOLD_OFF;
+  }
+
   // Pending KRA watermark
-  if (receipt.etimsSubmitted === false) {
+  if (receipt.etimsSubmitted === false && !receipt.voided) {
     output += ESCPOS.ALIGN_CENTER + ESCPOS.BOLD_ON;
     output += '*** PENDING KRA SUBMISSION ***' + ESCPOS.FEED;
     output += ESCPOS.BOLD_OFF;
@@ -140,7 +149,10 @@ export function generateESCPOS(receipt: ReceiptData): string {
   if (receipt.totCents && receipt.totCents > 0) {
     output += pad('TOT (3%):', 20) + pad(formatKES(receipt.totCents), 12, 'right') + ESCPOS.FEED;
   }
-  
+  if (receipt.tipCents && receipt.tipCents > 0) {
+    output += pad('Tip/Gratuity:', 20) + pad(formatKES(receipt.tipCents), 12, 'right') + ESCPOS.FEED;
+  }
+
   output += line('-', 32) + ESCPOS.FEED;
   output += ESCPOS.BOLD_ON + ESCPOS.DOUBLE_HEIGHT;
   output += pad('TOTAL:', 20) + pad(formatKES(receipt.totalCents), 12, 'right') + ESCPOS.FEED;
@@ -195,20 +207,44 @@ export function generateHTML(receipt: ReceiptData): string {
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Receipt ${receipt.receiptNumber}</title>
   <style>
     @media print {
       @page { margin: 0; size: 80mm auto; }
       body { margin: 0; }
+      .no-print { display: none !important; }
     }
+    * { box-sizing: border-box; }
     body {
       font-family: 'Courier New', monospace;
       font-size: 12px;
       line-height: 1.4;
       max-width: 80mm;
+      width: 100%;
       margin: 0 auto;
-      padding: 10mm;
+      padding: 8mm 10mm;
+      background: #fff;
+      color: #000;
     }
+    @media screen and (max-width: 480px) {
+      body { padding: 4mm 5mm; font-size: 13px; }
+    }
+    .print-btn {
+      display: block;
+      width: 100%;
+      padding: 12px;
+      margin-bottom: 12px;
+      background: #1d4ed8;
+      color: #fff;
+      font-size: 16px;
+      font-weight: bold;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-family: system-ui, sans-serif;
+    }
+    .print-btn:active { opacity: 0.8; }
     .center { text-align: center; }
     .bold { font-weight: bold; }
     .large { font-size: 16px; }
@@ -229,10 +265,23 @@ export function generateHTML(receipt: ReceiptData): string {
       margin-bottom: 8px;
       letter-spacing: 0.5px;
     }
+    .void-watermark {
+      background: #1a1a1a;
+      color: #fff;
+      text-align: center;
+      font-weight: 900;
+      font-size: 22px;
+      padding: 10px 4px;
+      margin-bottom: 8px;
+      letter-spacing: 4px;
+      border: 3px solid #000;
+    }
   </style>
 </head>
 <body>
-  ${receipt.etimsSubmitted === false ? `<div class="pending-watermark">⚠ PENDING KRA SUBMISSION</div>` : ''}
+  <button class="print-btn no-print" onclick="window.print()">🖨 Print Receipt</button>
+  ${receipt.voided ? `<div class="void-watermark">★ VOID ★</div>` : ''}
+  ${receipt.etimsSubmitted === false && !receipt.voided ? `<div class="pending-watermark">⚠ PENDING KRA SUBMISSION</div>` : ''}
   <div class="center bold large">${receipt.businessName}</div>
   <div class="center">${receipt.storeName}</div>
   ${receipt.storeAddress ? `<div class="center small">${receipt.storeAddress}</div>` : ''}
@@ -267,6 +316,7 @@ export function generateHTML(receipt: ReceiptData): string {
     ${receipt.serviceChargeCents && receipt.serviceChargeCents > 0 ? `<tr><td>Service (10%):</td><td class="right">${formatKES(receipt.serviceChargeCents)}</td></tr>` : ''}
     ${receipt.vatCents && receipt.vatCents > 0 ? `<tr><td>VAT (16%):</td><td class="right">${formatKES(receipt.vatCents)}</td></tr>` : ''}
     ${receipt.totCents && receipt.totCents > 0 ? `<tr><td>TOT (3%):</td><td class="right">${formatKES(receipt.totCents)}</td></tr>` : ''}
+    ${receipt.tipCents && receipt.tipCents > 0 ? `<tr><td>Tip/Gratuity:</td><td class="right">${formatKES(receipt.tipCents)}</td></tr>` : ''}
     <tr class="bold large"><td>TOTAL:</td><td class="right">${formatKES(receipt.totalCents)}</td></tr>
   </table>
   
@@ -305,7 +355,11 @@ export function generateHTML(receipt: ReceiptData): string {
 // Print to browser
 export function printToBrowser(receipt: ReceiptData): void {
   const html = generateHTML(receipt);
-  const printWindow = window.open('', '_blank', 'width=300,height=600');
+  const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+  const winFeatures = isMobile
+    ? 'width=400,height=700,scrollbars=yes'
+    : 'width=420,height=700,scrollbars=yes,resizable=yes';
+  const printWindow = window.open('', '_blank', winFeatures);
   if (printWindow) {
     printWindow.document.write(html);
     printWindow.document.close();

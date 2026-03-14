@@ -1,0 +1,142 @@
+/* Enhanced Reports Styles */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Mobile-responsive chart containers */
+@media (max-width: 640px) {
+  .recharts-responsive-container {
+    min-height: 200px !important;
+  }
+  
+  .recharts-cartesian-axis-tick-value {
+    font-size: 10px !important;
+  }
+}
+
+/* Enhanced stat cards for mobile */
+@media (max-width: 768px) {
+  .stat-card-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+  }
+  
+  .stat-card-grid-5 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .stat-card-grid-5 > :nth-child(5) {
+    grid-column: span 2;
+  }
+}
+
+/* Interactive chart hover effects */
+.chart-container:hover .recharts-bar-rectangle {
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+
+.chart-container:hover .recharts-line-curve {
+  stroke-width: 3;
+  transition: stroke-width 0.2s ease;
+}
+
+/* Enhanced table responsiveness */
+@media (max-width: 768px) {
+  .responsive-table {
+    font-size: 0.75rem;
+  }
+  
+  .responsive-table th,
+  .responsive-table td {
+    padding: 0.5rem 0.25rem;
+  }
+  
+  .responsive-table .hide-mobile {
+    display: none;
+  }
+}
+
+/* Loading states */
+.loading-shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Enhanced comparison indicators */
+.comparison-positive {
+  color: #059669;
+  background-color: #d1fae5;
+}
+
+.comparison-negative {
+  color: #dc2626;
+  background-color: #fee2e2;
+}
+
+.comparison-neutral {
+  color: #6b7280;
+  background-color: #f3f4f6;
+}
+
+/* Trend indicators */
+.trend-up::before {
+  content: "↗";
+  color: #059669;
+  font-weight: bold;
+  margin-right: 0.25rem;
+}
+
+.trend-down::before {
+  content: "↘";
+  color: #dc2626;
+  font-weight: bold;
+  margin-right: 0.25rem;
+}
+
+.trend-stable::before {
+  content: "→";
+  color: #6b7280;
+  font-weight: bold;
+  margin-right: 0.25rem;
+}
+
+/* Enhanced tooltips */
+.custom-tooltip {
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* Print optimizations */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  .print-break {
+    page-break-before: always;
+  }
+  
+  .print-avoid-break {
+    page-break-inside: avoid;
+  }
+}

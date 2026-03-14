@@ -238,4 +238,445 @@ export class PdfService {
       return this.htmlWrapper('Payslip', content);
     }
   }
+
+  /**
+   * KRA P9A Form — Annual PAYE Return for individual employee.
+   * Lists monthly earnings + deductions for all payslips in the given year.
+   */
+  async generateCustomerStatement(customerId: string, startDate: Date, endDate: Date): Promise<string> {
+    const customer = await this.prisma.customer.findUnique({ where: { id: customerId } });
+    if (!customer) throw new Error('Customer not found');
+
+    const business = await this.prisma.business.findUnique({ where: { id: customer.businessId } });
+
+    const sales = await this.prisma.sale.findMany({
+      where: {
+        customerId,
+        status: { in: ['PAID', 'AMENDED'] },
+        createdAt: { gte: startDate, lte: endDate },
+      },
+      include: { payments: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    let runningBalance = 0;
+    const rows = sales
+      .map((sale) => {
+        runningBalance += sale.totalCents;
+        const paymentMethod =
+          sale.payments.length > 0
+            ? sale.payments.map((p) => p.method).join(', ')
+            : '—';
+        return `<tr>
+          <td>${new Date(sale.createdAt).toLocaleDateString('en-KE')}</td>
+          <td>${sale.receiptNumber ?? '—'}</td>
+          <td class="amount">KES ${(sale.totalCents / 100).toFixed(2)}</td>
+          <td>${paymentMethod}</td>
+          <td class="amount">KES ${(runningBalance / 100).toFixed(2)}</td>
+        </tr>`;
+      })
+      .join('');
+
+    const startStr = startDate.toLocaleDateString('en-KE');
+    const endStr = endDate.toLocaleDateString('en-KE');
+
+    const content = `
+      <div class="header">
+        <div>
+          <div class="business-name">${business?.name ?? 'Business'}</div>
+          <div class="meta">Customer Statement</div>
+          <div class="meta">Period: ${startStr} — ${endStr}</div>
+        </div>
+        <div class="meta" style="text-align:right">
+          <div>Generated: ${new Date().toLocaleDateString('en-KE')}</div>
+        </div>
+      </div>
+
+      <div style="border:1px solid #ddd;padding:12px;margin-bottom:16px;border-radius:4px;background:#f9f9f9">
+        <strong>Customer:</strong> ${customer.name}<br/>
+        ${customer.phone ? `<strong>Phone:</strong> ${customer.phone}<br/>` : ''}
+        ${customer.email ? `<strong>Email:</strong> ${customer.email}<br/>` : ''}
+        <strong>Loyalty Points:</strong> ${customer.loyaltyPoints.toLocaleString()} pts
+      </div>
+
+      ${
+        sales.length === 0
+          ? '<p style="color:#666">No sales found for this period.</p>'
+          : `<table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Receipt #</th>
+            <th>Total</th>
+            <th>Payment Method</th>
+            <th>Balance</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>`
+      }
+
+      <div style="margin-top:20px;padding:12px;border-top:2px solid #333">
+        <strong>Current Outstanding Balance:</strong>
+        <span style="font-size:16px;font-weight:bold;color:${customer.balanceCents < 0 ? 'red' : 'green'}">
+          KES ${Math.abs(customer.balanceCents / 100).toFixed(2)}
+          ${customer.balanceCents < 0 ? ' (owed)' : customer.balanceCents > 0 ? ' (credit)' : ''}
+        </span>
+      </div>
+    `;
+
+    return this.htmlWrapper(`Customer Statement — ${customer.name}`, content);
+  }
+
+  async generateP9(employeeId: string, year: number): Promise<string> {
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    // Fetch employee info
+    const emp = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      include: { user: true },
+    });
+    if (!emp) throw new Error('Employee not found');
+
+    const business = await this.prisma.business.findUnique({ where: { id: (emp as any).businessId } });
+
+    // Fetch all payslips for this employee in the year
+    const payslips: any[] = await (this.prisma as any).payslip.findMany({
+      where: { employeeId },
+      include: { payrollRun: { where: { year } } },
+      orderBy: { createdAt: 'asc' },
+    }).catch(() => []);
+
+    // Filter to the requested year only
+    const yearPayslips = payslips.filter((p: any) => p.payrollRun?.year === year);
+
+    // Build monthly rows (all 12 months, empty if no data)
+    let totalGross = 0, totalPaye = 0, totalNhif = 0, totalNssf = 0;
+    let totalHousingLevy = 0, totalNetPay = 0, totalPersonalRelief = 0;
+
+    const rows = MONTHS.map((m, i) => {
+      const month = i + 1;
+      const p = yearPayslips.find((x: any) => x.payrollRun?.month === month);
+      if (!p) {
+        return `<tr>
+          <td>${m}</td>
+          <td class="amount">—</td><td class="amount">—</td><td class="amount">—</td>
+          <td class="amount">—</td><td class="amount">—</td><td class="amount">—</td>
+          <td class="amount">—</td><td class="amount">—</td>
+        </tr>`;
+      }
+      const personalRelief = 240000; // KES 2,400 in cents
+      totalGross += p.grossPay ?? 0;
+      totalPaye += p.payeAmount ?? 0;
+      totalNhif += p.nhifAmount ?? 0;
+      totalNssf += (p.nssf1Amount ?? 0) + (p.nssf2Amount ?? 0);
+      totalHousingLevy += p.housingLevyAmount ?? 0;
+      totalNetPay += p.netPay ?? 0;
+      totalPersonalRelief += personalRelief;
+
+      const fmt = (c: number) => (c / 100).toFixed(2);
+      return `<tr>
+        <td>${m}</td>
+        <td class="amount">${fmt(p.grossPay ?? 0)}</td>
+        <td class="amount">${fmt((p.nssf1Amount ?? 0) + (p.nssf2Amount ?? 0))}</td>
+        <td class="amount">${fmt(Math.max(0, (p.grossPay ?? 0) - (p.nssf1Amount ?? 0) - (p.nssf2Amount ?? 0)))}</td>
+        <td class="amount">${fmt(p.payeAmount ?? 0)}</td>
+        <td class="amount">${fmt(personalRelief)}</td>
+        <td class="amount">${fmt(p.nhifAmount ?? 0)}</td>
+        <td class="amount">${fmt(p.housingLevyAmount ?? 0)}</td>
+        <td class="amount">${fmt(p.netPay ?? 0)}</td>
+      </tr>`;
+    }).join('');
+
+    const fmt = (c: number) => (c / 100).toFixed(2);
+    const empName = (emp as any).user?.name ?? employeeId;
+
+    const content = `
+      <div style="border: 2px solid #333; padding: 20px; margin-bottom: 20px;">
+        <div style="text-align: center; margin-bottom: 16px;">
+          <h1 style="font-size: 16px; margin: 0;">KENYA REVENUE AUTHORITY</h1>
+          <h2 style="font-size: 14px; margin: 4px 0;">P9A FORM — PAY AS YOU EARN</h2>
+          <p style="margin: 0; font-size: 12px;">Tax Year: ${year}</p>
+        </div>
+
+        <table style="width: 100%; margin-bottom: 16px; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 4px 8px; width: 50%;"><strong>Employer Name:</strong> ${business?.name ?? '—'}</td>
+            <td style="padding: 4px 8px;"><strong>Employee Name:</strong> ${empName}</td>
+          </tr>
+          <tr>
+            <td style="padding: 4px 8px;"><strong>Employer KRA PIN:</strong> _______________</td>
+            <td style="padding: 4px 8px;"><strong>Employee KRA PIN:</strong> _______________</td>
+          </tr>
+          <tr>
+            <td style="padding: 4px 8px;"><strong>Period:</strong> January ${year} — December ${year}</td>
+            <td style="padding: 4px 8px;"><strong>Employee ID:</strong> ${(emp as any).employeeNumber ?? employeeId}</td>
+          </tr>
+        </table>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Month</th>
+            <th class="amount">Gross Pay<br/>(KES)</th>
+            <th class="amount">NSSF<br/>(KES)</th>
+            <th class="amount">Taxable Pay<br/>(KES)</th>
+            <th class="amount">Tax Charged<br/>(KES)</th>
+            <th class="amount">Personal Relief<br/>(KES)</th>
+            <th class="amount">NHIF<br/>(KES)</th>
+            <th class="amount">Housing Levy<br/>(KES)</th>
+            <th class="amount">Net Pay<br/>(KES)</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+          <tr class="total-row">
+            <td><strong>TOTAL</strong></td>
+            <td class="amount"><strong>${fmt(totalGross)}</strong></td>
+            <td class="amount"><strong>${fmt(totalNssf)}</strong></td>
+            <td class="amount"><strong>${fmt(Math.max(0, totalGross - totalNssf))}</strong></td>
+            <td class="amount"><strong>${fmt(totalPaye)}</strong></td>
+            <td class="amount"><strong>${fmt(totalPersonalRelief)}</strong></td>
+            <td class="amount"><strong>${fmt(totalNhif)}</strong></td>
+            <td class="amount"><strong>${fmt(totalHousingLevy)}</strong></td>
+            <td class="amount"><strong>${fmt(totalNetPay)}</strong></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div style="margin-top: 40px; display: flex; gap: 80px; font-size: 12px;">
+        <div>
+          Employer Signature: ___________________<br/>
+          <small>Date: ___________</small>
+        </div>
+        <div>
+          Employee Signature: ___________________<br/>
+          <small>Date: ___________</small>
+        </div>
+      </div>
+      <p style="margin-top: 20px; font-size: 10px; color: #666;">
+        This P9A form is computer-generated. Verify all figures before submission to KRA.
+        File by 31st January ${year + 1}.
+      </p>
+    `;
+    return this.htmlWrapper(`P9A — ${empName} — ${year}`, content);
+  }
+
+  async generateDebitNote(returnId: string): Promise<string> {
+    const ret = await this.prisma.supplierReturn.findUnique({
+      where: { id: returnId },
+      include: {
+        items: { include: { item: { select: { name: true, barcode: true } } } },
+        supplier: true,
+      },
+    });
+    if (!ret) throw new Error('Return not found');
+    const business = await this.prisma.business.findUnique({ where: { id: ret.businessId } });
+
+    const rows = (ret as any).items.map((i: any) => `<tr>
+      <td>${i.item.name}</td><td>${i.item.barcode ?? '—'}</td>
+      <td style="text-align:center">${i.quantity}</td>
+      <td class="amount">KES ${(i.unitCostCents / 100).toFixed(2)}</td>
+      <td class="amount">KES ${(i.totalCents / 100).toFixed(2)}</td>
+      <td>${i.reason ?? '—'}</td>
+    </tr>`).join('');
+
+    const content = `
+      <div class="header">
+        <div>
+          <div class="business-name">${business?.name ?? 'Business'}</div>
+          <div class="meta">DEBIT NOTE — ${ret.returnNumber}</div>
+          <div class="meta">Date: ${new Date(ret.createdAt).toLocaleDateString('en-KE')}</div>
+        </div>
+        <div class="meta" style="text-align:right">
+          <strong>Supplier:</strong> ${(ret as any).supplier?.name ?? ret.supplierId}<br/>
+          <strong>Status:</strong> ${ret.status}
+        </div>
+      </div>
+      <div style="padding:10px;background:#fff3cd;border:1px solid #ffc107;border-radius:4px;margin-bottom:16px">
+        <strong>Reason:</strong> ${ret.reason}${ret.notes ? `<br/><strong>Notes:</strong> ${ret.notes}` : ''}
+      </div>
+      <table>
+        <thead><tr><th>Item</th><th>SKU</th><th>Qty</th><th>Unit Cost</th><th>Total</th><th>Reason</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div style="margin-top:20px;text-align:right;font-size:16px;font-weight:bold">
+        Total Debit: KES ${(ret.totalCents / 100).toFixed(2)}
+      </div>
+    `;
+    return this.htmlWrapper(`Debit Note — ${ret.returnNumber}`, content);
+  }
+
+  async generateExpenseReport(employeeId: string, month: string): Promise<string> {
+    const [year, m] = month.split('-').map(Number);
+    const start = new Date(year, m - 1, 1);
+    const end = new Date(year, m, 0, 23, 59, 59);
+
+    const expenses = await this.prisma.expense.findMany({
+      where: { submittedBy: employeeId, date: { gte: start, lte: end } },
+      orderBy: { date: 'asc' },
+    });
+
+    const total = expenses.reduce((s, e) => s + e.amountCents, 0);
+    const vatBase = expenses.filter(e => e.vatReclaimable).reduce((s, e) => s + e.amountCents, 0);
+    const vatAmount = Math.round(vatBase * 16 / 116);
+
+    const rows = expenses.map(e => {
+      const dateStr = e.date
+        ? new Date(e.date).toISOString().slice(0, 10)
+        : new Date(e.createdAt).toISOString().slice(0, 10);
+      const statusBg = e.approvalStatus === 'APPROVED' ? '#d1fae5' : e.approvalStatus === 'REJECTED' ? '#fee2e2' : '#fef3c7';
+      const statusColor = e.approvalStatus === 'APPROVED' ? '#065f46' : e.approvalStatus === 'REJECTED' ? '#991b1b' : '#92400e';
+      return `<tr>
+        <td>${dateStr}</td>
+        <td>${e.category}</td>
+        <td>${(e.description ?? '').replace(/</g, '&lt;')}</td>
+        <td class="amount">KES ${(e.amountCents / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
+        <td><span style="padding:2px 6px;border-radius:4px;font-size:10px;background:${statusBg};color:${statusColor}">${e.approvalStatus}</span></td>
+        <td style="text-align:center">${e.vatReclaimable ? '&#10003;' : ''}</td>
+      </tr>`;
+    }).join('');
+
+    const content = `
+      <div class="header">
+        <div>
+          <div class="business-name">Expense Report</div>
+          <div class="meta">Employee: ${employeeId}</div>
+          <div class="meta">Period: ${month}</div>
+        </div>
+        <div class="meta" style="text-align:right">
+          <div>Generated: ${new Date().toLocaleDateString('en-KE')}</div>
+          <div>${expenses.length} expense(s)</div>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr><th>Date</th><th>Category</th><th>Description</th><th>Amount</th><th>Status</th><th>VAT</th></tr>
+        </thead>
+        <tbody>
+          ${rows || '<tr><td colspan="6" style="text-align:center;color:#999">No expenses found for this period</td></tr>'}
+          <tr class="total-row">
+            <td colspan="3"><strong>TOTAL</strong></td>
+            <td class="amount"><strong>KES ${(total / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</strong></td>
+            <td></td><td></td>
+          </tr>
+        </tbody>
+      </table>
+      ${vatAmount > 0 ? `
+      <div style="margin-top:16px;padding:12px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;font-size:12px">
+        <strong>VAT Reclaim Summary</strong><br/>
+        Reclaimable total: KES ${(vatBase / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })} |
+        Estimated input VAT (16/116): <strong>KES ${(vatAmount / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</strong>
+      </div>` : ''}
+      <div style="margin-top:40px;display:flex;gap:80px;font-size:12px">
+        <div>Employee Signature: ___________________<br/><small>Date: ___________</small></div>
+        <div>Manager Approval: ___________________<br/><small>Date: ___________</small></div>
+      </div>
+    `;
+    return this.htmlWrapper(`Expense Report — ${month}`, content);
+  }
+
+  /**
+   * KRA P10A Form — Monthly PAYE Return.
+   * Lists all employees' earnings and PAYE for a given month.
+   */
+  async generateP10(businessId: string, month: number, year: number): Promise<string> {
+    const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const monthName = MONTHS[(month - 1) % 12];
+
+    const business = await this.prisma.business.findUnique({ where: { id: businessId } });
+
+    const run: any = await (this.prisma as any).payrollRun.findFirst({
+      where: { businessId, month, year },
+      include: {
+        payslips: true,
+      },
+    }).catch(() => null);
+
+    const fmt = (c: number) => (c / 100).toFixed(2);
+    const businessPin = (business as any)?.kraPin ?? (business as any)?.kraCredentials ?? 'N/A';
+
+    let totalGross = 0, totalPaye = 0, totalRelief = 0, totalTaxable = 0;
+    const PERSONAL_RELIEF_CENTS = 240000; // KES 2,400/month
+
+    const payslips: any[] = run?.payslips ?? [];
+
+    const tableRows = payslips.map((p: any) => {
+      const gross = p.grossPay ?? 0;
+      const nssf = (p.nssf1Amount ?? 0) + (p.nssf2Amount ?? 0);
+      const taxable = Math.max(0, gross - nssf);
+      const relief = PERSONAL_RELIEF_CENTS;
+      const paye = p.payeAmount ?? 0;
+      totalGross += gross;
+      totalPaye += paye;
+      totalRelief += relief;
+      totalTaxable += taxable;
+      return `<tr>
+        <td>${(p.employeeName ?? '').replace(/</g, '&lt;')}</td>
+        <td>N/A</td>
+        <td class="amount">${fmt(gross)}</td>
+        <td class="amount">${fmt(relief)}</td>
+        <td class="amount">${fmt(taxable)}</td>
+        <td class="amount">${fmt(paye)}</td>
+      </tr>`;
+    }).join('');
+
+    const content = `
+      <div style="border: 2px solid #333; padding: 20px; margin-bottom: 20px;">
+        <div style="text-align: center; margin-bottom: 16px;">
+          <h1 style="font-size: 16px; margin: 0;">KENYA REVENUE AUTHORITY</h1>
+          <h2 style="font-size: 14px; margin: 4px 0;">P10A FORM — EMPLOYER'S MONTHLY PAYE RETURN</h2>
+          <p style="margin: 0; font-size: 12px;">Month: ${monthName} ${year}</p>
+        </div>
+        <table style="width:100%;margin-bottom:16px;border-collapse:collapse;">
+          <tr>
+            <td style="padding:4px 8px;width:50%;"><strong>Employer Name:</strong> ${business?.name ?? '—'}</td>
+            <td style="padding:4px 8px;"><strong>Employer KRA PIN:</strong> ${businessPin}</td>
+          </tr>
+          <tr>
+            <td style="padding:4px 8px;"><strong>Month/Year:</strong> ${monthName} ${year}</td>
+            <td style="padding:4px 8px;"><strong>Payroll Status:</strong> ${run?.status ?? 'N/A'}</td>
+          </tr>
+        </table>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Employee Name</th>
+            <th>Employee KRA PIN</th>
+            <th class="amount">Gross Pay (KES)</th>
+            <th class="amount">Tax Relief (KES)</th>
+            <th class="amount">Taxable Pay (KES)</th>
+            <th class="amount">PAYE (KES)</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRows || '<tr><td colspan="6" style="text-align:center;color:#999;">No payslips found for this period</td></tr>'}
+          <tr class="total-row">
+            <td colspan="2"><strong>TOTALS</strong></td>
+            <td class="amount"><strong>${fmt(totalGross)}</strong></td>
+            <td class="amount"><strong>${fmt(totalRelief)}</strong></td>
+            <td class="amount"><strong>${fmt(totalTaxable)}</strong></td>
+            <td class="amount"><strong>${fmt(totalPaye)}</strong></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div style="margin-top:24px;padding:12px;background:#fff8e1;border-left:4px solid #f59e0b;font-size:11px;">
+        <strong>Note:</strong> File this return on iTax by the 9th of ${MONTHS[month % 12]} ${month === 12 ? year + 1 : year}.
+        Total PAYE remittable: <strong>KES ${fmt(totalPaye)}</strong>
+      </div>
+
+      <div style="margin-top: 40px; display: flex; gap: 80px; font-size: 12px;">
+        <div>Authorized Signature: ___________________<br/><small>Date: ___________</small></div>
+        <div>Designation: ___________________<br/><small>Official Stamp:</small></div>
+      </div>
+    `;
+
+    return this.htmlWrapper(`P10A — ${monthName} ${year} — ${business?.name ?? businessId}`, content);
+  }
 }

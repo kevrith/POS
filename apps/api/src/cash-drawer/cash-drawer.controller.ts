@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Patch, Body, Param } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Body, Param, Query, BadRequestException } from '@nestjs/common';
 import { CashDrawerService } from './cash-drawer.service';
 
 @Controller('cash-drawer')
@@ -11,6 +11,7 @@ export class CashDrawerController {
     storeId: string;
     cashierId: string;
     openingBalanceCents: number;
+    tillNumber?: number;
   }) {
     return this.cashDrawerService.openSession(data);
   }
@@ -33,6 +34,11 @@ export class CashDrawerController {
     @Param('storeId') storeId: string
   ) {
     return this.cashDrawerService.getCurrentSession(cashierId, storeId);
+  }
+
+  @Get('active-sessions')
+  async getActiveSessions(@Query('storeId') storeId: string, @Query('businessId') businessId?: string) {
+    return this.cashDrawerService.getActiveSessions(storeId, businessId);
   }
 
   @Get(':id/summary')

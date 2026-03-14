@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Req, Get, Redirect } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Req, Get, Redirect, Delete, Param } from '@nestjs/common';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
@@ -32,13 +32,13 @@ interface RegisterDto {
 export class AuthController {
   constructor(private authService: AuthService) {}
 
-  @Throttle({ auth: { limit: 10, ttl: 60000 } })
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('login')
   async login(@Body() dto: LoginDto) {
     return this.authService.loginWithPassword(dto.email, dto.password, dto.totpCode);
   }
 
-  @Throttle({ auth: { limit: 20, ttl: 60000 } })
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   @Post('login/pin')
   async loginPin(@Body() dto: PinLoginDto) {
     return this.authService.loginWithPin(dto.pin, dto.businessId, dto.storeId);
@@ -97,5 +97,29 @@ export class AuthController {
     @Body() dto: { pin: string; businessId: string },
   ) {
     return this.authService.verifyManagerPin(dto.pin, dto.businessId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('change-password')
+  async changePassword(@Req() req: Request & { user: AuthUser }, @Body() body: { currentPassword: string; newPassword: string }) {
+    return this.authService.changePassword(req.user.id, body.currentPassword, body.newPassword);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('sessions')
+  async getSessions(@Req() req: Request & { user: AuthUser }) {
+    return this.authService.getSessions(req.user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('sessions/:id')
+  async revokeSession(@Req() req: Request & { user: AuthUser }, @Param('id') id: string) {
+    return this.authService.revokeSession(id, req.user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('sessions')
+  async revokeAllSessions(@Req() req: Request & { user: AuthUser }) {
+    return this.authService.revokeAllSessions(req.user.id);
   }
 }

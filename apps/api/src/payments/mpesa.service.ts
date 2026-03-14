@@ -219,6 +219,50 @@ export class MpesaService {
     return { qrCode: result.QRCode!, demoMode: false };
   }
 
+  async initiateB2C(params: {
+    phone: string;
+    amountCents: number;
+    remarks: string;
+    businessId: string;
+  }): Promise<{ conversationId: string; originatorConversationId: string; responseDescription: string }> {
+    const token = await this.getAccessToken();
+    const shortCode = this.config.get<string>('MPESA_SHORTCODE') ?? '174379';
+    const securityCred = this.config.get<string>('MPESA_B2C_SECURITY_CREDENTIAL') ?? 'MOCK_CRED';
+    const callbackUrl = this.config.get<string>('MPESA_CALLBACK_URL') ?? 'https://example.com/callback';
+
+    // Sandbox / mock fallback when B2C credential not set
+    if (!this.config.get<string>('MPESA_B2C_SECURITY_CREDENTIAL')) {
+      return {
+        conversationId: `B2C-MOCK-${Date.now()}`,
+        originatorConversationId: `OC-${Date.now()}`,
+        responseDescription: `Mock B2C: KES ${(params.amountCents / 100).toFixed(2)} → ${params.phone}`,
+      };
+    }
+
+    const res = await fetch('https://sandbox.safaricom.co.ke/mpesa/b2c/v1/paymentrequest', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        InitiatorName: 'testapi',
+        SecurityCredential: securityCred,
+        CommandID: 'BusinessPayment',
+        Amount: Math.round(params.amountCents / 100),
+        PartyA: shortCode,
+        PartyB: params.phone,
+        Remarks: params.remarks,
+        QueueTimeOutURL: `${callbackUrl}/b2c/timeout`,
+        ResultURL: `${callbackUrl}/b2c/result`,
+        Occasion: params.businessId,
+      }),
+    });
+    const data = await res.json() as any;
+    return {
+      conversationId: data.ConversationID,
+      originatorConversationId: data.OriginatorConversationID,
+      responseDescription: data.ResponseDescription,
+    };
+  }
+
   async handleCallback(body: unknown): Promise<void> {
     const data = body as MpesaCallbackBody;
     const callback = data?.Body?.stkCallback;

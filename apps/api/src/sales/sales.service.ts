@@ -17,6 +17,7 @@ interface FindAllOptions {
   endDate?: Date;
   status?: string;
   etimsSubmitted?: boolean;
+  receiptNumber?: string;
   limit: number;
   offset: number;
 }
@@ -50,6 +51,7 @@ interface CreateSaleDto {
   /** When provided by the frontend (0 = disabled, >0 = enabled), use it directly.
    *  Falls back to business.serviceChargeRate only when omitted (old clients). */
   serviceChargeCents?: number;
+  tipCents?: number;
   /** Hospitality order ID — if provided, mark it PAID and free its table after checkout */
   orderId?: string;
 }
@@ -115,11 +117,12 @@ export class SalesService {
       ? dto.serviceChargeCents
       : calculateServiceCharge(subtotalCents, store.business.serviceChargeRate);
     const discountCents = dto.discountCents ?? 0;
+    const tipCents = dto.tipCents ?? 0;
     const taxBase = subtotalCents - discountCents;
     // VAT/TOT are inclusive in item prices — extract for reporting only, do NOT add to total
     const vatCents = store.business.taxType === 'VAT' ? calculateVAT(taxBase) : 0;
     const totCents = store.business.taxType === 'TOT' ? calculateTOT(taxBase) : 0;
-    const totalCents = taxBase + serviceChargeCents;
+    const totalCents = taxBase + serviceChargeCents + tipCents;
 
     // ── Write transaction (kept minimal: sale + sequence + stock movements) ──
     const sale = await this.prisma.$transaction(async (tx) => {
@@ -143,6 +146,7 @@ export class SalesService {
           priceLevel: dto.priceLevel,
           subtotalCents,
           serviceChargeCents,
+          tipCents,
           discountCents,
           promotionId: dto.promotionId,
           vatCents,
@@ -454,6 +458,12 @@ export class SalesService {
     if (opts.storeId) where['storeId'] = opts.storeId;
     if (opts.status) where['status'] = opts.status;
     if (opts.etimsSubmitted !== undefined) where['etimsSubmitted'] = opts.etimsSubmitted;
+    if (opts.receiptNumber) {
+      where['receiptNumber'] = {
+        contains: opts.receiptNumber,
+        mode: 'insensitive',
+      };
+    }
     if (opts.startDate || opts.endDate) {
       where['createdAt'] = {
         ...(opts.startDate ? { gte: opts.startDate } : {}),

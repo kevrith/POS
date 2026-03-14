@@ -88,16 +88,46 @@ export class HospitalityService {
     tableId?: string;
     roomNumber?: string;
     waiterId: string;
+    roomBookingId?: string;
   }) {
+    const { roomBookingId, ...orderData } = data;
     const order = await this.prisma.order.create({
-      data: { ...data, status: 'OPEN' },
+      data: { ...orderData, status: 'OPEN' },
     });
 
     if (data.tableId) {
       await this.updateTableStatus(data.tableId, 'OCCUPIED');
     }
 
+    // Auto-link to room booking folio if explicitly provided
+    if (roomBookingId) {
+      await this.linkOrderToFolio(order.id, roomBookingId).catch(() => null);
+    }
+
     return order;
+  }
+
+  async linkOrderToFolio(orderId: string, roomBookingId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+    if (!order) throw new Error('Order not found');
+    const booking = await this.prisma.roomBooking.findUnique({ where: { id: roomBookingId } });
+    if (!booking) throw new Error('Booking not found');
+    const totalCents = order.items.reduce((s, i) => s + i.totalCents, 0);
+    return this.prisma.guestFolioCharge.create({
+      data: {
+        bookingId: roomBookingId,
+        businessId: booking.businessId,
+        description: `Room service order #${orderId.slice(-8).toUpperCase()}`,
+        amountCents: totalCents > 0 ? totalCents : 0,
+        totalCents: totalCents > 0 ? totalCents : 0,
+        quantity: 1,
+        type: 'FOOD_BEVERAGE',
+        date: new Date(),
+      },
+    });
   }
 
   async addOrderItems(orderId: string, items: Array<{
@@ -107,6 +137,8 @@ export class HospitalityService {
     unitPriceCents: number;
     specialInstructions?: string;
     modifiers?: Array<{ name: string; priceCents?: number } | string>;
+    course?: string;
+    seatNumber?: number;
   }>) {
     return Promise.all(
       items.map(item => {
@@ -125,6 +157,8 @@ export class HospitalityService {
             totalCents,
             specialInstructions: item.specialInstructions,
             modifiers: item.modifiers ? JSON.stringify(item.modifiers) : null,
+            course: item.course ?? 'MAIN',
+            seatNumber: item.seatNumber ?? 0,
           },
         });
       })
@@ -282,6 +316,7 @@ export class HospitalityService {
     reservationTime: Date;
     duration?: number;
     notes?: string;
+    depositCents?: number;
   }) {
     const existing = await this.prisma.tableReservation.findFirst({
       where: {
@@ -308,8 +343,22 @@ export class HospitalityService {
         duration: data.duration || 120,
         notes: data.notes,
         status: 'CONFIRMED',
+        depositCents: data.depositCents ?? 0,
       },
     });
+  }
+
+  async getReservationDepositStatus(reservationId: string) {
+    const reservation = await this.prisma.tableReservation.findUnique({
+      where: { id: reservationId },
+      include: { table: { select: { number: true, capacity: true } } },
+    });
+    if (!reservation) throw new NotFoundException('Reservation not found');
+    return {
+      ...reservation,
+      hasDeposit: (reservation.depositCents ?? 0) > 0,
+      depositFormatted: `KES ${((reservation.depositCents ?? 0) / 100).toFixed(2)}`,
+    };
   }
 
   async getReservations(storeId: string, date?: Date) {
@@ -328,7 +377,14 @@ export class HospitalityService {
     });
   }
 
-  async createKOT(orderId: string, type: string) {
+  async fireCourse(orderId: string, course: string) {
+    return this.prisma.orderItem.updateMany({
+      where: { orderId, course, firedAt: null },
+      data: { firedAt: new Date() },
+    });
+  }
+
+  async createKOT(orderId: string, type: string, itemIds?: string[]) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: { kots: true },
@@ -338,9 +394,12 @@ export class HospitalityService {
 
     const kotNumber = order.kots.length + 1;
 
-    // Calculate estimated prep minutes from order items
+    // Calculate estimated prep minutes from the KOT's items (or all order items for NEW_ORDER)
+    const itemFilter = itemIds && itemIds.length > 0
+      ? { orderId, id: { in: itemIds } }
+      : { orderId };
     const items = await this.prisma.orderItem.findMany({
-      where: { orderId },
+      where: itemFilter,
       include: { item: { select: { prepTimeMinutes: true } } },
     });
     const estimatedPrepMinutes = items.length > 0
@@ -353,6 +412,7 @@ export class HospitalityService {
         kotNumber,
         type,
         status: 'PENDING',
+        itemIds: JSON.stringify(itemIds ?? []),
         printedAt: new Date(),
         estimatedPrepMinutes,
       },
@@ -414,7 +474,7 @@ export class HospitalityService {
   }
 
   async getKDSOrders(storeId: string) {
-    return this.prisma.kOT.findMany({
+    const kots = await this.prisma.kOT.findMany({
       where: {
         order: { storeId },
         status: { in: ['PENDING', 'IN_PROGRESS', 'READY'] },
@@ -435,6 +495,15 @@ export class HospitalityService {
         { priority: 'desc' },
         { createdAt: 'asc' },
       ],
+    });
+
+    // Filter order.items to only those belonging to this KOT
+    return kots.map(kot => {
+      const kotItemIds = JSON.parse(kot.itemIds ?? '[]') as string[];
+      const filteredItems = kotItemIds.length > 0
+        ? kot.order.items.filter(i => kotItemIds.includes(i.id))
+        : kot.order.items;
+      return { ...kot, order: { ...kot.order, items: filteredItems } };
     });
   }
 
@@ -743,27 +812,50 @@ export class HospitalityService {
   async checkOutGuest(bookingId: string, payments: Array<{ method: string; amountCents: number }>) {
     const booking = await this.prisma.roomBooking.findUnique({
       where: { id: bookingId },
-      include: { room: true },
+      include: { room: true, folioCharges: true },
     });
     if (!booking) throw new NotFoundException('Booking not found');
     if (booking.status !== 'CHECKED_IN') {
       throw new BadRequestException('Guest is not checked in');
     }
+
+    // Auto-add room rate charges for each night if not already posted
+    const existingRoomRateNights = booking.folioCharges
+      .filter(c => c.type === 'ROOM_RATE')
+      .reduce((sum, c) => sum + c.quantity, 0);
+    const nightsToAdd = (booking.nightCount || 1) - existingRoomRateNights;
+    if (nightsToAdd > 0) {
+      await this.prisma.guestFolioCharge.create({
+        data: {
+          bookingId,
+          businessId: booking.businessId,
+          type: 'ROOM_RATE',
+          description: `Room ${booking.room.number} — ${nightsToAdd} night${nightsToAdd !== 1 ? 's' : ''} × KES ${(booking.pricePerNightCents / 100).toFixed(0)}/night`,
+          amountCents: booking.pricePerNightCents,
+          quantity: nightsToAdd,
+          totalCents: booking.pricePerNightCents * nightsToAdd,
+        },
+      });
+    }
+
+    // Reload folio after auto-adding room rate
+    const allCharges = await this.prisma.guestFolioCharge.findMany({ where: { bookingId } });
+    const folioTotal = allCharges.reduce((sum, c) => sum + c.totalCents, 0);
+    const balanceDue = Math.max(0, folioTotal - (booking.depositCents ?? 0));
+
     const checkOut = new Date();
     const [updated] = await this.prisma.$transaction([
       this.prisma.roomBooking.update({
         where: { id: bookingId },
-        data: {
-          status: 'CHECKED_OUT',
-          actualCheckOut: checkOut,
-        },
+        data: { status: 'CHECKED_OUT', actualCheckOut: checkOut, totalAmountCents: folioTotal },
+        include: { folioCharges: true, room: { select: { number: true, type: true } } },
       }),
       this.prisma.hotelRoom.update({
         where: { id: booking.roomId },
-        data: { status: 'AVAILABLE' },
+        data: { status: 'AVAILABLE', housekeepingStatus: 'DIRTY' },
       }),
     ]);
-    return { ...updated, payments };
+    return { ...updated, folioTotal, balanceDue, payments };
   }
 
   async cancelRoomBooking(bookingId: string) {
@@ -777,5 +869,264 @@ export class HospitalityService {
       this.prisma.hotelRoom.update({ where: { id: booking.roomId }, data: { status: 'AVAILABLE' } }),
     ]);
     return { success: true };
+  }
+
+  // ── Guest Folio ─────────────────────────────────────────────────────────────
+
+  async getFolio(bookingId: string) {
+    const booking = await this.prisma.roomBooking.findUnique({
+      where: { id: bookingId },
+      include: {
+        room: { select: { number: true, type: true, floor: true } },
+        folioCharges: { orderBy: { date: 'asc' } },
+      },
+    });
+    if (!booking) throw new NotFoundException('Booking not found');
+    const folioTotal = booking.folioCharges.reduce((sum, c) => sum + c.totalCents, 0);
+    const balanceDue = Math.max(0, folioTotal - (booking.depositCents ?? 0));
+    const roomRateTotal = booking.pricePerNightCents * booking.nightCount;
+    return { ...booking, folioTotal, balanceDue, roomRateTotal };
+  }
+
+  async addFolioCharge(bookingId: string, data: {
+    type: string;
+    description: string;
+    amountCents: number;
+    quantity?: number;
+    postedBy?: string;
+    saleId?: string;
+  }) {
+    const booking = await this.prisma.roomBooking.findUnique({ where: { id: bookingId } });
+    if (!booking) throw new NotFoundException('Booking not found');
+    const qty = data.quantity ?? 1;
+    return this.prisma.guestFolioCharge.create({
+      data: {
+        bookingId,
+        businessId: booking.businessId,
+        type: data.type,
+        description: data.description,
+        amountCents: data.amountCents,
+        quantity: qty,
+        totalCents: data.amountCents * qty,
+        postedBy: data.postedBy,
+        saleId: data.saleId,
+        date: new Date(),
+      },
+    });
+  }
+
+  async removeFolioCharge(chargeId: string) {
+    await this.prisma.guestFolioCharge.delete({ where: { id: chargeId } });
+    return { success: true };
+  }
+
+  // ── Void Single KOT Item ─────────────────────────────────────────────────────
+
+  async voidOrderItem(orderId: string, itemId: string, reason: string, _managerId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+    if (!order) throw new Error('Order not found');
+    if (['PAID', 'CANCELLED'].includes(order.status)) throw new Error('Cannot modify a completed order');
+
+    const item = order.items.find(i => i.id === itemId);
+    if (!item) throw new Error('Item not found in order');
+
+    await this.prisma.orderItem.delete({ where: { id: itemId } });
+
+    // Audit notification (fire and forget)
+    this.prisma.notification.create({
+      data: {
+        businessId: order.businessId,
+        title: 'KOT Item Voided',
+        body: `"${item.name}" x${item.quantity} removed from Order ${order.id.slice(-6).toUpperCase()}. Reason: ${reason}`,
+        type: 'VOID',
+      },
+    }).catch(() => {});
+
+    return this.prisma.order.findUnique({ where: { id: orderId }, include: { items: true } });
+  }
+
+  // ── Happy Hours ───────────────────────────────────────────────────────────────
+
+  async getHappyHours(businessId: string) {
+    return this.prisma.happyHour.findMany({
+      where: { businessId, isActive: true },
+      orderBy: { startHour: 'asc' },
+    });
+  }
+
+  async createHappyHour(data: {
+    businessId: string;
+    name: string;
+    discountPct: number;
+    startHour: number;
+    endHour: number;
+    startMinute?: number;
+    endMinute?: number;
+    appliesTo?: string;
+    storeId?: string;
+  }) {
+    return this.prisma.happyHour.create({
+      data: {
+        businessId: data.businessId,
+        name: data.name,
+        discountPct: data.discountPct,
+        startHour: data.startHour,
+        startMinute: data.startMinute ?? 0,
+        endHour: data.endHour,
+        endMinute: data.endMinute ?? 0,
+        appliesTo: data.appliesTo ?? 'ALL',
+        storeId: data.storeId,
+      },
+    });
+  }
+
+  async deleteHappyHour(id: string) {
+    return this.prisma.happyHour.delete({ where: { id } });
+  }
+
+  async getActiveHappyHourDiscount(businessId: string): Promise<number> {
+    const now = new Date();
+    const currentMins = now.getHours() * 60 + now.getMinutes();
+    const currentDay = now.getDay();
+
+    const happyHours = await this.prisma.happyHour.findMany({
+      where: { businessId, isActive: true },
+    });
+
+    for (const hh of happyHours) {
+      const days: number[] = JSON.parse(hh.daysOfWeek) as number[];
+      if (!days.includes(currentDay)) continue;
+      const startMins = hh.startHour * 60 + hh.startMinute;
+      const endMins = hh.endHour * 60 + hh.endMinute;
+      if (currentMins >= startMins && currentMins < endMins) {
+        return hh.discountPct;
+      }
+    }
+    return 0;
+  }
+
+  // ── RevPASH ───────────────────────────────────────────────────────────────
+
+  async getRevPASH(businessId: string, storeId: string, date: string) {
+    const dayStart = new Date(date);
+    const dayEnd = new Date(date);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+
+    // Total sales from table orders
+    const sales = await this.prisma.sale.findMany({
+      where: {
+        businessId,
+        storeId,
+        status: 'COMPLETED',
+        createdAt: { gte: dayStart, lt: dayEnd },
+        orderId: { not: null },
+      },
+      select: { totalCents: true },
+    });
+    const totalRevenueCents = sales.reduce((s, sale) => s + sale.totalCents, 0);
+
+    // Total seat capacity
+    const tables = await this.prisma.table.findMany({ where: { storeId }, select: { capacity: true } });
+    const totalSeats = tables.reduce((s, t) => s + t.capacity, 0);
+
+    const openHours = 12; // default
+    const revPASH = totalSeats > 0 ? totalRevenueCents / (totalSeats * openHours) : 0;
+
+    return {
+      date,
+      totalRevenueCents,
+      totalSeats,
+      openHours,
+      revPASHCents: Math.round(revPASH),
+      revPASH: revPASH / 100,
+      saleCount: sales.length,
+      avgCheckCents: sales.length > 0 ? Math.round(totalRevenueCents / sales.length) : 0,
+      tableCount: tables.length,
+    };
+  }
+
+  // ── Housekeeping ─────────────────────────────────────────────────────────────
+
+  async updateHousekeepingStatus(roomId: string, housekeepingStatus: string) {
+    return this.prisma.hotelRoom.update({
+      where: { id: roomId },
+      data: { housekeepingStatus },
+    });
+  }
+
+  async getHousekeepingQueue(businessId: string, storeId: string) {
+    const rooms = await this.prisma.hotelRoom.findMany({
+      where: { businessId, storeId },
+      select: {
+        id: true, number: true, floor: true, type: true,
+        status: true, housekeepingStatus: true,
+        bookings: {
+          where: { status: { in: ['CHECKED_IN', 'CHECKED_OUT'] } },
+          orderBy: { actualCheckOut: 'desc' },
+          take: 1,
+          select: { guestName: true, actualCheckOut: true, status: true },
+        },
+      },
+      orderBy: [{ floor: 'asc' }, { number: 'asc' }],
+    });
+    return rooms.map(r => ({
+      ...r,
+      lastGuest: r.bookings[0] ?? null,
+      bookings: undefined,
+    }));
+  }
+
+  // ── Hotel Dashboard ──────────────────────────────────────────────────────────
+
+  async getHotelDashboard(businessId: string, storeId: string) {
+    const rooms = await this.prisma.hotelRoom.findMany({
+      where: { businessId, storeId },
+    });
+    const total = rooms.length;
+    const occupied = rooms.filter(r => r.status === 'OCCUPIED').length;
+    const available = rooms.filter(r => r.status === 'AVAILABLE').length;
+    const reserved = rooms.filter(r => r.status === 'RESERVED').length;
+    const maintenance = rooms.filter(r => r.status === 'MAINTENANCE').length;
+    const occupancyPct = total > 0 ? Math.round((occupied / total) * 100) : 0;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const todayArrivals = await this.prisma.roomBooking.count({
+      where: {
+        businessId, storeId,
+        status: { in: ['RESERVED', 'CHECKED_IN'] },
+        checkInDate: { gte: today, lt: tomorrow },
+      },
+    });
+
+    const todayDepartures = await this.prisma.roomBooking.count({
+      where: {
+        businessId, storeId,
+        status: 'CHECKED_IN',
+        checkOutDate: { gte: today, lt: tomorrow },
+      },
+    });
+
+    // Revenue this month
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const monthlyRevenue = await this.prisma.guestFolioCharge.aggregate({
+      where: { businessId, createdAt: { gte: startOfMonth } },
+      _sum: { totalCents: true },
+    });
+
+    // Dirty rooms needing housekeeping
+    const dirtyRooms = rooms.filter(r => r.housekeepingStatus === 'DIRTY').length;
+
+    return {
+      total, occupied, available, reserved, maintenance,
+      occupancyPct, todayArrivals, todayDepartures, dirtyRooms,
+      monthlyRevenueCents: monthlyRevenue._sum.totalCents ?? 0,
+    };
   }
 }

@@ -17,6 +17,7 @@ export interface CartItem {
   vatApplicable: boolean;
   totApplicable: boolean;
   weightGrams?: number;
+  tareGrams?: number;
 }
 
 export interface ApiItem {
@@ -35,6 +36,11 @@ export interface ApiItem {
   vatApplicable: boolean;
   totApplicable: boolean;
   category?: string | null;  // stored as plain string in DB (e.g. "Food", "Beverages")
+  ageRestricted?: boolean;
+  minAgeYears?: number;
+  tareWeightGrams?: number;
+  binLocation?: string;
+  sku?: string;
 }
 
 export interface HeldSale {
@@ -54,9 +60,12 @@ interface POSState {
   customerName: string | null;
   heldSales: HeldSale[];
   addToCart: (item: ApiItem) => void;
+  addWeightedToCart: (item: ApiItem, weightGrams: number, overridePriceCents?: number) => void;
   removeFromCart: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
   updateDiscount: (id: string, discountPercent: number) => void;
+  updateUnitPrice: (id: string, newPriceCents: number) => void;
+  updateTare: (id: string, tareGrams: number) => void;
   clearCart: () => void;
   setPriceLevel: (level: PriceLevel) => void;
   setCustomer: (id: string | null, name: string | null) => void;
@@ -107,6 +116,30 @@ export const usePOSStore = create<POSState>()((set, _get) => ({
       return { cart: [...state.cart, newItem] };
     }),
 
+  addWeightedToCart: (item: ApiItem, weightGrams: number, overridePriceCents?: number) =>
+    set((state) => {
+      const unitPrice = overridePriceCents ?? getPriceForLevel(item, state.priceLevel);
+      // quantity = kg, price per kg → totalCents = (weightGrams/1000) * unitPrice
+      const quantity = weightGrams / 1000;
+      const totalCents = Math.round(quantity * unitPrice);
+      const newItem: CartItem = {
+        id: item.id,
+        name: item.name,
+        barcode: item.barcode,
+        quantity,
+        unitPriceCents: unitPrice,
+        totalCents,
+        trackStock: item.trackStock,
+        currentStock: item.currentStock,
+        itemType: item.type,
+        vatApplicable: item.vatApplicable,
+        totApplicable: item.totApplicable,
+        weightGrams,
+      };
+      // Always add as new line (weight items are unique per scan)
+      return { cart: [...state.cart, newItem] };
+    }),
+
   removeFromCart: (id) =>
     set((state) => ({ cart: state.cart.filter((i) => i.id !== id) })),
 
@@ -132,6 +165,32 @@ export const usePOSStore = create<POSState>()((set, _get) => ({
           const discount = Math.max(0, Math.min(100, discountPercent));
           const discountedPrice = Math.round(i.unitPriceCents * (1 - discount / 100));
           return { ...i, discountPercent: discount, totalCents: i.quantity * discountedPrice };
+        }
+        return i;
+      }),
+    })),
+
+  updateUnitPrice: (id, newPriceCents) =>
+    set((state) => ({
+      cart: state.cart.map((i) => {
+        if (i.id === id) {
+          const discount = i.discountPercent ?? 0;
+          const discountedPrice = Math.round(newPriceCents * (1 - discount / 100));
+          return { ...i, unitPriceCents: newPriceCents, totalCents: i.quantity * discountedPrice };
+        }
+        return i;
+      }),
+    })),
+
+  updateTare: (id, tareGrams) =>
+    set((state) => ({
+      cart: state.cart.map((i) => {
+        if (i.id === id && i.weightGrams != null) {
+          const netGrams = Math.max(0, i.weightGrams - tareGrams);
+          const netQty = netGrams / 1000;
+          const discount = i.discountPercent ?? 0;
+          const discountedPrice = Math.round(i.unitPriceCents * (1 - discount / 100));
+          return { ...i, tareGrams, quantity: netQty, totalCents: Math.round(netQty * discountedPrice) };
         }
         return i;
       }),

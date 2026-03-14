@@ -16,6 +16,7 @@ const inputStyle: React.CSSProperties = {
 
 function TierBadge({ tier }: { tier: string }) {
   const m: Record<string, { bg: string; color: string }> = {
+    LIFETIME:   { bg: 'rgba(245,158,11,0.15)',  color: '#f59e0b' },
     ENTERPRISE: { bg: 'rgba(139,92,246,0.12)', color: '#8b5cf6' },
     PRO:        { bg: 'rgba(59,130,246,0.12)',  color: '#3b82f6' },
     STARTER:    { bg: 'rgba(100,116,139,0.12)', color: '#64748b' },
@@ -56,7 +57,7 @@ export default function LicenseKeysPage() {
   const createKey = async () => {
     setCreating(true);
     try {
-      const expiresAt = expiresInDays ? new Date(Date.now() + parseInt(expiresInDays) * 86400000).toISOString() : undefined;
+      const expiresAt = (tier === 'LIFETIME' || !expiresInDays) ? undefined : new Date(Date.now() + parseInt(expiresInDays) * 86400000).toISOString();
       await adminApi.createLicenseKey(tier, expiresAt);
       load();
     } catch (e: any) { alert(e.message); }
@@ -68,7 +69,7 @@ export default function LicenseKeysPage() {
     setMbCreating(true);
     setMbResult(null);
     try {
-      const expiresAt = mbExpires ? new Date(Date.now() + parseInt(mbExpires) * 86400000).toISOString() : undefined;
+      const expiresAt = (mbTier === 'LIFETIME' || !mbExpires) ? undefined : new Date(Date.now() + parseInt(mbExpires) * 86400000).toISOString();
       const res = await adminApi.createMachineBoundKey(mbMachineId.trim(), mbTier, expiresAt);
       setMbResult(res.key);
       load();
@@ -115,19 +116,25 @@ export default function LicenseKeysPage() {
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', color: C.textMuted, marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tier</label>
               <select value={tier} onChange={e => setTier(e.target.value)} style={{ ...inputStyle, width: '100%', cursor: 'pointer' }}>
-                {['STARTER', 'PRO', 'ENTERPRISE'].map(t => <option key={t} value={t}>{t}</option>)}
+                {['STARTER', 'PRO', 'ENTERPRISE', 'LIFETIME'].map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', color: C.textMuted, marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Expires In (days)
               </label>
-              <input
-                value={expiresInDays} onChange={e => setExpiresInDays(e.target.value)}
-                placeholder="365" type="number" style={{ ...inputStyle, width: '100%' }}
-                onFocus={e => { e.target.style.borderColor = C.blue; }}
-                onBlur={e => { e.target.style.borderColor = C.inputBorder; }}
-              />
+              {tier === 'LIFETIME' ? (
+                <div style={{ ...inputStyle, width: '100%', color: C.amber, background: 'rgba(245,158,11,0.07)', border: `1px solid rgba(245,158,11,0.3)`, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span>♾️</span> Never expires
+                </div>
+              ) : (
+                <input
+                  value={expiresInDays} onChange={e => setExpiresInDays(e.target.value)}
+                  placeholder="365" type="number" style={{ ...inputStyle, width: '100%' }}
+                  onFocus={e => { e.target.style.borderColor = C.blue; }}
+                  onBlur={e => { e.target.style.borderColor = C.inputBorder; }}
+                />
+              )}
             </div>
             <button
               onClick={createKey} disabled={creating}
@@ -173,17 +180,23 @@ export default function LicenseKeysPage() {
               <div style={{ flex: 1 }}>
                 <label style={{ display: 'block', fontSize: '0.75rem', color: C.textMuted, marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tier</label>
                 <select value={mbTier} onChange={e => setMbTier(e.target.value)} style={{ ...inputStyle, width: '100%', cursor: 'pointer' }}>
-                  {['STARTER', 'PRO', 'ENTERPRISE'].map(t => <option key={t} value={t}>{t}</option>)}
+                  {['STARTER', 'PRO', 'ENTERPRISE', 'LIFETIME'].map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
               <div style={{ flex: 1 }}>
                 <label style={{ display: 'block', fontSize: '0.75rem', color: C.textMuted, marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Days</label>
-                <input
-                  value={mbExpires} onChange={e => setMbExpires(e.target.value)}
-                  placeholder="365" type="number" style={{ ...inputStyle, width: '100%' }}
-                  onFocus={e => { e.target.style.borderColor = C.purple; }}
-                  onBlur={e => { e.target.style.borderColor = C.inputBorder; }}
-                />
+                {mbTier === 'LIFETIME' ? (
+                  <div style={{ ...inputStyle, color: C.amber, background: 'rgba(245,158,11,0.07)', border: `1px solid rgba(245,158,11,0.3)`, display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.8125rem' }}>
+                    ♾️ Never
+                  </div>
+                ) : (
+                  <input
+                    value={mbExpires} onChange={e => setMbExpires(e.target.value)}
+                    placeholder="365" type="number" style={{ ...inputStyle, width: '100%' }}
+                    onFocus={e => { e.target.style.borderColor = C.purple; }}
+                    onBlur={e => { e.target.style.borderColor = C.inputBorder; }}
+                  />
+                )}
               </div>
             </div>
             <button

@@ -4,11 +4,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, ShoppingCart, Trash2, Plus, Minus, PauseCircle,
   PlayCircle, X, User, MessageSquare, Star, Scale, Camera,
-  AlertTriangle, Monitor,
+  AlertTriangle, Monitor, Edit2, UserPlus, ShieldAlert,
 } from 'lucide-react';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { api } from '../lib/api';
-import { usePOSStore, type ApiItem, type PriceLevel } from '../stores/pos';
+import { usePOSStore, type ApiItem, type PriceLevel, type CartItem } from '../stores/pos';
 import { useAuthStore } from '../stores/auth';
 import PaymentModal from '../components/PaymentModal';
 import HeldSalesModal from '../components/HeldSalesModal';
@@ -31,6 +31,7 @@ interface SalePayload {
   discountCents?: number;
   promotionId?: string;
   serviceChargeCents?: number;
+  tipCents?: number;
 }
 
 interface Promotion {
@@ -54,6 +55,27 @@ interface Category {
   id: string;
   name: string;
   color?: string;
+}
+
+// ─── GS1-128 variable-weight/price barcode parser ─────────────────────────
+/**
+ * GS1-128 EAN-13 weight/price embedded barcodes start with '2'.
+ * Format: 2PPPPPWWWWWC  (13 digits total)
+ *   PPPPP = 5-digit PLU/item code
+ *   WWWWW = weight in grams (prefix 20-24) or price×100 (prefix 25-29)
+ *   C     = check digit
+ */
+function parseGS1Weight(barcode: string): { plu: string; weightGrams: number; priceCents: number | null } | null {
+  if (barcode.length !== 13 || !barcode.startsWith('2')) return null;
+  const plu = barcode.slice(1, 6);
+  const raw = barcode.slice(6, 11);
+  const prefix = parseInt(barcode.slice(0, 2));
+  if (prefix >= 20 && prefix <= 24) {
+    return { plu, weightGrams: parseInt(raw), priceCents: null };
+  } else if (prefix >= 25 && prefix <= 29) {
+    return { plu, weightGrams: 0, priceCents: parseInt(raw) };
+  }
+  return null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -88,7 +110,7 @@ export default function POSPage() {
   const user = useAuthStore((s) => s.user);
 
   const {
-    cart, addToCart, removeFromCart, updateQuantity, updateDiscount, clearCart,
+    cart, addToCart, addWeightedToCart, removeFromCart, updateQuantity, updateDiscount, updateUnitPrice, clearCart,
     priceLevel, setPriceLevel,
     customerId, customerName, setCustomer,
     heldSales, holdCurrentSale, resumeHeldSale, discardHeldSale,
@@ -114,6 +136,18 @@ export default function POSPage() {
   const [expiryWarnings, setExpiryWarnings] = useState<Array<{ itemId: string; name: string; status: string; expiryDate?: string }>>([]);
   const [showExpiryWarning, setShowExpiryWarning] = useState(false);
   const [showCartMobile, setShowCartMobile] = useState(false);
+  // Age gate
+  const [pendingAgeItem, setPendingAgeItem] = useState<ApiItem | null>(null);
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
+  const [barcodeToast, setBarcodeToast] = useState<string | null>(null);
+  // Price override
+  const [priceOverrideItem, setPriceOverrideItem] = useState<CartItem | null>(null);
+  const [priceOverrideInput, setPriceOverrideInput] = useState('');
+  const [priceOverridePin, setPriceOverridePin] = useState('');
+  const [priceOverrideError, setPriceOverrideError] = useState('');
+  const [priceOverridePending, setPriceOverridePending] = useState(false);
+  // Tip
+  const [tipInput, setTipInput] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -137,7 +171,7 @@ export default function POSPage() {
     queryKey: ['items', businessId, effectiveStoreId, search],
     queryFn: () =>
       api.get<ApiItem[]>(
-        `/items?businessId=${businessId}${effectiveStoreId ? `&storeId=${effectiveStoreId}` : ''}${
+        `/items?businessId=${businessId}${effectiveStoreId ? `&storeId=${effectiveStoreId}` : ''}&activeOnly=true${
           search ? `&search=${encodeURIComponent(search)}` : ''
         }`,
       ),
@@ -263,8 +297,9 @@ export default function POSPage() {
   const vatApplicableTotal = cart.filter((i) => i.vatApplicable).reduce((s, i) => s + i.totalCents, 0);
   const vatApplicableAfterDiscount = vatApplicableTotal * (Math.max(taxBase, 0) / Math.max(subtotalCents, 1));
   const vatCents = Math.round(vatApplicableAfterDiscount * 16 / 116);
+  const tipCents = Math.round(parseFloat(tipInput || '0') * 100);
   // Total does NOT add vatCents — it is already embedded in item prices
-  const totalCents = Math.max(0, taxBase) + serviceChargeCents;
+  const totalCents = Math.max(0, taxBase) + serviceChargeCents + tipCents;
 
   // ─── Checkout ──────────────────────────────────────────
 
@@ -280,6 +315,7 @@ export default function POSPage() {
         items: cart.map((i) => ({ itemId: i.id, quantity: i.quantity })),
         payments,
         serviceChargeCents,  // 0 when toggle is off, >0 when on — backend honours this
+        ...(tipCents > 0 && { tipCents }),
         ...(totalDiscountCents > 0 && {
           discountCents: totalDiscountCents,
           promotionId: appliedPromotion?.id,
@@ -329,6 +365,7 @@ export default function POSPage() {
         subtotalCents,
         serviceChargeCents,
         vatCents,
+        tipCents: tipCents > 0 ? tipCents : undefined,
         totalCents,
         payments: checkoutMutation.variables ?? [],
         etimsSubmitted: false,
@@ -371,6 +408,8 @@ export default function POSPage() {
       clearCart();
       setLoyaltyDiscountApplied(false);
       setLoyaltyDiscountCents(0);
+      setTipInput('');
+      setAgeConfirmed(false);
       setShowPayment(false);
       void qc.invalidateQueries({ queryKey: ['items'] });
     },
@@ -420,13 +459,41 @@ export default function POSPage() {
         return;
       }
     }
+    // GS1-128 / variable-weight barcode: parse BEFORE normal lookup
+    const gs1 = parseGS1Weight(raw);
+    if (gs1) {
+      const hit = items.find(i =>
+        i.barcode === gs1.plu ||
+        i.barcode?.startsWith(gs1.plu) ||
+        i.sku === gs1.plu
+      );
+      if (hit) {
+        const tareGrams = hit.tareWeightGrams ?? 0;
+        if (gs1.weightGrams > 0) {
+          const netGrams = Math.max(0, gs1.weightGrams - tareGrams);
+          addWeightedToCart(hit, netGrams);
+          const netKg = (netGrams / 1000).toFixed(3);
+          const msg = tareGrams > 0
+            ? `Scanned: ${hit.name} — Net: ${netKg} kg (tare: ${(tareGrams / 1000).toFixed(3)} kg deducted)`
+            : `Scanned: ${hit.name} — ${netKg} kg`;
+          setBarcodeToast(msg);
+          setTimeout(() => setBarcodeToast(null), 3500);
+        } else if (gs1.priceCents !== null) {
+          addWeightedToCart(hit, 0, gs1.priceCents);
+          setBarcodeToast(`Scanned: ${hit.name} — KES ${(gs1.priceCents / 100).toFixed(2)}`);
+          setTimeout(() => setBarcodeToast(null), 3500);
+        }
+        setSearch('');
+        return;
+      }
+    }
     // Barcode scan fallback
     const item = items.find(i => i.barcode === raw);
     if (item) {
       addToCart(item);
       setSearch('');
     }
-  }, [items, addToCart]);
+  }, [items, addToCart, addWeightedToCart]);
 
   // ─── Camera barcode scanner ──────────────────────────────
 
@@ -553,6 +620,12 @@ export default function POSPage() {
 
   return (
     <div className="flex h-full overflow-hidden flex-col md:flex-row relative">
+      {/* GS1-128 barcode scan toast */}
+      {barcodeToast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-green-700 text-white px-6 py-3 rounded-xl shadow-lg text-sm font-medium max-w-sm text-center">
+          {barcodeToast}
+        </div>
+      )}
       {/* ── Left: Item Grid ── */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Search + Price Level bar */}
@@ -704,10 +777,18 @@ export default function POSPage() {
               const outOfStock = item.trackStock && (item.currentStock ?? 0) <= 0;
               const isExpiringSoon = !!(item.trackExpiry && item.defaultExpiryDays != null && item.defaultExpiryDays <= 30);
               const isExpired = !!(item.trackExpiry && item.defaultExpiryDays != null && item.defaultExpiryDays <= 0);
+              const handleItemClick = () => {
+                if (outOfStock || isExpired) return;
+                if (item.ageRestricted && !ageConfirmed) {
+                  setPendingAgeItem(item);
+                  return;
+                }
+                addToCart(item);
+              };
               return (
                 <button
                   key={item.id}
-                  onClick={() => { if (!outOfStock && !isExpired) addToCart(item); }}
+                  onClick={handleItemClick}
                   disabled={outOfStock || isExpired}
                   className={`p-3 rounded-xl border-2 text-left transition-all relative ${
                     outOfStock || isExpired
@@ -715,6 +796,11 @@ export default function POSPage() {
                       : 'border-gray-200 bg-white hover:border-blue-400 hover:shadow-md active:scale-95'
                   }`}
                 >
+                  {item.ageRestricted && (
+                    <div className="absolute top-1 left-1 bg-red-600 text-white text-[9px] font-bold px-1 py-0.5 rounded">
+                      {item.minAgeYears ?? 18}+
+                    </div>
+                  )}
                   {isExpiringSoon && !isExpired && (
                     <div className="absolute top-1 right-1 bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded">
                       Expiring
@@ -895,6 +981,14 @@ export default function POSPage() {
                       className="w-20 px-2 py-1 text-xs border rounded focus:ring-1 focus:ring-blue-500"
                     />
                     <span className="text-xs text-gray-400">% off</span>
+                    <button
+                      onClick={() => { setPriceOverrideItem(item); setPriceOverrideInput((item.unitPriceCents / 100).toFixed(2)); setPriceOverrideError(''); setPriceOverridePin(''); }}
+                      className="flex items-center gap-1 px-2 py-1 text-xs border border-amber-300 text-amber-700 rounded hover:bg-amber-50"
+                      title="Override price"
+                    >
+                      <Edit2 className="w-3 h-3" />
+                      Price
+                    </button>
                   </div>
                   {/* Read Scale button for WEIGHTED items */}
                   {item.itemType === 'WEIGHTED' && isSerialSupported() && (
@@ -957,6 +1051,12 @@ export default function POSPage() {
                 <span>{formatKES(vatCents)}</span>
               </div>
             )}
+            {tipCents > 0 && (
+              <div className="flex justify-between text-gray-600">
+                <span>Tip/Gratuity</span>
+                <span>{formatKES(tipCents)}</span>
+              </div>
+            )}
             <div className="flex justify-between font-bold text-base border-t pt-2">
               <span>Total</span>
               <div className="text-right">
@@ -983,6 +1083,43 @@ export default function POSPage() {
               >
                 Svc {serviceChargeRate}% {serviceChargeEnabled ? '✓' : ''}
               </button>
+              {/* Next Customer — hold current & start fresh */}
+              <button
+                onClick={() => { holdCurrentSale(`Customer ${heldSales.length + 1}`); setTipInput(''); setAgeConfirmed(false); }}
+                disabled={cart.length === 0}
+                title="Hold current sale and start next customer"
+                className="flex items-center gap-1 px-3 py-2 text-xs font-medium rounded-lg border border-orange-300 text-orange-700 hover:bg-orange-50 disabled:opacity-30"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                Next
+              </button>
+            </div>
+            {/* Tip input */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500 whitespace-nowrap">Tip (KES)</span>
+              <input
+                type="number"
+                min="0"
+                step="10"
+                value={tipInput}
+                onChange={(e) => setTipInput(e.target.value)}
+                placeholder="0.00"
+                className="flex-1 px-2 py-1.5 text-sm border rounded-lg focus:ring-1 focus:ring-blue-500"
+              />
+              {[50, 100, 200].map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTipInput(String(t))}
+                  className="px-2 py-1.5 text-xs border rounded-lg hover:bg-gray-50 text-gray-600"
+                >
+                  {t}
+                </button>
+              ))}
+              {tipInput && (
+                <button onClick={() => setTipInput('')} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
             <button
               onClick={() => void handlePayClick()}
@@ -1105,6 +1242,128 @@ export default function POSPage() {
           receipt={receiptData}
           onClose={() => setShowPrintModal(false)}
         />
+      )}
+
+      {/* ── Age Gate Modal ── */}
+      {pendingAgeItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl text-center">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <ShieldAlert className="w-8 h-8 text-red-600" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 mb-1">Age Verification Required</h2>
+            <p className="text-gray-500 text-sm mb-4">
+              <span className="font-semibold">{pendingAgeItem.name}</span> is restricted to customers aged{' '}
+              <span className="font-bold text-red-600">{pendingAgeItem.minAgeYears ?? 18}+</span> only.
+            </p>
+            <p className="text-xs text-gray-400 mb-5">
+              By confirming, you verify that the customer is of legal age and accepts responsibility for this sale.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setPendingAgeItem(null)}
+                className="flex-1 py-3 border border-gray-300 rounded-xl text-gray-700 font-medium hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setAgeConfirmed(true);
+                  addToCart(pendingAgeItem);
+                  setPendingAgeItem(null);
+                }}
+                className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold"
+              >
+                Confirm {pendingAgeItem.minAgeYears ?? 18}+ ✓
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Price Override Modal ── */}
+      {priceOverrideItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900">Override Price</h2>
+              <button onClick={() => setPriceOverrideItem(null)} className="p-1 rounded hover:bg-gray-100">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">
+              <span className="font-medium">{priceOverrideItem.name}</span>
+              <span className="ml-2 text-gray-400">Current: {formatKES(priceOverrideItem.unitPriceCents)}</span>
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">New Price (KES)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={priceOverrideInput}
+                  onChange={(e) => setPriceOverrideInput(e.target.value)}
+                  className="w-full border rounded-xl px-4 py-3 text-xl font-bold focus:ring-2 focus:ring-amber-500"
+                  autoFocus
+                />
+              </div>
+              {/* Manager PIN required for CASHIER role */}
+              {user?.role === 'CASHIER' && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Manager PIN (required)</label>
+                  <input
+                    type="password"
+                    maxLength={6}
+                    value={priceOverridePin}
+                    onChange={(e) => setPriceOverridePin(e.target.value)}
+                    placeholder="Enter manager PIN"
+                    className="w-full border rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+              )}
+              {priceOverrideError && (
+                <p className="text-xs text-red-600 flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  {priceOverrideError}
+                </p>
+              )}
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={() => setPriceOverrideItem(null)}
+                className="flex-1 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  const newPrice = Math.round(parseFloat(priceOverrideInput) * 100);
+                  if (!newPrice || newPrice <= 0) { setPriceOverrideError('Enter a valid price'); return; }
+                  // CASHIER needs manager PIN verification
+                  if (user?.role === 'CASHIER') {
+                    if (!priceOverridePin) { setPriceOverrideError('Manager PIN required'); return; }
+                    setPriceOverridePending(true);
+                    try {
+                      await api.post('/auth/verify-pin', { businessId, pin: priceOverridePin, role: 'MANAGER' });
+                    } catch {
+                      setPriceOverrideError('Invalid manager PIN');
+                      setPriceOverridePending(false);
+                      return;
+                    }
+                    setPriceOverridePending(false);
+                  }
+                  updateUnitPrice(priceOverrideItem.id, newPrice);
+                  setPriceOverrideItem(null);
+                }}
+                disabled={priceOverridePending}
+                className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold disabled:opacity-40"
+              >
+                {priceOverridePending ? 'Verifying…' : 'Apply Override'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Camera Barcode Scanner ── */}

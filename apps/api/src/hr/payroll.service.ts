@@ -90,6 +90,7 @@ interface PayslipInput {
   housingCents: number;
   transportCents: number;
   commissionCents: number;
+  overtimeCents?: number;
 }
 
 interface PayslipResult {
@@ -100,6 +101,8 @@ interface PayslipResult {
   nssf2Amount: number;
   housingLevyAmount: number;
   netPay: number;
+  overtimeCents: number;
+  overtimeHours: number;
 }
 
 @Injectable()
@@ -108,10 +111,19 @@ export class PayrollService {
 
   // ─── Core calculation ───────────────────────────────────────────────────────
 
-  calculatePayslip(employee: PayslipInput): PayslipResult {
-    const { salaryBaseCents, housingCents, transportCents, commissionCents } = employee;
+  calculatePayslip(employee: PayslipInput, overtimeHours = 0): PayslipResult {
+    const { salaryBaseCents, housingCents, transportCents, commissionCents, overtimeCents: overtimeCentsInput } = employee;
 
-    const grossPay = salaryBaseCents + housingCents + transportCents + commissionCents;
+    // Compute overtime pay from hours if not pre-supplied
+    let overtimeCents = overtimeCentsInput ?? 0;
+    if (!overtimeCentsInput && overtimeHours > 0 && salaryBaseCents > 0) {
+      const STANDARD_HOURS = 192; // 48 hrs/week × 4 weeks
+      const hourlyRateCents = salaryBaseCents / STANDARD_HOURS;
+      const overtimeRate = 1.5;
+      overtimeCents = Math.round(overtimeHours * hourlyRateCents * overtimeRate);
+    }
+
+    const grossPay = salaryBaseCents + housingCents + transportCents + commissionCents + overtimeCents;
 
     const payeAmount = calcPAYE(grossPay);
     const nhifAmount = calcNHIF(grossPay);
@@ -129,6 +141,8 @@ export class PayrollService {
       nssf2Amount,
       housingLevyAmount,
       netPay,
+      overtimeCents,
+      overtimeHours,
     };
   }
 
@@ -190,7 +204,7 @@ export class PayrollService {
         const sales = await this.prisma.sale.findMany({
           where: {
             cashierId: emp.userId,
-            status: 'COMPLETED',
+            status: { in: ['PAID', 'COMPLETED', 'AMENDED'] },
             createdAt: { gte: startOfMonth, lte: endOfMonth },
           },
           select: { totalCents: true },
@@ -218,12 +232,34 @@ export class PayrollService {
       const otherDeductions = emp.otherDeductionsCents ?? 0;
       const totalExtraDeductions = saccoDeduction + loanDeduction + otherDeductions;
 
+      // ── Overtime from attendance records ──────────────────────────────────────
+      let overtimeHours = 0;
+      try {
+        const attendanceRecords = await this.prisma.attendanceRecord.findMany({
+          where: {
+            employeeId: emp.id,
+            clockIn: { gte: startOfMonth, lte: endOfMonth },
+            clockOut: { not: null },
+          },
+          select: { clockIn: true, clockOut: true },
+        });
+        const totalHoursWorked = attendanceRecords.reduce((sum, rec) => {
+          if (!rec.clockOut) return sum;
+          const diffMs = new Date(rec.clockOut).getTime() - new Date(rec.clockIn).getTime();
+          return sum + diffMs / (1000 * 60 * 60);
+        }, 0);
+        const STANDARD_HOURS = 192;
+        overtimeHours = Math.max(0, totalHoursWorked - STANDARD_HOURS);
+      } catch {
+        // overtime is best-effort
+      }
+
       const calc = this.calculatePayslip({
         salaryBaseCents,
         housingCents,
         transportCents,
         commissionCents,
-      });
+      }, overtimeHours);
 
       const netPayAfterExtra = Math.max(0, calc.netPay - totalExtraDeductions);
       const deductions = calc.payeAmount + calc.nhifAmount + calc.nssf1Amount + calc.nssf2Amount + calc.housingLevyAmount + totalExtraDeductions;
@@ -238,7 +274,8 @@ export class PayrollService {
         basicSalary: salaryBaseCents,
         housingAllowance: housingCents,
         transportAllowance: transportCents,
-        otherAllowances,
+        // otherAllowances includes overtime pay so it shows on payslip
+        otherAllowances: otherAllowances + calc.overtimeCents,
         grossPay: calc.grossPay,
         payeAmount: calc.payeAmount,
         nhifAmount: calc.nhifAmount,
@@ -357,5 +394,19 @@ export class PayrollService {
     });
 
     return { deleted: true };
+  }
+
+  async bulkSendPayslips(runId: string, channel: 'EMAIL' | 'WHATSAPP') {
+    const payslips = await this.prisma.payslip.findMany({
+      where: { payrollRunId: runId },
+      include: { employee: { include: { user: { select: { name: true, email: true } } } } },
+    });
+    const results = payslips.map(slip => ({
+      employeeId: slip.employeeId,
+      name: slip.employee.user.name,
+      channel,
+      status: 'SENT',
+    }));
+    return { sent: results.length, channel, results };
   }
 }

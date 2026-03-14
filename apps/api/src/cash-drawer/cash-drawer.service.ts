@@ -14,7 +14,14 @@ export class CashDrawerService {
     storeId: string;
     cashierId: string;
     openingBalanceCents: number;
+    tillNumber?: number;
   }) {
+    if (data.tillNumber) {
+      const existing = await this.prisma.cashDrawerSession.findFirst({
+        where: { businessId: data.businessId, storeId: data.storeId, tillNumber: data.tillNumber, status: 'OPEN' },
+      });
+      if (existing) throw new Error(`Till ${data.tillNumber} is already open`);
+    }
     return this.prisma.cashDrawerSession.create({
       data: {
         ...data,
@@ -111,10 +118,17 @@ export class CashDrawerService {
       salesCount: sales._count,
       cashPaymentsCents: cashPayments._sum.amountCents || 0,
       expensesCents: expenses._sum.amountCents || 0,
-      expectedBalanceCents: 
-        session.openingBalanceCents + 
-        (cashPayments._sum.amountCents || 0) - 
+      expectedBalanceCents:
+        session.openingBalanceCents +
+        (cashPayments._sum.amountCents || 0) -
         (expenses._sum.amountCents || 0),
     };
+  }
+
+  async getActiveSessions(storeId: string, businessId?: string) {
+    return this.prisma.cashDrawerSession.findMany({
+      where: { storeId, status: 'OPEN', ...(businessId ? { businessId } : {}) },
+      orderBy: { tillNumber: 'asc' },
+    });
   }
 }

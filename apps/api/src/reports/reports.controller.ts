@@ -58,6 +58,15 @@ export class ReportsController {
     return this.reports.totReport(businessId, new Date(startDate), new Date(endDate));
   }
 
+  @Get('vat-return-itax')
+  async vatReturnItax(
+    @Query('businessId') businessId: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    return this.reports.vatReturn(businessId, new Date(startDate), new Date(endDate));
+  }
+
   @Get('stock-valuation')
   async stockValuation(
     @Query('businessId') businessId: string,
@@ -296,6 +305,11 @@ export class ReportsController {
     return this.reports.fullDataExport(businessId);
   }
 
+  @Get('recipe-costing')
+  async recipeCostingReport(@Query('businessId') businessId: string) {
+    return this.reports.recipeCostingReport(businessId);
+  }
+
   @Get('supplier-ageing')
   async supplierAgeingReport(
     @Query('businessId') businessId: string,
@@ -374,5 +388,188 @@ export class ReportsController {
     const html = await this.pdf.generatePurchaseOrder(poId);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(html);
+  }
+
+  @Get('pdf/customer-statement/:customerId')
+  async customerStatementPdf(
+    @Param('customerId') customerId: string,
+    @Query('startDate') s: string,
+    @Query('endDate') e: string,
+    @Res() res: Response,
+  ) {
+    const html = await this.pdf.generateCustomerStatement(
+      customerId,
+      new Date(s),
+      new Date(e),
+    );
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  }
+
+  @Get('pdf/payslip/:employeeId')
+  async payslipPdf(
+    @Param('employeeId') employeeId: string,
+    @Query('month') month: string,
+    @Query('year') year: string,
+    @Res() res: Response,
+  ) {
+    const html = await this.pdf.generatePayslip(employeeId, Number(month), Number(year));
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  }
+
+  @Get('pdf/p9/:employeeId')
+  async p9Pdf(
+    @Param('employeeId') employeeId: string,
+    @Query('year') year: string,
+    @Res() res: Response,
+  ) {
+    const html = await this.pdf.generateP9(employeeId, Number(year));
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  }
+
+  @Get('pdf/p10')
+  async p10Pdf(
+    @Query('businessId') businessId: string,
+    @Query('month') month: string,
+    @Query('year') year: string,
+    @Res() res: Response,
+  ) {
+    const html = await this.pdf.generateP10(businessId, Number(month), Number(year));
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  }
+
+  @Get('pdf/debit-note/:returnId')
+  async debitNotePdf(@Param('returnId') returnId: string, @Res() res: Response) {
+    const html = await this.pdf.generateDebitNote(returnId);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  }
+
+  @Get('pdf/expense-report')
+  async expenseReportPdf(
+    @Query('employeeId') employeeId: string,
+    @Query('month') month: string,
+    @Res() res: Response,
+  ) {
+    const html = await this.pdf.generateExpenseReport(employeeId, month);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  }
+
+  @Get('vat-return')
+  async vatReturn(
+    @Query('businessId') businessId: string,
+    @Query('month') month: string,
+  ) {
+    return this.reports.getVATReturn(businessId, month);
+  }
+
+  @Get('nssf-return')
+  async nssfReturn(
+    @Query('businessId') businessId: string,
+    @Query('month') month: string,
+    @Query('year') year: string,
+    @Res() res: Response,
+  ) {
+    const csv = await this.reports.nssfReturnFile(businessId, Number(month), Number(year));
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="NSSF-Return-${month}-${year}.csv"`);
+    res.send(csv);
+  }
+
+  @Get('nhif-return')
+  async nhifReturn(
+    @Query('businessId') businessId: string,
+    @Query('month') month: string,
+    @Query('year') year: string,
+    @Res() res: Response,
+  ) {
+    const csv = await this.reports.nhifReturnFile(businessId, Number(month), Number(year));
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="NHIF-SHA-Return-${month}-${year}.csv"`);
+    res.send(csv);
+  }
+
+  @Get('dead-stock')
+  async deadStockReport(
+    @Query('businessId') businessId: string,
+    @Query('storeId') storeId?: string,
+    @Query('days') days?: string,
+  ) {
+    return this.reports.deadStockReport(businessId, storeId, days ? Number(days) : 90);
+  }
+
+  @Get('gross-margin')
+  async grossMarginReport(
+    @Query('businessId') businessId: string,
+    @Query('storeId') storeId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reports.grossMarginByCategory(
+      businessId,
+      storeId,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
+
+  @Get('shrinkage')
+  async shrinkageReport(
+    @Query('businessId') businessId: string,
+    @Query('storeId') storeId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reports.shrinkageReport(
+      businessId, storeId,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
+
+  @Get('department-pnl')
+  async departmentPnl(
+    @Query('businessId') businessId: string,
+    @Query('storeId') storeId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reports.departmentPnl(
+      businessId, storeId,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
+
+  @Get('customer-analytics')
+  async customerAnalytics(
+    @Query('businessId') businessId: string,
+    @Query('storeId') storeId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reports.customerAnalytics(
+      businessId,
+      storeId,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
+
+  @Get('forecast')
+  async forecastReport(
+    @Query('businessId') businessId: string,
+    @Query('storeId') storeId?: string,
+    @Query('days') days?: string,
+  ) {
+    return this.reports.advancedForecast(
+      businessId,
+      storeId,
+      days ? parseInt(days) : 30,
+    );
   }
 }

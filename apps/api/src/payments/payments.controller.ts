@@ -16,7 +16,7 @@ export class PaymentsController {
 
   @Post('mpesa/stk-push')
   @UseGuards(JwtAuthGuard)
-  @Throttle({ mpesa: { limit: 5, ttl: 60000 } })
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   async stkPush(@Body() body: { phone: string; amountCents: number; reference: string }) {
     return this.mpesa.initiateSTKPush({
       phone: body.phone,
@@ -36,6 +36,12 @@ export class PaymentsController {
   async mpesaCallback(@Body() body: unknown) {
     await this.mpesa.handleCallback(body);
     return { ResultCode: 0, ResultDesc: 'Success' };
+  }
+
+  @Post('mpesa/b2c')
+  @UseGuards(JwtAuthGuard)
+  async mpesaB2C(@Body() body: { phone: string; amountCents: number; remarks: string; businessId: string }) {
+    return this.mpesa.initiateB2C(body);
   }
 
   @Post('mpesa/qr')

@@ -34,7 +34,26 @@ export class AuthService {
     private jwt: JwtService,
   ) {}
 
+  // ─── Password complexity validation ─────────────────────────
+  private validatePasswordComplexity(password: string): void {
+    if (password.length < 8) {
+      throw new Error('Password must be at least 8 characters long');
+    }
+    if (!/[A-Z]/.test(password)) {
+      throw new Error('Password must contain at least one uppercase letter');
+    }
+    if (!/[a-z]/.test(password)) {
+      throw new Error('Password must contain at least one lowercase letter');
+    }
+    if (!/[0-9]/.test(password)) {
+      throw new Error('Password must contain at least one number');
+    }
+  }
+
   // ─── Email + Password login ──────────────────────────────────
+  private static readonly MAX_LOGIN_ATTEMPTS = 5;
+  private static readonly LOCKOUT_MINUTES = 15;
+
   async loginWithPassword(
     email: string,
     password: string,
@@ -48,8 +67,47 @@ export class AuthService {
       },
     });
 
-    if (!user || !(await bcrypt.compare(password, user.passwordHash ?? ''))) {
+    if (!user) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // ── Lockout check ──────────────────────────────────────────
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      const minutesLeft = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
+      throw new UnauthorizedException(
+        `Account locked due to too many failed attempts. Try again in ${minutesLeft} minute(s).`,
+      );
+    }
+
+    const passwordMatch = await bcrypt.compare(password, user.passwordHash ?? '');
+    if (!passwordMatch) {
+      const newAttempts = (user.loginAttempts ?? 0) + 1;
+      const shouldLock = newAttempts >= AuthService.MAX_LOGIN_ATTEMPTS;
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          loginAttempts: newAttempts,
+          lockedUntil: shouldLock
+            ? new Date(Date.now() + AuthService.LOCKOUT_MINUTES * 60 * 1000)
+            : null,
+        },
+      });
+      if (shouldLock) {
+        throw new UnauthorizedException(
+          `Too many failed attempts. Account locked for ${AuthService.LOCKOUT_MINUTES} minutes.`,
+        );
+      }
+      throw new UnauthorizedException(
+        `Invalid credentials. ${AuthService.MAX_LOGIN_ATTEMPTS - newAttempts} attempt(s) remaining before lockout.`,
+      );
+    }
+
+    // ── Reset attempts on successful password match ─────────────
+    if ((user.loginAttempts ?? 0) > 0) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { loginAttempts: 0, lockedUntil: null },
+      });
     }
 
     // Owner/Admin: TOTP mandatory
@@ -82,6 +140,16 @@ export class AuthService {
     };
 
     const accessToken = this.jwt.sign(payload, { expiresIn: '15m' });
+
+    // Track session (fire-and-forget — non-critical)
+    const tokenHash = require('crypto').createHash('sha256').update(accessToken).digest('hex');
+    this.prisma.userSession.create({
+      data: {
+        userId: user.id,
+        tokenHash,
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+      },
+    }).catch(() => {});
 
     return {
       accessToken,
@@ -184,6 +252,8 @@ export class AuthService {
   }): Promise<{ accessToken: string; user: AuthUser }> {
     const existing = await this.prisma.user.findUnique({ where: { email: data.email } });
     if (existing) throw new BadRequestException('Email already registered');
+
+    this.validatePasswordComplexity(data.password);
 
     const passwordHash = await bcrypt.hash(data.password, 12);
 
@@ -324,5 +394,40 @@ export class AuthService {
     }
 
     throw new UnauthorizedException('Invalid manager PIN');
+  }
+
+  // ─── Change password ─────────────────────────────────────────
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.passwordHash) throw new Error('User not found');
+
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!valid) throw new Error('Current password is incorrect');
+
+    this.validatePasswordComplexity(newPassword);
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash: hash } });
+    return { success: true };
+  }
+
+  // ─── Session management ──────────────────────────────────────
+  async getSessions(userId: string) {
+    return this.prisma.userSession.findMany({
+      where: { userId, isRevoked: false, expiresAt: { gt: new Date() } },
+      orderBy: { lastSeenAt: 'desc' },
+    });
+  }
+
+  async revokeSession(sessionId: string, userId: string) {
+    const session = await this.prisma.userSession.findFirst({ where: { id: sessionId, userId } });
+    if (!session) throw new Error('Session not found');
+    await this.prisma.userSession.update({ where: { id: sessionId }, data: { isRevoked: true } });
+    return { success: true };
+  }
+
+  async revokeAllSessions(userId: string) {
+    await this.prisma.userSession.updateMany({ where: { userId }, data: { isRevoked: true } });
+    return { success: true };
   }
 }

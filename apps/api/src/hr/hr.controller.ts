@@ -254,4 +254,82 @@ export class HrController {
   async deletePayrollRun(@Param('runId') runId: string) {
     return this.payrollService.deletePayrollRun(runId);
   }
+
+  // ─── Expense Claims ──────────────────────────────────────────────────────────
+
+  @Get('expense-claims')
+  async getExpenseClaims(
+    @Query('businessId') businessId: string,
+    @Query('employeeId') employeeId?: string,
+  ) {
+    return this.hrService.getExpenseClaims(businessId, employeeId);
+  }
+
+  @Post('expense-claims')
+  async createExpenseClaim(
+    @Body() body: {
+      businessId: string;
+      employeeId: string;
+      amountCents: number;
+      description: string;
+      category?: string;
+      receiptUrl?: string;
+    },
+  ) {
+    return this.hrService.createExpenseClaim(body.businessId, body);
+  }
+
+  @Patch('expense-claims/:id/approve')
+  async approveExpenseClaim(
+    @Param('id') id: string,
+    @Body() body: { approverId: string },
+  ) {
+    return this.hrService.approveExpenseClaim(id, body.approverId);
+  }
+
+  @Patch('expense-claims/:id/reject')
+  async rejectExpenseClaim(
+    @Param('id') id: string,
+    @Body() body: { rejectorId: string; reason: string },
+  ) {
+    return this.hrService.rejectExpenseClaim(id, body.rejectorId, body.reason);
+  }
+
+  @Patch('expense-claims/:id/paid')
+  async markClaimPaid(@Param('id') id: string) {
+    return this.hrService.markClaimPaid(id);
+  }
+
+  // ─── Contract Management ────────────────────────────────────────────────────
+
+  @Get('contracts/expiring')
+  getExpiringContracts(@Query('businessId') bizId: string, @Query('days') days?: string) {
+    return this.hrService.getExpiringContracts(bizId, days ? parseInt(days) : 30);
+  }
+
+  @Patch('employees/:id/contract')
+  updateContract(@Param('id') id: string, @Body() body: { contractType: string; contractEndDate?: string }) {
+    return this.hrService.updateContract(id, body.contractType, body.contractEndDate);
+  }
+
+  // ─── Bulk Payslip Send ──────────────────────────────────────────────────────
+
+  @Post('payroll/:runId/bulk-send')
+  bulkSendPayslips(@Param('runId') runId: string, @Body() body: { channel: string }) {
+    return this.payrollService.bulkSendPayslips(runId, body.channel as 'EMAIL' | 'WHATSAPP');
+  }
+
+  // ─── Biometric Clock-in (ZKTeco integration stub) ──────────────────────────
+
+  @Post('biometric/clock-in')
+  async biometricClockIn(@Body() body: { businessId: string; employeePin: string; deviceId?: string }) {
+    // Real implementation: query ZKTeco device via TCP on port 4370 using zklib
+    // For now: verify employeePin against Employee.user.pin and create attendance record
+    return this.hrService.clockIn(body.businessId, body.employeePin, 'BIOMETRIC');
+  }
+
+  @Post('biometric/clock-out')
+  async biometricClockOut(@Body() body: { businessId: string; employeePin: string; deviceId?: string }) {
+    return this.hrService.clockOut(body.businessId, body.employeePin, 'BIOMETRIC');
+  }
 }

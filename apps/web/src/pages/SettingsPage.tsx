@@ -361,7 +361,7 @@ export default function SettingsPage() {
   const queryClient = useQueryClient();
   const [saved, setSaved] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    'general' | 'users' | 'stores' | 'etims' | 'mpesa' | 'subscription' | 'messaging' | 'loyalty' | 'loyalty-tiers' | 'printers' | 'api-keys' | 'scale' | 'backup' | 'automation' | 'webhooks' | 'audit' | 'kdpa'
+    'general' | 'users' | 'stores' | 'etims' | 'mpesa' | 'subscription' | 'messaging' | 'loyalty' | 'loyalty-tiers' | 'printers' | 'api-keys' | 'scale' | 'backup' | 'automation' | 'webhooks' | 'audit' | 'kdpa' | 'security'
   >('general');
 
   // ─── General form state ────────────────────────────────────────────────────
@@ -453,6 +453,12 @@ export default function SettingsPage() {
     description: '',
     events: [] as string[],
   });
+
+  // ─── Security tab ──────────────────────────────────────────────────────────
+  const [cpCurrent, setCpCurrent] = useState('');
+  const [cpNew, setCpNew] = useState('');
+  const [cpConfirm, setCpConfirm] = useState('');
+  const [cpMsg, setCpMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // ─── In-app confirm dialog (replaces window.confirm) ───────────────────────
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -904,6 +910,43 @@ export default function SettingsPage() {
     },
   });
 
+  // ─── Security: change password mutation ────────────────────────────────────
+  const changePwdMutation = useMutation({
+    mutationFn: () => api.post('/auth/change-password', { currentPassword: cpCurrent, newPassword: cpNew }),
+    onSuccess: () => {
+      setCpMsg({ type: 'success', text: 'Password changed successfully' });
+      setCpCurrent('');
+      setCpNew('');
+      setCpConfirm('');
+    },
+    onError: (e: unknown) => setCpMsg({ type: 'error', text: (e as Error).message || 'Failed to change password' }),
+  });
+
+  // ─── Security: active sessions ─────────────────────────────────────────────
+  interface ActiveSession {
+    id: string;
+    ipAddress?: string;
+    userAgent?: string;
+    createdAt: string;
+    lastSeenAt: string;
+  }
+
+  const { data: activeSessions, refetch: refetchSessions } = useQuery<ActiveSession[]>({
+    queryKey: ['auth-sessions'],
+    queryFn: () => api.get<ActiveSession[]>('/auth/sessions'),
+    enabled: activeTab === 'security',
+  });
+
+  const revokeSessionMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/auth/sessions/${id}`),
+    onSuccess: () => void refetchSessions(),
+  });
+
+  const revokeAllMutation = useMutation({
+    mutationFn: () => api.delete('/auth/sessions'),
+    onSuccess: () => void refetchSessions(),
+  });
+
   if (isLoading) {
     return (
       <div className="p-6 flex items-center justify-center h-64">
@@ -930,6 +973,7 @@ export default function SettingsPage() {
     { id: 'backup' as const, label: 'Backup', icon: HardDrive },
     { id: 'automation' as const, label: 'Automation', icon: Clock },
     { id: 'subscription' as const, label: 'Subscription', icon: CreditCard },
+    { id: 'security' as const, label: 'Security', icon: Lock },
   ];
 
   return (
@@ -3517,6 +3561,114 @@ export default function SettingsPage() {
                 <p className="mt-0.5 text-amber-700">Schedules define when reports should be sent. The actual email delivery requires a server-side cron job to call the trigger endpoint. Use the Play button to send manually at any time.</p>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Security ──────────────────────────────────────────────────────── */}
+      {activeTab === 'security' && (
+        <div className="space-y-6">
+          {/* Change Password */}
+          <div className="bg-white rounded-xl shadow p-6 space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Lock className="w-5 h-5 text-blue-600" />
+              <h2 className="text-base font-semibold text-gray-900">Change Password</h2>
+            </div>
+            <p className="text-sm text-gray-500">Update your account password. The new password must be at least 8 characters and include uppercase, lowercase, and a number.</p>
+            {cpMsg && (
+              <div className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm ${cpMsg.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                {cpMsg.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                {cpMsg.text}
+              </div>
+            )}
+            <div className="grid gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
+                <input
+                  type="password"
+                  value={cpCurrent}
+                  onChange={(e) => { setCpCurrent(e.target.value); setCpMsg(null); }}
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter current password"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                <input
+                  type="password"
+                  value={cpNew}
+                  onChange={(e) => { setCpNew(e.target.value); setCpMsg(null); }}
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter new password"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
+                <input
+                  type="password"
+                  value={cpConfirm}
+                  onChange={(e) => { setCpConfirm(e.target.value); setCpMsg(null); }}
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="Confirm new password"
+                />
+                {cpNew && cpConfirm && cpNew !== cpConfirm && (
+                  <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={() => changePwdMutation.mutate()}
+                disabled={!cpCurrent || !cpNew || !cpConfirm || cpNew !== cpConfirm || changePwdMutation.isPending}
+                className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {changePwdMutation.isPending ? 'Saving...' : 'Change Password'}
+              </button>
+            </div>
+          </div>
+
+          {/* Active Sessions */}
+          <div className="bg-white rounded-xl shadow p-6 space-y-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Shield className="w-5 h-5 text-blue-600" />
+                <h2 className="text-base font-semibold text-gray-900">Active Sessions</h2>
+              </div>
+              <button
+                onClick={() => revokeAllMutation.mutate()}
+                disabled={revokeAllMutation.isPending}
+                className="px-3 py-1.5 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50"
+              >
+                Revoke All Other Sessions
+              </button>
+            </div>
+            <p className="text-sm text-gray-500">These are the active login sessions for your account. Revoke any you do not recognise.</p>
+            {!activeSessions || activeSessions.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-4">No active sessions found.</p>
+            ) : (
+              <div className="space-y-2">
+                {activeSessions.map((session) => (
+                  <div key={session.id} className="flex items-center justify-between p-3 border border-gray-100 rounded-lg">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-800 truncate">
+                        {session.userAgent ? session.userAgent.slice(0, 40) + (session.userAgent.length > 40 ? '…' : '') : 'Unknown device'}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {session.ipAddress && <span className="mr-2">{session.ipAddress}</span>}
+                        Last seen: {new Date(session.lastSeenAt).toLocaleString('en-KE')}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => revokeSessionMutation.mutate(session.id)}
+                      disabled={revokeSessionMutation.isPending}
+                      className="ml-3 px-3 py-1.5 text-xs font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50 flex-shrink-0"
+                    >
+                      Revoke
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

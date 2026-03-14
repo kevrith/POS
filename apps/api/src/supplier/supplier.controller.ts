@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Patch, Body, Param, Query } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Body, Param, Query, BadRequestException } from '@nestjs/common';
 import { SupplierService } from './supplier.service';
 
 
@@ -132,6 +132,47 @@ export class SupplierController {
     return this.supplierService.voidCreditNote(id);
   }
 
+  // ── Supplier Returns ──────────────────────────────────────────────────────────
+
+  @Get('returns')
+  async getReturns(@Query('businessId') businessId: string, @Query('supplierId') supplierId?: string) {
+    return this.supplierService.getSupplierReturns(businessId, supplierId);
+  }
+
+  @Post('returns')
+  async createReturn(@Body() body: any) {
+    const { businessId, ...rest } = body;
+    return this.supplierService.createSupplierReturn(businessId, rest);
+  }
+
+  @Patch('returns/:id/status')
+  async updateReturnStatus(@Param('id') id: string, @Body() body: { status: string }) {
+    return this.supplierService.updateReturnStatus(id, body.status);
+  }
+
+  // ── Supplier Invoices ──────────────────────────────────────────────────────────
+
+  @Get('invoices')
+  async getInvoices(@Query('businessId') businessId: string, @Query('supplierId') supplierId?: string) {
+    return this.supplierService.getSupplierInvoices(businessId, supplierId);
+  }
+
+  @Post('invoices')
+  async createInvoice(@Body() body: any) {
+    const { businessId, ...rest } = body;
+    return this.supplierService.createSupplierInvoice(businessId, rest);
+  }
+
+  @Patch('invoices/:id/status')
+  async updateInvoiceStatus(@Param('id') id: string, @Body() body: { status: string }) {
+    return this.supplierService.updateInvoiceStatus(id, body.status);
+  }
+
+  @Get('purchase-orders/:id/three-way-match')
+  async threeWayMatch(@Param('id') id: string, @Query('businessId') businessId: string) {
+    return this.supplierService.threeWayMatch(businessId, id);
+  }
+
   // ── Other static routes ───────────────────────────────────────────────────────
 
   @Get('outstanding-pos')
@@ -160,5 +201,64 @@ export class SupplierController {
   @Get(':id/ledger')
   async getLedger(@Param('id') id: string) {
     return this.supplierService.getLedger(id);
+  }
+
+  @Post('auto-reorder')
+  async autoReorder(
+    @Body() body: { businessId: string; storeId: string; supplierId?: string },
+  ) {
+    return this.supplierService.autoReorderCheck(body.businessId, body.storeId, body.supplierId);
+  }
+
+  // ── Price Agreements ──────────────────────────────────────────────────────
+
+  @Get(':id/price-agreements')
+  async listPriceAgreements(@Param('id') id: string, @Query('businessId') businessId: string) {
+    return this.supplierService.listPriceAgreements(id, businessId);
+  }
+
+  @Post(':id/price-agreements')
+  async createPriceAgreement(@Param('id') id: string, @Body() dto: any) {
+    return this.supplierService.createPriceAgreement(id, dto);
+  }
+
+  @Delete('price-agreements/:id')
+  async deactivatePriceAgreement(@Param('id') id: string) {
+    return this.supplierService.deactivatePriceAgreement(id);
+  }
+
+  // ── Price Agreements (global listing) ────────────────────────────────────────
+
+  @Get('price-agreements')
+  async getPriceAgreements(
+    @Query('businessId') businessId: string,
+    @Query('supplierId') supplierId?: string,
+  ) {
+    return this.supplierService.getPriceAgreements(businessId, supplierId);
+  }
+
+  @Post('price-agreements')
+  async createPriceAgreementGlobal(@Body() dto: any) {
+    const { supplierId, ...rest } = dto;
+    return this.supplierService.createPriceAgreement(supplierId, rest);
+  }
+
+  @Delete('price-agreements-delete/:id')
+  async deletePriceAgreement(@Param('id') id: string) {
+    return this.supplierService.deletePriceAgreement(id);
+  }
+
+  // ── Landed Cost Allocation ────────────────────────────────────────────────────
+
+  @Post('grn/:id/landed-cost')
+  async allocateLandedCost(
+    @Param('id') id: string,
+    @Body() body: { totalFreightCents: number; method?: 'PROPORTIONAL' | 'EQUAL' },
+  ) {
+    try {
+      return await this.supplierService.allocateLandedCost(id, body.totalFreightCents, body.method ?? 'PROPORTIONAL');
+    } catch (err) {
+      throw new BadRequestException((err as Error).message);
+    }
   }
 }

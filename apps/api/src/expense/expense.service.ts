@@ -23,6 +23,8 @@ export class ExpenseService {
     isRecurring?: boolean;
     recurringDay?: number;
     cashDrawerSessionId?: string;
+    vatReclaimable?: boolean;
+    vatAmountCents?: number;
   }) {
     const business = await this.prisma.business.findUnique({
       where: { id: data.businessId },
@@ -56,6 +58,9 @@ export class ExpenseService {
             lte: filters.endDate,
           },
         }),
+      },
+      include: {
+        approvalSteps: { orderBy: { level: 'asc' } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -207,5 +212,151 @@ export class ExpenseService {
     for (const biz of businesses) {
       await this.checkRecurringDue(biz.id).catch(() => {});
     }
+  }
+
+  // ── Multi-level Approval Chain ────────────────────────────────────────────────
+
+  async requestApproval(expenseId: string, approverId: string, level: number = 1) {
+    return this.prisma.expenseApprovalStep.create({
+      data: { expenseId, approverId, level, status: 'PENDING' },
+    });
+  }
+
+  async approveStep(stepId: string, comment?: string) {
+    const step = await this.prisma.expenseApprovalStep.update({
+      where: { id: stepId },
+      data: { status: 'APPROVED', comment, actionAt: new Date() },
+    });
+    const allSteps = await this.prisma.expenseApprovalStep.findMany({
+      where: { expenseId: step.expenseId },
+    });
+    if (allSteps.every((s) => s.status === 'APPROVED')) {
+      await this.prisma.expense.update({
+        where: { id: step.expenseId },
+        data: { approvalStatus: 'APPROVED' },
+      });
+    }
+    return step;
+  }
+
+  async rejectStep(stepId: string, comment: string) {
+    const step = await this.prisma.expenseApprovalStep.update({
+      where: { id: stepId },
+      data: { status: 'REJECTED', comment, actionAt: new Date() },
+    });
+    await this.prisma.expense.update({
+      where: { id: step.expenseId },
+      data: { approvalStatus: 'REJECTED' },
+    });
+    return step;
+  }
+
+  async getExpenseWithApprovalChain(expenseId: string) {
+    return this.prisma.expense.findUnique({
+      where: { id: expenseId },
+      include: { approvalSteps: { orderBy: { level: 'asc' } } },
+    });
+  }
+
+  // ── VAT Reclaim Summary ────────────────────────────────────────────────────────
+
+  async getVATReclaimSummary(businessId: string, startDate: string, endDate: string) {
+    const expenses = await this.prisma.expense.findMany({
+      where: {
+        businessId,
+        vatReclaimable: true,
+        approvalStatus: 'APPROVED',
+        date: { gte: new Date(startDate), lte: new Date(endDate) },
+      },
+    });
+    const totalCents = expenses.reduce((s, e) => s + e.amountCents, 0);
+    const vatCents = Math.round(totalCents * 16 / 116);
+    return { count: expenses.length, totalCents, vatCents, expenses };
+  }
+
+  // ── Petty Cash Float ──────────────────────────────────────────────────────────
+
+  async getPettyCashFloat(businessId: string, storeId?: string) {
+    const whereStoreId = storeId ?? null;
+    const float = await this.prisma.pettyCashFloat.findFirst({
+      where: { businessId, storeId: whereStoreId },
+      include: { transactions: { orderBy: { createdAt: 'desc' }, take: 30 } },
+    });
+    return float ?? {
+      id: null,
+      businessId,
+      storeId: whereStoreId,
+      balanceCents: 0,
+      lastTopUpAt: null,
+      transactions: [],
+    };
+  }
+
+  async topUpPettyCash(
+    businessId: string,
+    storeId: string | undefined,
+    amountCents: number,
+    description: string,
+    userId: string,
+  ) {
+    const whereStoreId = storeId ?? null;
+    let float = await this.prisma.pettyCashFloat.findFirst({
+      where: { businessId, storeId: whereStoreId },
+    });
+    if (!float) {
+      float = await this.prisma.pettyCashFloat.create({
+        data: { businessId, storeId: whereStoreId, balanceCents: 0 },
+      });
+    }
+    await this.prisma.pettyCashFloat.update({
+      where: { id: float.id },
+      data: { balanceCents: { increment: amountCents }, lastTopUpAt: new Date() },
+    });
+    await this.prisma.pettyCashTransaction.create({
+      data: { floatId: float.id, type: 'TOP_UP', amountCents, description, userId },
+    });
+    return this.getPettyCashFloat(businessId, storeId);
+  }
+
+  async getVatReclaimable(businessId: string, startDate?: string, endDate?: string) {
+    const where: any = { businessId, vatReclaimable: true, approvalStatus: 'APPROVED' };
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) where.createdAt.gte = new Date(startDate);
+      if (endDate) where.createdAt.lte = new Date(endDate);
+    }
+    const expenses = await this.prisma.expense.findMany({ where });
+    const total = expenses.reduce((s, e) => s + (e.vatAmountCents ?? 0), 0);
+    return { expenses, totalVatCents: total };
+  }
+
+  async disbursePettyCash(
+    businessId: string,
+    storeId: string | undefined,
+    amountCents: number,
+    description: string,
+    reference: string | undefined,
+    userId: string,
+  ) {
+    const whereStoreId = storeId ?? null;
+    const float = await this.prisma.pettyCashFloat.findFirst({
+      where: { businessId, storeId: whereStoreId },
+    });
+    if (!float) {
+      throw new Error('No petty cash float found. Please top up first.');
+    }
+    if (float.balanceCents < amountCents) {
+      throw new Error(
+        `Insufficient balance. Available: KES ${(float.balanceCents / 100).toFixed(2)}`,
+      );
+    }
+    await this.prisma.pettyCashFloat.update({
+      where: { id: float.id },
+      data: { balanceCents: { decrement: amountCents } },
+    });
+    await this.prisma.pettyCashTransaction.create({
+      data: { floatId: float.id, type: 'DISBURSEMENT', amountCents, description, reference, userId },
+    });
+    return this.getPettyCashFloat(businessId, storeId);
   }
 }

@@ -8,6 +8,7 @@ import {
   Query,
   UploadedFile,
   UseInterceptors,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -31,6 +32,8 @@ export class ExpenseController {
     isRecurring?: boolean;
     recurringDay?: number;
     cashDrawerSessionId?: string;
+    vatReclaimable?: boolean;
+    vatAmountCents?: number;
   }) {
     return this.expenseService.create(data);
   }
@@ -74,6 +77,48 @@ export class ExpenseController {
     );
   }
 
+  // ── Multi-level Approval Chain ─────────────────────────────────────────────────
+
+  @Post(':id/request-approval')
+  async requestApproval(
+    @Param('id') id: string,
+    @Body() body: { approverId: string; level?: number },
+  ) {
+    return this.expenseService.requestApproval(id, body.approverId, body.level);
+  }
+
+  @Patch('approval-steps/:stepId/approve')
+  async approveStep(
+    @Param('stepId') stepId: string,
+    @Body() body: { comment?: string },
+  ) {
+    return this.expenseService.approveStep(stepId, body.comment);
+  }
+
+  @Patch('approval-steps/:stepId/reject')
+  async rejectStep(
+    @Param('stepId') stepId: string,
+    @Body() body: { comment: string },
+  ) {
+    return this.expenseService.rejectStep(stepId, body.comment);
+  }
+
+  @Get(':id/approval-chain')
+  async getApprovalChain(@Param('id') id: string) {
+    return this.expenseService.getExpenseWithApprovalChain(id);
+  }
+
+  // ── VAT Reclaim ───────────────────────────────────────────────────────────────
+
+  @Get('vat-reclaim')
+  async getVATReclaimSummary(
+    @Query('businessId') businessId: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    return this.expenseService.getVATReclaimSummary(businessId, startDate, endDate);
+  }
+
   // ── Recurring Expenses ────────────────────────────────────────────────────────
 
   @Get('recurring')
@@ -87,7 +132,72 @@ export class ExpenseController {
     return { success: true };
   }
 
-  // ── Receipt Photo Upload ──────────────────────────────────────────────────────
+  // ── Petty Cash Float ──────────────────────────────────────────────────────────
+
+  @Get('petty-cash')
+  async getPettyCash(
+    @Query('businessId') businessId: string,
+    @Query('storeId') storeId?: string,
+  ) {
+    return this.expenseService.getPettyCashFloat(businessId, storeId);
+  }
+
+  @Post('petty-cash/top-up')
+  async topUpPettyCash(
+    @Body() body: {
+      businessId: string;
+      storeId?: string;
+      amountCents: number;
+      description: string;
+      userId: string;
+    },
+  ) {
+    try {
+      return await this.expenseService.topUpPettyCash(
+        body.businessId,
+        body.storeId,
+        body.amountCents,
+        body.description,
+        body.userId,
+      );
+    } catch (err) {
+      throw new BadRequestException((err as Error).message);
+    }
+  }
+
+  @Post('petty-cash/disburse')
+  async disbursePettyCash(
+    @Body() body: {
+      businessId: string;
+      storeId?: string;
+      amountCents: number;
+      description: string;
+      reference?: string;
+      userId: string;
+    },
+  ) {
+    try {
+      return await this.expenseService.disbursePettyCash(
+        body.businessId,
+        body.storeId,
+        body.amountCents,
+        body.description,
+        body.reference,
+        body.userId,
+      );
+    } catch (err) {
+      throw new BadRequestException((err as Error).message);
+    }
+  }
+
+  @Get('vat-reclaimable')
+  async getVatReclaimable(
+    @Query('businessId') businessId: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.expenseService.getVatReclaimable(businessId, startDate, endDate);
+  }
 
   @Post('upload-receipt')
   @UseInterceptors(FileInterceptor('file', {

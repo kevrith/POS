@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import * as bcrypt from 'bcrypt';
@@ -427,6 +428,102 @@ export class HrService {
     return streak;
   }
 
+  // ─── Expense Claims ──────────────────────────────────────────────────────────
+
+  async getExpenseClaims(businessId: string, employeeId?: string) {
+    return this.prisma.expenseClaim.findMany({
+      where: { businessId, ...(employeeId ? { employeeId } : {}) },
+      include: { employee: { select: { user: { select: { name: true } } } } },
+      orderBy: { submittedAt: 'desc' },
+    });
+  }
+
+  async createExpenseClaim(businessId: string, data: {
+    employeeId: string;
+    amountCents: number;
+    description: string;
+    category?: string;
+    receiptUrl?: string;
+  }) {
+    return this.prisma.expenseClaim.create({
+      data: {
+        businessId,
+        employeeId: data.employeeId,
+        amountCents: data.amountCents,
+        description: data.description,
+        category: data.category ?? 'OTHER',
+        receiptUrl: data.receiptUrl,
+      },
+      include: { employee: { select: { user: { select: { name: true } } } } },
+    });
+  }
+
+  async approveExpenseClaim(claimId: string, approverId: string) {
+    return this.prisma.expenseClaim.update({
+      where: { id: claimId },
+      data: { status: 'APPROVED', approvedBy: approverId },
+    });
+  }
+
+  async rejectExpenseClaim(claimId: string, rejectorId: string, reason: string) {
+    return this.prisma.expenseClaim.update({
+      where: { id: claimId },
+      data: { status: 'REJECTED', rejectedBy: rejectorId, rejectionReason: reason },
+    });
+  }
+
+  async markClaimPaid(claimId: string) {
+    return this.prisma.expenseClaim.update({
+      where: { id: claimId },
+      data: { status: 'PAID' },
+    });
+  }
+
+  @Cron('1 0 1 * *') // 1st of every month at 00:01
+  async accrueLeaveBalances() {
+    // Kenya statutory: 21 days annual / 12 months = 1.75 days/month; 1 sick day/month
+    const year = new Date().getFullYear();
+    const employees = await this.prisma.employee.findMany({
+      where: { isActive: true },
+      select: { id: true },
+    });
+    for (const emp of employees) {
+      await this.prisma.leaveBalance.upsert({
+        where: { employeeId_year_leaveType: { employeeId: emp.id, year, leaveType: 'ANNUAL' } },
+        create: { employeeId: emp.id, year, leaveType: 'ANNUAL', allocatedDays: 1.75, usedDays: 0 },
+        update: { allocatedDays: { increment: 1.75 } },
+      });
+      await this.prisma.leaveBalance.upsert({
+        where: { employeeId_year_leaveType: { employeeId: emp.id, year, leaveType: 'SICK' } },
+        create: { employeeId: emp.id, year, leaveType: 'SICK', allocatedDays: 1, usedDays: 0 },
+        update: { allocatedDays: { increment: 1 } },
+      });
+    }
+  }
+
+  @Cron('0 8 * * *')
+  async checkContractExpiry() {
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+    const expiring = await this.prisma.employee.findMany({
+      where: { contractEndDate: { lte: thirtyDaysFromNow, gte: new Date() } },
+      include: { user: { select: { name: true, businessId: true } } },
+    });
+    for (const emp of expiring) {
+      await this.prisma.notification.create({
+        data: {
+          businessId: emp.user.businessId,
+          type: 'CONTRACT_EXPIRY',
+          priority: 'HIGH',
+          title: 'Contract Expiring Soon',
+          body: `${emp.user.name}'s contract expires soon. Please review.`,
+          entityId: emp.id,
+          entityType: 'Employee',
+        },
+      });
+    }
+  }
+
   async getShiftSalesReport(
     businessId: string,
     storeId: string | undefined,
@@ -474,5 +571,66 @@ export class HrService {
       };
     }));
     return result;
+  }
+
+  // ─── Biometric Clock-in ─────────────────────────────────────────────────────
+
+  async clockIn(businessId: string, pin: string, method = 'MANUAL') {
+    const user = await this.prisma.user.findFirst({ where: { businessId, pin } });
+    if (!user) throw new Error('Invalid PIN');
+    const employee = await this.prisma.employee.findFirst({ where: { businessId, userId: user.id, isActive: true } });
+    if (!employee) throw new Error('No active employee record for this PIN');
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const existing = await this.prisma.attendance.findFirst({
+      where: { employeeId: employee.id, date: today, clockOut: null },
+    });
+    if (existing) return { alreadyClockedIn: true, attendance: existing };
+    return this.prisma.attendance.create({
+      data: { employeeId: employee.id, businessId, date: today, clockIn: new Date(), notes: `Clocked in via ${method}` },
+    });
+  }
+
+  async clockOut(businessId: string, pin: string, method = 'MANUAL') {
+    const user = await this.prisma.user.findFirst({ where: { businessId, pin } });
+    if (!user) throw new Error('Invalid PIN');
+    const employee = await this.prisma.employee.findFirst({ where: { businessId, userId: user.id, isActive: true } });
+    if (!employee) throw new Error('No active employee record for this PIN');
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const record = await this.prisma.attendance.findFirst({
+      where: { employeeId: employee.id, date: today, clockOut: null },
+    });
+    if (!record) throw new Error('No open clock-in found for today');
+    return this.prisma.attendance.update({
+      where: { id: record.id },
+      data: { clockOut: new Date(), notes: record.notes ? `${record.notes} | Out via ${method}` : `Clocked out via ${method}` },
+    });
+  }
+
+  // ─── Contract Management ────────────────────────────────────────────────────
+
+  async getExpiringContracts(businessId: string, daysAhead = 30) {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() + daysAhead);
+    return this.prisma.employee.findMany({
+      where: {
+        businessId,
+        contractType: { not: 'PERMANENT' },
+        contractEndDate: { lte: cutoff, gte: new Date() },
+        isActive: true,
+      },
+      include: { user: { select: { name: true, email: true } } },
+      orderBy: { contractEndDate: 'asc' },
+    });
+  }
+
+  async updateContract(employeeId: string, contractType: string, contractEndDate?: string | null) {
+    return this.prisma.employee.update({
+      where: { id: employeeId },
+      data: {
+        contractType,
+        contractEndDate: contractEndDate ? new Date(contractEndDate) : null,
+      },
+      include: { user: { select: { name: true, email: true } } },
+    });
   }
 }

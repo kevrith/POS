@@ -2,14 +2,15 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend,
+  PieChart, Pie, Cell, Legend, LineChart, Line, Area, AreaChart,
+  ComposedChart, ReferenceLine, Brush, ScatterChart, Scatter,
 } from 'recharts';
 import {
   DollarSign, ShoppingBag, TrendingUp, Package, FileText,
   BarChart3, Calendar, Download, RefreshCw, AlertCircle,
   ChefHat, Truck, Layers, CreditCard, History, BookOpen,
   ClipboardList, Hash, Flag, Shield, AlertTriangle, DatabaseBackup,
-  Users, Smartphone, X, Pencil, Printer,
+  Users, Smartphone, X, Pencil, Printer, BarChart2,
 } from 'lucide-react';
 import { api, openPdfReport } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
@@ -76,6 +77,22 @@ interface VatReport {
     netCents: number;
     totalCents: number;
   }>;
+}
+
+interface VatReturnData {
+  period: { startDate: string; endDate: string };
+  outputVat: {
+    totalCents: number;
+    totalSalesCents: number;
+    salesCount: number;
+    sales: Array<{ id: string; receiptNumber: string | null; createdAt: string; subtotalCents: number; discountCents: number; totalCents: number; vatCents: number }>;
+  };
+  inputVat: {
+    totalCents: number;
+    expensesCount: number;
+    expenses: Array<{ id: string; description: string; category: string; amountCents: number; createdAt: string; vatCents: number }>;
+  };
+  netVatPayableCents: number;
 }
 
 interface ExpenseReport {
@@ -182,8 +199,62 @@ interface CreditBookData {
   };
 }
 
-type Tab = 'overview' | 'sales' | 'item-summary' | 'tax' | 'pl' | 'inventory' | 'fiscal' | 'attendance' | 'commissions' | 'employee-sales' | 'recipes' | 'bundles' | 'suppliers' | 'supplier-ageing' | 'credit' | 'stock-history' | 'layaway' | 'proforma' | 'serials' | 'kra' | 'audit' | 'grn' | 'export';
-type Range = 'today' | 'week' | 'month' | 'custom';
+interface DeadStockItem {
+  itemId: string;
+  name: string;
+  category: string;
+  stock: number;
+  costPriceCents: number;
+  stockValueCents: number;
+  daysSinceLastSale: number | null;
+  lastSaleDate: string | null;
+}
+
+interface DeadStockData {
+  items: DeadStockItem[];
+  totalItems: number;
+  totalValueCents: number;
+  daysThreshold: number;
+}
+
+interface GrossMarginItem {
+  name: string;
+  qty: number;
+  revenueCents: number;
+  costCents: number;
+  grossProfitCents: number;
+  marginPct: number;
+}
+
+interface GrossMarginCategory {
+  name: string;
+  revenueCents: number;
+  costCents: number;
+  grossProfitCents: number;
+  marginPct: number;
+  qty: number;
+  items: GrossMarginItem[];
+}
+
+interface GrossMarginData {
+  categories: GrossMarginCategory[];
+  totalRevenueCents: number;
+  totalCostCents: number;
+  totalGrossProfitCents: number;
+  overallMarginPct: number;
+}
+
+interface ShrinkageItem { itemId: string; name: string; sku: string; totalUnitsLost: number; totalValueCents: number; incidents: number; }
+interface ShrinkageData { items: ShrinkageItem[]; totalValueCents: number; totalIncidents: number; }
+interface DeptPnlRow { category: string; revenueCents: number; cogsCents: number; grossProfitCents: number; marginPct: number; units: number; }
+interface DeptPnlData { departments: DeptPnlRow[]; totals: { revenueCents: number; cogsCents: number; grossProfitCents: number; marginPct: number }; }
+interface RecipeComponent { name: string; quantity: number; costPriceCents: number; totalCostCents: number; }
+interface RecipeCostItem { itemId: string; name: string; category: string; sellingPriceCents: number; totalIngredientCostCents: number; foodCostPct: number | null; grossMarginPct: number | null; status: 'HIGH_COST' | 'ACCEPTABLE' | 'LOW_COST' | 'NO_PRICE'; components: RecipeComponent[]; }
+interface RecipeCostData { items: RecipeCostItem[]; summary: { totalItems: number; avgFoodCostPct: number; highCostItems: number }; }
+
+type Tab = 'overview' | 'sales' | 'customer-analytics' | 'forecasting' | 'item-summary' | 'tax' | 'vat-return' | 'pl' | 'inventory' | 'fiscal' | 'attendance' | 'commissions' | 'employee-sales' | 'recipes' | 'bundles' | 'suppliers' | 'supplier-ageing' | 'credit' | 'stock-history' | 'layaway' | 'proforma' | 'serials' | 'kra' | 'audit' | 'grn' | 'export' | 'dead-stock' | 'gross-margin' | 'shrinkage' | 'dept-pnl' | 'recipe-costing';
+type Range = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom';
+type ComparisonPeriod = 'none' | 'previous' | 'yoy' | 'mom';
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -215,7 +286,46 @@ function getDateRange(range: Range, from: string, to: string): { startDate: stri
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
     return { startDate: start.toISOString(), endDate: end.toISOString() };
   }
+  if (range === 'quarter') {
+    const quarter = Math.floor(now.getMonth() / 3);
+    const start = new Date(now.getFullYear(), quarter * 3, 1);
+    const end = new Date(now.getFullYear(), quarter * 3 + 3, 0, 23, 59, 59);
+    return { startDate: start.toISOString(), endDate: end.toISOString() };
+  }
+  if (range === 'year') {
+    const start = new Date(now.getFullYear(), 0, 1);
+    const end = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+    return { startDate: start.toISOString(), endDate: end.toISOString() };
+  }
   return { startDate: new Date(from).toISOString(), endDate: new Date(to + 'T23:59:59').toISOString() };
+}
+
+function getComparisonDateRange(range: Range, comparison: ComparisonPeriod, startDate: string, endDate: string): { startDate: string; endDate: string } | null {
+  if (comparison === 'none') return null;
+  
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const diffMs = end.getTime() - start.getTime();
+  
+  if (comparison === 'previous') {
+    const compStart = new Date(start.getTime() - diffMs - 24 * 60 * 60 * 1000);
+    const compEnd = new Date(start.getTime() - 24 * 60 * 60 * 1000);
+    return { startDate: compStart.toISOString(), endDate: compEnd.toISOString() };
+  }
+  
+  if (comparison === 'yoy') {
+    const compStart = new Date(start.getFullYear() - 1, start.getMonth(), start.getDate());
+    const compEnd = new Date(end.getFullYear() - 1, end.getMonth(), end.getDate(), 23, 59, 59);
+    return { startDate: compStart.toISOString(), endDate: compEnd.toISOString() };
+  }
+  
+  if (comparison === 'mom') {
+    const compStart = new Date(start.getFullYear() - 1, start.getMonth(), start.getDate());
+    const compEnd = new Date(end.getFullYear() - 1, end.getMonth(), end.getDate(), 23, 59, 59);
+    return { startDate: compStart.toISOString(), endDate: compEnd.toISOString() };
+  }
+  
+  return null;
 }
 
 const CHART_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4'];
@@ -224,19 +334,29 @@ const RANGE_LABELS: Record<Range, string> = {
   today: 'Today',
   week: 'This Week',
   month: 'This Month',
+  quarter: 'This Quarter',
+  year: 'This Year',
   custom: 'Custom',
+};
+
+const COMPARISON_LABELS: Record<ComparisonPeriod, string> = {
+  none: 'No Comparison',
+  previous: 'vs Previous Period',
+  yoy: 'vs Same Period Last Year',
+  mom: 'vs Same Month Last Year',
 };
 
 // ─── Stat Card ────────────────────────────────────────────────
 
 function StatCard({
-  label, value, icon: Icon, color, sub,
+  label, value, icon: Icon, color, sub, valueColor,
 }: {
   label: string;
   value: string | number;
   icon: React.ComponentType<{ className?: string }>;
   color: string;
   sub?: string;
+  valueColor?: string;
 }) {
   return (
     <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
@@ -245,7 +365,7 @@ function StatCard({
           <Icon className="w-5 h-5 text-white" />
         </div>
       </div>
-      <p className="text-2xl font-bold text-gray-900">{value}</p>
+      <p className={`text-2xl font-bold ${valueColor ?? 'text-gray-900'}`}>{value}</p>
       <p className="text-sm text-gray-500 mt-0.5">{label}</p>
       {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
     </div>
@@ -328,8 +448,15 @@ export default function ReportsPage() {
   const [writeOffNotes, setWriteOffNotes] = useState('');
   const [historyAsOf, setHistoryAsOf] = useState(() => new Date().toISOString().substring(0, 10));
   const [layawayStatus, setLayawayStatus] = useState('');
+  const [deadStockDays, setDeadStockDays] = useState(90);
+  const [expandedGrossMarginCategory, setExpandedGrossMarginCategory] = useState<string | null>(null);
+  const [comparisonPeriod, setComparisonPeriod] = useState<ComparisonPeriod>('none');
+  const [chartType, setChartType] = useState<'bar' | 'line' | 'area'>('bar');
+  const [showTrendlines, setShowTrendlines] = useState(false);
+  const [selectedMetrics, setSelectedMetrics] = useState<string[]>(['revenue', 'transactions']);
 
   const { startDate, endDate } = getDateRange(range, customFrom, customTo);
+  const comparisonRange = getComparisonDateRange(range, comparisonPeriod, startDate, endDate);
 
   const baseQs = useMemo(() => {
     const p = new URLSearchParams({ businessId });
@@ -338,6 +465,15 @@ export default function ReportsPage() {
     p.set('endDate', endDate);
     return p.toString();
   }, [businessId, storeId, startDate, endDate]);
+
+  const comparisonQs = useMemo(() => {
+    if (!comparisonRange) return null;
+    const p = new URLSearchParams({ businessId });
+    if (storeId) p.set('storeId', storeId);
+    p.set('startDate', comparisonRange.startDate);
+    p.set('endDate', comparisonRange.endDate);
+    return p.toString();
+  }, [businessId, storeId, comparisonRange]);
 
   const taxQs = useMemo(
     () => new URLSearchParams({ businessId, startDate, endDate }).toString(),
@@ -361,6 +497,64 @@ export default function ReportsPage() {
     refetchIntervalInBackground: false,
   });
 
+  // Comparison data for period-over-period analysis
+  const { data: comparisonSalesData } = useQuery<SalesSummary>({
+    queryKey: ['report-sales-comparison', comparisonQs],
+    queryFn: () => api.get<SalesSummary>(`/reports/sales?${comparisonQs}`),
+    enabled: !!businessId && !!comparisonQs && comparisonPeriod !== 'none',
+    staleTime: 5 * 60 * 1000, // 5 minutes for comparison data
+  });
+
+  // Customer analytics data
+  const { data: customerAnalytics } = useQuery<{
+    totalCustomers: number;
+    newCustomers: number;
+    returningCustomers: number;
+    avgOrderValue: number;
+    customerLifetimeValue: number;
+    topCustomers: Array<{
+      id: string;
+      name: string;
+      totalSpent: number;
+      orderCount: number;
+      lastVisit: string;
+    }>;
+    rfmSegments: Array<{
+      segment: string;
+      count: number;
+      avgSpend: number;
+    }>;
+  }>({
+    queryKey: ['customer-analytics', baseQs],
+    queryFn: () => api.get(`/reports/customer-analytics?${baseQs}`),
+    enabled: !!businessId && (tab === 'overview' || tab === 'customer-analytics'),
+  });
+
+  // Advanced forecasting data
+  const { data: forecastData } = useQuery<{
+    items: Array<{
+      itemId: string;
+      itemName: string;
+      currentStock: number;
+      forecastedDemand: number;
+      confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+      trend: number;
+      seasonality: number;
+      reorderPoint: number;
+      suggestedOrderQty: number;
+    }>;
+    demandPatterns: Array<{
+      date: string;
+      predicted: number;
+      actual?: number;
+      confidence: number;
+    }>;
+  }>({
+    queryKey: ['forecast-data', businessId, storeId],
+    queryFn: () => api.get(`/reports/forecast?businessId=${businessId}${storeId ? `&storeId=${storeId}` : ''}`),
+    enabled: !!businessId && tab === 'forecasting',
+  });
+
   const { data: paymentMethods = [], refetch: refetchPayments } = useQuery<PaymentMethod[]>({
     queryKey: ['report-payments', baseQs],
     queryFn: () => api.get<PaymentMethod[]>(`/reports/payment-methods?${baseQs}`),
@@ -379,6 +573,12 @@ export default function ReportsPage() {
     refetchIntervalInBackground: false,
   });
 
+  const { data: vatReturnData, isLoading: vatReturnLoading } = useQuery<VatReturnData>({
+    queryKey: ['report-vat-return-itax', taxQs],
+    queryFn: () => api.get<VatReturnData>(`/reports/vat-return-itax?${taxQs}`),
+    enabled: !!businessId && tab === 'vat-return',
+  });
+
   const { data: plData } = useQuery<ProfitLoss>({
     queryKey: ['report-pl', taxQs],
     queryFn: () => api.get<ProfitLoss>(`/reports/profit-loss?${taxQs}`),
@@ -388,13 +588,16 @@ export default function ReportsPage() {
     refetchIntervalInBackground: false,
   });
 
-  const { data: stockData } = useQuery<StockValuation>({
+  const { data: stockData, refetch: refetchStock } = useQuery<StockValuation>({
     queryKey: ['report-stock', businessId, storeId],
     queryFn: () =>
       api.get<StockValuation>(
         `/reports/stock-valuation?businessId=${businessId}${storeId ? `&storeId=${storeId}` : ''}`,
       ),
     enabled: !!businessId && tab === 'inventory',
+    staleTime: 0,                   // always consider stale → refetch on focus/nav
+    refetchInterval: 15_000,        // poll every 15 s while tab is open
+    refetchIntervalInBackground: false,
   });
 
   const { data: expenseData } = useQuery<ExpenseReport>({
@@ -538,11 +741,13 @@ export default function ReportsPage() {
       role: string;
       salesCount: number;
       totalCents: number;
+      totalItemsSold: number;
+      avgItemsPerTransaction: number;
       categories: Array<{ name: string; subtotalCents: number; items: Array<{ itemName: string; qty: number; totalCents: number }> }>;
       mpesaPayments: Array<{ saleReceiptNumber: string | null; amountCents: number; mpesaRef: string | null; createdAt: string }>;
       mpesaTotalCents: number;
     }>;
-    summary: { totalEmployees: number; totalSales: number; totalRevenueCents: number; totalMpesaCents: number };
+    summary: { totalEmployees: number; totalSales: number; totalRevenueCents: number; totalMpesaCents: number; totalItemsSold: number; avgItemsPerTransaction: number };
   }>({
     queryKey: ['report-employee-sales', businessId, storeId, startDate, endDate, empSalesFilter],
     queryFn: () =>
@@ -576,6 +781,48 @@ export default function ReportsPage() {
         `/reports/item-summary?businessId=${businessId}${storeId ? `&storeId=${storeId}` : ''}&startDate=${startDate}&endDate=${endDate}`,
       ),
     enabled: !!businessId && tab === 'item-summary',
+  });
+
+  const { data: deadStockData } = useQuery<DeadStockData>({
+    queryKey: ['report-dead-stock', businessId, storeId, deadStockDays],
+    queryFn: () =>
+      api.get<DeadStockData>(
+        `/reports/dead-stock?businessId=${businessId}${storeId ? `&storeId=${storeId}` : ''}&days=${deadStockDays}`,
+      ),
+    enabled: !!businessId && tab === 'dead-stock',
+  });
+
+  const { data: grossMarginData } = useQuery<GrossMarginData>({
+    queryKey: ['report-gross-margin', businessId, storeId, startDate, endDate],
+    queryFn: () =>
+      api.get<GrossMarginData>(
+        `/reports/gross-margin?businessId=${businessId}${storeId ? `&storeId=${storeId}` : ''}&startDate=${startDate}&endDate=${endDate}`,
+      ),
+    enabled: !!businessId && tab === 'gross-margin',
+  });
+
+  const { data: shrinkageData } = useQuery<ShrinkageData>({
+    queryKey: ['report-shrinkage', businessId, storeId, startDate, endDate],
+    queryFn: () =>
+      api.get<ShrinkageData>(
+        `/reports/shrinkage?businessId=${businessId}${storeId ? `&storeId=${storeId}` : ''}&startDate=${startDate}&endDate=${endDate}`,
+      ),
+    enabled: !!businessId && tab === 'shrinkage',
+  });
+
+  const { data: deptPnlData } = useQuery<DeptPnlData>({
+    queryKey: ['report-dept-pnl', businessId, storeId, startDate, endDate],
+    queryFn: () =>
+      api.get<DeptPnlData>(
+        `/reports/department-pnl?businessId=${businessId}${storeId ? `&storeId=${storeId}` : ''}&startDate=${startDate}&endDate=${endDate}`,
+      ),
+    enabled: !!businessId && tab === 'dept-pnl',
+  });
+
+  const { data: recipeCostData } = useQuery<RecipeCostData>({
+    queryKey: ['recipe-costing', businessId],
+    queryFn: () => api.get<RecipeCostData>(`/reports/recipe-costing?businessId=${businessId}`),
+    enabled: !!businessId && tab === 'recipe-costing',
   });
 
   const writeOffMutation = useMutation({
@@ -628,13 +875,43 @@ export default function ReportsPage() {
       .slice(-14);
   }, [salesData?.sales]);
 
+  const hourlyBuckets = useMemo(() => {
+    const buckets = new Array(24).fill(0) as number[];
+    (salesData?.sales ?? []).forEach((s) => {
+      buckets[new Date(s.createdAt).getHours()] += s.totalCents;
+    });
+    return buckets;
+  }, [salesData?.sales]);
+
+  const discountTotal = useMemo(
+    () => (salesData?.sales ?? []).reduce((sum, s) => sum + (s.discountCents ?? 0), 0),
+    [salesData?.sales],
+  );
+
+  const serviceChargeTotal = useMemo(
+    () => (salesData?.sales ?? []).reduce((sum, s) => sum + (s.serviceChargeCents ?? 0), 0),
+    [salesData?.sales],
+  );
+
+  const peakHour = useMemo(() => {
+    const max = Math.max(...hourlyBuckets);
+    if (max === 0) return null;
+    const h = hourlyBuckets.indexOf(max);
+    return h === 0 ? '12am' : h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h - 12}pm`;
+  }, [hourlyBuckets]);
+
+  const maxHourlyBucket = useMemo(() => Math.max(...hourlyBuckets, 1), [hourlyBuckets]);
+
   // ── Tab config ────────────────────────────────────────────────
 
   const tabs: Array<{ id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }> = [
     { id: 'overview', label: 'Overview', icon: BarChart3 },
     { id: 'sales', label: 'Sales', icon: ShoppingBag },
+    { id: 'customer-analytics', label: 'Customer Analytics', icon: Users },
+    { id: 'forecasting', label: 'Forecasting', icon: TrendingUp },
     { id: 'item-summary', label: 'Item Summary', icon: Package },
     { id: 'tax', label: 'Tax Report', icon: FileText },
+    { id: 'vat-return', label: 'VAT Return', icon: FileText },
     { id: 'pl', label: 'P&L', icon: TrendingUp },
     { id: 'inventory', label: 'Stock', icon: Package },
     { id: 'fiscal', label: 'X / Z Report', icon: DollarSign },
@@ -654,6 +931,11 @@ export default function ReportsPage() {
     { id: 'kra', label: 'KRA Export', icon: Flag },
     { id: 'audit', label: 'Audit Log', icon: Shield },
     { id: 'export', label: 'Full Export', icon: DatabaseBackup },
+    { id: 'dead-stock', label: 'Dead Stock', icon: Package },
+    { id: 'gross-margin', label: 'Gross Margin', icon: TrendingUp },
+    { id: 'shrinkage', label: 'Shrinkage', icon: AlertTriangle },
+    { id: 'dept-pnl', label: 'Dept P&L', icon: BarChart3 },
+    { id: 'recipe-costing', label: 'Food Cost', icon: Package },
   ];
 
   // ── Render ────────────────────────────────────────────────────
@@ -661,47 +943,88 @@ export default function ReportsPage() {
   return (
     <div className="h-full flex flex-col bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b px-6 py-4">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <h1 className="text-2xl font-bold text-gray-900">Reports & Analytics</h1>
+      <div className="bg-white border-b px-4 sm:px-6 py-4">
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Reports & Analytics</h1>
 
-          {/* Date range selectors */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <Calendar className="w-4 h-4 text-gray-400" />
-            {(['today', 'week', 'month', 'custom'] as Range[]).map((r) => (
-              <button
-                key={r}
-                onClick={() => setRange(r)}
-                className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${
-                  range === r
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
+          {/* Mobile-responsive controls */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
+            {/* Date range selectors */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <Calendar className="w-4 h-4 text-gray-400" />
+              {(['today', 'week', 'month', 'quarter', 'year', 'custom'] as Range[]).map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setRange(r)}
+                  className={`px-2 sm:px-3 py-1.5 text-xs sm:text-sm rounded-lg font-medium transition-colors ${
+                    range === r
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {RANGE_LABELS[r]}
+                </button>
+              ))}
+            </div>
+            
+            {/* Comparison period selector */}
+            <div className="flex items-center gap-2">
+              <select
+                value={comparisonPeriod}
+                onChange={(e) => setComparisonPeriod(e.target.value as ComparisonPeriod)}
+                className="text-xs sm:text-sm border rounded-lg px-2 py-1.5 bg-white"
               >
-                {RANGE_LABELS[r]}
-              </button>
-            ))}
-            {range === 'custom' && (
-              <>
-                <input
-                  type="date"
-                  value={customFrom}
-                  onChange={(e) => setCustomFrom(e.target.value)}
-                  className="border px-2 py-1.5 rounded-lg text-sm"
-                />
-                <span className="text-gray-400 text-sm">to</span>
-                <input
-                  type="date"
-                  value={customTo}
-                  onChange={(e) => setCustomTo(e.target.value)}
-                  className="border px-2 py-1.5 rounded-lg text-sm"
-                />
-              </>
+                {Object.entries(COMPARISON_LABELS).map(([key, label]) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Chart controls */}
+            {(tab === 'overview' || tab === 'sales') && (
+              <div className="flex items-center gap-2">
+                <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
+                  {(['bar', 'line', 'area'] as const).map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => setChartType(type)}
+                      className={`px-2 py-1 capitalize ${chartType === type ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setShowTrendlines(!showTrendlines)}
+                  className={`px-2 py-1 text-xs rounded border ${showTrendlines ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}
+                >
+                  Trends
+                </button>
+              </div>
             )}
           </div>
         </div>
 
-        {/* Tabs */}
+        {/* Custom date inputs */}
+        {range === 'custom' && (
+          <div className="flex items-center gap-2 mb-4">
+            <input
+              type="date"
+              value={customFrom}
+              onChange={(e) => setCustomFrom(e.target.value)}
+              className="border px-2 py-1.5 rounded-lg text-sm"
+            />
+            <span className="text-gray-400 text-sm">to</span>
+            <input
+              type="date"
+              value={customTo}
+              onChange={(e) => setCustomTo(e.target.value)}
+              className="border px-2 py-1.5 rounded-lg text-sm"
+            />
+          </div>
+        )}
+
+        {/* Mobile-responsive tabs */}
         <div className="flex gap-1 mt-4 -mb-4 overflow-x-auto">
           {tabs.map((t) => {
             const Icon = t.icon;
@@ -709,14 +1032,15 @@ export default function ReportsPage() {
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                className={`flex items-center gap-1.5 px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   tab === t.id
                     ? 'border-blue-600 text-blue-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                <Icon className="w-4 h-4" />
-                {t.label}
+                <Icon className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">{t.label}</span>
+                <span className="sm:hidden">{t.label.split(' ')[0]}</span>
               </button>
             );
           })}
@@ -737,6 +1061,7 @@ export default function ReportsPage() {
             {/* ── OVERVIEW ── */}
             {tab === 'overview' && (
               <div className="space-y-6">
+                {/* Enhanced KPI cards with comparison */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                   <StatCard
                     label="Total Revenue"
@@ -744,12 +1069,14 @@ export default function ReportsPage() {
                     icon={DollarSign}
                     color="bg-blue-500"
                     sub={`${summary?.totalSales ?? 0} transactions`}
+                    valueColor="text-green-600"
                   />
                   <StatCard
                     label="Avg Sale Value"
                     value={formatKES(avgSale)}
                     icon={TrendingUp}
                     color="bg-green-500"
+                    valueColor="text-green-600"
                   />
                   <StatCard
                     label="VAT Collected"
@@ -762,24 +1089,180 @@ export default function ReportsPage() {
                     value={plData ? formatKES(plData.netProfitCents) : '—'}
                     icon={BarChart3}
                     color={plData && plData.netProfitCents >= 0 ? 'bg-emerald-500' : 'bg-red-500'}
+                    valueColor={plData ? (plData.netProfitCents >= 0 ? 'text-green-600' : 'text-red-600') : undefined}
                   />
                 </div>
 
+                {/* Comparison metrics */}
+                {comparisonSalesData && comparisonPeriod !== 'none' && (
+                  <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                    <h3 className="text-base font-semibold text-gray-800 mb-4">
+                      Period Comparison - {COMPARISON_LABELS[comparisonPeriod]}
+                    </h3>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                      {[
+                        {
+                          label: 'Revenue Change',
+                          current: summary?.totalRevenueCents ?? 0,
+                          previous: comparisonSalesData.summary?.totalRevenueCents ?? 0,
+                          format: formatKES,
+                        },
+                        {
+                          label: 'Transaction Change',
+                          current: summary?.totalSales ?? 0,
+                          previous: comparisonSalesData.summary?.totalSales ?? 0,
+                          format: (v: number) => v.toString(),
+                        },
+                        {
+                          label: 'Avg Sale Change',
+                          current: avgSale,
+                          previous: comparisonSalesData.summary && comparisonSalesData.summary.totalSales > 0
+                            ? Math.round(comparisonSalesData.summary.totalRevenueCents / comparisonSalesData.summary.totalSales)
+                            : 0,
+                          format: formatKES,
+                        },
+                        {
+                          label: 'VAT Change',
+                          current: summary?.totalVatCents ?? 0,
+                          previous: comparisonSalesData.summary?.totalVatCents ?? 0,
+                          format: formatKES,
+                        },
+                      ].map((metric) => {
+                        const change = metric.previous > 0 ? ((metric.current - metric.previous) / metric.previous) * 100 : 0;
+                        const isPositive = change >= 0;
+                        return (
+                          <div key={metric.label} className="text-center">
+                            <p className="text-xs text-gray-500 mb-1">{metric.label}</p>
+                            <p className={`text-lg font-bold ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                              {isPositive ? '+' : ''}{change.toFixed(1)}%
+                            </p>
+                            <p className="text-xs text-gray-400">
+                              {metric.format(metric.current)} vs {metric.format(metric.previous)}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Enhanced daily revenue chart */}
                 {dailyData.length > 0 && (
                   <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-                    <h2 className="text-base font-semibold text-gray-800 mb-4">Daily Revenue</h2>
-                    <ResponsiveContainer width="100%" height={220}>
-                      <BarChart data={dailyData} margin={{ left: 0, right: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                        <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}K`} />
-                        <Tooltip formatter={(v: number) => [`KES ${v.toLocaleString('en-KE')}`, 'Revenue']} />
-                        <Bar dataKey="totalKES" fill="#3B82F6" radius={[4, 4, 0, 0]} />
-                      </BarChart>
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-base font-semibold text-gray-800">Revenue Trend</h2>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400">Chart Type:</span>
+                        <div className="flex rounded border border-gray-200 overflow-hidden">
+                          {(['bar', 'line', 'area'] as const).map((type) => (
+                            <button
+                              key={type}
+                              onClick={() => setChartType(type)}
+                              className={`px-2 py-1 text-xs capitalize ${chartType === type ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                            >
+                              {type}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <ResponsiveContainer width="100%" height={280}>
+                      {chartType === 'bar' ? (
+                        <BarChart data={dailyData} margin={{ left: 0, right: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                          <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                          <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}K`} />
+                          <Tooltip formatter={(v: number) => [`KES ${v.toLocaleString('en-KE')}`, 'Revenue']} />
+                          <Bar dataKey="totalKES" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                          {showTrendlines && (
+                            <ReferenceLine
+                              stroke="#EF4444"
+                              strokeDasharray="5 5"
+                              segment={[
+                                { x: dailyData[0]?.date, y: dailyData[0]?.totalKES },
+                                { x: dailyData[dailyData.length - 1]?.date, y: dailyData[dailyData.length - 1]?.totalKES }
+                              ]}
+                            />
+                          )}
+                        </BarChart>
+                      ) : chartType === 'line' ? (
+                        <LineChart data={dailyData} margin={{ left: 0, right: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                          <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                          <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}K`} />
+                          <Tooltip formatter={(v: number) => [`KES ${v.toLocaleString('en-KE')}`, 'Revenue']} />
+                          <Line type="monotone" dataKey="totalKES" stroke="#3B82F6" strokeWidth={2} dot={{ r: 4 }} />
+                        </LineChart>
+                      ) : (
+                        <AreaChart data={dailyData} margin={{ left: 0, right: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                          <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                          <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}K`} />
+                          <Tooltip formatter={(v: number) => [`KES ${v.toLocaleString('en-KE')}`, 'Revenue']} />
+                          <Area type="monotone" dataKey="totalKES" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.3} />
+                        </AreaChart>
+                      )}
                     </ResponsiveContainer>
                   </div>
                 )}
 
+                {/* Customer insights */}
+                {customerAnalytics && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                      <h3 className="text-base font-semibold text-gray-800 mb-4">Customer Insights</h3>
+                      <div className="space-y-3">
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">Total Customers</span>
+                          <span className="font-semibold">{customerAnalytics.totalCustomers}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">New Customers</span>
+                          <span className="font-semibold text-green-600">+{customerAnalytics.newCustomers}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">Returning Customers</span>
+                          <span className="font-semibold text-blue-600">{customerAnalytics.returningCustomers}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">Avg Order Value</span>
+                          <span className="font-semibold">{formatKES(customerAnalytics.avgOrderValue)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">Customer LTV</span>
+                          <span className="font-semibold">{formatKES(customerAnalytics.customerLifetimeValue)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                      <h3 className="text-base font-semibold text-gray-800 mb-4">Top Customers</h3>
+                      <div className="space-y-2">
+                        {customerAnalytics.topCustomers.slice(0, 5).map((customer, i) => (
+                          <div key={customer.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-xs font-bold text-blue-700">
+                                {i + 1}
+                              </div>
+                              <div>
+                                <p className="font-medium text-sm">{customer.name}</p>
+                                <p className="text-xs text-gray-500">{customer.orderCount} orders</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-semibold text-sm">{formatKES(customer.totalSpent)}</p>
+                              <p className="text-xs text-gray-500">
+                                {new Date(customer.lastVisit).toLocaleDateString('en-KE', { month: 'short', day: 'numeric' })}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Enhanced payment methods and P&L sections remain the same but with mobile responsiveness */}
                 {paymentMethods.length > 0 && (
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
@@ -859,15 +1342,281 @@ export default function ReportsPage() {
               </div>
             )}
 
+            {/* ── CUSTOMER ANALYTICS ── */}
+            {tab === 'customer-analytics' && (
+              <div className="space-y-6">
+                {customerAnalytics ? (
+                  <>
+                    {/* Customer KPIs */}
+                    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                      <StatCard
+                        label="Total Customers"
+                        value={customerAnalytics.totalCustomers}
+                        icon={Users}
+                        color="bg-blue-500"
+                      />
+                      <StatCard
+                        label="New Customers"
+                        value={customerAnalytics.newCustomers}
+                        icon={TrendingUp}
+                        color="bg-green-500"
+                        sub="This period"
+                      />
+                      <StatCard
+                        label="Returning Rate"
+                        value={`${customerAnalytics.totalCustomers > 0 ? Math.round((customerAnalytics.returningCustomers / customerAnalytics.totalCustomers) * 100) : 0}%`}
+                        icon={RefreshCw}
+                        color="bg-purple-500"
+                      />
+                      <StatCard
+                        label="Avg Order Value"
+                        value={formatKES(customerAnalytics.avgOrderValue)}
+                        icon={DollarSign}
+                        color="bg-emerald-500"
+                      />
+                      <StatCard
+                        label="Customer LTV"
+                        value={formatKES(customerAnalytics.customerLifetimeValue)}
+                        icon={BarChart3}
+                        color="bg-orange-500"
+                      />
+                    </div>
+
+                    {/* Top Customers Table */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                      <div className="px-5 py-4 border-b flex justify-between items-center">
+                        <h2 className="font-semibold text-gray-800">Top Customers by Value</h2>
+                        <button
+                          onClick={() => {
+                            const rows = customerAnalytics.topCustomers.map((c) => [
+                              c.name,
+                              String(c.orderCount),
+                              (c.totalSpent / 100).toFixed(2),
+                              new Date(c.lastVisit).toLocaleDateString('en-KE'),
+                            ]);
+                            downloadCsv('top-customers.csv', [
+                              ['Customer Name', 'Orders', 'Total Spent (KES)', 'Last Visit'],
+                              ...rows,
+                            ]);
+                          }}
+                          className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700"
+                        >
+                          <Download className="w-4 h-4" /> Export
+                        </button>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="text-left px-5 py-3 font-medium text-gray-600">Customer</th>
+                              <th className="text-center px-5 py-3 font-medium text-gray-600">Orders</th>
+                              <th className="text-right px-5 py-3 font-medium text-gray-600">Total Spent</th>
+                              <th className="text-center px-5 py-3 font-medium text-gray-600">Last Visit</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {customerAnalytics.topCustomers.map((customer, i) => (
+                              <tr key={customer.id} className="hover:bg-gray-50">
+                                <td className="px-5 py-3">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-xs font-bold text-blue-700">
+                                      {i + 1}
+                                    </div>
+                                    <span className="font-medium">{customer.name}</span>
+                                  </div>
+                                </td>
+                                <td className="px-5 py-3 text-center">{customer.orderCount}</td>
+                                <td className="px-5 py-3 text-right font-semibold">{formatKES(customer.totalSpent)}</td>
+                                <td className="px-5 py-3 text-center text-gray-500">
+                                  {new Date(customer.lastVisit).toLocaleDateString('en-KE')}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center justify-center py-16 text-gray-400">
+                    <RefreshCw className="w-6 h-6 animate-spin mr-2" />
+                    Loading customer analytics…
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── FORECASTING ── */}
+            {tab === 'forecasting' && (
+              <div className="space-y-6">
+                {forecastData ? (
+                  <>
+                    {/* Forecast Summary */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                      <StatCard
+                        label="Items Tracked"
+                        value={forecastData.items.length}
+                        icon={Package}
+                        color="bg-blue-500"
+                      />
+                      <StatCard
+                        label="Low Stock Items"
+                        value={forecastData.items.filter(i => i.currentStock < i.reorderPoint).length}
+                        icon={AlertCircle}
+                        color="bg-red-500"
+                      />
+                      <StatCard
+                        label="High Confidence"
+                        value={forecastData.items.filter(i => i.confidence === 'HIGH').length}
+                        icon={TrendingUp}
+                        color="bg-green-500"
+                      />
+                      <StatCard
+                        label="Reorder Needed"
+                        value={forecastData.items.filter(i => i.suggestedOrderQty > 0).length}
+                        icon={ShoppingBag}
+                        color="bg-orange-500"
+                      />
+                    </div>
+
+                    {/* Forecast Table */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                      <div className="px-5 py-4 border-b flex justify-between items-center">
+                        <h2 className="font-semibold text-gray-800">Inventory Forecast & Recommendations</h2>
+                        <button
+                          onClick={() => {
+                            const rows = forecastData.items.map((item) => [
+                              item.itemName,
+                              String(item.currentStock),
+                              String(item.forecastedDemand),
+                              String(item.reorderPoint),
+                              String(item.suggestedOrderQty),
+                              item.confidence,
+                              item.trend.toFixed(3),
+                            ]);
+                            downloadCsv('inventory-forecast.csv', [
+                              ['Item', 'Current Stock', 'Forecasted Demand', 'Reorder Point', 'Suggested Order', 'Confidence', 'Trend'],
+                              ...rows,
+                            ]);
+                          }}
+                          className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700"
+                        >
+                          <Download className="w-4 h-4" /> Export
+                        </button>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="text-left px-5 py-3 font-medium text-gray-600">Item</th>
+                              <th className="text-center px-5 py-3 font-medium text-gray-600">Current Stock</th>
+                              <th className="text-center px-5 py-3 font-medium text-gray-600">Forecasted Demand</th>
+                              <th className="text-center px-5 py-3 font-medium text-gray-600">Confidence</th>
+                              <th className="text-center px-5 py-3 font-medium text-gray-600">Trend</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {forecastData.items
+                              .sort((a, b) => b.suggestedOrderQty - a.suggestedOrderQty)
+                              .map((item) => {
+                                const needsReorder = item.currentStock < item.reorderPoint;
+                                const trendDirection = item.trend > 0.1 ? 'up' : item.trend < -0.1 ? 'down' : 'stable';
+                                const trendColor = trendDirection === 'up' ? 'text-green-600' : trendDirection === 'down' ? 'text-red-600' : 'text-gray-600';
+                                
+                                return (
+                                  <tr key={item.itemId} className={`hover:bg-gray-50 ${needsReorder ? 'bg-red-50/30' : ''}`}>
+                                    <td className="px-5 py-3 font-medium">{item.itemName}</td>
+                                    <td className={`px-5 py-3 text-center ${needsReorder ? 'text-red-600 font-semibold' : ''}`}>
+                                      {item.currentStock}
+                                    </td>
+                                    <td className="px-5 py-3 text-center">{item.forecastedDemand}</td>
+                                    <td className="px-5 py-3 text-center">
+                                      <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
+                                        item.confidence === 'HIGH' ? 'bg-green-100 text-green-700' :
+                                        item.confidence === 'MEDIUM' ? 'bg-yellow-100 text-yellow-700' :
+                                        'bg-red-100 text-red-700'
+                                      }`}>
+                                        {item.confidence}
+                                      </span>
+                                    </td>
+                                    <td className={`px-5 py-3 text-center font-semibold ${trendColor}`}>
+                                      {trendDirection === 'up' ? '↗' : trendDirection === 'down' ? '↘' : '→'}
+                                      {Math.abs(item.trend * 100).toFixed(1)}%
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center justify-center py-16 text-gray-400">
+                    <RefreshCw className="w-6 h-6 animate-spin mr-2" />
+                    Loading forecasting data…
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* ── SALES ── */}
             {tab === 'sales' && (
               <div className="space-y-4">
+                {/* KPI row */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                   <StatCard label="Transactions" value={summary?.totalSales ?? 0} icon={ShoppingBag} color="bg-blue-500" />
                   <StatCard label="Total Revenue" value={formatKES(summary?.totalRevenueCents ?? 0)} icon={DollarSign} color="bg-green-500" />
                   <StatCard label="Avg Sale" value={formatKES(avgSale)} icon={TrendingUp} color="bg-purple-500" />
                   <StatCard label="VAT Collected" value={formatKES(summary?.totalVatCents ?? 0)} icon={FileText} color="bg-orange-500" />
                 </div>
+
+                {/* Analytics row: discounts + service charges */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Total Discounts', value: formatKES(discountTotal), sub: discountTotal > 0 && summary?.totalRevenueCents ? `${((discountTotal / (summary.totalRevenueCents + discountTotal)) * 100).toFixed(1)}% of gross` : 'No discounts', color: 'text-red-500', bg: 'bg-red-50' },
+                    { label: 'Service Charges', value: formatKES(serviceChargeTotal), sub: 'Collected', color: 'text-amber-600', bg: 'bg-amber-50' },
+                    { label: 'Peak Hour', value: peakHour ?? '—', sub: peakHour ? 'Highest revenue hour' : 'No data', color: 'text-indigo-600', bg: 'bg-indigo-50' },
+                    { label: 'Net (ex-VAT/TOT)', value: formatKES(Math.max(0, (summary?.totalRevenueCents ?? 0) - (summary?.totalVatCents ?? 0) - (summary?.totalTotCents ?? 0))), sub: 'Excl. all taxes', color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                  ].map(({ label, value, sub, color, bg }) => (
+                    <div key={label} className={`${bg} rounded-xl p-4 border border-white`}>
+                      <p className={`text-lg font-black ${color} tabular-nums`}>{value}</p>
+                      <p className="text-xs font-semibold text-gray-600 mt-0.5">{label}</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">{sub}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Hourly revenue chart */}
+                {(salesData?.sales?.length ?? 0) > 0 && (
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="font-semibold text-gray-800">Revenue by Hour of Day</h2>
+                      <span className="text-xs text-gray-400">Based on {salesData?.sales?.length} transactions</span>
+                    </div>
+                    <div className="flex items-end gap-[2px] h-24">
+                      {hourlyBuckets.map((v, h) => {
+                        const frac = v / maxHourlyBucket;
+                        const lbl = h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`;
+                        return (
+                          <div key={h} className="flex-1 flex flex-col items-center gap-0.5 group relative">
+                            <div
+                              title={`${lbl}: ${formatKES(v)}`}
+                              className={`w-full rounded-t transition-all ${v > 0 ? 'bg-blue-400 hover:bg-blue-600' : 'bg-gray-100'}`}
+                              style={{ height: `${Math.max(frac * 88, v > 0 ? 3 : 2)}px` }}
+                            />
+                            {h % 4 === 0 && <span className="text-[9px] text-gray-400">{lbl}</span>}
+                            {v > 0 && (
+                              <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-10">
+                                {lbl}: {formatKES(v)}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="px-5 py-4 border-b">
@@ -1480,6 +2229,14 @@ export default function ReportsPage() {
                       <div className="px-5 py-4 border-b flex justify-between items-center">
                         <h2 className="font-semibold text-gray-800">Stock Valuation</h2>
                         <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => { void refetchStock(); }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
+                            title="Refresh stock levels"
+                          >
+                            <RefreshCw size={13} />
+                            Refresh
+                          </button>
                           <button
                             onClick={() => {
                               if (!stockData?.items?.length) return;
@@ -2580,11 +3337,13 @@ export default function ReportsPage() {
 
                 {/* Summary cards */}
                 {employeeSalesData && (
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                     <StatCard label="Employees" value={employeeSalesData.summary.totalEmployees} icon={Users} color="bg-blue-500" />
                     <StatCard label="Total Transactions" value={employeeSalesData.summary.totalSales} icon={ShoppingBag} color="bg-indigo-500" />
                     <StatCard label="Total Revenue" value={formatKES(employeeSalesData.summary.totalRevenueCents)} icon={TrendingUp} color="bg-green-500" />
                     <StatCard label="M-Pesa Collected" value={formatKES(employeeSalesData.summary.totalMpesaCents)} icon={Smartphone} color="bg-emerald-500" />
+                    <StatCard label="Items Sold" value={employeeSalesData.summary.totalItemsSold ?? 0} icon={Package} color="bg-purple-500" />
+                    <StatCard label="Avg Items/Txn" value={(employeeSalesData.summary.avgItemsPerTransaction ?? 0).toFixed(1)} icon={BarChart2} color="bg-orange-500" />
                   </div>
                 )}
 
@@ -2673,6 +3432,14 @@ export default function ReportsPage() {
                           <div className="text-center">
                             <p className="font-bold text-emerald-700">{formatKES(emp.mpesaTotalCents)}</p>
                             <p className="text-gray-500 text-xs">M-Pesa</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="font-bold text-purple-700">{emp.totalItemsSold ?? 0}</p>
+                            <p className="text-gray-500 text-xs">Items Sold</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="font-bold text-orange-700">{(emp.avgItemsPerTransaction ?? 0).toFixed(1)}</p>
+                            <p className="text-gray-500 text-xs">Items/Txn</p>
                           </div>
                         </div>
                         <button
@@ -3249,6 +4016,633 @@ export default function ReportsPage() {
                     </p>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* ── DEAD STOCK ── */}
+            {tab === 'dead-stock' && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <label className="text-sm font-medium text-gray-700">Threshold (days without a sale):</label>
+                  {([30, 60, 90, 180] as const).map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setDeadStockDays(d)}
+                      className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${deadStockDays === d ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    >{d}d</button>
+                  ))}
+                </div>
+                {deadStockData && (
+                  <>
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                      <StatCard label="Dead Stock Items" value={deadStockData.totalItems} icon={Package} color="bg-red-500" sub={`No sale in ${deadStockData.daysThreshold}+ days`} />
+                      <StatCard label="Total Value at Cost" value={formatKES(deadStockData.totalValueCents)} icon={DollarSign} color="bg-orange-500" sub="Capital tied up" />
+                    </div>
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                      <div className="px-5 py-4 border-b flex justify-between items-center">
+                        <h2 className="font-semibold text-gray-800">Dead Stock Items ({deadStockData.totalItems})</h2>
+                        <button
+                          onClick={() => {
+                            if (!deadStockData.items.length) return;
+                            downloadCsv(`dead-stock-${deadStockDays}d.csv`, [
+                              ['Item', 'Category', 'Stock', 'Cost Price', 'Stock Value', 'Days Since Last Sale', 'Last Sale Date'],
+                              ...deadStockData.items.map((r) => [
+                                r.name, r.category, String(r.stock),
+                                (r.costPriceCents / 100).toFixed(2),
+                                (r.stockValueCents / 100).toFixed(2),
+                                r.daysSinceLastSale != null ? String(r.daysSinceLastSale) : 'Never sold',
+                                r.lastSaleDate ? new Date(r.lastSaleDate).toLocaleDateString('en-KE') : '—',
+                              ]),
+                            ]);
+                          }}
+                          className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700"
+                        >
+                          <Download className="w-4 h-4" /> Export CSV
+                        </button>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="text-left px-5 py-3 font-medium text-gray-600">Item</th>
+                              <th className="text-left px-5 py-3 font-medium text-gray-600">Category</th>
+                              <th className="text-right px-5 py-3 font-medium text-gray-600">Stock</th>
+                              <th className="text-right px-5 py-3 font-medium text-gray-600">Value at Cost</th>
+                              <th className="text-right px-5 py-3 font-medium text-gray-600">Days Since Last Sale</th>
+                              <th className="text-right px-5 py-3 font-medium text-gray-600">Last Sale</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {deadStockData.items.length === 0 ? (
+                              <tr><td colSpan={6} className="px-5 py-8 text-center text-gray-400">No dead stock found for this threshold</td></tr>
+                            ) : deadStockData.items.map((r) => (
+                              <tr key={r.itemId} className="hover:bg-gray-50">
+                                <td className="px-5 py-3 font-medium">{r.name}</td>
+                                <td className="px-5 py-3 text-gray-500">{r.category || '—'}</td>
+                                <td className="px-5 py-3 text-right font-semibold">{r.stock}</td>
+                                <td className="px-5 py-3 text-right text-orange-600 font-semibold">{formatKES(r.stockValueCents)}</td>
+                                <td className="px-5 py-3 text-right">
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${r.daysSinceLastSale == null ? 'bg-red-100 text-red-700' : r.daysSinceLastSale > 180 ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
+                                    {r.daysSinceLastSale != null ? `${r.daysSinceLastSale}d` : 'Never sold'}
+                                  </span>
+                                </td>
+                                <td className="px-5 py-3 text-right text-gray-500 text-xs">
+                                  {r.lastSaleDate ? new Date(r.lastSaleDate).toLocaleDateString('en-KE') : '—'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ── GROSS MARGIN ── */}
+            {tab === 'gross-margin' && (
+              <div className="space-y-4">
+                {grossMarginData && (
+                  <>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                      <StatCard label="Revenue" value={formatKES(grossMarginData.totalRevenueCents)} icon={DollarSign} color="bg-blue-500" />
+                      <StatCard label="Total Cost" value={formatKES(grossMarginData.totalCostCents)} icon={TrendingUp} color="bg-red-500" />
+                      <StatCard label="Gross Profit" value={formatKES(grossMarginData.totalGrossProfitCents)} icon={TrendingUp} color={grossMarginData.totalGrossProfitCents >= 0 ? 'bg-green-500' : 'bg-red-500'} />
+                      <StatCard label="Overall Margin" value={`${grossMarginData.overallMarginPct.toFixed(1)}%`} icon={BarChart3} color="bg-purple-500" />
+                    </div>
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                      <div className="px-5 py-4 border-b flex justify-between items-center">
+                        <h2 className="font-semibold text-gray-800">Gross Margin by Category</h2>
+                        <button
+                          onClick={() => {
+                            if (!grossMarginData.categories.length) return;
+                            const rows: string[][] = [['Category', 'Revenue', 'Cost', 'Gross Profit', 'Margin %', 'Qty']];
+                            grossMarginData.categories.forEach((cat) => {
+                              rows.push([cat.name, (cat.revenueCents / 100).toFixed(2), (cat.costCents / 100).toFixed(2), (cat.grossProfitCents / 100).toFixed(2), cat.marginPct.toFixed(1) + '%', String(cat.qty)]);
+                              cat.items.forEach((item) => {
+                                rows.push(['  ' + item.name, (item.revenueCents / 100).toFixed(2), (item.costCents / 100).toFixed(2), (item.grossProfitCents / 100).toFixed(2), item.marginPct.toFixed(1) + '%', String(item.qty)]);
+                              });
+                            });
+                            downloadCsv(`gross-margin-${startDate.substring(0, 10)}.csv`, rows);
+                          }}
+                          className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700"
+                        >
+                          <Download className="w-4 h-4" /> Export CSV
+                        </button>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="text-left px-5 py-3 font-medium text-gray-600">Category / Item</th>
+                              <th className="text-right px-5 py-3 font-medium text-gray-600">Qty</th>
+                              <th className="text-right px-5 py-3 font-medium text-gray-600">Revenue</th>
+                              <th className="text-right px-5 py-3 font-medium text-gray-600">Cost</th>
+                              <th className="text-right px-5 py-3 font-medium text-gray-600">Gross Profit</th>
+                              <th className="text-left px-5 py-3 font-medium text-gray-600">Margin %</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {grossMarginData.categories.length === 0 ? (
+                              <tr><td colSpan={6} className="px-5 py-8 text-center text-gray-400">No sales data for this period</td></tr>
+                            ) : grossMarginData.categories.map((cat) => (
+                              <>
+                                <tr
+                                  key={cat.name}
+                                  onClick={() => setExpandedGrossMarginCategory(expandedGrossMarginCategory === cat.name ? null : cat.name)}
+                                  className="bg-gray-50 cursor-pointer hover:bg-gray-100"
+                                >
+                                  <td className="px-5 py-3 font-bold text-gray-800 flex items-center gap-2">
+                                    <span className={`text-gray-400 transition-transform ${expandedGrossMarginCategory === cat.name ? 'rotate-90' : ''}`}>▶</span>
+                                    {cat.name}
+                                  </td>
+                                  <td className="px-5 py-3 text-right font-semibold">{cat.qty}</td>
+                                  <td className="px-5 py-3 text-right font-semibold">{formatKES(cat.revenueCents)}</td>
+                                  <td className="px-5 py-3 text-right font-semibold text-red-600">{formatKES(cat.costCents)}</td>
+                                  <td className="px-5 py-3 text-right font-bold text-green-600">{formatKES(cat.grossProfitCents)}</td>
+                                  <td className="px-5 py-3">
+                                    <div className="flex items-center gap-2">
+                                      <div className="flex-1 bg-gray-200 rounded-full h-2 min-w-16">
+                                        <div className="bg-green-500 h-2 rounded-full" style={{ width: `${Math.min(100, Math.max(0, cat.marginPct))}%` }} />
+                                      </div>
+                                      <span className="text-xs font-semibold text-gray-700 whitespace-nowrap">{cat.marginPct.toFixed(1)}%</span>
+                                    </div>
+                                  </td>
+                                </tr>
+                                {expandedGrossMarginCategory === cat.name && cat.items.map((item) => (
+                                  <tr key={item.name} className="hover:bg-blue-50/30">
+                                    <td className="px-5 py-2 pl-10 text-gray-700">{item.name}</td>
+                                    <td className="px-5 py-2 text-right text-gray-600">{item.qty}</td>
+                                    <td className="px-5 py-2 text-right text-gray-600">{formatKES(item.revenueCents)}</td>
+                                    <td className="px-5 py-2 text-right text-red-500">{formatKES(item.costCents)}</td>
+                                    <td className="px-5 py-2 text-right text-green-600 font-semibold">{formatKES(item.grossProfitCents)}</td>
+                                    <td className="px-5 py-2">
+                                      <div className="flex items-center gap-2">
+                                        <div className="flex-1 bg-gray-200 rounded-full h-1.5 min-w-16">
+                                          <div className="bg-green-400 h-1.5 rounded-full" style={{ width: `${Math.min(100, Math.max(0, item.marginPct))}%` }} />
+                                        </div>
+                                        <span className="text-xs text-gray-600 whitespace-nowrap">{item.marginPct.toFixed(1)}%</span>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </>
+                            ))}
+                          </tbody>
+                          {grossMarginData.categories.length > 0 && (
+                            <tfoot>
+                              <tr className="bg-gray-100 font-bold">
+                                <td className="px-5 py-3 text-gray-800">Total</td>
+                                <td className="px-5 py-3 text-right">{grossMarginData.categories.reduce((s, c) => s + c.qty, 0)}</td>
+                                <td className="px-5 py-3 text-right">{formatKES(grossMarginData.totalRevenueCents)}</td>
+                                <td className="px-5 py-3 text-right text-red-600">{formatKES(grossMarginData.totalCostCents)}</td>
+                                <td className="px-5 py-3 text-right text-green-600">{formatKES(grossMarginData.totalGrossProfitCents)}</td>
+                                <td className="px-5 py-3 text-sm font-bold text-purple-700">{grossMarginData.overallMarginPct.toFixed(1)}%</td>
+                              </tr>
+                            </tfoot>
+                          )}
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ── SHRINKAGE ── */}
+            {tab === 'shrinkage' && (
+              <div className="space-y-4">
+                {shrinkageData && (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <StatCard
+                        label="Total Incidents"
+                        value={shrinkageData.totalIncidents}
+                        icon={AlertTriangle}
+                        color="bg-orange-500"
+                      />
+                      <StatCard
+                        label="Total Value Lost"
+                        value={formatKES(shrinkageData.totalValueCents)}
+                        icon={DollarSign}
+                        color="bg-red-500"
+                      />
+                    </div>
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                      <div className="px-5 py-4 border-b flex justify-between items-center">
+                        <h2 className="font-semibold text-gray-800">Shrinkage by Item</h2>
+                        <button
+                          onClick={() => {
+                            if (!shrinkageData.items.length) return;
+                            const rows: string[][] = [['Item Name', 'SKU', 'Units Lost', 'Incidents', 'Value Lost (KES)']];
+                            shrinkageData.items.forEach((i) => {
+                              rows.push([i.name, i.sku, String(i.totalUnitsLost), String(i.incidents), (i.totalValueCents / 100).toFixed(2)]);
+                            });
+                            downloadCsv(`shrinkage-${startDate.substring(0, 10)}.csv`, rows);
+                          }}
+                          className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700"
+                        >
+                          <Download className="w-4 h-4" /> Export CSV
+                        </button>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="text-left px-5 py-3 font-medium text-gray-600">Item Name</th>
+                              <th className="text-left px-5 py-3 font-medium text-gray-600">SKU</th>
+                              <th className="text-right px-5 py-3 font-medium text-gray-600">Units Lost</th>
+                              <th className="text-right px-5 py-3 font-medium text-gray-600">Incidents</th>
+                              <th className="text-right px-5 py-3 font-medium text-gray-600">Value Lost</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {shrinkageData.items.length === 0 ? (
+                              <tr>
+                                <td colSpan={5} className="px-5 py-8 text-center text-gray-400">
+                                  No shrinkage recorded for this period
+                                </td>
+                              </tr>
+                            ) : shrinkageData.items.map((item) => (
+                              <tr key={item.itemId} className="hover:bg-gray-50">
+                                <td className="px-5 py-3 font-medium text-gray-800">{item.name}</td>
+                                <td className="px-5 py-3 text-gray-500 font-mono text-xs">{item.sku || '—'}</td>
+                                <td className="px-5 py-3 text-right text-orange-600 font-semibold">{item.totalUnitsLost}</td>
+                                <td className="px-5 py-3 text-right text-gray-600">{item.incidents}</td>
+                                <td className="px-5 py-3 text-right text-red-600 font-semibold">{formatKES(item.totalValueCents)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          {shrinkageData.items.length > 0 && (
+                            <tfoot>
+                              <tr className="bg-gray-100 font-bold">
+                                <td className="px-5 py-3 text-gray-800" colSpan={2}>Total</td>
+                                <td className="px-5 py-3 text-right text-orange-700">
+                                  {shrinkageData.items.reduce((s, i) => s + i.totalUnitsLost, 0)}
+                                </td>
+                                <td className="px-5 py-3 text-right text-gray-700">{shrinkageData.totalIncidents}</td>
+                                <td className="px-5 py-3 text-right text-red-700">{formatKES(shrinkageData.totalValueCents)}</td>
+                              </tr>
+                            </tfoot>
+                          )}
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                )}
+                {!shrinkageData && (
+                  <div className="flex items-center justify-center py-16 text-gray-400">
+                    <RefreshCw className="w-6 h-6 animate-spin mr-2" /> Loading…
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── DEPT P&L ── */}
+            {tab === 'dept-pnl' && (
+              <div className="space-y-4">
+                {deptPnlData && (
+                  <>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                      <StatCard label="Total Revenue" value={formatKES(deptPnlData.totals.revenueCents)} icon={DollarSign} color="bg-blue-500" />
+                      <StatCard label="Total COGS" value={formatKES(deptPnlData.totals.cogsCents)} icon={TrendingUp} color="bg-red-500" />
+                      <StatCard label="Gross Profit" value={formatKES(deptPnlData.totals.grossProfitCents)} icon={TrendingUp} color={deptPnlData.totals.grossProfitCents >= 0 ? 'bg-green-500' : 'bg-red-500'} />
+                      <StatCard label="Overall Margin" value={`${deptPnlData.totals.marginPct.toFixed(1)}%`} icon={BarChart3} color="bg-purple-500" />
+                    </div>
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                      <div className="px-5 py-4 border-b flex justify-between items-center">
+                        <h2 className="font-semibold text-gray-800">Department / Category P&L</h2>
+                        <button
+                          onClick={() => {
+                            if (!deptPnlData.departments.length) return;
+                            const rows: string[][] = [['Category', 'Revenue', 'COGS', 'Gross Profit', 'Margin %', 'Units']];
+                            deptPnlData.departments.forEach((d) => {
+                              rows.push([d.category, (d.revenueCents / 100).toFixed(2), (d.cogsCents / 100).toFixed(2), (d.grossProfitCents / 100).toFixed(2), d.marginPct.toFixed(1) + '%', String(d.units)]);
+                            });
+                            downloadCsv(`dept-pnl-${startDate.substring(0, 10)}.csv`, rows);
+                          }}
+                          className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700"
+                        >
+                          <Download className="w-4 h-4" /> Export CSV
+                        </button>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="text-left px-5 py-3 font-medium text-gray-600">Category</th>
+                              <th className="text-right px-5 py-3 font-medium text-gray-600">Units</th>
+                              <th className="text-right px-5 py-3 font-medium text-gray-600">Revenue</th>
+                              <th className="text-right px-5 py-3 font-medium text-gray-600">COGS</th>
+                              <th className="text-right px-5 py-3 font-medium text-gray-600">Gross Profit</th>
+                              <th className="text-left px-5 py-3 font-medium text-gray-600">Margin %</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {deptPnlData.departments.length === 0 ? (
+                              <tr>
+                                <td colSpan={6} className="px-5 py-8 text-center text-gray-400">
+                                  No sales data for this period
+                                </td>
+                              </tr>
+                            ) : deptPnlData.departments.map((dept) => {
+                              const marginColor = dept.marginPct >= 30
+                                ? 'text-green-600'
+                                : dept.marginPct >= 10
+                                ? 'text-yellow-600'
+                                : 'text-red-600';
+                              const barColor = dept.marginPct >= 30
+                                ? 'bg-green-500'
+                                : dept.marginPct >= 10
+                                ? 'bg-yellow-400'
+                                : 'bg-red-400';
+                              const barWidth = Math.min(100, Math.max(0, (dept.marginPct / 60) * 100));
+                              return (
+                                <tr key={dept.category} className="hover:bg-gray-50">
+                                  <td className="px-5 py-3 font-medium text-gray-800">{dept.category}</td>
+                                  <td className="px-5 py-3 text-right text-gray-600">{dept.units}</td>
+                                  <td className="px-5 py-3 text-right font-semibold text-blue-700">{formatKES(dept.revenueCents)}</td>
+                                  <td className="px-5 py-3 text-right text-red-600">{formatKES(dept.cogsCents)}</td>
+                                  <td className={`px-5 py-3 text-right font-bold ${dept.grossProfitCents >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    {formatKES(dept.grossProfitCents)}
+                                  </td>
+                                  <td className="px-5 py-3">
+                                    <div className="flex items-center gap-2">
+                                      <div className="flex-1 bg-gray-200 rounded-full h-2 min-w-16">
+                                        <div className={`${barColor} h-2 rounded-full`} style={{ width: `${barWidth}%` }} />
+                                      </div>
+                                      <span className={`text-xs font-semibold whitespace-nowrap ${marginColor}`}>
+                                        {dept.marginPct.toFixed(1)}%
+                                      </span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          {deptPnlData.departments.length > 0 && (
+                            <tfoot>
+                              <tr className="bg-gray-100 font-bold">
+                                <td className="px-5 py-3 text-gray-800">Total</td>
+                                <td className="px-5 py-3 text-right">{deptPnlData.departments.reduce((s, d) => s + d.units, 0)}</td>
+                                <td className="px-5 py-3 text-right text-blue-700">{formatKES(deptPnlData.totals.revenueCents)}</td>
+                                <td className="px-5 py-3 text-right text-red-600">{formatKES(deptPnlData.totals.cogsCents)}</td>
+                                <td className="px-5 py-3 text-right text-green-600">{formatKES(deptPnlData.totals.grossProfitCents)}</td>
+                                <td className="px-5 py-3 text-sm font-bold text-purple-700">{deptPnlData.totals.marginPct.toFixed(1)}%</td>
+                              </tr>
+                            </tfoot>
+                          )}
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                )}
+                {!deptPnlData && (
+                  <div className="flex items-center justify-center py-16 text-gray-400">
+                    <RefreshCw className="w-6 h-6 animate-spin mr-2" /> Loading…
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── RECIPE COSTING ── */}
+            {tab === 'recipe-costing' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 text-center">
+                    <p className="text-2xl font-bold text-green-700">{recipeCostData?.summary.totalItems ?? 0}</p>
+                    <p className="text-xs text-gray-500">Recipe Items</p>
+                  </div>
+                  <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-xl p-4 text-center">
+                    <p className="text-2xl font-bold text-yellow-700">{(recipeCostData?.summary.avgFoodCostPct ?? 0).toFixed(1)}%</p>
+                    <p className="text-xs text-gray-500">Avg Food Cost %</p>
+                  </div>
+                  <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 text-center">
+                    <p className="text-2xl font-bold text-red-700">{recipeCostData?.summary.highCostItems ?? 0}</p>
+                    <p className="text-xs text-gray-500">High Cost Items</p>
+                  </div>
+                </div>
+                {!recipeCostData?.items.length ? (
+                  <div className="text-center py-12 text-gray-400">No recipe items found. Add bundle components to items in Inventory to enable food cost analysis.</div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 dark:bg-gray-800">
+                        <tr>
+                          <th className="px-4 py-3 text-left">Item</th>
+                          <th className="px-4 py-3 text-left">Category</th>
+                          <th className="px-4 py-3 text-right">Selling Price</th>
+                          <th className="px-4 py-3 text-right">Ingredient Cost</th>
+                          <th className="px-4 py-3 text-right">Food Cost %</th>
+                          <th className="px-4 py-3 text-right">Margin %</th>
+                          <th className="px-4 py-3 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                        {recipeCostData.items.map(item => (
+                          <tr key={item.itemId} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                            <td className="px-4 py-3 font-medium">{item.name}</td>
+                            <td className="px-4 py-3 text-gray-500">{item.category}</td>
+                            <td className="px-4 py-3 text-right">{formatKES(item.sellingPriceCents)}</td>
+                            <td className="px-4 py-3 text-right">{formatKES(item.totalIngredientCostCents)}</td>
+                            <td className="px-4 py-3 text-right font-semibold">{item.foodCostPct !== null ? `${item.foodCostPct.toFixed(1)}%` : '—'}</td>
+                            <td className="px-4 py-3 text-right">
+                              {item.grossMarginPct !== null ? (
+                                <span className={item.grossMarginPct >= 65 ? 'text-green-600' : item.grossMarginPct >= 40 ? 'text-yellow-600' : 'text-red-600'}>
+                                  {item.grossMarginPct.toFixed(1)}%
+                                </span>
+                              ) : '—'}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${item.status === 'HIGH_COST' ? 'bg-red-100 text-red-700' : item.status === 'ACCEPTABLE' ? 'bg-yellow-100 text-yellow-700' : item.status === 'LOW_COST' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                                {item.status.replace('_', ' ')}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── VAT RETURN ── */}
+            {tab === 'vat-return' && (
+              <div className="space-y-6">
+                {vatReturnLoading && (
+                  <div className="flex items-center justify-center py-16 text-gray-400">
+                    <RefreshCw className="w-6 h-6 animate-spin mr-2" /> Loading VAT Return data…
+                  </div>
+                )}
+                {!vatReturnLoading && vatReturnData && (
+                  <>
+                    {/* Summary cards */}
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4">
+                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Output VAT (Sales)</p>
+                        <p className="text-2xl font-bold text-green-700 dark:text-green-400">{formatKES(vatReturnData.outputVat.totalCents)}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">From {vatReturnData.outputVat.salesCount} transactions totalling {formatKES(vatReturnData.outputVat.totalSalesCents)}</p>
+                      </div>
+                      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4">
+                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Input VAT (Reclaimable)</p>
+                        <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">{formatKES(vatReturnData.inputVat.totalCents)}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">From {vatReturnData.inputVat.expensesCount} approved reclaimable expenses</p>
+                      </div>
+                      <div className={`rounded-xl p-4 ${vatReturnData.netVatPayableCents >= 0 ? 'bg-red-50 dark:bg-red-900/20' : 'bg-purple-50 dark:bg-purple-900/20'}`}>
+                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Net VAT Payable</p>
+                        <p className={`text-2xl font-bold ${vatReturnData.netVatPayableCents >= 0 ? 'text-red-700 dark:text-red-400' : 'text-purple-700 dark:text-purple-400'}`}>
+                          {formatKES(Math.abs(vatReturnData.netVatPayableCents))}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          {vatReturnData.netVatPayableCents >= 0 ? 'Payable to KRA' : 'Credit / Refund due from KRA'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Export button */}
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => {
+                          const rows: string[][] = [
+                            ['KRA VAT Return Export'],
+                            [`Period: ${new Date(vatReturnData.period.startDate).toLocaleDateString('en-KE')} to ${new Date(vatReturnData.period.endDate).toLocaleDateString('en-KE')}`],
+                            [],
+                            ['SECTION A — OUTPUT TAX (SALES)'],
+                            ['Receipt No', 'Date', 'Gross Sales (KES)', 'Taxable Amount (KES)', 'Output VAT (KES)'],
+                            ...vatReturnData.outputVat.sales.map(s => [
+                              s.receiptNumber ?? '',
+                              new Date(s.createdAt).toLocaleDateString('en-KE'),
+                              ((s.totalCents) / 100).toFixed(2),
+                              ((s.subtotalCents - (s.discountCents ?? 0)) / 100).toFixed(2),
+                              (s.vatCents / 100).toFixed(2),
+                            ]),
+                            ['TOTAL', '', (vatReturnData.outputVat.totalSalesCents / 100).toFixed(2), '', (vatReturnData.outputVat.totalCents / 100).toFixed(2)],
+                            [],
+                            ['SECTION B — INPUT TAX (PURCHASES / EXPENSES)'],
+                            ['Description', 'Category', 'Date', 'Amount Incl. VAT (KES)', 'Input VAT (KES)'],
+                            ...vatReturnData.inputVat.expenses.map(e => [
+                              e.description,
+                              e.category,
+                              new Date(e.createdAt).toLocaleDateString('en-KE'),
+                              (e.amountCents / 100).toFixed(2),
+                              (e.vatCents / 100).toFixed(2),
+                            ]),
+                            ['TOTAL', '', '', '', (vatReturnData.inputVat.totalCents / 100).toFixed(2)],
+                            [],
+                            ['SUMMARY'],
+                            ['Output VAT', (vatReturnData.outputVat.totalCents / 100).toFixed(2)],
+                            ['Input VAT (Claimable)', (vatReturnData.inputVat.totalCents / 100).toFixed(2)],
+                            ['Net VAT Payable', (vatReturnData.netVatPayableCents / 100).toFixed(2)],
+                          ];
+                          const content = rows.map(r => r.map(c => { const s = String(c ?? ''); return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s; }).join(',')).join('\r\n');
+                          const blob = new Blob(['\uFEFF' + content], { type: 'text/csv;charset=utf-8;' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a'); a.href = url; a.download = `vat-return-itax-${startDate.substring(0, 10)}.csv`; a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-xl transition-colors"
+                      >
+                        <Download className="w-4 h-4" /> Export for iTax (CSV)
+                      </button>
+                    </div>
+
+                    {/* Output VAT table */}
+                    <div>
+                      <h3 className="font-bold text-gray-800 dark:text-gray-200 mb-3">Section A — Output VAT (Sales)</h3>
+                      <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                            <tr>
+                              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Receipt No</th>
+                              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Date</th>
+                              <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Gross (KES)</th>
+                              <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Output VAT (KES)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                            {vatReturnData.outputVat.sales.slice(0, 50).map((s, i) => (
+                              <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                <td className="px-4 py-2.5 font-mono text-xs text-gray-700 dark:text-gray-300">{s.receiptNumber ?? '—'}</td>
+                                <td className="px-4 py-2.5 text-gray-600 dark:text-gray-300">{new Date(s.createdAt).toLocaleDateString('en-KE')}</td>
+                                <td className="px-4 py-2.5 text-right">{formatKES(s.totalCents)}</td>
+                                <td className="px-4 py-2.5 text-right font-semibold text-green-700 dark:text-green-400">{formatKES(s.vatCents)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot className="border-t-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+                            <tr>
+                              <td colSpan={2} className="px-4 py-3 font-bold text-gray-800 dark:text-gray-200">TOTAL</td>
+                              <td className="px-4 py-3 text-right font-bold">{formatKES(vatReturnData.outputVat.totalSalesCents)}</td>
+                              <td className="px-4 py-3 text-right font-bold text-green-700 dark:text-green-400">{formatKES(vatReturnData.outputVat.totalCents)}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                        {vatReturnData.outputVat.salesCount > 50 && (
+                          <p className="text-xs text-gray-400 text-center py-2">Showing first 50 of {vatReturnData.outputVat.salesCount} transactions. Export CSV for full data.</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Input VAT table */}
+                    <div>
+                      <h3 className="font-bold text-gray-800 dark:text-gray-200 mb-3">Section B — Input VAT (Reclaimable Expenses)</h3>
+                      {vatReturnData.inputVat.expensesCount === 0 ? (
+                        <div className="text-center py-8 text-gray-400 dark:text-gray-500 border border-dashed border-gray-300 dark:border-gray-600 rounded-xl">
+                          No reclaimable expenses for this period. Mark expenses as &ldquo;VAT Reclaimable&rdquo; in the Expenses module.
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                          <table className="w-full text-sm">
+                            <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                              <tr>
+                                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Description</th>
+                                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Category</th>
+                                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Date</th>
+                                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Amount (KES)</th>
+                                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Input VAT (KES)</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                              {vatReturnData.inputVat.expenses.map((e, i) => (
+                                <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                  <td className="px-4 py-2.5 text-gray-800 dark:text-gray-200">{e.description}</td>
+                                  <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400">{e.category}</td>
+                                  <td className="px-4 py-2.5 text-gray-600 dark:text-gray-300">{new Date(e.createdAt).toLocaleDateString('en-KE')}</td>
+                                  <td className="px-4 py-2.5 text-right">{formatKES(e.amountCents)}</td>
+                                  <td className="px-4 py-2.5 text-right font-semibold text-blue-700 dark:text-blue-400">{formatKES(e.vatCents)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot className="border-t-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+                              <tr>
+                                <td colSpan={3} className="px-4 py-3 font-bold text-gray-800 dark:text-gray-200">TOTAL</td>
+                                <td className="px-4 py-3 text-right font-bold">{formatKES(vatReturnData.inputVat.expenses.reduce((s, e) => s + e.amountCents, 0))}</td>
+                                <td className="px-4 py-3 text-right font-bold text-blue-700 dark:text-blue-400">{formatKES(vatReturnData.inputVat.totalCents)}</td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Net summary */}
+                    <div className="bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+                      <h3 className="font-bold text-gray-800 dark:text-gray-200 mb-3">Summary — VAT Computation</h3>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Output VAT (Box 8)</span><span className="font-semibold text-gray-900 dark:text-white">{formatKES(vatReturnData.outputVat.totalCents)}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Input VAT Claimable (Box 13)</span><span className="font-semibold text-gray-900 dark:text-white">({formatKES(vatReturnData.inputVat.totalCents)})</span></div>
+                        <div className="flex justify-between border-t border-gray-200 dark:border-gray-700 pt-2 mt-2">
+                          <span className="font-bold text-gray-800 dark:text-gray-200">Net VAT Payable / (Refundable)</span>
+                          <span className={`font-bold text-lg ${vatReturnData.netVatPayableCents >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                            {vatReturnData.netVatPayableCents < 0 ? `(${formatKES(Math.abs(vatReturnData.netVatPayableCents))})` : formatKES(vatReturnData.netVatPayableCents)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 

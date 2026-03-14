@@ -67,3 +67,6 @@ backups/*.sqlite
 *.pem
 *.key
 !**/*.example.*
+
+# Claude Code agent worktrees
+.claude/worktrees/

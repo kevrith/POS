@@ -43,6 +43,7 @@ export class HospitalityController {
     tableId?: string;
     roomNumber?: string;
     waiterId: string;
+    roomBookingId?: string;
   }) {
     return this.hospitalityService.createOrder(data);
   }
@@ -55,6 +56,7 @@ export class HospitalityController {
     unitPriceCents: number;
     specialInstructions?: string;
     modifiers?: string[];
+    course?: string;
   }>) {
     return this.hospitalityService.addOrderItems(id, items);
   }
@@ -100,6 +102,15 @@ export class HospitalityController {
     return this.hospitalityService.transferTable(id, newTableId);
   }
 
+  // ── Course / Fire Management ───────────────────────────────────────────────
+
+  @Post('orders/:id/fire-course')
+  async fireCourse(@Param('id') id: string, @Body() body: { course: string }) {
+    return this.hospitalityService.fireCourse(id, body.course);
+  }
+
+  // ── Reservations ──────────────────────────────────────────────────────────
+
   @Post('reservations')
   async createReservation(@Body() data: {
     tableId: string;
@@ -109,6 +120,7 @@ export class HospitalityController {
     reservationTime: string;
     duration?: number;
     notes?: string;
+    depositCents?: number;
   }) {
     return this.hospitalityService.createReservation({
       ...data,
@@ -121,9 +133,14 @@ export class HospitalityController {
     return this.hospitalityService.getReservations(storeId, date ? new Date(date) : undefined);
   }
 
+  @Get('reservations/:id/deposit-status')
+  async getReservationDepositStatus(@Param('id') id: string) {
+    return this.hospitalityService.getReservationDepositStatus(id);
+  }
+
   @Post('orders/:id/kot')
-  async createKOT(@Param('id') id: string, @Body('type') type: string) {
-    return this.hospitalityService.createKOT(id, type);
+  async createKOT(@Param('id') id: string, @Body('type') type: string, @Body('itemIds') itemIds?: string[]) {
+    return this.hospitalityService.createKOT(id, type, itemIds);
   }
 
   @Patch('kot/:id/status')
@@ -266,5 +283,94 @@ export class HospitalityController {
   @Post('room-bookings/:id/cancel')
   cancelRoomBooking(@Param('id') id: string) {
     return this.hospitalityService.cancelRoomBooking(id);
+  }
+
+  // ── Guest Folio ───────────────────────────────────────────────────────────
+
+  @Get('room-bookings/:id/folio')
+  getFolio(@Param('id') id: string) {
+    return this.hospitalityService.getFolio(id);
+  }
+
+  @Post('room-bookings/:id/folio')
+  addFolioCharge(
+    @Param('id') id: string,
+    @Body() body: { type: string; description: string; amountCents: number; quantity?: number; postedBy?: string; saleId?: string },
+  ) {
+    return this.hospitalityService.addFolioCharge(id, body);
+  }
+
+  @Delete('folio-charges/:id')
+  removeFolioCharge(@Param('id') id: string) {
+    return this.hospitalityService.removeFolioCharge(id);
+  }
+
+  // ── Housekeeping ──────────────────────────────────────────────────────────
+
+  @Patch('hotel-rooms/:id/housekeeping')
+  updateHousekeepingStatus(@Param('id') id: string, @Body('status') status: string) {
+    return this.hospitalityService.updateHousekeepingStatus(id, status);
+  }
+
+  @Get('housekeeping')
+  getHousekeepingQueue(
+    @Query('businessId') businessId: string,
+    @Query('storeId') storeId: string,
+  ) {
+    return this.hospitalityService.getHousekeepingQueue(businessId, storeId);
+  }
+
+  // ── Hotel Dashboard ────────────────────────────────────────────────────────
+
+  @Get('hotel-dashboard')
+  getHotelDashboard(
+    @Query('businessId') businessId: string,
+    @Query('storeId') storeId: string,
+  ) {
+    return this.hospitalityService.getHotelDashboard(businessId, storeId);
+  }
+
+  // ── Void Single KOT Item ──────────────────────────────────────────────────
+
+  @Patch('orders/:orderId/items/:itemId/void')
+  async voidOrderItem(
+    @Param('orderId') orderId: string,
+    @Param('itemId') itemId: string,
+    @Body() body: { reason: string; managerId: string },
+  ) {
+    return this.hospitalityService.voidOrderItem(orderId, itemId, body.reason, body.managerId);
+  }
+
+  // ── Happy Hours ───────────────────────────────────────────────────────────
+
+  @Get('happy-hours/active-discount')
+  async getActiveDiscount(@Query('businessId') businessId: string) {
+    return { discountPct: await this.hospitalityService.getActiveHappyHourDiscount(businessId) };
+  }
+
+  @Get('happy-hours')
+  async getHappyHours(@Query('businessId') businessId: string) {
+    return this.hospitalityService.getHappyHours(businessId);
+  }
+
+  @Post('happy-hours')
+  async createHappyHour(@Body() body: any) {
+    return this.hospitalityService.createHappyHour(body);
+  }
+
+  @Delete('happy-hours/:id')
+  async deleteHappyHour(@Param('id') id: string) {
+    return this.hospitalityService.deleteHappyHour(id);
+  }
+
+  // ── RevPASH ───────────────────────────────────────────────────────────────
+
+  @Get('revpash')
+  async getRevPASH(
+    @Query('businessId') businessId: string,
+    @Query('storeId') storeId: string,
+    @Query('date') date: string,
+  ) {
+    return this.hospitalityService.getRevPASH(businessId, storeId, date);
   }
 }

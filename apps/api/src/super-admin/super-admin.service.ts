@@ -90,9 +90,15 @@ export class SuperAdminService {
       this.prisma.referral.count({ where: { status: 'CONVERTED' } }),
     ]);
 
-    // Rough MRR: active businesses × average plan price (KES 3,999/mo blended)
-    const avgPlanPriceCents = 399900; // KES 3,999
-    const estimatedMRRCents = activeSubscriptions * avgPlanPriceCents;
+    // Plan breakdown counts
+    const [starterCount, proCount, enterpriseCount] = await Promise.all([
+      this.prisma.business.count({ where: { subscriptionStatus: 'ACTIVE', subscriptionTier: 'STARTER' } }),
+      this.prisma.business.count({ where: { subscriptionStatus: 'ACTIVE', subscriptionTier: 'PRO' } }),
+      this.prisma.business.count({ where: { subscriptionStatus: 'ACTIVE', subscriptionTier: 'ENTERPRISE' } }),
+    ]);
+
+    // Accurate MRR based on actual plan mix
+    const estimatedMRRCents = starterCount * 149900 + proCount * 399900 + enterpriseCount * 999900;
 
     return {
       totalBusinesses,
@@ -106,6 +112,7 @@ export class SuperAdminService {
       referralsConverted,
       estimatedMRRCents,
       estimatedARRCents: estimatedMRRCents * 12,
+      planBreakdown: { STARTER: starterCount, PRO: proCount, ENTERPRISE: enterpriseCount },
     };
   }
 

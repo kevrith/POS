@@ -50,6 +50,12 @@ interface InventoryItem {
   unit?: string;
   vatApplicable: boolean;
   category?: Category;
+  isActive?: boolean;
+  imageUrl?: string;
+  allergens?: string; // JSON array string
+  reorderQty?: number;
+  binLocation?: string;
+  sku?: string;
 }
 
 interface StockMovement {
@@ -91,6 +97,9 @@ interface CreateItemPayload {
   prepTimeMinutes?: number;
   businessId: string;
   storeId?: string;
+  imageUrl?: string;
+  allergens?: string;
+  reorderQty?: number;
 }
 
 interface ItemVariant {
@@ -444,6 +453,10 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
     vatApplicable: item.vatApplicable,
     trackStock: item.trackStock,
     prepTimeMinutes: (item as any).prepTimeMinutes ?? 5,
+    imageUrl: item.imageUrl ?? '',
+    allergens: (() => { try { return JSON.parse(item.allergens ?? '[]') as string[]; } catch { return [] as string[]; } })(),
+    reorderQty: item.reorderQty ?? 1,
+    binLocation: item.binLocation ?? '',
   });
   const [error, setError] = useState('');
 
@@ -472,7 +485,11 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
       vatApplicable: form.vatApplicable,
       trackStock: form.trackStock,
       prepTimeMinutes: form.prepTimeMinutes,
-    });
+      imageUrl: form.imageUrl.trim() || undefined,
+      allergens: JSON.stringify(form.allergens),
+      reorderQty: form.reorderQty,
+      binLocation: form.binLocation.trim() || undefined,
+    } as Partial<CreateItemPayload>);
   }
 
   const inputCls = 'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
@@ -531,6 +548,48 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
             </div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">Prep Time (minutes)</label>
               <input type="number" min="1" value={form.prepTimeMinutes} onChange={(e) => setForm(f => ({ ...f, prepTimeMinutes: parseInt(e.target.value) || 5 }))} className={inputCls} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
+              <input type="url" value={form.imageUrl} onChange={(e) => setForm(f => ({ ...f, imageUrl: e.target.value }))} className={inputCls} placeholder="https://..." />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Reorder Qty</label>
+              <input type="number" min="1" value={form.reorderQty} onChange={(e) => setForm(f => ({ ...f, reorderQty: parseInt(e.target.value) || 1 }))} className={inputCls} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Bin / Shelf Location</label>
+              <input type="text" value={form.binLocation} onChange={(e) => setForm(f => ({ ...f, binLocation: e.target.value }))} className={inputCls} placeholder="e.g. A-12, Shelf 3" />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Allergens</label>
+            <div className="flex flex-wrap gap-2">
+              {(['GLUTEN', 'NUTS', 'DAIRY', 'EGGS', 'SOY', 'FISH', 'SHELLFISH', 'SESAME'] as const).map((allergen) => (
+                <label key={allergen} className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.allergens.includes(allergen)}
+                    onChange={(e) => setForm(f => ({
+                      ...f,
+                      allergens: e.target.checked
+                        ? [...f.allergens, allergen]
+                        : f.allergens.filter(a => a !== allergen),
+                    }))}
+                    className="w-3.5 h-3.5 rounded"
+                  />
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    form.allergens.includes(allergen) ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
+                  }`}>{allergen}</span>
+                </label>
+              ))}
             </div>
           </div>
 
@@ -1149,6 +1208,12 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
   const [showBarcodeModal, setShowBarcodeModal] = useState(false);
   const qc = useQueryClient();
 
+  const toggleActiveMutation = useMutation({
+    mutationFn: (item: InventoryItem) =>
+      api.patch(`/items/${item.id}/toggle-active?businessId=${businessId}`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['items'] }),
+  });
+
   const params = new URLSearchParams({
     businessId,
     ...(storeId ? { storeId } : {}),
@@ -1266,17 +1331,33 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  {['Name', 'Barcode', 'Category', 'Type', 'Retail Price', 'Stock', 'Actions'].map(h => (
+                  {['Name', 'Barcode', 'Category', 'Type', 'Retail Price', 'Stock', 'Bin', 'Status', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {filtered.map((item) => (
-                  <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                {filtered.map((item) => {
+                  const allergenList: string[] = (() => { try { return JSON.parse(item.allergens ?? '[]') as string[]; } catch { return []; } })();
+                  return (
+                  <tr key={item.id} className={`hover:bg-gray-50 transition-colors ${item.isActive === false ? 'opacity-60' : ''}`}>
                     <td className="px-4 py-3">
-                      <p className="font-medium text-gray-900">{item.name}</p>
-                      {item.vatApplicable && <span className="text-xs text-blue-500">VAT</span>}
+                      <div className="flex items-center gap-2">
+                        {item.imageUrl && (
+                          <img src={item.imageUrl} alt={item.name} className="w-8 h-8 rounded object-cover flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                        )}
+                        <div>
+                          <p className="font-medium text-gray-900">{item.name}</p>
+                          {item.vatApplicable && <span className="text-xs text-blue-500 mr-1">VAT</span>}
+                          {allergenList.length > 0 && (
+                            <div className="flex flex-wrap gap-0.5 mt-0.5">
+                              {allergenList.map(a => (
+                                <span key={a} className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">{a}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-gray-500">{item.barcode ?? '—'}</td>
                     <td className="px-4 py-3">
@@ -1305,6 +1386,21 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
                         <span className="text-gray-400 text-xs">Not tracked</span>
                       )}
                     </td>
+                    <td className="px-4 py-3 font-mono text-xs text-gray-500">{item.binLocation ?? '—'}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => toggleActiveMutation.mutate(item)}
+                        disabled={toggleActiveMutation.isPending}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold transition-colors ${
+                          item.isActive === false
+                            ? 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                            : 'bg-green-100 text-green-700 hover:bg-green-200'
+                        }`}
+                        title={item.isActive === false ? 'Click to activate' : 'Click to deactivate'}
+                      >
+                        {item.isActive === false ? 'Inactive' : 'Active'}
+                      </button>
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <button onClick={() => setEditItem(item)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Edit</button>
@@ -1321,7 +1417,8 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

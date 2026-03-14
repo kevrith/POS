@@ -140,6 +140,74 @@ export class ReportsService {
     return { sales, totalTotCents: totalTot, totalSalesCents: totalSales };
   }
 
+  async vatReturn(businessId: string, startDate: Date, endDate: Date) {
+    const [rawSales, reclaimableExpenses] = await Promise.all([
+      this.prisma.sale.findMany({
+        where: {
+          businessId,
+          status: { in: ['PAID', 'AMENDED'] },
+          createdAt: { gte: startDate, lte: endDate },
+        },
+        select: {
+          id: true,
+          receiptNumber: true,
+          createdAt: true,
+          subtotalCents: true,
+          discountCents: true,
+          totalCents: true,
+        },
+      }),
+      this.prisma.expense.findMany({
+        where: {
+          businessId,
+          vatReclaimable: true,
+          approvalStatus: 'APPROVED',
+          createdAt: { gte: startDate, lte: endDate },
+        },
+        select: {
+          id: true,
+          description: true,
+          category: true,
+          amountCents: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+
+    // Output VAT from sales (extracted inclusive 16/116)
+    const salesWithVat = rawSales.map(s => {
+      const vatCents = recalcVat(s.subtotalCents, s.discountCents);
+      return { ...s, vatCents };
+    });
+
+    const outputVatCents = salesWithVat.reduce((sum, s) => sum + s.vatCents, 0);
+    const totalSalesCents = rawSales.reduce((sum, s) => sum + s.totalCents, 0);
+
+    // Input VAT from reclaimable expenses (extracted inclusive 16/116)
+    const expensesWithVat = reclaimableExpenses.map(e => ({
+      ...e,
+      vatCents: Math.round(e.amountCents * 16 / 116),
+    }));
+    const inputVatCents = expensesWithVat.reduce((sum, e) => sum + e.vatCents, 0);
+    const netVatPayableCents = outputVatCents - inputVatCents;
+
+    return {
+      period: { startDate: startDate.toISOString(), endDate: endDate.toISOString() },
+      outputVat: {
+        totalCents: outputVatCents,
+        totalSalesCents,
+        salesCount: rawSales.length,
+        sales: salesWithVat,
+      },
+      inputVat: {
+        totalCents: inputVatCents,
+        expensesCount: reclaimableExpenses.length,
+        expenses: expensesWithVat,
+      },
+      netVatPayableCents,
+    };
+  }
+
   async stockValuation(businessId: string, storeId?: string) {
     const items = await this.prisma.item.findMany({
       where: {
@@ -1098,6 +1166,32 @@ export class ReportsService {
 
   // ─── Full Data Export ──────────────────────────────────────────────────────
 
+  async getVatItaxExport(businessId: string, periodStart: string, periodEnd: string) {
+    const sales = await this.prisma.sale.findMany({
+      where: {
+        businessId,
+        status: 'COMPLETED',
+        createdAt: { gte: new Date(periodStart), lte: new Date(periodEnd) },
+      },
+      include: { items: true },
+    });
+
+    const rows: string[] = ['PIN,InvoiceNo,Date,CustomerName,TaxableValueKES,VATKES'];
+    for (const sale of sales) {
+      const taxableKES = (sale.subtotalCents / 100).toFixed(2);
+      const vatKES = (sale.vatCents / 100).toFixed(2);
+      rows.push([
+        'A000000000A', // business PIN placeholder
+        sale.receiptNumber ?? sale.id,
+        sale.createdAt.toISOString().split('T')[0],
+        ((sale as any).customerName ?? 'Cash Sale').replace(/,/g, ' '),
+        taxableKES,
+        vatKES,
+      ].join(','));
+    }
+    return rows.join('\n');
+  }
+
   async fullDataExport(businessId: string) {
     const [business, stores, items, sales, customers, expenses, suppliers, employees] = await Promise.all([
       this.prisma.business.findUnique({
@@ -1334,6 +1428,7 @@ export class ReportsService {
       role: string;
       salesCount: number;
       totalCents: number;
+      totalItemsSold: number;
       categories: Record<string, {
         name: string;
         items: Record<string, { itemName: string; qty: number; totalCents: number }>;
@@ -1354,6 +1449,7 @@ export class ReportsService {
           role: sale.cashier.role,
           salesCount: 0,
           totalCents: 0,
+          totalItemsSold: 0,
           categories: {},
           mpesaPayments: [],
           mpesaTotalCents: 0,
@@ -1363,6 +1459,7 @@ export class ReportsService {
       const emp = byEmployee[empId];
       emp.salesCount++;
       emp.totalCents += sale.totalCents;
+      emp.totalItemsSold += sale.items.reduce((sum, si) => sum + si.quantity, 0);
 
       // Group sale items by category
       for (const si of sale.items) {
@@ -1399,6 +1496,8 @@ export class ReportsService {
       role: emp.role,
       salesCount: emp.salesCount,
       totalCents: emp.totalCents,
+      totalItemsSold: emp.totalItemsSold,
+      avgItemsPerTransaction: emp.salesCount > 0 ? Math.round((emp.totalItemsSold / emp.salesCount) * 100) / 100 : 0,
       categories: Object.values(emp.categories).map((cat) => ({
         name: cat.name,
         subtotalCents: cat.subtotalCents,
@@ -1410,11 +1509,15 @@ export class ReportsService {
       mpesaTotalCents: emp.mpesaTotalCents,
     })).sort((a, b) => b.totalCents - a.totalCents);
 
+    const totalItemsSold = rows.reduce((s, r) => s + r.totalItemsSold, 0);
+    const totalSales = rows.reduce((s, r) => s + r.salesCount, 0);
     const summary = {
       totalEmployees: rows.length,
-      totalSales: rows.reduce((s, r) => s + r.salesCount, 0),
+      totalSales,
       totalRevenueCents: rows.reduce((s, r) => s + r.totalCents, 0),
       totalMpesaCents: rows.reduce((s, r) => s + r.mpesaTotalCents, 0),
+      totalItemsSold,
+      avgItemsPerTransaction: totalSales > 0 ? Math.round((totalItemsSold / totalSales) * 100) / 100 : 0,
     };
 
     return { rows, summary };
@@ -1527,5 +1630,732 @@ export class ReportsService {
               : 'OK',
       };
     });
+  }
+
+  // ─── Dead Stock Report ─────────────────────────────────────────────────────
+  async deadStockReport(businessId: string, storeId?: string, daysThreshold = 90) {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - daysThreshold);
+
+    const items = await this.prisma.item.findMany({
+      where: {
+        businessId,
+        ...(storeId ? { storeId } : {}),
+        deletedAt: null,
+        isActive: true,
+        trackStock: true,
+      },
+      include: {
+        movements: {
+          where: { createdAt: { gte: cutoff } },
+          take: 1,
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+
+    const deadItems = [];
+    for (const item of items) {
+      // Check current stock level
+      const stockAgg = await this.prisma.inventoryMovement.aggregate({
+        where: { itemId: item.id, ...(storeId ? { storeId } : {}) },
+        _sum: { quantity: true },
+      });
+      const stock = stockAgg._sum.quantity ?? 0;
+      if (stock <= 0) continue; // no stock, nothing to report
+
+      // Last movement date
+      const lastMovement = await this.prisma.inventoryMovement.findFirst({
+        where: { itemId: item.id, ...(storeId ? { storeId } : {}) },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const hasRecentActivity = item.movements.length > 0;
+      if (!hasRecentActivity) {
+        const lastSold = lastMovement?.createdAt;
+        const daysSinceActivity = lastSold
+          ? Math.floor((Date.now() - lastSold.getTime()) / 86400000)
+          : null;
+        deadItems.push({
+          itemId: item.id,
+          name: item.name,
+          category: item.category ?? 'Uncategorised',
+          stock,
+          costPriceCents: item.costPriceCents ?? 0,
+          stockValueCents: stock * (item.costPriceCents ?? 0),
+          daysSinceLastSale: daysSinceActivity,
+          lastSaleDate: lastSold?.toISOString() ?? null,
+        });
+      }
+    }
+
+    const totalValueCents = deadItems.reduce((s, i) => s + i.stockValueCents, 0);
+    return {
+      items: deadItems.sort((a, b) => b.stockValueCents - a.stockValueCents),
+      totalItems: deadItems.length,
+      totalValueCents,
+      daysThreshold,
+    };
+  }
+
+  // ─── Gross Margin by Category ──────────────────────────────────────────────
+  async grossMarginByCategory(businessId: string, storeId?: string, startDate?: Date, endDate?: Date) {
+    const saleWhere: any = { businessId, status: { in: ['PAID', 'AMENDED'] } };
+    if (storeId) saleWhere.storeId = storeId;
+    if (startDate || endDate) {
+      saleWhere.createdAt = {
+        ...(startDate && { gte: startDate }),
+        ...(endDate && { lte: endDate }),
+      };
+    }
+
+    const saleItems = await this.prisma.saleItem.findMany({
+      where: { sale: saleWhere },
+      include: {
+        item: { select: { name: true, category: true, costPriceCents: true } },
+      },
+    });
+
+    const categoryMap: Record<string, {
+      name: string;
+      revenueCents: number;
+      costCents: number;
+      qty: number;
+      items: Record<string, { name: string; qty: number; revenueCents: number; costCents: number }>;
+    }> = {};
+
+    for (const si of saleItems) {
+      const cat = si.item?.category || 'Uncategorised';
+      const itemName = si.item?.name || 'Unknown';
+      const costPerUnit = si.item?.costPriceCents ?? 0;
+      const lineCost = costPerUnit * si.quantity;
+
+      if (!categoryMap[cat]) {
+        categoryMap[cat] = { name: cat, revenueCents: 0, costCents: 0, qty: 0, items: {} };
+      }
+      if (!categoryMap[cat].items[itemName]) {
+        categoryMap[cat].items[itemName] = { name: itemName, qty: 0, revenueCents: 0, costCents: 0 };
+      }
+      categoryMap[cat].items[itemName].qty += si.quantity;
+      categoryMap[cat].items[itemName].revenueCents += si.totalCents;
+      categoryMap[cat].items[itemName].costCents += lineCost;
+      categoryMap[cat].revenueCents += si.totalCents;
+      categoryMap[cat].costCents += lineCost;
+      categoryMap[cat].qty += si.quantity;
+    }
+
+    const categories = Object.values(categoryMap).map((cat) => ({
+      name: cat.name,
+      revenueCents: cat.revenueCents,
+      costCents: cat.costCents,
+      grossProfitCents: cat.revenueCents - cat.costCents,
+      marginPct: cat.revenueCents > 0 ? ((cat.revenueCents - cat.costCents) / cat.revenueCents) * 100 : 0,
+      qty: cat.qty,
+      items: Object.values(cat.items)
+        .map((i) => ({
+          ...i,
+          grossProfitCents: i.revenueCents - i.costCents,
+          marginPct: i.revenueCents > 0 ? ((i.revenueCents - i.costCents) / i.revenueCents) * 100 : 0,
+        }))
+        .sort((a, b) => b.grossProfitCents - a.grossProfitCents),
+    })).sort((a, b) => b.grossProfitCents - a.grossProfitCents);
+
+    const totalRevenueCents = categories.reduce((s, c) => s + c.revenueCents, 0);
+    const totalCostCents = categories.reduce((s, c) => s + c.costCents, 0);
+    return {
+      categories,
+      totalRevenueCents,
+      totalCostCents,
+      totalGrossProfitCents: totalRevenueCents - totalCostCents,
+      overallMarginPct: totalRevenueCents > 0 ? ((totalRevenueCents - totalCostCents) / totalRevenueCents) * 100 : 0,
+    };
+  }
+
+  // ─── NSSF Return File (CSV) ───────────────────────────────────────────────────
+
+  async nssfReturnFile(businessId: string, month: number, year: number): Promise<string> {
+    const run = await (this.prisma as any).payrollRun.findFirst({
+      where: { businessId, month, year, status: { in: ['APPROVED', 'PAID'] } },
+      include: {
+        payslips: {
+          include: { payrollRun: true },
+        },
+      },
+    });
+
+    const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const monthName = MONTHS[(month - 1) % 12];
+
+    const lines: string[] = [];
+    lines.push('Member Name,Employee Number,Gross Salary (KES),NSSF Employee (KES),NSSF Employer (KES),Total NSSF (KES)');
+
+    if (run && run.payslips) {
+      for (const slip of run.payslips as any[]) {
+        const gross = (slip.grossPay ?? 0) / 100; // convert cents to KES
+        const nssfEmployee = ((slip.nssf1Amount ?? 0) + (slip.nssf2Amount ?? 0)) / 100;
+        const nssfEmployer = nssfEmployee; // Employer matches employee
+        const totalNssf = nssfEmployee + nssfEmployer;
+        const empNum = slip.employeeId ?? '';
+        const name = (slip.employeeName ?? '').replace(/,/g, ' ');
+        lines.push(`"${name}","${empNum}",${gross.toFixed(2)},${nssfEmployee.toFixed(2)},${nssfEmployer.toFixed(2)},${totalNssf.toFixed(2)}`);
+      }
+    }
+
+    lines.push('');
+    lines.push(`# NSSF Return — ${monthName} ${year}`);
+    lines.push(`# Generated: ${new Date().toISOString()}`);
+    if (!run) lines.push('# WARNING: No APPROVED/PAID payroll run found for this period');
+
+    return lines.join('\n');
+  }
+
+  // ─── NHIF/SHA Return File (CSV) ───────────────────────────────────────────────
+
+  async nhifReturnFile(businessId: string, month: number, year: number): Promise<string> {
+    const run = await (this.prisma as any).payrollRun.findFirst({
+      where: { businessId, month, year, status: { in: ['APPROVED', 'PAID'] } },
+      include: {
+        payslips: {
+          include: { payrollRun: true },
+        },
+      },
+    });
+
+    const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const monthName = MONTHS[(month - 1) % 12];
+
+    const lines: string[] = [];
+    lines.push('Employee Name,Employee Number,Gross Salary (KES),NHIF/SHA Deduction (KES)');
+
+    if (run && run.payslips) {
+      for (const slip of run.payslips as any[]) {
+        const gross = (slip.grossPay ?? 0) / 100;
+        const nhif = (slip.nhifAmount ?? 0) / 100;
+        const empNum = slip.employeeId ?? '';
+        const name = (slip.employeeName ?? '').replace(/,/g, ' ');
+        lines.push(`"${name}","${empNum}",${gross.toFixed(2)},${nhif.toFixed(2)}`);
+      }
+    }
+
+    lines.push('');
+    lines.push(`# NHIF/SHA Return — ${monthName} ${year}`);
+    lines.push(`# Generated: ${new Date().toISOString()}`);
+    if (!run) lines.push('# WARNING: No APPROVED/PAID payroll run found for this period');
+
+    return lines.join('\n');
+  }
+
+  // ─── Shrinkage Report ────────────────────────────────────────────────────────
+
+  async shrinkageReport(businessId: string, storeId?: string, startDate?: Date, endDate?: Date) {
+    const where: any = {
+      businessId,
+      type: 'ADJUSTMENT',
+      quantity: { lt: 0 },
+    };
+    if (storeId) where.storeId = storeId;
+    if (startDate) where.createdAt = { gte: startDate };
+    if (endDate) where.createdAt = { ...where.createdAt, lte: endDate };
+
+    const movements = await this.prisma.inventoryMovement.findMany({
+      where,
+      include: { item: { select: { name: true, barcode: true, costPriceCents: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const byItem = new Map<string, { itemId: string; name: string; sku: string; totalUnitsLost: number; totalValueCents: number; incidents: number }>();
+    for (const m of movements) {
+      const key = m.itemId;
+      const existing = byItem.get(key) ?? { itemId: m.itemId, name: m.item.name, sku: m.item.barcode ?? '', totalUnitsLost: 0, totalValueCents: 0, incidents: 0 };
+      existing.totalUnitsLost += Math.abs(m.quantity);
+      existing.totalValueCents += Math.abs(m.quantity) * (m.item.costPriceCents ?? 0);
+      existing.incidents += 1;
+      byItem.set(key, existing);
+    }
+
+    const items = Array.from(byItem.values()).sort((a, b) => b.totalValueCents - a.totalValueCents);
+    const totalValueCents = items.reduce((s, i) => s + i.totalValueCents, 0);
+
+    return { items, totalValueCents, totalIncidents: movements.length };
+  }
+
+  // ─── Department / Category P&L ───────────────────────────────────────────────
+
+  async departmentPnl(businessId: string, storeId?: string, startDate?: Date, endDate?: Date) {
+    const where: any = {
+      sale: { businessId, status: { in: ['PAID', 'AMENDED'] } },
+    };
+    if (storeId) where.sale = { ...where.sale, storeId };
+    if (startDate || endDate) {
+      where.sale = { ...where.sale, createdAt: {} };
+      if (startDate) where.sale.createdAt.gte = startDate;
+      if (endDate) where.sale.createdAt.lte = endDate;
+    }
+
+    const saleItems = await this.prisma.saleItem.findMany({
+      where,
+      include: {
+        item: { select: { category: true, costPriceCents: true } },
+        sale: { select: { storeId: true } },
+      },
+    });
+
+    const byCategory = new Map<string, { category: string; revenueCents: number; cogsCents: number; units: number }>();
+    for (const si of saleItems) {
+      const cat = (si.item as any)?.category ?? 'Uncategorized';
+      const key = storeId ? cat : `${si.sale.storeId}::${cat}`;
+      const existing = byCategory.get(key) ?? { category: cat, revenueCents: 0, cogsCents: 0, units: 0 };
+      existing.revenueCents += si.totalCents;
+      existing.cogsCents += ((si.item as any)?.costPriceCents ?? 0) * si.quantity;
+      existing.units += si.quantity;
+      byCategory.set(key, existing);
+    }
+
+    const departments = Array.from(byCategory.values()).map(d => ({
+      ...d,
+      grossProfitCents: d.revenueCents - d.cogsCents,
+      marginPct: d.revenueCents > 0 ? ((d.revenueCents - d.cogsCents) / d.revenueCents) * 100 : 0,
+    })).sort((a, b) => b.revenueCents - a.revenueCents);
+
+    const totals = departments.reduce((acc, d) => ({
+      revenueCents: acc.revenueCents + d.revenueCents,
+      cogsCents: acc.cogsCents + d.cogsCents,
+      grossProfitCents: acc.grossProfitCents + d.grossProfitCents,
+    }), { revenueCents: 0, cogsCents: 0, grossProfitCents: 0 });
+
+    return {
+      departments,
+      totals: { ...totals, marginPct: totals.revenueCents > 0 ? (totals.grossProfitCents / totals.revenueCents) * 100 : 0 },
+    };
+  }
+
+  // ─── Recipe Costing Report ────────────────────────────────────────────────
+
+  async recipeCostingReport(businessId: string) {
+    const items = await this.prisma.item.findMany({
+      where: { businessId, deletedAt: null },
+      include: {
+        bundleComponents: {
+          include: {
+            componentItem: { select: { name: true, costPriceCents: true } },
+          },
+        },
+      },
+    });
+
+    const recipeItems = items.filter(i => i.bundleComponents.length > 0);
+
+    const mapped = recipeItems.map(item => {
+      const bc = item.bundleComponents;
+      const totalIngredientCostCents = bc.reduce((s, c) => s + c.quantity * (c.componentItem.costPriceCents ?? 0), 0);
+      const sellingPriceCents = item.retailPriceCents ?? 0;
+      const foodCostPct = sellingPriceCents > 0 ? (totalIngredientCostCents / sellingPriceCents) * 100 : null;
+      return {
+        itemId: item.id,
+        name: item.name,
+        category: item.category,
+        sellingPriceCents,
+        totalIngredientCostCents,
+        foodCostPct,
+        grossMarginPct: sellingPriceCents > 0 ? ((sellingPriceCents - totalIngredientCostCents) / sellingPriceCents) * 100 : null,
+        status: foodCostPct === null ? 'NO_PRICE' : foodCostPct > 35 ? 'HIGH_COST' : foodCostPct > 25 ? 'ACCEPTABLE' : 'LOW_COST',
+        components: bc.map(c => ({
+          name: c.componentItem.name,
+          quantity: c.quantity,
+          costPriceCents: c.componentItem.costPriceCents ?? 0,
+          totalCostCents: c.quantity * (c.componentItem.costPriceCents ?? 0),
+        })),
+      };
+    }).sort((a, b) => (b.foodCostPct ?? 0) - (a.foodCostPct ?? 0));
+
+    const withCost = mapped.filter(r => r.foodCostPct !== null);
+    const avgFoodCostPct = withCost.length > 0
+      ? withCost.reduce((s, r) => s + (r.foodCostPct ?? 0), 0) / withCost.length
+      : 0;
+
+    return {
+      items: mapped,
+      summary: {
+        totalItems: mapped.length,
+        avgFoodCostPct,
+        highCostItems: mapped.filter(r => r.status === 'HIGH_COST').length,
+      },
+    };
+  }
+
+  // ─── Customer Analytics ────────────────────────────────────────────────────
+
+  async customerAnalytics(businessId: string, storeId?: string, startDate?: Date, endDate?: Date) {
+    const where: any = { businessId, status: { in: ['PAID', 'AMENDED'] } };
+    if (storeId) where.storeId = storeId;
+    if (startDate || endDate) {
+      where.createdAt = {
+        ...(startDate && { gte: startDate }),
+        ...(endDate && { lte: endDate }),
+      };
+    }
+
+    const sales = await this.prisma.sale.findMany({
+      where,
+      include: {
+        customer: { select: { id: true, name: true, phone: true, email: true } },
+        items: { select: { quantity: true, totalCents: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Customer segmentation (RFM analysis)
+    const customerMap = new Map<string, {
+      customerId: string;
+      name: string;
+      phone?: string;
+      email?: string;
+      totalSpentCents: number;
+      transactionCount: number;
+      avgOrderValueCents: number;
+      lastPurchaseDate: Date;
+      daysSinceLastPurchase: number;
+      totalItemsPurchased: number;
+    }>();
+
+    const now = new Date();
+    for (const sale of sales) {
+      const customerId = sale.customerId || 'walk-in';
+      const customerName = sale.customer?.name || sale.customerName || 'Walk-in Customer';
+      
+      const existing = customerMap.get(customerId) || {
+        customerId,
+        name: customerName,
+        phone: sale.customer?.phone || sale.customerPhone,
+        email: sale.customer?.email,
+        totalSpentCents: 0,
+        transactionCount: 0,
+        avgOrderValueCents: 0,
+        lastPurchaseDate: sale.createdAt,
+        daysSinceLastPurchase: 0,
+        totalItemsPurchased: 0,
+      };
+
+      existing.totalSpentCents += sale.totalCents;
+      existing.transactionCount += 1;
+      existing.totalItemsPurchased += sale.items.reduce((sum, item) => sum + item.quantity, 0);
+      
+      if (sale.createdAt > existing.lastPurchaseDate) {
+        existing.lastPurchaseDate = sale.createdAt;
+      }
+      
+      customerMap.set(customerId, existing);
+    }
+
+    // Calculate final metrics
+    const customers = Array.from(customerMap.values()).map(customer => {
+      customer.avgOrderValueCents = customer.transactionCount > 0 
+        ? Math.round(customer.totalSpentCents / customer.transactionCount) 
+        : 0;
+      customer.daysSinceLastPurchase = Math.floor(
+        (now.getTime() - customer.lastPurchaseDate.getTime()) / (1000 * 60 * 60 * 24)
+      );
+      return customer;
+    });
+
+    // Sort customers by total spent
+    const topCustomers = customers
+      .filter(c => c.customerId !== 'walk-in')
+      .sort((a, b) => b.totalSpentCents - a.totalSpentCents)
+      .slice(0, 20);
+
+    // RFM Segmentation
+    const validCustomers = customers.filter(c => c.customerId !== 'walk-in');
+    const segments = {
+      champions: validCustomers.filter(c => c.totalSpentCents > 50000 && c.daysSinceLastPurchase <= 30).length,
+      loyalCustomers: validCustomers.filter(c => c.transactionCount >= 5 && c.daysSinceLastPurchase <= 60).length,
+      potentialLoyalists: validCustomers.filter(c => c.transactionCount >= 3 && c.daysSinceLastPurchase <= 90).length,
+      atRisk: validCustomers.filter(c => c.totalSpentCents > 20000 && c.daysSinceLastPurchase > 90).length,
+      cannotLoseThem: validCustomers.filter(c => c.totalSpentCents > 100000 && c.daysSinceLastPurchase > 60).length,
+      hibernating: validCustomers.filter(c => c.daysSinceLastPurchase > 180).length,
+    };
+
+    // Customer lifecycle analysis
+    const newCustomers = validCustomers.filter(c => c.daysSinceLastPurchase <= 30 && c.transactionCount === 1).length;
+    const returningCustomers = validCustomers.filter(c => c.transactionCount > 1).length;
+    const totalCustomers = validCustomers.length;
+    const walkInSales = customers.find(c => c.customerId === 'walk-in');
+
+    // Calculate average order value and customer lifetime value
+    const totalRevenueCents = validCustomers.reduce((sum, c) => sum + c.totalSpentCents, 0);
+    const totalTransactions = validCustomers.reduce((sum, c) => sum + c.transactionCount, 0);
+    const avgOrderValue = totalTransactions > 0 ? Math.round(totalRevenueCents / totalTransactions) : 0;
+    const customerLifetimeValue = totalCustomers > 0 ? Math.round(totalRevenueCents / totalCustomers) : 0;
+
+    // Format top customers for frontend
+    const formattedTopCustomers = topCustomers.map(customer => ({
+      id: customer.customerId,
+      name: customer.name,
+      totalSpent: customer.totalSpentCents,
+      orderCount: customer.transactionCount,
+      lastVisit: customer.lastPurchaseDate.toISOString(),
+    }));
+
+    // Format RFM segments for frontend
+    const rfmSegments = [
+      { segment: 'Champions', count: segments.champions, avgSpend: segments.champions > 0 ? Math.round(validCustomers.filter(c => c.totalSpentCents > 50000 && c.daysSinceLastPurchase <= 30).reduce((sum, c) => sum + c.totalSpentCents, 0) / segments.champions) : 0 },
+      { segment: 'Loyal Customers', count: segments.loyalCustomers, avgSpend: segments.loyalCustomers > 0 ? Math.round(validCustomers.filter(c => c.transactionCount >= 5 && c.daysSinceLastPurchase <= 60).reduce((sum, c) => sum + c.totalSpentCents, 0) / segments.loyalCustomers) : 0 },
+      { segment: 'Potential Loyalists', count: segments.potentialLoyalists, avgSpend: segments.potentialLoyalists > 0 ? Math.round(validCustomers.filter(c => c.transactionCount >= 3 && c.daysSinceLastPurchase <= 90).reduce((sum, c) => sum + c.totalSpentCents, 0) / segments.potentialLoyalists) : 0 },
+      { segment: 'At Risk', count: segments.atRisk, avgSpend: segments.atRisk > 0 ? Math.round(validCustomers.filter(c => c.totalSpentCents > 20000 && c.daysSinceLastPurchase > 90).reduce((sum, c) => sum + c.totalSpentCents, 0) / segments.atRisk) : 0 },
+      { segment: 'Cannot Lose Them', count: segments.cannotLoseThem, avgSpend: segments.cannotLoseThem > 0 ? Math.round(validCustomers.filter(c => c.totalSpentCents > 100000 && c.daysSinceLastPurchase > 60).reduce((sum, c) => sum + c.totalSpentCents, 0) / segments.cannotLoseThem) : 0 },
+      { segment: 'Hibernating', count: segments.hibernating, avgSpend: segments.hibernating > 0 ? Math.round(validCustomers.filter(c => c.daysSinceLastPurchase > 180).reduce((sum, c) => sum + c.totalSpentCents, 0) / segments.hibernating) : 0 },
+    ].filter(segment => segment.count > 0);
+
+    return {
+      totalCustomers,
+      newCustomers,
+      returningCustomers,
+      avgOrderValue,
+      customerLifetimeValue,
+      topCustomers: formattedTopCustomers,
+      rfmSegments,
+      summary: {
+        totalCustomers,
+        newCustomers,
+        returningCustomers,
+        walkInTransactions: walkInSales?.transactionCount || 0,
+        walkInRevenueCents: walkInSales?.totalSpentCents || 0,
+        avgCustomerValueCents: customerLifetimeValue,
+        avgTransactionsPerCustomer: totalCustomers > 0
+          ? Math.round((totalTransactions / totalCustomers) * 100) / 100
+          : 0,
+      },
+      segments,
+      customerLifecycle: {
+        new: newCustomers,
+        returning: returningCustomers,
+        dormant: segments.hibernating,
+        atRisk: segments.atRisk,
+      },
+    };
+  }
+
+  // ─── Advanced Forecast ─────────────────────────────────────────────────────
+
+  async advancedForecast(businessId: string, storeId?: string, days: number = 30) {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - (days * 3)); // Look back 3x the forecast period
+
+    const where: any = { businessId, status: { in: ['PAID', 'AMENDED'] } };
+    if (storeId) where.storeId = storeId;
+    where.createdAt = { gte: startDate, lte: endDate };
+
+    const saleItems = await this.prisma.saleItem.findMany({
+      where: { sale: where },
+      include: {
+        item: { select: { id: true, name: true, category: true, trackStock: true } },
+        sale: { select: { createdAt: true } },
+      },
+      orderBy: { sale: { createdAt: 'asc' } },
+    });
+
+    // Group by item and calculate daily sales
+    const itemSalesMap = new Map<string, {
+      itemId: string;
+      name: string;
+      category: string;
+      dailySales: number[];
+      totalSold: number;
+      avgDailySales: number;
+      trend: 'increasing' | 'decreasing' | 'stable';
+      seasonality: number;
+      forecastDemand: number;
+      confidence: number;
+    }>();
+
+    // Initialize daily sales arrays
+    const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+    
+    for (const saleItem of saleItems) {
+      if (!saleItem.item?.trackStock) continue;
+      
+      const itemId = saleItem.itemId;
+      if (!itemSalesMap.has(itemId)) {
+        itemSalesMap.set(itemId, {
+          itemId,
+          name: saleItem.item.name,
+          category: saleItem.item.category || 'Uncategorized',
+          dailySales: new Array(totalDays).fill(0),
+          totalSold: 0,
+          avgDailySales: 0,
+          trend: 'stable',
+          seasonality: 1,
+          forecastDemand: 0,
+          confidence: 0,
+        });
+      }
+
+      const item = itemSalesMap.get(itemId)!;
+      const dayIndex = Math.floor((saleItem.sale.createdAt.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (dayIndex >= 0 && dayIndex < totalDays) {
+        item.dailySales[dayIndex] += saleItem.quantity;
+        item.totalSold += saleItem.quantity;
+      }
+    }
+
+    // Calculate forecasts using linear regression
+    const forecasts = Array.from(itemSalesMap.values()).map(item => {
+      const sales = item.dailySales;
+      const n = sales.length;
+      
+      if (n === 0 || item.totalSold === 0) {
+        return { ...item, forecastDemand: 0, confidence: 0, trend: 'stable' as const };
+      }
+
+      // Calculate average daily sales
+      item.avgDailySales = item.totalSold / n;
+
+      // Simple linear regression for trend
+      const xSum = (n * (n - 1)) / 2;
+      const ySum = sales.reduce((sum, val) => sum + val, 0);
+      const xySum = sales.reduce((sum, val, idx) => sum + (val * idx), 0);
+      const x2Sum = (n * (n - 1) * (2 * n - 1)) / 6;
+
+      const slope = n > 1 ? (n * xySum - xSum * ySum) / (n * x2Sum - xSum * xSum) : 0;
+      const intercept = (ySum - slope * xSum) / n;
+
+      // Determine trend
+      const trend = Math.abs(slope) < 0.01 ? 'stable' : slope > 0 ? 'increasing' : 'decreasing';
+
+      // Calculate forecast for the next period
+      const forecastDemand = Math.max(0, Math.round((intercept + slope * n) * days));
+
+      // Calculate confidence based on variance
+      const variance = sales.reduce((sum, val) => {
+        const predicted = intercept + slope * sales.indexOf(val);
+        return sum + Math.pow(val - predicted, 2);
+      }, 0) / n;
+      
+      const confidence = Math.max(0, Math.min(100, 100 - (Math.sqrt(variance) / item.avgDailySales) * 100));
+
+      return {
+        ...item,
+        trend,
+        forecastDemand,
+        confidence: Math.round(confidence),
+      };
+    });
+
+    // Sort by forecast demand (highest first)
+    const sortedForecasts = forecasts
+      .filter(f => f.forecastDemand > 0)
+      .sort((a, b) => b.forecastDemand - a.forecastDemand);
+
+    // Get current stock levels
+    const itemIds = sortedForecasts.map(f => f.itemId);
+    const stockLevels = await this.prisma.inventoryMovement.groupBy({
+      by: ['itemId'],
+      where: {
+        businessId,
+        ...(storeId && { storeId }),
+        itemId: { in: itemIds },
+      },
+      _sum: { quantity: true },
+    });
+
+    const stockMap = new Map(stockLevels.map(s => [s.itemId, s._sum.quantity || 0]));
+
+    // Add reorder recommendations
+    const recommendations = sortedForecasts.map(forecast => {
+      const currentStock = stockMap.get(forecast.itemId) || 0;
+      const needsReorder = currentStock < forecast.forecastDemand;
+      const suggestedOrderQty = needsReorder 
+        ? Math.max(0, forecast.forecastDemand - currentStock + Math.round(forecast.avgDailySales * 7)) // Add 1 week buffer
+        : 0;
+
+      return {
+        ...forecast,
+        currentStock,
+        needsReorder,
+        suggestedOrderQty,
+        stockoutRisk: currentStock === 0 ? 'high' : currentStock < forecast.forecastDemand * 0.5 ? 'medium' : 'low',
+      };
+    });
+
+    return {
+      forecastPeriodDays: days,
+      generatedAt: new Date().toISOString(),
+      totalItemsAnalyzed: forecasts.length,
+      recommendations: recommendations.slice(0, 50), // Top 50 items
+      summary: {
+        highDemandItems: recommendations.filter(r => r.forecastDemand > r.avgDailySales * days * 1.5).length,
+        reorderRequired: recommendations.filter(r => r.needsReorder).length,
+        stockoutRisk: recommendations.filter(r => r.stockoutRisk === 'high').length,
+        avgConfidence: Math.round(recommendations.reduce((sum, r) => sum + r.confidence, 0) / recommendations.length) || 0,
+      },
+    };
+  }
+
+  // ── VAT Return (iTax-ready) ────────────────────────────────────────────────────
+
+  async getVATReturn(businessId: string, month: string) {
+    const [year, m] = month.split('-').map(Number);
+    const start = new Date(year, m - 1, 1);
+    const end = new Date(year, m, 0, 23, 59, 59);
+
+    const sales = await this.prisma.sale.findMany({
+      where: {
+        businessId,
+        status: { in: ['PAID', 'AMENDED'] },
+        createdAt: { gte: start, lte: end },
+      },
+      select: {
+        totalCents: true,
+        vatCents: true,
+        totCents: true,
+        subtotalCents: true,
+        discountCents: true,
+        receiptNumber: true,
+        createdAt: true,
+      },
+    });
+
+    // Recalc using inclusive formula for consistency
+    const vatSales = sales.filter(s => s.vatCents > 0 || s.totCents === 0);
+    const totalOutputVAT = vatSales.reduce((s, sale) => s + recalcVat(sale.subtotalCents, sale.discountCents), 0);
+    const vatableValue = vatSales.reduce((s, sale) => {
+      const vat = recalcVat(sale.subtotalCents, sale.discountCents);
+      return s + (sale.totalCents - vat);
+    }, 0);
+
+    const totSales = sales.filter(s => s.totCents > 0);
+    const totalTOT = totSales.reduce((s, sale) => s + recalcTot(sale.subtotalCents, sale.discountCents), 0);
+    const zeroRatedSales = totSales.reduce((s, sale) => s + sale.totalCents, 0);
+
+    // Input VAT from approved VAT-reclaimable expenses
+    const expenses = await this.prisma.expense.findMany({
+      where: {
+        businessId,
+        date: { gte: start, lte: end },
+        approvalStatus: 'APPROVED',
+        vatReclaimable: true,
+      },
+    });
+    const inputVAT = Math.round(expenses.reduce((s, e) => s + e.amountCents, 0) * 16 / 116);
+
+    const netVATPayable = Math.max(0, totalOutputVAT - inputVAT);
+
+    return {
+      period: month,
+      vatableValue,
+      outputVAT: totalOutputVAT,
+      zeroRatedSales,
+      totalTOT,
+      inputVAT,
+      netVATPayable,
+      saleCount: sales.length,
+      // iTax box labels
+      box1_output_vat: totalOutputVAT,
+      box2_input_vat: inputVAT,
+      box3_net_payable: netVATPayable,
+      expenses: expenses.length,
+    };
   }
 }

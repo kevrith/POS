@@ -23,6 +23,9 @@ interface CreateItemDto {
   storeId: string;
   businessId: string;
   initialStock?: number;
+  imageUrl?: string;
+  allergens?: string[];
+  reorderQty?: number;
 }
 
 interface UpdateItemDto extends Partial<Omit<CreateItemDto, 'businessId' | 'storeId'>> {}
@@ -45,12 +48,13 @@ export class ItemsService {
     private inventory: InventoryService,
   ) {}
 
-  async findAll(businessId: string, storeId?: string, search?: string) {
+  async findAll(businessId: string, storeId?: string, search?: string, activeOnly = false) {
     const items = await this.prisma.item.findMany({
       where: {
         businessId,
         ...(storeId ? { storeId } : {}),
         deletedAt: null,
+        ...(activeOnly && { isActive: true }),
         ...(search && {
           OR: [
             { name: { contains: search } },
@@ -138,8 +142,17 @@ export class ItemsService {
         trackStock: dto.trackStock,
         vatApplicable: dto.vatApplicable,
         totApplicable: dto.totApplicable,
+        ...(dto.imageUrl !== undefined && { imageUrl: dto.imageUrl }),
+        ...(dto.allergens !== undefined && { allergens: JSON.stringify(dto.allergens) }),
+        ...(dto.reorderQty !== undefined && { reorderQty: dto.reorderQty }),
       },
     });
+  }
+
+  async toggleActive(id: string, businessId: string) {
+    const item = await this.prisma.item.findFirst({ where: { id, businessId, deletedAt: null } });
+    if (!item) throw new NotFoundException('Item not found');
+    return this.prisma.item.update({ where: { id }, data: { isActive: !item.isActive } });
   }
 
   async softDelete(id: string, businessId: string) {
@@ -373,6 +386,52 @@ export class ItemsService {
     return items
       .map((item) => ({ ...item, currentStock: stockMap.get(item.id) ?? 0 }))
       .filter((item) => item.currentStock <= (item.reorderLevel ?? 0));
+  }
+
+  decodeGS1Barcode(barcode: string): { itemBarcode?: string; weightGrams?: number; priceCents?: number; raw: string } {
+    // GS1-128: Application Identifiers (AI)
+    // AI 01 = GTIN (14 digits)
+    // AI 3100-3105 = net weight in kg (6 digits, implied decimal)
+    // AI 3200-3205 = net weight in g (6 digits)
+    // AI 3960-3969 = price (6 digits)
+    const result: any = { raw: barcode };
+
+    // Remove parentheses if human-readable format: (01)12345... → 0112345...
+    const stripped = barcode.replace(/[()]/g, '');
+
+    let pos = 0;
+    while (pos < stripped.length) {
+      const ai2 = stripped.substring(pos, pos + 2);
+      const ai3 = stripped.substring(pos, pos + 3);
+      const ai4 = stripped.substring(pos, pos + 4);
+
+      if (ai2 === '01') {
+        result.itemBarcode = stripped.substring(pos + 2, pos + 16);
+        pos += 16;
+      } else if (ai4 >= '3100' && ai4 <= '3105') {
+        const decimals = parseInt(ai4[3]);
+        const raw = parseInt(stripped.substring(pos + 4, pos + 10));
+        result.weightGrams = Math.round(raw * Math.pow(10, -decimals) * 1000);
+        pos += 10;
+      } else if (ai4 >= '3200' && ai4 <= '3205') {
+        const decimals = parseInt(ai4[3]);
+        const raw = parseInt(stripped.substring(pos + 4, pos + 10));
+        result.weightGrams = Math.round(raw * Math.pow(10, -decimals));
+        pos += 10;
+      } else if (ai4 >= '3960' && ai4 <= '3969') {
+        const decimals = parseInt(ai4[3]);
+        const raw = parseInt(stripped.substring(pos + 4, pos + 10));
+        result.priceCents = Math.round(raw * Math.pow(10, -decimals) * 100);
+        pos += 10;
+      } else {
+        // Unknown AI, stop
+        break;
+      }
+      // Suppress unused variable warnings
+      void ai3;
+    }
+
+    return result;
   }
 
   /** Get items expiring within threshold days for inventory badge display */

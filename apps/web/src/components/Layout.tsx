@@ -3,10 +3,11 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   ShoppingCart, BarChart3, Package, Settings, LogOut, Users,
   CreditCard, Truck, DollarSign, UserCheck, Coffee, Layers,
-  Bell, ChevronDown, ChevronRight, Wallet, Hash, ChefHat, Box, Grid,
+  Bell, ChevronDown, ChevronRight, Wallet, Hash, ChefHat, Box,
   Tag, Gift, Sun, Moon, Monitor, Wand2, ArrowRightLeft, LayoutDashboard,
   AlertTriangle, X, Pill, CalendarClock, TrendingUp, GitBranch, Landmark,
-  Lock, BedDouble,
+  Lock, BedDouble, CheckCircle2, Trash2, Radio, BookOpen,
+  Link2, FileText, Clock, Send, Tablet, Shield,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
@@ -40,12 +41,18 @@ interface NavGroupWithBusinessTypes extends Omit<NavGroup, 'items'> {
 
 const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
   {
+    label: 'Home',
+    items: [
+      { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    ],
+  },
+  {
     label: 'Sales',
     items: [
       { to: '/pos', icon: ShoppingCart, label: 'Point of Sale', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
       { to: '/hospitality', icon: Coffee, label: 'Hospitality', roles: ['OWNER', 'MANAGER', 'WAITER'], businessTypes: ['HOSPITALITY', 'FAST_FOOD'] },
-      { to: '/tables', icon: Grid, label: 'Tables', roles: ['OWNER', 'MANAGER', 'WAITER'], businessTypes: ['HOSPITALITY'] },
       { to: '/kds', icon: Monitor, label: 'Kitchen Display', roles: ['OWNER', 'MANAGER', 'WAITER', 'KITCHEN'], businessTypes: ['HOSPITALITY', 'FAST_FOOD'] },
+      { to: '/kiosk', icon: Tablet, label: 'Kiosk Mode', roles: ['OWNER', 'MANAGER'] },
       { to: '/layaway', icon: Layers, label: 'Layaway', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['RETAIL', 'SUPERMARKET'] },
       { to: '/proforma', icon: CreditCard, label: 'Proformas', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
       { to: '/prescriptions', icon: Pill, label: 'Prescriptions', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['CLINIC'] },
@@ -57,7 +64,10 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
     roles: ['OWNER', 'MANAGER'],
     items: [
       { to: '/delivery', icon: Truck, label: 'Delivery', businessTypes: ['HOSPITALITY', 'FAST_FOOD', 'RETAIL', 'SUPERMARKET'] },
+      { to: '/delivery-management', icon: Truck, label: 'Delivery Dispatch', roles: ['OWNER', 'MANAGER'], businessTypes: ['HOSPITALITY', 'FAST_FOOD', 'RETAIL', 'SUPERMARKET'] },
+      { to: '/waitlist', icon: Clock, label: 'Waitlist', roles: ['OWNER', 'MANAGER', 'WAITER'], businessTypes: ['HOSPITALITY', 'FAST_FOOD'] },
       { to: '/hotel', icon: BedDouble, label: 'Hotel Integration', roles: ['OWNER', 'MANAGER'], businessTypes: ['HOSPITALITY'] },
+      { to: '/channel-manager', icon: Radio, label: 'Channel Manager', roles: ['OWNER', 'MANAGER'], businessTypes: ['HOSPITALITY'] },
     ],
   },
   {
@@ -70,7 +80,10 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
       { to: '/recipe', icon: ChefHat, label: 'Recipes / BOM', businessTypes: ['HOSPITALITY', 'FAST_FOOD'] },
       { to: '/bundle', icon: Box, label: 'Bundles / Kits' },
       { to: '/suppliers', icon: Truck, label: 'Suppliers & POs' },
+      { to: '/rfq', icon: Send, label: 'RFQ', roles: ['OWNER', 'MANAGER'] },
       { to: '/transfers', icon: ArrowRightLeft, label: 'Stock Transfers' },
+      { to: '/stocktake', icon: CheckCircle2, label: 'Stocktake' },
+      { to: '/damaged-goods', icon: Trash2, label: 'Damaged Goods' },
     ],
   },
   {
@@ -80,6 +93,9 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
       { to: '/owner-dashboard', icon: LayoutDashboard, label: 'Owner Dashboard', roles: ['OWNER'] },
       { to: '/cash-drawer', icon: Wallet, label: 'Cash Drawer' },
       { to: '/expenses', icon: DollarSign, label: 'Expenses', roles: ['OWNER', 'MANAGER', 'ACCOUNTANT'] },
+      { to: '/cheques', icon: FileText, label: 'Cheques', roles: ['OWNER', 'MANAGER', 'ACCOUNTANT'] },
+      { to: '/ledger', icon: BookOpen, label: 'General Ledger', roles: ['OWNER', 'MANAGER', 'ACCOUNTANT'] },
+      { to: '/payment-links', icon: Link2, label: 'Payment Links', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
       { to: '/reports', icon: BarChart3, label: 'Reports', roles: ['OWNER', 'MANAGER', 'ACCOUNTANT'] },
       { to: '/sales-list', icon: ShoppingCart, label: 'Sales History', roles: ['OWNER', 'MANAGER', 'ACCOUNTANT'] },
     ],
@@ -114,6 +130,13 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
     roles: ['OWNER'],
     items: [
       { to: '/franchise', icon: GitBranch, label: 'Franchise Network', roles: ['OWNER'] },
+    ],
+  },
+  {
+    label: 'Security',
+    roles: ['OWNER', 'MANAGER'],
+    items: [
+      { to: '/security-settings', icon: Shield, label: 'Security & Roles', roles: ['OWNER', 'MANAGER'] },
     ],
   },
 ];
@@ -539,7 +562,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        <main className="flex-1 overflow-hidden bg-gray-50 dark:bg-gray-950 pb-16 md:pb-0">
+        <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-950 pb-16 md:pb-0">
           {children}
         </main>
       </div>

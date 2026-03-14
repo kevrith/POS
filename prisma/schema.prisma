@@ -20,6 +20,10 @@ model Business {
   etimsCredentialsEncrypted       String?
   mpesaCredentialsEncrypted       String?
   atCredentialsEncrypted          String?
+  etimsMode                       String   @default("SANDBOX") // SANDBOX | PRODUCTION
+  etimsProductionOnboarded        Boolean  @default(false)
+  kraItaxIntegrationEnabled       Boolean  @default(false)
+  kraItaxCredentials              String?  // Encrypted iTax credentials
   subscriptionTier                String   @default("TRIAL")
   subscriptionStatus              String   @default("TRIAL")
   trialEndsAt                     DateTime?
@@ -91,6 +95,11 @@ model User {
   avatarUrl         String?
   deviceToken       String?
   phone             String?
+  passwordChangedAt DateTime?
+  passwordExpiresAt DateTime?
+  mustChangePassword Boolean  @default(false)
+  loginAttempts     Int      @default(0)
+  lockedUntil       DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -100,8 +109,25 @@ model User {
   orders            Order[]
   assignedKOTs      KOT[]     @relation("ChefKOTs")
   assignedStores    UserStore[]
+  sessions          UserSession[]
 
   @@index([businessId, role])
+}
+
+model UserSession {
+  id           String   @id @default(uuid())
+  userId       String
+  tokenHash    String   @unique
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+  lastSeenAt   DateTime @default(now())
+  expiresAt    DateTime
+  isRevoked    Boolean  @default(false)
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Store {
@@ -152,8 +178,17 @@ model Item {
   totApplicable           Boolean   @default(false)
   barcode                 String?
   category                String?
+  ageRestricted           Boolean   @default(false)
+  minAgeYears             Int       @default(18)
   prepTimeMinutes         Int       @default(5)
   unitWeightGrams         Int?
+  isActive                Boolean   @default(true)
+  imageUrl                String?
+  allergens               String    @default("[]")
+  reorderQty              Int       @default(1)
+  tareWeightGrams         Int?
+  binLocation             String?
+  isWeighed               Boolean   @default(false)
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
   deletedAt               DateTime?
@@ -169,6 +204,8 @@ model Item {
   orderItems              OrderItem[]
   serialRecords           SerialRecord[]
   variants                ItemVariant[]
+  supplierReturnItems     SupplierReturnItem[]
+  damagedGoodsRecords     DamagedGoodsRecord[]
 
   @@index([businessId, storeId])
   @@index([type])
@@ -187,6 +224,7 @@ model ItemVariant {
   vipPriceCents       Int?
   costPriceCents      Int?
   attributes          String
+  trackStock          Boolean  @default(false)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
@@ -239,6 +277,7 @@ model Sale {
   subtotalCents         Int       @default(0)
   serviceChargeCents    Int       @default(0)
   discountCents         Int       @default(0)
+  tipCents              Int       @default(0)
   promotionId           String?
   vatCents              Int       @default(0)
   totCents              Int       @default(0)
@@ -279,6 +318,8 @@ model Order {
   mode        String    @default("HOSPITALITY")
   priority    Int       @default(0)
   isVIP       Boolean   @default(false)
+  coverCount  Int       @default(1)
+  tableNotes  String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -323,8 +364,34 @@ model Employee {
   attendance       AttendanceRecord[]
   leaves           Leave[]
   leaveBalances    LeaveBalance[]
+  expenseClaims    ExpenseClaim[]
+  disciplinaryRecords     DisciplinaryRecord[]
+  housekeepingAssignments HousekeepingAssignment[]
+  contractEndDate  DateTime?
+  contractType     String?   @default("PERMANENT")  // PERMANENT | CONTRACT | CASUAL
 
   @@index([businessId])
+}
+
+model ExpenseClaim {
+  id              String   @id @default(uuid())
+  businessId      String
+  employeeId      String
+  amountCents     Int
+  description     String
+  category        String   @default("OTHER")
+  receiptUrl      String?
+  status          String   @default("PENDING")
+  approvedBy      String?
+  rejectedBy      String?
+  rejectionReason String?
+  submittedAt     DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  employee        Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([businessId])
+  @@index([employeeId])
 }
 
 model AuditLog {
@@ -391,6 +458,9 @@ model OrderItem {
   totalCents          Int
   specialInstructions String?
   modifiers           String?
+  course              String?   // STARTER | MAIN | DESSERT
+  firedAt             DateTime?
+  seatNumber          Int?      @default(0)  // 0 = shared/whole-table, 1..N = individual guest seat
   createdAt           DateTime @default(now())
 
   order               Order    @relation(fields: [orderId], references: [id])
@@ -442,6 +512,7 @@ model InventoryMovement {
   recipeItemId    String?
   bundleItemId    String?
   grnId           String?
+  variantId       String?
   source          String
   createdAt       DateTime  @default(now())
 
@@ -527,6 +598,10 @@ model Supplier {
 
   purchaseOrders          PurchaseOrder[]
   creditNotes             SupplierCreditNote[]
+  returns                 SupplierReturn[]
+  invoices                SupplierInvoice[]
+  priceAgreements         SupplierPriceAgreement[]
+  rfqResponses            RFQResponse[]
 
   @@index([businessId])
 }
@@ -565,10 +640,13 @@ model POItem {
 }
 
 model GRN {
-  id          String   @id @default(uuid())
-  poId        String
-  receivedAt  DateTime @default(now())
-  createdAt   DateTime @default(now())
+  id                    String   @id @default(uuid())
+  poId                  String
+  receivedAt            DateTime @default(now())
+  freightCents          Int      @default(0)
+  dutyPaidCents         Int      @default(0)
+  landedCostAllocated   Boolean  @default(false)
+  createdAt             DateTime @default(now())
 
   po          PurchaseOrder @relation(fields: [poId], references: [id])
   items       GRNItem[]
@@ -583,6 +661,7 @@ model GRNItem {
   quantityReceived  Int
   batchLotNumber    String?
   expiryDate        DateTime?
+  landedCostCents   Int       @default(0)
   createdAt         DateTime  @default(now())
 
   grn               GRN       @relation(fields: [grnId], references: [id])
@@ -606,9 +685,14 @@ model Expense {
   approvedBy            String?
   submittedBy           String
   cashDrawerSessionId   String?
+  vatReclaimable        Boolean   @default(false)
+  vatAmountCents        Int       @default(0)
+  currentApprovalLevel  Int       @default(1)
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
   deletedAt             DateTime?
+
+  approvalSteps         ExpenseApprovalStep[]
 
   @@index([businessId, category, createdAt])
   @@index([approvalStatus])
@@ -647,16 +731,18 @@ model Leave {
 }
 
 model Customer {
-  id                String   @id @default(uuid())
-  businessId        String
-  name              String
-  phone             String?
-  email             String?
-  creditLimitCents  Int      @default(0)
-  balanceCents      Int      @default(0)
-  loyaltyPoints     Int      @default(0)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                        String   @id @default(uuid())
+  businessId                String
+  name                      String
+  phone                     String?
+  email                     String?
+  creditLimitCents          Int      @default(0)
+  creditLimitPendingCents   Int      @default(0)
+  creditApprovalStatus      String   @default("NONE")  // NONE | PENDING | APPROVED | REJECTED
+  balanceCents              Int      @default(0)
+  loyaltyPoints             Int      @default(0)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
 
   sales             Sale[]
   layaways          Layaway[]
@@ -728,6 +814,8 @@ model CashDrawerSession {
   expectedBalanceCents    Int?
   varianceCents           Int?
   notes                   String?
+  tillNumber              Int       @default(1)
+  tillLabel               String?
   openedAt                DateTime  @default(now())
   closedAt                DateTime?
   createdAt               DateTime  @default(now())
@@ -735,6 +823,7 @@ model CashDrawerSession {
 
   @@index([businessId, storeId, cashierId])
   @@index([status])
+  @@index([businessId, storeId, tillNumber])
 }
 
 model UserStore {
@@ -940,6 +1029,7 @@ model KOT {
   kotNumber   Int
   type        String
   status      String    @default("PENDING")
+  itemIds     String    @default("[]") // JSON array of OrderItem IDs in this KOT
   printedAt            DateTime?
   preparedAt           DateTime?
   assignedChefId       String?
@@ -985,6 +1075,9 @@ model TableReservation {
   duration        Int      @default(120)
   status          String   @default("CONFIRMED")
   notes           String?
+  depositCents    Int      @default(0)
+  depositMethod   String?
+  depositReference String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -1031,7 +1124,7 @@ model LicenseKey {
   id          String    @id @default(uuid())
   key         String    @unique
   businessId  String?
-  tier        String    @default("STARTER")  // STARTER | PRO | ENTERPRISE
+  tier        String    @default("STARTER")  // STARTER | PRO | ENTERPRISE | LIFETIME
   expiresAt   DateTime?
   isActive    Boolean   @default(true)
   activatedAt DateTime?
@@ -1097,6 +1190,59 @@ model SupplierCreditNote {
   supplier      Supplier @relation(fields: [supplierId], references: [id])
 
   @@index([businessId, supplierId])
+}
+
+// ── Supplier Returns ──────────────────────────────────────────────────────────
+
+model SupplierReturn {
+  id               String   @id @default(uuid())
+  businessId       String
+  supplierId       String
+  purchaseOrderId  String?
+  returnNumber     String
+  status           String   @default("DRAFT")
+  reason           String
+  totalCents       Int      @default(0)
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  items            SupplierReturnItem[]
+  supplier         Supplier @relation(fields: [supplierId], references: [id])
+
+  @@index([businessId])
+  @@index([supplierId])
+}
+
+model SupplierReturnItem {
+  id            String   @id @default(uuid())
+  returnId      String
+  itemId        String
+  quantity      Int
+  unitCostCents Int
+  totalCents    Int
+  reason        String?
+
+  return        SupplierReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  item          Item           @relation(fields: [itemId], references: [id])
+}
+
+model SupplierInvoice {
+  id              String   @id @default(uuid())
+  businessId      String
+  supplierId      String
+  purchaseOrderId String?
+  invoiceNumber   String
+  invoiceDateStr  String
+  totalCents      Int
+  status          String   @default("UNMATCHED")
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  supplier        Supplier @relation(fields: [supplierId], references: [id])
+
+  @@index([businessId])
+  @@index([supplierId])
 }
 
 // ── Pharmacy / Clinic ────────────────────────────────────────────────────────
@@ -1165,6 +1311,14 @@ model DeliveryOrder {
   customerName     String
   customerPhone    String?
   deliveryAddress  String
+  zoneId           String?
+  courierProvider  String?
+  courierOrderId   String?
+  trackingUrl      String?
+  estimatedDeliveryAt DateTime?
+  failedAttempts   Int       @default(0)
+  rescheduleReason String?
+  rescheduledAt    DateTime?
   driverId         String?
   scheduledAt      DateTime?
   pickedUpAt       DateTime?
@@ -1265,51 +1419,73 @@ model Payslip {
 }
 
 model HotelRoom {
-  id                String        @id @default(cuid())
-  businessId        String
-  storeId           String
-  number            String        // room number, e.g. "101", "Suite A"
-  type              String        @default("STANDARD") // STANDARD | DELUXE | SUITE | EXECUTIVE
-  floor             String?
-  capacity          Int           @default(2)
-  pricePerNightCents Int          @default(0)
-  status            String        @default("AVAILABLE") // AVAILABLE | OCCUPIED | MAINTENANCE | RESERVED
-  amenities         String?       // JSON string: ["WiFi","AC","TV"]
-  notes             String?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-  bookings          RoomBooking[]
+  id                   String        @id @default(cuid())
+  businessId           String
+  storeId              String
+  number               String        // room number, e.g. "101", "Suite A"
+  type                 String        @default("STANDARD") // STANDARD | DELUXE | SUITE | EXECUTIVE
+  floor                String?
+  capacity             Int           @default(2)
+  pricePerNightCents   Int           @default(0)
+  status               String        @default("AVAILABLE") // AVAILABLE | OCCUPIED | MAINTENANCE | RESERVED
+  housekeepingStatus   String        @default("CLEAN") // CLEAN | DIRTY | INSPECTED | OUT_OF_ORDER
+  amenities            String?       // JSON string: ["WiFi","AC","TV"]
+  notes                String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  bookings             RoomBooking[]
+  housekeepingAssignments HousekeepingAssignment[]
 
   @@unique([businessId, storeId, number])
   @@index([businessId, storeId, status])
 }
 
 model RoomBooking {
-  id                String    @id @default(cuid())
+  id                String             @id @default(cuid())
   businessId        String
   storeId           String
   roomId            String
-  room              HotelRoom @relation(fields: [roomId], references: [id])
+  room              HotelRoom          @relation(fields: [roomId], references: [id])
   guestName         String
   guestPhone        String?
-  guestIdNumber     String?   // passport / national ID
+  guestIdNumber     String?            // passport / national ID
   checkInDate       DateTime
   checkOutDate      DateTime?
   actualCheckIn     DateTime?
   actualCheckOut    DateTime?
-  nightCount        Int       @default(1)
-  pricePerNightCents Int      @default(0)
-  totalAmountCents  Int       @default(0)
-  depositCents      Int       @default(0)
-  status            String    @default("RESERVED") // RESERVED | CHECKED_IN | CHECKED_OUT | CANCELLED | NO_SHOW
+  nightCount        Int                @default(1)
+  pricePerNightCents Int               @default(0)
+  totalAmountCents  Int                @default(0)
+  depositCents      Int                @default(0)
+  status            String             @default("RESERVED") // RESERVED | CHECKED_IN | CHECKED_OUT | CANCELLED | NO_SHOW
   notes             String?
-  orderId           String?   // room service order linked
-  saleId            String?   // checkout sale id
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  orderId           String?            // room service order linked
+  saleId            String?            // checkout sale id
+  folioCharges      GuestFolioCharge[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   @@index([businessId, storeId, status])
   @@index([roomId])
+}
+
+model GuestFolioCharge {
+  id          String      @id @default(cuid())
+  bookingId   String
+  booking     RoomBooking @relation(fields: [bookingId], references: [id])
+  businessId  String
+  type        String      // ROOM_RATE | FOOD_BEVERAGE | MINIBAR | LAUNDRY | TRANSPORT | OTHER
+  description String
+  amountCents Int
+  quantity    Int         @default(1)
+  totalCents  Int
+  postedBy    String?
+  saleId      String?
+  date        DateTime    @default(now())
+  createdAt   DateTime    @default(now())
+
+  @@index([bookingId])
+  @@index([businessId])
 }
 
 model BankStatement {
@@ -1342,4 +1518,530 @@ model BankStatementEntry {
 
   @@index([statementId])
   @@index([matchStatus])
+}
+
+// ─── Stocktake ─────────────────────────────────────────────────────────────────
+
+model StocktakeSession {
+  id           String           @id @default(cuid())
+  businessId   String
+  storeId      String
+  name         String
+  status       String           @default("DRAFT") // DRAFT | IN_PROGRESS | FINALIZED
+  startedAt    DateTime?
+  finalizedAt  DateTime?
+  createdBy    String
+  notes        String?
+  counts       StocktakeCount[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([businessId])
+  @@index([storeId])
+}
+
+model StocktakeCount {
+  id           String           @id @default(cuid())
+  sessionId    String
+  session      StocktakeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  itemId       String
+  itemName     String
+  systemQty    Float
+  countedQty   Float?
+  varianceQty  Float?
+  note         String?
+  countedAt    DateTime?
+  countedBy    String?
+  createdAt    DateTime         @default(now())
+
+  @@index([sessionId])
+  @@index([itemId])
+}
+
+model HappyHour {
+  id           String   @id @default(uuid())
+  businessId   String
+  storeId      String?
+  name         String
+  discountPct  Float
+  startHour    Int
+  startMinute  Int      @default(0)
+  endHour      Int
+  endMinute    Int      @default(0)
+  daysOfWeek   String   @default("[0,1,2,3,4,5,6]")
+  appliesTo    String   @default("ALL")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  @@index([businessId])
+}
+
+// ─── New Feature Models ────────────────────────────────────────────────────────
+
+// Damaged Goods Write-off
+model DamagedGoodsRecord {
+  id           String   @id @default(uuid())
+  businessId   String
+  storeId      String
+  itemId       String
+  variantId    String?
+  quantity     Int
+  costCents    Int      @default(0)
+  reason       String
+  authorizedBy String?
+  submittedBy  String
+  status       String   @default("PENDING")  // PENDING | APPROVED | REJECTED
+  notes        String?
+  imageUrl     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  item         Item     @relation(fields: [itemId], references: [id])
+
+  @@index([businessId, storeId, createdAt])
+  @@index([status])
+}
+
+// Waitlist
+model Waitlist {
+  id                   String    @id @default(uuid())
+  businessId           String
+  storeId              String
+  customerName         String
+  customerPhone        String?
+  partySize            Int
+  notes                String?
+  estimatedWaitMinutes Int       @default(30)
+  status               String    @default("WAITING")  // WAITING | SEATED | CANCELLED | NO_SHOW
+  notifiedAt           DateTime?
+  seatedAt             DateTime?
+  tableId              String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([businessId, storeId, status])
+  @@index([createdAt])
+}
+
+// Channel Manager (Booking.com, Airbnb etc.)
+model ChannelBooking {
+  id               String    @id @default(uuid())
+  businessId       String
+  storeId          String
+  channel          String    // BOOKING_COM | AIRBNB | DIRECT | EXPEDIA
+  externalId       String
+  guestName        String
+  guestEmail       String?
+  guestPhone       String?
+  roomNumber       String?
+  checkInDate      DateTime
+  checkOutDate     DateTime
+  nightCount       Int
+  totalAmountCents Int
+  commissionCents  Int       @default(0)
+  status           String    @default("CONFIRMED")  // CONFIRMED | CANCELLED | MODIFIED | CHECKED_IN | CHECKED_OUT
+  rawPayload       String?
+  roomBookingId    String?   @unique
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([businessId, channel, externalId])
+  @@index([businessId, status])
+  @@index([checkInDate])
+}
+
+// Housekeeping Staff Assignment
+model HousekeepingAssignment {
+  id          String    @id @default(uuid())
+  businessId  String
+  roomId      String
+  employeeId  String
+  assignedBy  String
+  task        String    @default("CLEAN")    // CLEAN | INSPECT | TURNDOWN | MAINTENANCE
+  priority    String    @default("NORMAL")   // NORMAL | HIGH | URGENT
+  status      String    @default("PENDING")  // PENDING | IN_PROGRESS | DONE
+  notes       String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  room        HotelRoom @relation(fields: [roomId], references: [id])
+  employee    Employee  @relation(fields: [employeeId], references: [id])
+
+  @@index([businessId, status])
+  @@index([roomId])
+  @@index([employeeId])
+}
+
+// Disciplinary Records
+model DisciplinaryRecord {
+  id           String    @id @default(uuid())
+  businessId   String
+  employeeId   String
+  type         String    // WARNING | SUSPENSION | DISMISSAL | WRITTEN_NOTICE | PIP
+  incidentDate DateTime
+  description  String
+  actionTaken  String
+  issuedBy     String
+  employeeAck  Boolean   @default(false)
+  ackDate      DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  employee     Employee  @relation(fields: [employeeId], references: [id])
+
+  @@index([businessId, employeeId])
+  @@index([createdAt])
+}
+
+// Supplier Pricing Agreements
+model SupplierPriceAgreement {
+  id               String    @id @default(uuid())
+  businessId       String
+  supplierId       String
+  itemId           String
+  agreedPriceCents Int
+  minQuantity      Int       @default(1)
+  effectiveFrom    DateTime  @default(now())
+  effectiveTo      DateTime?
+  isActive         Boolean   @default(true)
+  notes            String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  supplier         Supplier  @relation(fields: [supplierId], references: [id])
+
+  @@index([businessId, supplierId])
+  @@index([itemId, isActive])
+}
+
+// Request for Quotation
+model RFQ {
+  id        String      @id @default(uuid())
+  rfqNumber String      @unique
+  businessId String
+  storeId   String
+  status    String      @default("DRAFT")  // DRAFT | SENT | RECEIVED | AWARDED | CANCELLED
+  notes     String?
+  deadline  DateTime?
+  createdBy String
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  items     RFQItem[]
+  responses RFQResponse[]
+
+  @@index([businessId, status])
+}
+
+model RFQItem {
+  id             String   @id @default(uuid())
+  rfqId          String
+  itemId         String
+  quantityNeeded Int
+  unitPriceCents Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  rfq            RFQ      @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+
+  @@index([rfqId])
+}
+
+model RFQResponse {
+  id               String    @id @default(uuid())
+  rfqId            String
+  supplierId       String
+  quotedPriceCents Int
+  deliveryDays     Int?
+  validUntil       DateTime?
+  notes            String?
+  status           String    @default("PENDING")  // PENDING | AWARDED | REJECTED
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  rfq              RFQ      @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  supplier         Supplier @relation(fields: [supplierId], references: [id])
+
+  @@index([rfqId])
+  @@index([supplierId])
+}
+
+// Multi-level Expense Approval
+model ExpenseApprovalStep {
+  id         String   @id @default(uuid())
+  expenseId  String
+  level      Int
+  approverId String
+  status     String   @default("PENDING")  // PENDING | APPROVED | REJECTED
+  comment    String?
+  actionAt   DateTime?
+  createdAt  DateTime @default(now())
+
+  expense    Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  @@index([expenseId, level])
+}
+
+// Cheque Payments
+model ChequePayment {
+  id              String    @id @default(uuid())
+  businessId      String
+  storeId         String
+  saleId          String?
+  supplierId      String?
+  type            String    @default("RECEIVED")  // RECEIVED | ISSUED
+  chequeNumber    String
+  bankName        String
+  drawerName      String
+  amountCents     Int
+  issueDate       DateTime
+  clearanceDate   DateTime?
+  status          String    @default("PENDING")  // PENDING | CLEARED | BOUNCED | CANCELLED
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([businessId, status])
+  @@index([chequeNumber])
+}
+
+// General Ledger
+model JournalEntry {
+  id          String        @id @default(uuid())
+  businessId  String
+  storeId     String?
+  entryNumber String        @unique
+  date        DateTime
+  description String
+  reference   String?
+  sourceType  String?       // SALE | EXPENSE | PAYROLL | MANUAL | GRN
+  status      String        @default("DRAFT")  // DRAFT | POSTED | REVERSED
+  postedBy    String?
+  postedAt    DateTime?
+  reversalOf  String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  lines       JournalLine[]
+
+  @@index([businessId, date])
+  @@index([status])
+}
+
+model JournalLine {
+  id          String       @id @default(uuid())
+  entryId     String
+  accountCode String
+  accountName String
+  debitCents  Int          @default(0)
+  creditCents Int          @default(0)
+  description String?
+  createdAt   DateTime     @default(now())
+
+  entry       JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@index([entryId])
+  @@index([accountCode])
+}
+
+// Payment Links
+model PaymentLink {
+  id          String    @id @default(uuid())
+  businessId  String
+  storeId     String?
+  code        String    @unique
+  description String
+  amountCents Int       @default(0)
+  currency    String    @default("KES")
+  expiresAt   DateTime?
+  maxUses     Int?
+  usesCount   Int       @default(0)
+  status      String    @default("ACTIVE")  // ACTIVE | EXPIRED | DISABLED
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([businessId, status])
+  @@index([code])
+}
+
+// ─── Petty Cash ────────────────────────────────────────────────────────────────
+
+model PettyCashFloat {
+  id           String   @id @default(uuid())
+  businessId   String
+  storeId      String?
+  balanceCents Int      @default(0)
+  lastTopUpAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  transactions PettyCashTransaction[]
+
+  @@unique([businessId, storeId])
+  @@index([businessId])
+}
+
+model PettyCashTransaction {
+  id          String   @id @default(uuid())
+  floatId     String
+  type        String   // TOP_UP | DISBURSEMENT
+  amountCents Int
+  description String
+  reference   String?
+  userId      String
+  createdAt   DateTime @default(now())
+
+  float       PettyCashFloat @relation(fields: [floatId], references: [id])
+
+  @@index([floatId])
+}
+
+// ─── Delivery Enhancement Models ──────────────────────────────────────────────
+
+model DeliveryZone {
+  id               String    @id @default(uuid())
+  businessId       String
+  name             String
+  coordinates      String    // JSON array of lat/lng points defining the zone
+  basePriceCents   Int       @default(0)
+  pricePerKm       Int       @default(0)
+  maxDistanceKm    Float     @default(10)
+  estimatedMinutes Int       @default(30)
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([businessId])
+}
+
+model DriverLocation {
+  id              String    @id @default(uuid())
+  driverId        String
+  deliveryOrderId String?
+  lat             Float
+  lng             Float
+  heading         Float?
+  speed           Float?
+  accuracy        Float?
+  timestamp       DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+
+  @@index([driverId, timestamp])
+  @@index([deliveryOrderId])
+}
+
+model DeliverySLA {
+  id                 String    @id @default(uuid())
+  businessId         String
+  deliveryOrderId    String
+  promisedAt         DateTime
+  actualDeliveredAt  DateTime?
+  isOnTime           Boolean?
+  delayMinutes       Int       @default(0)
+  createdAt          DateTime  @default(now())
+
+  @@index([businessId])
+  @@index([deliveryOrderId])
+}
+
+model CourierIntegration {
+  id          String    @id @default(uuid())
+  businessId  String
+  provider    String    // GLOVO | SENDY | UBER | BOLT
+  apiKey      String?
+  webhookUrl  String?
+  isActive    Boolean   @default(true)
+  config      String?   // JSON config for provider-specific settings
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([businessId, provider])
+}
+
+// ─── Security & Settings Models ───────────────────────────────────────────────
+
+model CustomRole {
+  id          String    @id @default(uuid())
+  businessId  String
+  name        String
+  description String?
+  permissions String    // JSON array of permission strings
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  rolePermissions RolePermission[]
+
+  @@index([businessId])
+}
+
+model Permission {
+  id          String    @id @default(uuid())
+  name        String
+  category    String
+  description String?
+  endpoint    String?
+  method      String?
+  isActive    Boolean   @default(true)
+
+  rolePermissions RolePermission[]
+
+  @@index([category])
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  roleId       String
+  permissionId String
+  granted      Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+
+  role         CustomRole @relation(fields: [roleId], references: [id])
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@index([roleId])
+}
+
+model TaxConfiguration {
+  id              String    @id @default(uuid())
+  businessId      String
+  itemId          String?
+  category        String?
+  vatRate         Float     @default(16.0)
+  totRate         Float     @default(3.0)
+  isZeroRated     Boolean   @default(false)
+  exemptionReason String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([businessId])
+  @@index([itemId])
+}
+
+model PasswordPolicy {
+  id                  String    @id @default(uuid())
+  businessId          String
+  minLength           Int       @default(8)
+  requireUppercase    Boolean   @default(true)
+  requireLowercase    Boolean   @default(true)
+  requireNumbers      Boolean   @default(true)
+  requireSpecialChars Boolean   @default(false)
+  rotationDays        Int       @default(90)
+  preventReuse        Int       @default(5)
+  isActive            Boolean   @default(true)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([businessId])
+}
+
+model UserPasswordHistory {
+  id           String   @id @default(uuid())
+  userId       String
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
 }

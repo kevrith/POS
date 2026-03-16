@@ -3,10 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   CheckCircle, ChevronRight, ChevronLeft, Store, Shield,
-  ShoppingCart, ArrowRight, Zap, Package, Users, BarChart3,
+  ShoppingCart, ArrowRight, Zap, Package, Users, BarChart3, Sparkles,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
+
+const PLAN_INFO: Record<string, { label: string; color: string; desc: string }> = {
+  STARTER:    { label: 'Starter',    color: 'bg-emerald-500', desc: '1 store · 10 users · Full compliance' },
+  PRO:        { label: 'Pro',        color: 'bg-blue-600',    desc: '5 stores · 20 users · AI forecasting' },
+  ENTERPRISE: { label: 'Enterprise', color: 'bg-purple-600',  desc: 'Unlimited · White-glove support' },
+  LIFETIME:   { label: 'Lifetime',   color: 'bg-amber-500',   desc: 'One-time purchase · All features forever' },
+};
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -71,6 +78,9 @@ export default function SetupWizardPage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const businessId = user?.businessId ?? '';
+
+  const urlPlan = (new URLSearchParams(window.location.search).get('plan') ?? '').toUpperCase();
+  const planInfo = PLAN_INFO[urlPlan];
 
   const [step, setStep] = useState(0);
   const [bizForm, setBizForm] = useState<BizForm>({ name: '', taxChoice: 'VAT', posMode: 'RETAIL' });
@@ -145,10 +155,17 @@ export default function SetupWizardPage() {
                 <ShoppingCart className="w-10 h-10 text-white" />
               </div>
               <div>
-                <h1 className="text-3xl font-bold text-gray-900">Welcome to Premier POS</h1>
-                <p className="text-gray-500 mt-2">
-                  Let's get your business set up. This will take about 5 minutes.
-                </p>
+                <h1 className="text-3xl font-bold text-gray-900">Welcome to KASTRA POS</h1>
+                {planInfo ? (
+                  <div className={`inline-flex items-center gap-2 mt-3 px-4 py-2 rounded-full text-white text-sm font-semibold ${planInfo.color}`}>
+                    <Sparkles className="w-4 h-4" />
+                    {planInfo.label} Plan — 30-day free trial · {planInfo.desc}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 mt-2">
+                    Let's get your business set up. This will take about 5 minutes.
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4 text-left">

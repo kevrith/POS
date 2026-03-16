@@ -44,6 +44,44 @@ export class PaymentsController {
     return this.mpesa.initiateB2C(body);
   }
 
+  /** Bulk B2C disbursement for a payroll run — fires one B2C per payslip with employee phone */
+  @Post('mpesa/b2c-bulk')
+  @UseGuards(JwtAuthGuard)
+  async mpesaB2CBulk(@Body() body: { businessId: string; payrollRunId: string }) {
+    const payslips = await this.prisma.payslip.findMany({
+      where: { payrollRunId: body.payrollRunId },
+    });
+
+    // Batch-fetch employee → user phone numbers
+    const employeeIds = payslips.map(p => p.employeeId);
+    const employees = await this.prisma.employee.findMany({
+      where: { id: { in: employeeIds } },
+      include: { user: { select: { phone: true } } },
+    });
+    const phoneMap = new Map(employees.map(e => [e.id, e.user?.phone ?? null]));
+
+    const results: Array<{ employee: string; status: string; error?: string }> = [];
+    for (const ps of payslips) {
+      const phone = phoneMap.get(ps.employeeId);
+      if (!phone) {
+        results.push({ employee: ps.employeeName, status: 'skipped', error: 'No phone number on file' });
+        continue;
+      }
+      try {
+        await this.mpesa.initiateB2C({
+          businessId: body.businessId,
+          phone,
+          amountCents: ps.netPay,
+          remarks: `Payroll ${body.payrollRunId.slice(-6)}`,
+        });
+        results.push({ employee: ps.employeeName, status: 'sent' });
+      } catch (e: any) {
+        results.push({ employee: ps.employeeName, status: 'failed', error: e?.message });
+      }
+    }
+    return { disbursed: results.filter(r => r.status === 'sent').length, total: payslips.length, results };
+  }
+
   @Post('mpesa/qr')
   @UseGuards(JwtAuthGuard)
   async generateQR(

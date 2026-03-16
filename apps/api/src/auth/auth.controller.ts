@@ -122,4 +122,17 @@ export class AuthController {
   async revokeAllSessions(@Req() req: Request & { user: AuthUser }) {
     return this.authService.revokeAllSessions(req.user.id);
   }
+
+  // ─── Forgot / Reset password (public — no JWT needed) ─────────────────────
+
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Post('forgot-password')
+  async forgotPassword(@Body() body: { email: string }) {
+    return this.authService.forgotPassword(body.email);
+  }
+
+  @Post('reset-password')
+  async resetPassword(@Body() body: { token: string; newPassword: string }) {
+    return this.authService.resetPasswordWithToken(body.token, body.newPassword);
+  }
 }

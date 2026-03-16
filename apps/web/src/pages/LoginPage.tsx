@@ -1,7 +1,15 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/auth';
 import type { AuthUser } from '../stores/auth';
-import { Eye, EyeOff, Delete, ChevronLeft, Building2 } from 'lucide-react';
+import { Eye, EyeOff, Delete, ChevronLeft, Building2, Sparkles } from 'lucide-react';
+
+const PLAN_LABELS: Record<string, { label: string; color: string; price: string }> = {
+  STARTER:    { label: 'Starter',    color: 'bg-emerald-500', price: 'KES 1,499/mo' },
+  PRO:        { label: 'Pro',        color: 'bg-blue-600',    price: 'KES 3,999/mo' },
+  ENTERPRISE: { label: 'Enterprise', color: 'bg-purple-600',  price: 'KES 9,999/mo' },
+  LIFETIME:   { label: 'Lifetime',   color: 'bg-amber-500',   price: 'Pay once' },
+};
 
 type LoginMode = 'email' | 'pin' | 'register';
 type PinStep = 'business' | 'staff' | 'pad';
@@ -32,7 +40,14 @@ function initials(name: string) {
 }
 
 export default function LoginPage() {
-  const [mode, setMode] = useState<LoginMode>('email');
+  const navigate = useNavigate();
+
+  // Read URL params on mount
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlMode = urlParams.get('mode');
+  const urlPlan = (urlParams.get('plan') ?? '').toUpperCase();
+
+  const [mode, setMode] = useState<LoginMode>(urlMode === 'register' ? 'register' : 'email');
 
   // ── Email mode ──────────────────────────────────────────────────────────────
   const [email, setEmail] = useState('');
@@ -63,6 +78,33 @@ export default function LoginPage() {
   const [regLoading, setRegLoading] = useState(false);
   const [regError, setRegError] = useState('');
   const [regSuccess, setRegSuccess] = useState(false);
+
+  // ── Forgot password ──────────────────────────────────────────────────────────
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotError, setForgotError] = useState('');
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotLoading(true);
+    setForgotError('');
+    try {
+      const res = await fetch('/api/v1/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail }),
+      });
+      const data = await res.json() as { sent: boolean };
+      if (data.sent) setForgotSent(true);
+      else setForgotError('Something went wrong. Please try again.');
+    } catch {
+      setForgotError('Network error. Please try again.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
 
   const { login, loginWithPin, loginWithOAuth } = useAuthStore();
 
@@ -182,13 +224,26 @@ export default function LoginPage() {
       const res = await fetch('/api/v1/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: regName, email: regEmail, password: regPassword, businessName: regBusiness }),
+        body: JSON.stringify({
+          name: regName,
+          email: regEmail,
+          password: regPassword,
+          businessName: regBusiness,
+          ...(urlPlan ? { plan: urlPlan } : {}),
+        }),
       });
       if (!res.ok) {
         const data = await res.json() as { message?: string };
         throw new Error(data.message ?? 'Registration failed');
       }
-      setRegSuccess(true);
+      // Auto-login then redirect to setup wizard
+      try {
+        await login(regEmail, regPassword);
+        navigate(urlPlan ? `/setup?plan=${urlPlan}` : '/setup');
+      } catch {
+        // If auto-login fails just show success and let them sign in manually
+        setRegSuccess(true);
+      }
     } catch (err) {
       setRegError(err instanceof Error ? err.message : 'Registration failed');
     } finally {
@@ -281,6 +336,16 @@ export default function LoginPage() {
               </div>
             ) : (
               <form onSubmit={(e) => void handleRegister(e)} className="space-y-4">
+                {/* Plan context banner */}
+                {urlPlan && PLAN_LABELS[urlPlan] && (
+                  <div className={`flex items-center gap-3 px-4 py-3 rounded-xl text-white ${PLAN_LABELS[urlPlan].color}`}>
+                    <Sparkles className="w-4 h-4 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-sm leading-tight">{PLAN_LABELS[urlPlan].label} Plan — 30-day free trial</p>
+                      <p className="text-xs opacity-80">Then {PLAN_LABELS[urlPlan].price} · Cancel anytime</p>
+                    </div>
+                  </div>
+                )}
                 {regError && (
                   <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{regError}</div>
                 )}
@@ -423,6 +488,71 @@ export default function LoginPage() {
               >
                 {loading ? 'Signing in…' : 'Sign In'}
               </button>
+
+              {/* Forgot password link */}
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={() => { setShowForgot(v => !v); setForgotSent(false); setForgotError(''); setForgotEmail(email); }}
+                  className="text-xs text-blue-600 hover:text-blue-700 font-medium hover:underline"
+                >
+                  Forgot your password?
+                </button>
+              </div>
+
+              {/* Forgot password inline panel */}
+              {showForgot && (
+                <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 space-y-3">
+                  {forgotSent ? (
+                    <div className="text-center space-y-2">
+                      <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+                        <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                      </div>
+                      <p className="text-sm font-semibold text-gray-800">Check your email</p>
+                      <p className="text-xs text-gray-500">If an account exists for <strong>{forgotEmail}</strong>, a reset link has been sent. It expires in 15 minutes.</p>
+                      <button
+                        type="button"
+                        onClick={() => { setShowForgot(false); setForgotSent(false); }}
+                        className="text-xs text-blue-600 hover:underline font-medium"
+                      >
+                        Back to sign in
+                      </button>
+                    </div>
+                  ) : (
+                    <form onSubmit={(e) => void handleForgotPassword(e)} className="space-y-3">
+                      <p className="text-xs text-gray-600 font-medium">Enter your email and we'll send a reset link</p>
+                      {forgotError && (
+                        <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{forgotError}</p>
+                      )}
+                      <input
+                        type="email"
+                        value={forgotEmail}
+                        onChange={e => setForgotEmail(e.target.value)}
+                        className="w-full px-3 py-2 border border-blue-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent bg-white"
+                        placeholder="your@email.com"
+                        required
+                        autoFocus
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="submit"
+                          disabled={forgotLoading}
+                          className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg disabled:opacity-50 transition-colors"
+                        >
+                          {forgotLoading ? 'Sending…' : 'Send Reset Link'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowForgot(false)}
+                          className="px-3 py-2 bg-white border border-gray-200 text-gray-500 text-sm rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              )}
 
               <div className="flex items-center gap-3">
                 <div className="flex-1 border-t border-gray-200" />

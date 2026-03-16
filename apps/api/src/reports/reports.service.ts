@@ -2333,7 +2333,7 @@ export class ReportsService {
     const expenses = await this.prisma.expense.findMany({
       where: {
         businessId,
-        date: { gte: start, lte: end },
+        createdAt: { gte: start, lte: end },
         approvalStatus: 'APPROVED',
         vatReclaimable: true,
       },

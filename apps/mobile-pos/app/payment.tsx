@@ -15,7 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { mobileApi, formatKES } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { useCartStore } from '../stores/cart';
@@ -51,10 +51,16 @@ const PAYMENT_METHODS: Array<{ key: PaymentMethod; label: string; icon: any; col
   { key: 'SPLIT', label: 'Split', icon: 'shuffle-outline', color: Colors.warning },
 ];
 
-function calculateVAT(totalCents: number): { vatCents: number; exVatCents: number } {
-  // VAT inclusive: price × 16/116
-  const vatCents = Math.round((totalCents * 16) / 116);
-  return { vatCents, exVatCents: totalCents - vatCents };
+function calculateTax(totalCents: number, taxType: string): { taxCents: number; exTaxCents: number; label: string } {
+  if (taxType === 'VAT') {
+    const taxCents = Math.round((totalCents * 16) / 116);
+    return { taxCents, exTaxCents: totalCents - taxCents, label: 'VAT (16%)' };
+  }
+  if (taxType === 'TOT') {
+    const taxCents = Math.round((totalCents * 3) / 103);
+    return { taxCents, exTaxCents: totalCents - taxCents, label: 'TOT (3%)' };
+  }
+  return { taxCents: 0, exTaxCents: totalCents, label: '' };
 }
 
 function generateOfflineId(): string {
@@ -72,8 +78,17 @@ export default function PaymentScreen() {
   const storeId = user?.storeId ?? 'store-001';
   const cashierId = user?.id ?? '';
 
+  const { data: bizSettings } = useQuery<{ taxType?: string; serviceChargeRate?: number }>({
+    queryKey: ['mobile-biz-settings', businessId],
+    queryFn: () => mobileApi.get(`/business/${businessId}/settings`),
+    enabled: !!businessId,
+    staleTime: 5 * 60_000,
+    select: (d: any) => ({ taxType: d.taxType ?? 'VAT', serviceChargeRate: d.serviceChargeRate ?? 10 }),
+  });
+  const taxType = bizSettings?.taxType ?? 'VAT';
+
   const subtotal = subtotalCents();
-  const { vatCents, exVatCents } = calculateVAT(subtotal);
+  const { taxCents, exTaxCents, label: taxLabel } = calculateTax(subtotal, taxType);
 
   const [payMethod, setPayMethod] = useState<PaymentMethod>('CASH');
   const [amountTendered, setAmountTendered] = useState('');
@@ -96,7 +111,7 @@ export default function PaymentScreen() {
       : Math.round(discountVal * 100);
   const effectiveDiscount = Math.min(rawDiscount, subtotal);
   const totalAfterDiscount = subtotal - effectiveDiscount;
-  const { vatCents: finalVat } = calculateVAT(totalAfterDiscount);
+  const { taxCents: finalTax } = calculateTax(totalAfterDiscount, taxType);
 
   const tendered = Math.round((parseFloat(amountTendered || '0') || 0) * 100);
   const change = Math.max(0, tendered - totalAfterDiscount);
@@ -225,14 +240,18 @@ export default function PaymentScreen() {
               </View>
             ))}
             <View style={styles.divider} />
-            <View style={styles.summaryLine}>
-              <Text style={styles.summaryLabel}>Subtotal (ex-VAT)</Text>
-              <Text style={styles.summaryValue}>{formatKES(exVatCents)}</Text>
-            </View>
-            <View style={styles.summaryLine}>
-              <Text style={styles.summaryLabel}>VAT (16%)</Text>
-              <Text style={styles.summaryValue}>{formatKES(vatCents)}</Text>
-            </View>
+            {taxType !== 'NONE' && taxCents > 0 && (
+              <View style={styles.summaryLine}>
+                <Text style={styles.summaryLabel}>Subtotal (ex-tax)</Text>
+                <Text style={styles.summaryValue}>{formatKES(exTaxCents)}</Text>
+              </View>
+            )}
+            {taxType !== 'NONE' && taxCents > 0 && (
+              <View style={styles.summaryLine}>
+                <Text style={styles.summaryLabel}>{taxLabel}</Text>
+                <Text style={styles.summaryValue}>{formatKES(taxCents)}</Text>
+              </View>
+            )}
           </View>
 
           {/* Discount */}

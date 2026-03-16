@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import {
   Plus, Package, FileText, Truck, ChevronRight, X, Check,
   AlertCircle, Loader2, RefreshCw, ArrowLeft, Mail, Pencil,
@@ -977,7 +978,7 @@ export default function SuppliersPage() {
       totalFreightCents: Math.round(parseFloat(freightKES) * 100),
       allocationMethod: lcMethod,
     }),
-    onSuccess: () => { setLandedCostGrnId(''); setFreightKES(''); alert('Landed cost allocated successfully'); },
+    onSuccess: () => { setLandedCostGrnId(''); setFreightKES(''); toast.success('Landed cost allocated successfully'); },
   });
 
   // ── Invoices state ──

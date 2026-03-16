@@ -1,5 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
-import { ShoppingCart, Plus, Minus, Trash2, CreditCard, Banknote, X, Phone, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  ShoppingCart, Plus, Minus, Trash2, CreditCard, Banknote,
+  Phone, AlertCircle, CheckCircle2, Search, ScanLine,
+  ChevronRight, RotateCcw,
+} from 'lucide-react';
 import { api } from '../lib/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -25,33 +29,138 @@ function fmt(cents: number) {
   return `KES ${(cents / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
 }
 
+function fmtShort(cents: number) {
+  const v = cents / 100;
+  return v >= 1000 ? `${(v / 1000).toFixed(1)}K` : v.toFixed(2);
+}
+
 function getParams() {
   const p = new URLSearchParams(window.location.search);
   return { businessId: p.get('businessId') ?? '', storeId: p.get('storeId') ?? '' };
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+const CAT_COLORS: Record<string, string> = {
+  'Food':     '#ef4444', 'Drinks':  '#3b82f6', 'Coffee':    '#a16207',
+  'Desserts': '#ec4899', 'Bakery':  '#f59e0b', 'Snacks':    '#10b981',
+  'Produce':  '#22c55e', 'Dairy':   '#6366f1', 'Household': '#8b5cf6',
+  'Other':    '#64748b',
+};
+function catColor(cat: string) { return CAT_COLORS[cat] ?? '#3b82f6'; }
+
+// ─── Overlay screens ──────────────────────────────────────────────────────────
+
+function SuccessScreen({ onDone }: { onDone: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onDone, 5000);
+    return () => clearTimeout(t);
+  }, [onDone]);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-emerald-600 flex flex-col items-center justify-center text-white p-8">
+      <CheckCircle2 className="w-32 h-32 mb-6 animate-bounce" />
+      <h2 className="text-5xl font-black mb-3">Thank You!</h2>
+      <p className="text-xl text-emerald-100">Purchase complete. Please take your items.</p>
+      <p className="mt-6 text-emerald-200 text-sm">Returning in 5 seconds…</p>
+    </div>
+  );
+}
+
+function CashScreen({ total, onBack, onDone }: { total: number; onBack: () => void; onDone: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 bg-gray-900 flex items-center justify-center p-6">
+      <div className="bg-white rounded-3xl p-10 max-w-md w-full text-center shadow-2xl">
+        <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+          <Banknote className="w-10 h-10 text-green-600" />
+        </div>
+        <h2 className="text-3xl font-bold text-gray-900 mb-1">Pay with Cash</h2>
+        <p className="text-gray-500 mb-4">Present this amount to the cashier</p>
+        <div className="text-6xl font-black text-green-600 my-6">{fmt(total)}</div>
+        <p className="text-gray-400 mb-8 text-sm">Please give the exact amount at the counter</p>
+        <div className="flex gap-3">
+          <button onClick={onBack} className="flex-1 py-4 rounded-2xl bg-gray-100 text-gray-700 text-lg font-semibold hover:bg-gray-200 transition-colors">
+            ← Back
+          </button>
+          <button onClick={onDone} className="flex-[2] py-4 rounded-2xl bg-green-600 text-white text-lg font-bold hover:bg-green-700 transition-colors flex items-center justify-center gap-2">
+            <CheckCircle2 className="w-5 h-5" /> Paid
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MpesaScreen({ total, qr, onBack, onDone }: { total: number; qr: string | null; onBack: () => void; onDone: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 bg-gray-900 flex items-center justify-center p-6">
+      <div className="bg-white rounded-3xl p-10 max-w-md w-full text-center shadow-2xl">
+        <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+          <Phone className="w-10 h-10 text-green-600" />
+        </div>
+        <h2 className="text-3xl font-bold text-gray-900 mb-1">M-Pesa</h2>
+        <p className="text-gray-500 mb-1">Scan QR with M-Pesa app</p>
+        <div className="text-4xl font-black text-green-600 my-4">{fmt(total)}</div>
+        {qr ? (
+          <img src={qr} alt="M-Pesa QR" className="mx-auto w-52 h-52 my-4 border-4 border-green-200 rounded-2xl" />
+        ) : (
+          <div className="w-52 h-52 mx-auto my-4 bg-gray-100 rounded-2xl flex flex-col items-center justify-center text-gray-400 gap-2">
+            <ScanLine className="w-12 h-12" />
+            <span className="text-sm">QR loading…</span>
+          </div>
+        )}
+        <p className="text-gray-400 text-sm mb-6">Or enter till number manually in the M-Pesa app</p>
+        <div className="flex gap-3">
+          <button onClick={onBack} className="flex-1 py-4 rounded-2xl bg-gray-100 text-gray-700 text-lg font-semibold hover:bg-gray-200 transition-colors">
+            ← Back
+          </button>
+          <button onClick={onDone} className="flex-[2] py-4 rounded-2xl bg-green-600 text-white text-lg font-bold hover:bg-green-700 transition-colors flex items-center justify-center gap-2">
+            <CheckCircle2 className="w-5 h-5" /> Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CallStaffScreen({ onCancel }: { onCancel: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 bg-red-600 flex flex-col items-center justify-center p-8 text-white">
+      <AlertCircle className="w-28 h-28 mb-6 animate-pulse" />
+      <h2 className="text-5xl font-black mb-3">Staff Called</h2>
+      <p className="text-red-100 text-xl">A staff member will be with you shortly.</p>
+      <button onClick={onCancel} className="mt-10 px-12 py-5 bg-white text-red-600 rounded-2xl text-xl font-bold hover:bg-red-50 transition-colors">
+        Cancel
+      </button>
+    </div>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function KioskPage() {
   const { businessId, storeId } = getParams();
   const [items, setItems] = useState<KioskItem[]>([]);
   const [cart, setCart] = useState<CartEntry[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('all');
-  const [screen, setScreen] = useState<'shop' | 'cash-confirm' | 'mpesa' | 'success' | 'call-staff'>('shop');
+  const [search, setSearch] = useState('');
+  const [screen, setScreen] = useState<'shop' | 'cash' | 'mpesa' | 'success' | 'staff'>('shop');
   const [mpesaQR, setMpesaQR] = useState<string | null>(null);
   const [mpesaLoading, setMpesaLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [businessName, setBusinessName] = useState('Self Checkout');
+  const [logo, setLogo] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
-  // Fetch items on mount
+  // Fetch items
   useEffect(() => {
     if (!businessId) return;
     api.get<KioskItem[]>(`/items?businessId=${businessId}&activeOnly=true${storeId ? `&storeId=${storeId}` : ''}`)
       .then(setItems)
       .catch(() => setError('Could not load items. Please call staff.'));
-    // Try to get business name
-    api.get<{ name: string }>(`/business/${businessId}/settings`)
-      .then(b => b.name && setBusinessName(b.name))
+    api.get<{ name: string; logoUrl?: string }>(`/business/${businessId}/settings`)
+      .then(b => {
+        if (b.name) setBusinessName(b.name);
+        if (b.logoUrl) setLogo(b.logoUrl);
+      })
       .catch(() => {});
   }, [businessId, storeId]);
 
@@ -73,23 +182,39 @@ export default function KioskPage() {
     setCart(c => c.map(e => e.item.id === itemId ? { ...e, qty } : e));
   }, [removeItem]);
 
+  // Barcode lookup via search
+  const handleSearch = useCallback((val: string) => {
+    setSearch(val);
+    if (val.length >= 8) {
+      const match = items.find(i => i.barcode === val);
+      if (match) {
+        addItem(match);
+        setSearch('');
+        if (searchRef.current) searchRef.current.value = '';
+      }
+    }
+  }, [items, addItem]);
+
   // Totals
   const subtotalCents = cart.reduce((s, e) => s + e.item.retailPriceCents * e.qty, 0);
   const vatCents = cart.reduce((s, e) => e.item.vatApplicable ? s + Math.round(e.item.retailPriceCents * e.qty * 16 / 116) : s, 0);
   const totalCents = subtotalCents;
+  const cartQty = cart.reduce((s, e) => s + e.qty, 0);
 
   // Categories
   const categories = ['all', ...Array.from(new Set(items.map(i => i.category ?? 'Other')))];
-  const filtered = activeCategory === 'all' ? items : items.filter(i => (i.category ?? 'Other') === activeCategory);
+  const filtered = (activeCategory === 'all' ? items : items.filter(i => (i.category ?? 'Other') === activeCategory))
+    .filter(i => !search || i.name.toLowerCase().includes(search.toLowerCase()) || i.barcode?.includes(search));
 
-  // M-Pesa QR payment
+  // Cart map for quick lookup
+  const cartMap = Object.fromEntries(cart.map(e => [e.item.id, e.qty]));
+
+  // M-Pesa QR
   async function handleMpesa() {
     setMpesaLoading(true);
     try {
       const res = await api.post<{ qrCode?: string; QRCode?: string }>('/payments/mpesa/qr', {
-        businessId,
-        storeId,
-        amountCents: totalCents,
+        businessId, storeId, amountCents: totalCents,
       });
       setMpesaQR(res.qrCode ?? res.QRCode ?? null);
       setScreen('mpesa');
@@ -100,221 +225,279 @@ export default function KioskPage() {
     }
   }
 
-  // Cash confirm
-  function handleCashPay() {
-    setScreen('cash-confirm');
-  }
-
-  // Print receipt + reset
   function completeSale() {
+    setCart([]);
     setScreen('success');
-    setTimeout(() => {
-      setCart([]);
-      setScreen('shop');
-      setMpesaQR(null);
-    }, 5000);
   }
 
-  // ── Overlays ────────────────────────────────────────────────────────────────
-
-  if (screen === 'cash-confirm') {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-8">
-        <div className="bg-white rounded-2xl p-10 max-w-lg w-full text-center shadow-2xl">
-          <Banknote className="w-16 h-16 text-green-500 mx-auto mb-4" />
-          <h2 className="text-3xl font-bold mb-2">Please Pay</h2>
-          <p className="text-5xl font-bold text-green-600 my-6">{fmt(totalCents)}</p>
-          <p className="text-gray-500 mb-8 text-lg">Please give the exact amount to the cashier at the counter.</p>
-          <div className="flex gap-4 justify-center">
-            <button onClick={() => setScreen('shop')} className="px-8 py-4 rounded-xl bg-gray-100 text-gray-700 text-xl font-semibold hover:bg-gray-200">Back</button>
-            <button onClick={completeSale} className="px-8 py-4 rounded-xl bg-green-600 text-white text-xl font-semibold hover:bg-green-700">Paid ✓</button>
-          </div>
-        </div>
-      </div>
-    );
+  function resetToShop() {
+    setScreen('shop');
+    setMpesaQR(null);
   }
 
-  if (screen === 'mpesa') {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-8">
-        <div className="bg-white rounded-2xl p-10 max-w-lg w-full text-center shadow-2xl">
-          <Phone className="w-16 h-16 text-green-500 mx-auto mb-4" />
-          <h2 className="text-3xl font-bold mb-2">Pay with M-Pesa</h2>
-          <p className="text-4xl font-bold text-green-600 my-4">{fmt(totalCents)}</p>
-          {mpesaQR ? (
-            <img src={mpesaQR} alt="M-Pesa QR" className="mx-auto w-48 h-48 my-4 border-4 border-green-200 rounded-xl" />
-          ) : (
-            <div className="w-48 h-48 mx-auto my-4 bg-gray-100 rounded-xl flex items-center justify-center text-gray-400">QR not available</div>
-          )}
-          <p className="text-gray-500 mb-6">Scan with M-Pesa app or enter till number manually.</p>
-          <div className="flex gap-4 justify-center">
-            <button onClick={() => setScreen('shop')} className="px-8 py-4 rounded-xl bg-gray-100 text-gray-700 text-xl font-semibold hover:bg-gray-200">Back</button>
-            <button onClick={completeSale} className="px-8 py-4 rounded-xl bg-green-600 text-white text-xl font-semibold hover:bg-green-700">Payment Done ✓</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // ── Overlay screens ───────────────────────────────────────────────────────
+  if (screen === 'success') return <SuccessScreen onDone={resetToShop} />;
+  if (screen === 'cash')    return <CashScreen total={totalCents} onBack={() => setScreen('shop')} onDone={completeSale} />;
+  if (screen === 'mpesa')   return <MpesaScreen total={totalCents} qr={mpesaQR} onBack={() => setScreen('shop')} onDone={completeSale} />;
+  if (screen === 'staff')   return <CallStaffScreen onCancel={() => setScreen('shop')} />;
 
-  if (screen === 'success') {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-8">
-        <div className="bg-white rounded-2xl p-10 max-w-lg w-full text-center shadow-2xl">
-          <CheckCircle2 className="w-24 h-24 text-green-500 mx-auto mb-4" />
-          <h2 className="text-4xl font-bold text-green-600 mb-2">Thank You!</h2>
-          <p className="text-gray-500 text-xl">Your purchase is complete. Please take your items.</p>
-          <p className="text-gray-400 mt-4">Returning to home in 5 seconds...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (screen === 'call-staff') {
-    return (
-      <div className="min-h-screen bg-red-50 flex items-center justify-center p-8">
-        <div className="bg-white rounded-2xl p-10 max-w-lg w-full text-center shadow-2xl border-4 border-red-300">
-          <AlertCircle className="w-24 h-24 text-red-500 mx-auto mb-4 animate-pulse" />
-          <h2 className="text-4xl font-bold text-red-600 mb-2">Staff Called</h2>
-          <p className="text-gray-500 text-xl mb-8">A staff member will be with you shortly.</p>
-          <button onClick={() => setScreen('shop')} className="px-10 py-4 rounded-xl bg-gray-800 text-white text-xl font-semibold hover:bg-gray-700">Cancel</button>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Main shop screen ─────────────────────────────────────────────────────────
-
+  // ── Main shop screen ──────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col" style={{ fontFamily: 'system-ui, sans-serif' }}>
-      {/* Header */}
-      <div className="bg-gray-900 text-white px-6 py-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">{businessName}</h1>
-          <p className="text-gray-400 text-sm">Self Checkout</p>
+    <div className="h-screen flex flex-col bg-gray-100 overflow-hidden select-none" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <header className="bg-gray-900 text-white flex items-center gap-4 px-5 py-3 shrink-0">
+        {/* Logo / Business name */}
+        <div className="flex items-center gap-3 shrink-0">
+          {logo ? (
+            <img src={logo} alt="logo" className="h-10 w-10 object-contain rounded-lg" />
+          ) : (
+            <div className="h-10 w-10 rounded-xl bg-blue-600 flex items-center justify-center font-black text-lg">
+              {businessName.charAt(0)}
+            </div>
+          )}
+          <div>
+            <div className="font-bold text-base leading-none">{businessName}</div>
+            <div className="text-gray-400 text-xs mt-0.5">Self Checkout</div>
+          </div>
         </div>
+
+        {/* Search / Barcode input */}
+        <div className="flex-1 mx-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <ScanLine className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+            <input
+              ref={searchRef}
+              type="text"
+              value={search}
+              onChange={e => handleSearch(e.target.value)}
+              placeholder="Search items or scan barcode…"
+              className="w-full bg-gray-800 border border-gray-700 rounded-xl pl-9 pr-10 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+
+        {/* Cart count pill */}
+        {cartQty > 0 && (
+          <div className="flex items-center gap-2 bg-blue-600 px-4 py-2 rounded-xl text-sm font-bold shrink-0">
+            <ShoppingCart className="w-4 h-4" />
+            {cartQty} item{cartQty !== 1 ? 's' : ''}
+          </div>
+        )}
+
+        {/* Call staff */}
         <button
-          onClick={() => setScreen('call-staff')}
-          className="bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-xl text-lg font-semibold flex items-center gap-2"
+          onClick={() => setScreen('staff')}
+          className="flex items-center gap-2 bg-red-600 hover:bg-red-700 px-4 py-2.5 rounded-xl text-sm font-semibold shrink-0 transition-colors"
         >
-          <Phone className="w-5 h-5" /> Call Staff
+          <Phone className="w-4 h-4" /> Help
         </button>
+      </header>
+
+      {/* ── Category strip ──────────────────────────────────────────────────── */}
+      <div className="bg-white border-b shrink-0 flex items-center gap-2 px-4 py-2.5 overflow-x-auto">
+        {categories.map(cat => {
+          const color = cat === 'all' ? '#3b82f6' : catColor(cat);
+          const active = activeCategory === cat;
+          return (
+            <button
+              key={cat}
+              onClick={() => setActiveCategory(cat)}
+              style={active ? { background: color, color: '#fff', borderColor: color } : {}}
+              className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap border transition-all shrink-0 ${
+                active ? '' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+              }`}
+            >
+              {cat === 'all' ? 'All Items' : cat}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Category tabs */}
-      <div className="bg-white border-b px-4 py-2 flex gap-2 overflow-x-auto">
-        {categories.map(cat => (
-          <button
-            key={cat}
-            onClick={() => setActiveCategory(cat)}
-            className={`px-5 py-2 rounded-full text-base font-semibold whitespace-nowrap transition-colors ${
-              activeCategory === cat ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            {cat === 'all' ? 'All Items' : cat}
-          </button>
-        ))}
-      </div>
-
-      {/* Body */}
+      {/* ── Body ────────────────────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
+
         {/* Item grid */}
         <div className="flex-1 overflow-y-auto p-4">
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 text-red-700 text-center text-lg">{error}</div>
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 text-red-700 text-center text-base flex items-center gap-2 justify-center">
+              <AlertCircle className="w-5 h-5" /> {error}
+            </div>
           )}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {filtered.map(item => (
-              <button
-                key={item.id}
-                onClick={() => addItem(item)}
-                className="bg-white rounded-xl shadow hover:shadow-md transition-shadow p-4 flex flex-col items-center gap-3 text-left active:scale-95"
-              >
-                {item.imageUrl ? (
-                  <img src={item.imageUrl} alt={item.name} className="w-24 h-24 object-cover rounded-lg" />
-                ) : (
-                  <div className="w-24 h-24 bg-gray-100 rounded-lg flex items-center justify-center">
-                    <ShoppingCart className="w-10 h-10 text-gray-300" />
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+            {filtered.map(item => {
+              const qtyInCart = cartMap[item.id] ?? 0;
+              const color = catColor(item.category ?? 'Other');
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => addItem(item)}
+                  className="relative bg-white rounded-2xl shadow-sm hover:shadow-md transition-all active:scale-95 text-left overflow-hidden border border-gray-100 hover:border-blue-200 flex flex-col"
+                  style={{ outline: qtyInCart > 0 ? `2px solid ${color}` : 'none' }}
+                >
+                  {/* Category color bar */}
+                  <div className="h-1.5 w-full" style={{ background: color }} />
+
+                  {/* Image / placeholder */}
+                  <div className="relative flex-none">
+                    {item.imageUrl ? (
+                      <img src={item.imageUrl} alt={item.name} className="w-full h-28 object-cover" />
+                    ) : (
+                      <div className="w-full h-28 flex items-center justify-center" style={{ background: `${color}12` }}>
+                        <span className="text-4xl font-black opacity-20" style={{ color }}>{item.name.charAt(0)}</span>
+                      </div>
+                    )}
+                    {/* Cart badge */}
+                    {qtyInCart > 0 && (
+                      <div
+                        className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full flex items-center justify-center text-sm font-black text-white shadow"
+                        style={{ background: color }}
+                      >
+                        {qtyInCart}
+                      </div>
+                    )}
                   </div>
-                )}
-                <div className="text-center">
-                  <p className="font-semibold text-gray-900 text-lg leading-tight">{item.name}</p>
-                  <p className="text-blue-600 font-bold text-xl mt-1">{fmt(item.retailPriceCents)}</p>
-                  {item.vatApplicable && <p className="text-xs text-gray-400">VAT incl.</p>}
-                </div>
-                <div className="w-full bg-blue-600 text-white text-center py-2 rounded-lg font-semibold text-base">
-                  + Add
-                </div>
-              </button>
-            ))}
+
+                  {/* Info */}
+                  <div className="p-3 flex flex-col flex-1">
+                    <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">{item.category ?? 'Other'}</p>
+                    <p className="font-semibold text-gray-900 text-sm leading-tight flex-1 line-clamp-2">{item.name}</p>
+                    <div className="flex items-end justify-between mt-2">
+                      <div>
+                        <p className="text-base font-black text-gray-900">{fmt(item.retailPriceCents)}</p>
+                        {item.vatApplicable && <p className="text-[10px] text-gray-400">VAT incl.</p>}
+                      </div>
+                      <div
+                        className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-sm"
+                        style={{ background: color }}
+                      >
+                        <Plus className="w-4 h-4" />
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
+
           {filtered.length === 0 && !error && (
-            <div className="text-center py-20 text-gray-400 text-2xl">No items available</div>
+            <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+              <ShoppingCart className="w-16 h-16 mb-3 opacity-20" />
+              <p className="text-lg font-medium">No items found</p>
+              {search && <p className="text-sm mt-1">Try a different search term</p>}
+            </div>
           )}
         </div>
 
-        {/* Cart sidebar */}
-        <div className="w-80 bg-white border-l flex flex-col">
-          <div className="p-4 border-b bg-gray-50">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <ShoppingCart className="w-5 h-5" /> Your Order
-            </h2>
-          </div>
+        {/* ── Cart Sidebar ──────────────────────────────────────────────────── */}
+        <div className="w-80 bg-white border-l flex flex-col shrink-0 shadow-lg">
 
-          <div className="flex-1 overflow-y-auto p-3 space-y-2">
-            {cart.length === 0 && (
-              <p className="text-center text-gray-400 mt-12 text-lg">Tap items to add them</p>
+          {/* Cart header */}
+          <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2">
+              <ShoppingCart className="w-5 h-5 text-blue-600" />
+              <span className="font-bold text-gray-900">Your Order</span>
+              {cartQty > 0 && (
+                <span className="bg-blue-600 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">{cartQty}</span>
+              )}
+            </div>
+            {cart.length > 0 && (
+              <button onClick={() => setCart([])} className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1 font-medium">
+                <RotateCcw className="w-3 h-3" /> Clear
+              </button>
             )}
-            {cart.map(({ item, qty }) => (
-              <div key={item.id} className="flex items-center gap-2 bg-gray-50 rounded-xl p-3">
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm text-gray-900 truncate">{item.name}</p>
-                  <p className="text-blue-600 font-bold">{fmt(item.retailPriceCents * qty)}</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => updateQty(item.id, qty - 1)} className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center hover:bg-gray-300">
-                    <Minus className="w-4 h-4" />
-                  </button>
-                  <span className="w-6 text-center font-bold">{qty}</span>
-                  <button onClick={() => updateQty(item.id, qty + 1)} className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center hover:bg-blue-200">
-                    <Plus className="w-4 h-4 text-blue-600" />
-                  </button>
-                  <button onClick={() => removeItem(item.id)} className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center hover:bg-red-200 ml-1">
-                    <Trash2 className="w-4 h-4 text-red-500" />
-                  </button>
-                </div>
-              </div>
-            ))}
           </div>
 
-          {/* Totals + pay */}
-          <div className="border-t p-4 space-y-3">
-            <div className="space-y-1 text-sm text-gray-600">
-              <div className="flex justify-between"><span>Subtotal (ex-VAT)</span><span>{fmt(subtotalCents - vatCents)}</span></div>
-              <div className="flex justify-between"><span>VAT (16%)</span><span>{fmt(vatCents)}</span></div>
-              <div className="flex justify-between font-bold text-lg text-gray-900 pt-1 border-t"><span>Total</span><span>{fmt(totalCents)}</span></div>
+          {/* Cart items */}
+          <div className="flex-1 overflow-y-auto py-2">
+            {cart.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-gray-400 py-12 px-4">
+                <ShoppingCart className="w-12 h-12 mb-3 opacity-20" />
+                <p className="text-sm font-medium text-center">Tap an item to add it to your order</p>
+              </div>
+            ) : (
+              cart.map(({ item, qty }) => {
+                const color = catColor(item.category ?? 'Other');
+                return (
+                  <div key={item.id} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0">
+                    {/* Color indicator */}
+                    <div className="w-1 h-12 rounded-full shrink-0" style={{ background: color }} />
+
+                    {/* Name + price */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate leading-tight">{item.name}</p>
+                      <p className="text-xs text-gray-400">{fmt(item.retailPriceCents)} each</p>
+                      <p className="text-sm font-bold" style={{ color }}>{fmt(item.retailPriceCents * qty)}</p>
+                    </div>
+
+                    {/* Qty controls */}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => updateQty(item.id, qty - 1)}
+                        className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors active:scale-90"
+                      >
+                        {qty === 1 ? <Trash2 className="w-3.5 h-3.5 text-red-500" /> : <Minus className="w-3.5 h-3.5 text-gray-600" />}
+                      </button>
+                      <span className="w-6 text-center font-bold text-sm text-gray-900">{qty}</span>
+                      <button
+                        onClick={() => updateQty(item.id, qty + 1)}
+                        className="w-8 h-8 rounded-full flex items-center justify-center transition-colors active:scale-90 text-white"
+                        style={{ background: color }}
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Totals + payment */}
+          <div className="border-t p-4 shrink-0 space-y-3">
+            {/* VAT breakdown */}
+            <div className="space-y-1 text-sm text-gray-600 bg-gray-50 rounded-xl p-3">
+              <div className="flex justify-between">
+                <span>Subtotal (ex-VAT)</span>
+                <span className="font-medium">{fmt(subtotalCents - vatCents)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>VAT (16%)</span>
+                <span className="font-medium">{fmt(vatCents)}</span>
+              </div>
+              <div className="flex justify-between font-black text-base text-gray-900 pt-1.5 border-t border-gray-200 mt-1.5">
+                <span>Total</span>
+                <span className="text-blue-700">KES {fmtShort(totalCents)}</span>
+              </div>
             </div>
 
             {cart.length > 0 ? (
               <div className="space-y-2">
                 <button
-                  onClick={handleCashPay}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-2"
+                  onClick={() => setScreen('cash')}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-2xl text-base font-bold flex items-center justify-center gap-2 transition-colors active:scale-98 shadow-sm"
                 >
-                  <Banknote className="w-6 h-6" /> Pay with Cash
+                  <Banknote className="w-5 h-5" />
+                  Pay with Cash
+                  <ChevronRight className="w-4 h-4 opacity-70" />
                 </button>
                 <button
-                  onClick={handleMpesa}
+                  onClick={() => void handleMpesa()}
                   disabled={mpesaLoading}
-                  className="w-full bg-gray-800 hover:bg-gray-900 text-white py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="w-full bg-gray-900 hover:bg-gray-800 text-white py-4 rounded-2xl text-base font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 active:scale-98 shadow-sm"
                 >
-                  <CreditCard className="w-6 h-6" /> {mpesaLoading ? 'Loading...' : 'Pay with M-Pesa'}
-                </button>
-                <button onClick={() => setCart([])} className="w-full text-red-500 hover:text-red-700 py-2 text-sm flex items-center justify-center gap-1">
-                  <X className="w-4 h-4" /> Clear cart
+                  <CreditCard className="w-5 h-5" />
+                  {mpesaLoading ? 'Loading…' : 'Pay with M-Pesa'}
+                  <ChevronRight className="w-4 h-4 opacity-70" />
                 </button>
               </div>
             ) : (
-              <div className="text-center text-gray-400 text-sm py-2">Add items to pay</div>
+              <div className="text-center text-gray-400 text-sm py-3 flex items-center justify-center gap-1.5">
+                <ShoppingCart className="w-4 h-4 opacity-50" />
+                Add items to continue
+              </div>
             )}
           </div>
         </div>

@@ -78,6 +78,12 @@ export const adminApi = {
   revokeKey: (id: string) =>
     request<any>(`/license-keys/${id}/revoke`, { method: 'PATCH' }),
 
+  resendLicenseKey: (id: string) =>
+    request<{ success: boolean; sentTo: string }>(`/license-keys/${id}/resend`, { method: 'POST' }),
+
+  regenerateLicenseKey: (id: string) =>
+    request<{ success: boolean; newKey: string; sentTo: string }>(`/license-keys/${id}/regenerate`, { method: 'POST' }),
+
   getHealth: () => request<any>('/health'),
 
   getBusinessData: (id: string) => request<any>(`/businesses/${id}/data`),
@@ -86,4 +92,70 @@ export const adminApi = {
     request<any>('/force-update', { method: 'POST', body: JSON.stringify({ version, message, isRequired }) }),
 
   getReferrals: (page = 1) => request<any>(`/referrals?page=${page}&limit=20`),
+
+  getBusinessUsers: (id: string) => request<any[]>(`/businesses/${id}/users`),
+
+  resetUserPassword: (userId: string) =>
+    request<{ tempPassword: string; email: string | null }>(`/users/${userId}/reset-password`, { method: 'POST' }),
+
+  unlockUser: (userId: string) =>
+    request<{ success: boolean; name: string }>(`/users/${userId}/unlock`, { method: 'POST' }),
+
+  updateUser: (userId: string, data: { name?: string; role?: string; email?: string }) =>
+    request<any>(`/users/${userId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  listAllUsers: (page = 1, search?: string, role?: string) =>
+    request<any>(`/users?page=${page}&limit=30${search ? `&search=${encodeURIComponent(search)}` : ''}${role && role !== 'ALL' ? `&role=${role}` : ''}`),
+
+  deleteUser: (userId: string) =>
+    request<any>(`/users/${userId}`, { method: 'DELETE' }),
+
+  // ── Analytics ──────────────────────────────────────────────────────────
+  getChurnAnalytics:      (from?: string, to?: string) => request<any>(`/analytics/churn${from ? `?from=${from}${to ? `&to=${to}` : ''}` : ''}`),
+  getCohortAnalysis:      () => request<any>('/analytics/cohort'),
+  getBusinessLTV:         (page = 1, sortBy = 'ltv') => request<any>(`/analytics/ltv?page=${page}&sortBy=${sortBy}`),
+  getPaystackRevenue:     () => request<any>('/analytics/paystack-revenue'),
+  getCollectedRevenue:    () => request<any>('/analytics/collected-revenue'),
+  getTrialsExpiringSoon:  (days = 7) => request<any>(`/analytics/trials-expiring?days=${days}`),
+  getDunningList:         () => request<any>('/analytics/dunning'),
+  getAlertFeed:           () => request<any[]>('/alerts'),
+
+  // ── Business audit log ────────────────────────────────────────────────
+  getBusinessAuditLog: (id: string, page = 1) => request<any>(`/businesses/${id}/audit-log?page=${page}&limit=50`),
+  getSuperAdminAuditLog: (page = 1) => request<any>(`/audit-log?page=${page}&limit=50`),
+
+  // ── Bulk subscription update ──────────────────────────────────────────
+  bulkUpdateSubscriptions: (businessIds: string[], data: { subscriptionStatus?: string; subscriptionTier?: string; trialDays?: number }) =>
+    request<any>('/businesses/bulk-update', { method: 'POST', body: JSON.stringify({ businessIds, ...data }) }),
+
+  cancelBusiness: (id: string, reason: string) =>
+    request<any>(`/businesses/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
+
+  // ── IP Whitelist ──────────────────────────────────────────────────────
+  getIpWhitelist: () => request<any[]>('/ip-whitelist'),
+  addIp: (ip: string, label?: string) =>
+    request<any>('/ip-whitelist', { method: 'POST', body: JSON.stringify({ ip, label }) }),
+  removeIp: (id: string) => request<any>(`/ip-whitelist/${id}`, { method: 'DELETE' }),
+
+  // ── Webhooks ──────────────────────────────────────────────────────────
+  getWebhooks:   (page = 1) => request<any>(`/webhooks?page=${page}&limit=30`),
+  retryWebhook:  (id: string) => request<any>(`/webhooks/${id}/retry`, { method: 'POST' }),
+  toggleWebhook: (id: string, isActive: boolean) =>
+    request<any>(`/webhooks/${id}/toggle`, { method: 'PATCH', body: JSON.stringify({ isActive }) }),
+
+  // ── Revenue Export ────────────────────────────────────────────────────
+  exportRevenueCsv: async () => {
+    const token = getAdminToken();
+    const res = await fetch(`${API_BASE}/export/revenue-csv`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error('Export failed');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `kastra-revenue-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
 };

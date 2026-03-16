@@ -348,8 +348,8 @@
     </ul>
     <div class="nav-actions">
       <span class="nav-pill hide-mobile">✓ KRA eTIMS Ready</span>
-      <a href="http://localhost:3001" class="btn btn-ghost btn-sm">Log in</a>
-      <a href="http://localhost:3001/setup" class="btn btn-primary btn-sm">Start Free →</a>
+      <a href="http://localhost:3001/login" class="btn btn-ghost btn-sm">Log in</a>
+      <a href="http://localhost:3001/login?mode=register" class="btn btn-primary btn-sm">Start Free →</a>
     </div>
   </div>
 </nav>
@@ -371,8 +371,9 @@
       From a single kiosk to a 50-branch chain — KASTRA gives you complete control over sales, inventory, staff, and compliance. Works offline. Integrated with M-Pesa &amp; KRA eTIMS.
     </p>
     <div class="hero-cta">
-      <a href="http://localhost:3001/setup" class="btn btn-primary btn-lg">Start 30-Day Free Trial</a>
+      <a href="http://localhost:3001/login?mode=register" class="btn btn-primary btn-lg">Start 30-Day Free Trial</a>
       <a href="#features" class="btn btn-ghost btn-lg">Explore Features →</a>
+      <a href="kastra-pos-manual.html" target="_blank" class="btn btn-ghost btn-lg" style="border-color:rgba(99,102,241,.4);color:#a5b4fc;" title="Open the full 100-page enterprise manual in a new tab (printable to PDF)">📄 User Manual</a>
       <p class="hero-cta-note">No credit card required &nbsp;·&nbsp; Full access on all plans &nbsp;·&nbsp; Cancel anytime</p>
     </div>
     <div class="hero-stats">
@@ -449,7 +450,7 @@
           <li><span class="check-icon">✓</span>Offline mode — never miss a sale during outages</li>
         </ul>
         <div style="margin-top:28px;">
-          <a href="http://localhost:3001/setup" class="btn btn-primary">Try it free for 30 days →</a>
+          <a href="http://localhost:3001/login?mode=register" class="btn btn-primary">Try it free for 30 days →</a>
         </div>
       </div>
     </div>
@@ -491,6 +492,8 @@
       <div class="integration-chip"><div class="chip-dot" style="background:#1565c0;box-shadow:0 0 6px #1565c0;"></div>KRA eTIMS</div>
       <div class="integration-chip"><div class="chip-dot" style="background:#0056c7;box-shadow:0 0 6px #0056c7;"></div>Paystack</div>
       <div class="integration-chip"><div class="chip-dot" style="background:#e53935;box-shadow:0 0 6px #e53935;"></div>Africa's Talking SMS</div>
+      <div class="integration-chip"><div class="chip-dot" style="background:#d32f2f;box-shadow:0 0 6px #d32f2f;"></div>Equity Bank</div>
+      <div class="integration-chip"><div class="chip-dot" style="background:#006633;box-shadow:0 0 6px #006633;"></div>KCB Bank</div>
       <div class="integration-chip"><div class="chip-dot" style="background:#2ca01c;box-shadow:0 0 6px #2ca01c;"></div>QuickBooks Online</div>
       <div class="integration-chip"><div class="chip-dot" style="background:#1083cb;box-shadow:0 0 6px #1083cb;"></div>Xero</div>
       <div class="integration-chip"><div class="chip-dot" style="background:#96bf48;box-shadow:0 0 6px #96bf48;"></div>Shopify</div>
@@ -755,7 +758,7 @@
           <span class="price-lifetime" style="display:none">Own it forever. 1 year of updates included. KES 3,000/yr maintenance after year 1.</span>
         </div>
         <ul class="pricing-features">
-          <li><span class="pf-check">✓</span>1 store, up to 3 users</li>
+          <li><span class="pf-check">✓</span>1 store, up to 10 users</li>
           <li><span class="pf-check">✓</span>Full POS with M-Pesa integration</li>
           <li><span class="pf-check">✓</span>KRA eTIMS auto-submission</li>
           <li><span class="pf-check">✓</span>Inventory + batch management</li>
@@ -765,7 +768,7 @@
           <li><span class="pf-check muted">—</span><span class="muted">Multi-store management</span></li>
           <li><span class="pf-check muted">—</span><span class="muted">Webhooks &amp; API keys</span></li>
         </ul>
-        <a href="/setup?plan=STARTER" class="btn btn-outline-blue" style="width:100%;">Get Started Free</a>
+        <a href="http://localhost:3001/login?mode=register&plan=STARTER" class="btn btn-outline-blue" style="width:100%;">Get Started Free</a>
       </div>
 
       <!-- Pro -->
@@ -783,7 +786,7 @@
           <span class="price-lifetime" style="display:none">Own it forever. 1 year of updates included. KES 6,000/yr maintenance after year 1.</span>
         </div>
         <ul class="pricing-features">
-          <li><span class="pf-check">✓</span>Up to 5 stores, 10 users</li>
+          <li><span class="pf-check">✓</span>Up to 5 stores, 20 users</li>
           <li><span class="pf-check">✓</span>Everything in Starter</li>
           <li><span class="pf-check">✓</span>Multi-store stock transfers</li>
           <li><span class="pf-check">✓</span>HR shifts, commissions &amp; payroll</li>
@@ -793,7 +796,7 @@
           <li><span class="pf-check">✓</span>Automation &amp; scheduled reports</li>
           <li><span class="pf-check">✓</span>AI demand forecasting</li>
         </ul>
-        <a href="/setup?plan=PRO" class="btn btn-primary" style="width:100%;">Get Started Free</a>
+        <a href="http://localhost:3001/login?mode=register&plan=PRO" class="btn btn-primary" style="width:100%;">Get Started Free</a>
       </div>
 
       <!-- Enterprise -->
@@ -905,6 +908,288 @@
   </div>
 </section>
 
+<!-- ── Download / Get the App ── -->
+<section id="download" style="padding:100px 0;background:linear-gradient(180deg,rgba(59,130,246,.03) 0%,transparent 100%);">
+  <div class="container">
+    <!-- Header -->
+    <div style="text-align:center;margin-bottom:64px;">
+      <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.25);color:#34d399;font-size:12px;font-weight:700;padding:5px 14px;border-radius:999px;margin-bottom:16px;letter-spacing:.08em;text-transform:uppercase;">⬇ Get KASTRA POS</div>
+      <h2 style="font-size:clamp(1.75rem,3.5vw,2.75rem);font-weight:900;letter-spacing:-.03em;margin-bottom:14px;">Available on every<br/><span style="background:linear-gradient(135deg,#60a5fa,#34d399);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">platform you use</span></h2>
+      <p style="color:var(--text2);max-width:520px;margin:0 auto;font-size:1.0625rem;">Web app available now. Desktop and mobile apps launching soon — join the early access list to be first.</p>
+    </div>
+
+    <!-- ── Row 1: Web App (Available Now) ── -->
+    <div style="margin-bottom:48px;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+        <div style="width:40px;height:2px;background:linear-gradient(90deg,#10b981,transparent);"></div>
+        <h3 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);white-space:nowrap;">🌐 Web App — Available Now</h3>
+        <div style="flex:1;height:2px;background:linear-gradient(90deg,transparent,var(--border));"></div>
+        <span style="background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#34d399;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap;">✓ LIVE</span>
+      </div>
+      <div style="background:linear-gradient(135deg,rgba(59,130,246,.08),rgba(16,185,129,.05));border:1px solid rgba(59,130,246,.2);border-radius:20px;padding:32px 36px;display:flex;align-items:center;gap:32px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:260px;">
+          <div style="font-size:20px;font-weight:800;color:var(--text);margin-bottom:8px;">Start in your browser — no install needed</div>
+          <p style="color:var(--text2);font-size:14px;line-height:1.6;margin:0 0 20px;">The full KASTRA POS experience runs in any modern browser. Chrome, Firefox, Edge, Safari. Works on tablets, laptops, and desktops. Offline-capable via PWA.</p>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <a href="/app" style="display:inline-flex;align-items:center;gap:8px;background:var(--blue);color:#fff;font-size:14px;font-weight:700;padding:12px 24px;border-radius:10px;text-decoration:none;transition:all .15s;" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='var(--blue)'">
+              Open Web App →
+            </a>
+            <a href="/app/register" style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text);font-size:14px;font-weight:600;padding:12px 24px;border-radius:10px;text-decoration:none;" onmouseover="this.style.borderColor='rgba(255,255,255,.25)'" onmouseout="this.style.borderColor='var(--border2)'">
+              Start Free Trial
+            </a>
+          </div>
+        </div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;flex-shrink:0;">
+          <div style="text-align:center;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:12px;padding:14px 20px;">
+            <div style="font-size:22px;margin-bottom:4px;">🌍</div>
+            <div style="font-size:11px;font-weight:600;color:var(--text3);">Any Browser</div>
+          </div>
+          <div style="text-align:center;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:12px;padding:14px 20px;">
+            <div style="font-size:22px;margin-bottom:4px;">📶</div>
+            <div style="font-size:11px;font-weight:600;color:var(--text3);">PWA Offline</div>
+          </div>
+          <div style="text-align:center;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:12px;padding:14px 20px;">
+            <div style="font-size:22px;margin-bottom:4px;">🔒</div>
+            <div style="font-size:11px;font-weight:600;color:var(--text3);">KRA eTIMS</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Row 2: Desktop (Early Access) ── -->
+    <div style="margin-bottom:48px;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+        <div style="width:40px;height:2px;background:linear-gradient(90deg,#3b82f6,transparent);"></div>
+        <h3 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);white-space:nowrap;">🖥️ Desktop App — VSCU Offline eTIMS + LAN Sync</h3>
+        <div style="flex:1;height:2px;background:linear-gradient(90deg,transparent,var(--border));"></div>
+        <span style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:#fbbf24;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap;">Early Access</span>
+      </div>
+
+      <!-- Why desktop callout -->
+      <div style="margin-bottom:16px;background:rgba(59,130,246,.05);border:1px solid rgba(59,130,246,.12);border-radius:12px;padding:14px 20px;display:flex;flex-wrap:wrap;gap:20px;align-items:center;">
+        <span style="font-size:13px;font-weight:700;color:var(--blue2);">Why install the desktop app?</span>
+        <span style="font-size:13px;color:var(--text2);">✓ Sell offline with VSCU (no internet needed)</span>
+        <span style="font-size:13px;color:var(--text2);">✓ LAN sync across all terminals</span>
+        <span style="font-size:13px;color:var(--text2);">✓ Direct hardware (printer, cash drawer, scale)</span>
+        <span style="font-size:13px;color:var(--text2);">✓ Auto-updates via signed releases</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;">
+
+        <!-- Windows -->
+        <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:16px;padding:24px;transition:all .2s;" onmouseover="this.style.borderColor='rgba(0,120,215,.5)';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border2)';this.style.transform='none'">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+            <div style="width:44px;height:44px;background:rgba(0,120,215,.12);border:1px solid rgba(0,120,215,.25);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;">🪟</div>
+            <div><div style="font-weight:700;color:var(--text);">Windows</div><div style="font-size:12px;color:var(--text3);">10 / 11 · 64-bit</div></div>
+          </div>
+          <div style="font-size:12px;color:var(--text3);margin-bottom:14px;display:flex;gap:6px;">
+            <span style="background:rgba(255,255,255,.05);padding:2px 8px;border-radius:4px;">.exe</span>
+            <span style="background:rgba(255,255,255,.05);padding:2px 8px;border-radius:4px;">.msi</span>
+          </div>
+          <a href="mailto:hello@kastrapos.co.ke?subject=KASTRA Desktop Early Access - Windows" style="display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(0,120,215,.12);border:1px solid rgba(0,120,215,.3);color:#60a5fa;font-size:13px;font-weight:700;padding:10px;border-radius:8px;text-decoration:none;transition:all .15s;" onmouseover="this.style.background='rgba(0,120,215,.22)'" onmouseout="this.style.background='rgba(0,120,215,.12)'">
+            Request Early Access
+          </a>
+        </div>
+
+        <!-- macOS Intel -->
+        <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:16px;padding:24px;transition:all .2s;" onmouseover="this.style.borderColor='rgba(255,255,255,.2)';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border2)';this.style.transform='none'">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+            <div style="width:44px;height:44px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;">🍎</div>
+            <div><div style="font-weight:700;color:var(--text);">macOS Intel</div><div style="font-size:12px;color:var(--text3);">macOS 11+ · Intel CPU</div></div>
+          </div>
+          <div style="font-size:12px;color:var(--text3);margin-bottom:14px;display:flex;gap:6px;">
+            <span style="background:rgba(255,255,255,.05);padding:2px 8px;border-radius:4px;">.dmg</span>
+          </div>
+          <a href="mailto:hello@kastrapos.co.ke?subject=KASTRA Desktop Early Access - macOS Intel" style="display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text2);font-size:13px;font-weight:700;padding:10px;border-radius:8px;text-decoration:none;transition:all .15s;" onmouseover="this.style.borderColor='rgba(255,255,255,.25)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text2)'">
+            Request Early Access
+          </a>
+        </div>
+
+        <!-- macOS Apple Silicon -->
+        <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:16px;padding:24px;transition:all .2s;" onmouseover="this.style.borderColor='rgba(255,255,255,.2)';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border2)';this.style.transform='none'">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+            <div style="width:44px;height:44px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;">🍎</div>
+            <div><div style="font-weight:700;color:var(--text);">macOS Silicon</div><div style="font-size:12px;color:var(--text3);">M1 / M2 / M3</div></div>
+          </div>
+          <div style="font-size:12px;color:var(--text3);margin-bottom:14px;display:flex;gap:6px;">
+            <span style="background:rgba(255,255,255,.05);padding:2px 8px;border-radius:4px;">.dmg</span>
+          </div>
+          <a href="mailto:hello@kastrapos.co.ke?subject=KASTRA Desktop Early Access - macOS Silicon" style="display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text2);font-size:13px;font-weight:700;padding:10px;border-radius:8px;text-decoration:none;transition:all .15s;" onmouseover="this.style.borderColor='rgba(255,255,255,.25)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text2)'">
+            Request Early Access
+          </a>
+        </div>
+
+        <!-- Linux -->
+        <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:16px;padding:24px;transition:all .2s;" onmouseover="this.style.borderColor='rgba(245,158,11,.4)';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border2)';this.style.transform='none'">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+            <div style="width:44px;height:44px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;">🐧</div>
+            <div><div style="font-weight:700;color:var(--text);">Linux</div><div style="font-size:12px;color:var(--text3);">Ubuntu · Debian · Fedora</div></div>
+          </div>
+          <div style="font-size:12px;color:var(--text3);margin-bottom:14px;display:flex;gap:6px;">
+            <span style="background:rgba(255,255,255,.05);padding:2px 8px;border-radius:4px;">.AppImage</span>
+            <span style="background:rgba(255,255,255,.05);padding:2px 8px;border-radius:4px;">.deb</span>
+          </div>
+          <a href="mailto:hello@kastrapos.co.ke?subject=KASTRA Desktop Early Access - Linux" style="display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);color:#fbbf24;font-size:13px;font-weight:700;padding:10px;border-radius:8px;text-decoration:none;transition:all .15s;" onmouseover="this.style.background='rgba(245,158,11,.16)'" onmouseout="this.style.background='rgba(245,158,11,.08)'">
+            Request Early Access
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Row 3: Mobile Apps (Beta) ── -->
+    <div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+        <div style="width:40px;height:2px;background:linear-gradient(90deg,#8b5cf6,transparent);"></div>
+        <h3 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);white-space:nowrap;">📱 Mobile Apps — Beta</h3>
+        <div style="flex:1;height:2px;background:linear-gradient(90deg,transparent,var(--border));"></div>
+        <span style="background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.3);color:#c4b5fd;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap;">Join Beta</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px;">
+
+        <!-- KASTRA POS (Cashier) -->
+        <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;padding:28px;transition:all .2s;" onmouseover="this.style.borderColor='rgba(59,130,246,.4)'" onmouseout="this.style.borderColor='var(--border2)'">
+          <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px;">
+            <div style="width:56px;height:56px;background:linear-gradient(135deg,#2563eb,#7c3aed);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;">🏪</div>
+            <div>
+              <div style="font-weight:700;font-size:16px;color:var(--text);">KASTRA POS</div>
+              <div style="font-size:12px;color:var(--text3);margin-top:2px;">For Cashiers &amp; Managers</div>
+              <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+                <span style="background:rgba(59,130,246,.15);color:var(--blue2);font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;">CASHIER</span>
+                <span style="background:rgba(99,102,241,.15);color:#a5b4fc;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;">MANAGER</span>
+                <span style="background:rgba(16,185,129,.1);color:#34d399;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;">ANDROID &amp; iOS</span>
+              </div>
+            </div>
+          </div>
+          <p style="font-size:13px;color:var(--text2);margin:0 0 20px;line-height:1.5;">Full POS on your phone. Barcode scanning, M-Pesa payments, offline sales queue, X-reports, customer management. Perfect for mobile salespeople and pop-up locations.</p>
+          <a href="https://expo.dev/accounts/kevrith/projects/kastra-pos-cashier/builds/a95714a4-b29f-415b-ba8a-ee1de10f7cf8" target="_blank" style="display:flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(135deg,rgba(37,99,235,.2),rgba(124,58,237,.15));border:1px solid rgba(99,102,241,.35);color:#a5b4fc;font-size:14px;font-weight:700;padding:12px;border-radius:10px;text-decoration:none;transition:all .15s;" onmouseover="this.style.borderColor='rgba(99,102,241,.6)'" onmouseout="this.style.borderColor='rgba(99,102,241,.35)'">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v-6"/><path d="M9 11l3-3 3 3"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+            Download APK (Android)
+          </a>
+          <div style="margin-top:10px;display:flex;gap:8px;justify-content:center;">
+            <span style="font-size:11px;color:var(--text3);">Coming to</span>
+            <span style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M3.18 23.76a2 2 0 001.86-.21l11.93-6.9L13.5 13l-10.32 10.76z" fill="#EA4335"/><path d="M20.82 10.6L17.16 8.5l-3.66 3.5 3.66 3.5 3.69-2.12a1.5 1.5 0 000-2.78z" fill="#FBBC04"/><path d="M3.18.24A2 2 0 002 2v20a2 2 0 001.18 1.76L13.5 13 3.18.24z" fill="#34A853"/><path d="M3.18.24L13.5 11l3.66-3.5-10.12-5.85A2 2 0 003.18.24z" fill="#4285F4"/></svg>
+              Google Play</span>
+            <span style="font-size:11px;color:var(--text3);">&amp;</span>
+            <span style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="#94a3b8"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+              App Store</span>
+          </div>
+        </div>
+
+        <!-- KASTRA Order (Customer) -->
+        <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;padding:28px;transition:all .2s;" onmouseover="this.style.borderColor='rgba(16,185,129,.4)'" onmouseout="this.style.borderColor='var(--border2)'">
+          <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px;">
+            <div style="width:56px;height:56px;background:linear-gradient(135deg,#059669,#0891b2);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;">🛒</div>
+            <div>
+              <div style="font-weight:700;font-size:16px;color:var(--text);">KASTRA Order</div>
+              <div style="font-size:12px;color:var(--text3);margin-top:2px;">Self-Service for Customers</div>
+              <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+                <span style="background:rgba(16,185,129,.15);color:#34d399;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;">CUSTOMER</span>
+                <span style="background:rgba(6,182,212,.15);color:#67e8f9;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;">RESTAURANT</span>
+                <span style="background:rgba(16,185,129,.1);color:#34d399;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;">ANDROID &amp; iOS</span>
+              </div>
+            </div>
+          </div>
+          <p style="font-size:13px;color:var(--text2);margin:0 0 20px;line-height:1.5;">Customers browse your menu, build a cart, and place orders directly from their phone. Live order tracking, loyalty points, and table QR-code support for restaurants.</p>
+          <a href="https://expo.dev/accounts/kevrith/projects/kastra-customer/builds/2642e9f2-03a4-4f37-8f9a-ed318f1aeb1c" target="_blank" style="display:flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(135deg,rgba(5,150,105,.15),rgba(8,145,178,.12));border:1px solid rgba(16,185,129,.3);color:#34d399;font-size:14px;font-weight:700;padding:12px;border-radius:10px;text-decoration:none;transition:all .15s;" onmouseover="this.style.borderColor='rgba(16,185,129,.55)'" onmouseout="this.style.borderColor='rgba(16,185,129,.3)'">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v-6"/><path d="M9 11l3-3 3 3"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+            Download APK (Android)
+          </a>
+          <div style="margin-top:10px;text-align:center;font-size:11px;color:var(--text3);">Coming to Google Play &amp; App Store</div>
+        </div>
+
+        <!-- KASTRA Driver -->
+        <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;padding:28px;transition:all .2s;" onmouseover="this.style.borderColor='rgba(245,158,11,.4)'" onmouseout="this.style.borderColor='var(--border2)'">
+          <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px;">
+            <div style="width:56px;height:56px;background:linear-gradient(135deg,#d97706,#dc2626);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;">🚴</div>
+            <div>
+              <div style="font-weight:700;font-size:16px;color:var(--text);">KASTRA Driver</div>
+              <div style="font-size:12px;color:var(--text3);margin-top:2px;">For Delivery Riders</div>
+              <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+                <span style="background:rgba(245,158,11,.15);color:#fbbf24;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;">DRIVER</span>
+                <span style="background:rgba(239,68,68,.12);color:#fca5a5;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;">DELIVERY</span>
+                <span style="background:rgba(16,185,129,.1);color:#34d399;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;">ANDROID &amp; iOS</span>
+              </div>
+            </div>
+          </div>
+          <p style="font-size:13px;color:var(--text2);margin:0 0 20px;line-height:1.5;">Delivery riders get a full dispatch app — active delivery list, map navigation (Google Maps &amp; Waze), proof of delivery photo, earnings dashboard, and call-customer shortcut.</p>
+          <a href="https://expo.dev/accounts/kevrith/projects/kastra-driver/builds/dcd915ff-2f0e-4023-810e-0baa9e41f88f" target="_blank" style="display:flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(135deg,rgba(217,119,6,.12),rgba(220,38,38,.1));border:1px solid rgba(245,158,11,.3);color:#fbbf24;font-size:14px;font-weight:700;padding:12px;border-radius:10px;text-decoration:none;transition:all .15s;" onmouseover="this.style.borderColor='rgba(245,158,11,.55)'" onmouseout="this.style.borderColor='rgba(245,158,11,.3)'">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v-6"/><path d="M9 11l3-3 3 3"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+            Download APK (Android)
+          </a>
+          <div style="margin-top:10px;text-align:center;font-size:11px;color:var(--text3);">Coming to Google Play &amp; App Store</div>
+        </div>
+
+      </div>
+
+      <!-- Enterprise distribution note -->
+      <div style="margin-top:20px;background:rgba(139,92,246,.05);border:1px solid rgba(139,92,246,.15);border-radius:14px;padding:20px 24px;display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;">
+        <div style="width:40px;height:40px;background:rgba(139,92,246,.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">🏢</div>
+        <div style="flex:1;min-width:200px;">
+          <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;">Enterprise &amp; MDM Distribution</div>
+          <div style="font-size:13px;color:var(--text2);line-height:1.5;">Need to deploy across 50+ devices? We provide direct APK packages, MDM-compatible bundles, and white-label options for enterprise deployments. Ideal for banks, hotel chains, and retail franchises.</div>
+        </div>
+        <a href="mailto:enterprise@kastrapos.co.ke?subject=Enterprise Mobile Distribution Enquiry" style="flex-shrink:0;align-self:center;display:inline-flex;align-items:center;gap:8px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.3);color:#c4b5fd;font-size:13px;font-weight:700;padding:10px 18px;border-radius:8px;text-decoration:none;white-space:nowrap;transition:all .15s;" onmouseover="this.style.background='rgba(139,92,246,.25)'" onmouseout="this.style.background='rgba(139,92,246,.15)'">
+          Contact Enterprise Sales →
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Resources Section ── -->
+<section style="padding:80px 0;background:linear-gradient(180deg,transparent,rgba(59,130,246,.04));">
+  <div class="container">
+    <div style="text-align:center;margin-bottom:48px;">
+      <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.25);color:#a5b4fc;font-size:12px;font-weight:700;padding:5px 14px;border-radius:999px;margin-bottom:16px;letter-spacing:.08em;text-transform:uppercase;">📚 Resources</div>
+      <h2 style="font-size:clamp(1.75rem,3.5vw,2.5rem);font-weight:900;letter-spacing:-.03em;margin-bottom:12px;">Everything you need to<br/><span class="gradient-text">get up and running</span></h2>
+      <p style="color:var(--text2);max-width:480px;margin:0 auto;">Comprehensive documentation, guides, and support resources for KASTRA POS.</p>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;max-width:1000px;margin:0 auto;">
+      <!-- User Manual Card -->
+      <a href="kastra-pos-manual.html" target="_blank" style="display:block;background:var(--bg3);border:1px solid var(--border2);border-radius:16px;padding:28px;transition:all .2s;text-decoration:none;position:relative;overflow:hidden;" onmouseover="this.style.borderColor='rgba(99,102,241,.5)';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border2)';this.style.transform='none'">
+        <div style="width:48px;height:48px;background:linear-gradient(135deg,rgba(99,102,241,.2),rgba(139,92,246,.2));border:1px solid rgba(99,102,241,.3);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:16px;">📄</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <h3 style="font-size:16px;font-weight:700;color:var(--text);margin:0;">Enterprise User Manual</h3>
+          <span style="background:rgba(99,102,241,.15);color:#a5b4fc;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;text-transform:uppercase;letter-spacing:.06em;">v2.0</span>
+        </div>
+        <p style="font-size:13px;color:var(--text2);margin:0 0 16px;line-height:1.5;">Complete 100-page reference guide. All 25 modules, SVG diagrams, permission matrix, payroll tables, eTIMS setup, troubleshooting. Print to PDF.</p>
+        <div style="display:flex;align-items:center;gap:6px;color:#a5b4fc;font-size:13px;font-weight:600;">View Manual <span style="font-size:16px;">→</span></div>
+      </a>
+      <!-- Installation Guide Card -->
+      <a href="kastra-pos-manual.html#ch4" target="_blank" style="display:block;background:var(--bg3);border:1px solid var(--border2);border-radius:16px;padding:28px;transition:all .2s;text-decoration:none;" onmouseover="this.style.borderColor='rgba(16,185,129,.4)';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border2)';this.style.transform='none'">
+        <div style="width:48px;height:48px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.25);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:16px;">⚙️</div>
+        <h3 style="font-size:16px;font-weight:700;color:var(--text);margin:0 0 8px;">Installation Guide</h3>
+        <p style="font-size:13px;color:var(--text2);margin:0 0 16px;line-height:1.5;">Step-by-step Ubuntu 22.04 production setup. Node.js, PostgreSQL, Nginx, SSL, PM2, firewall, and environment configuration.</p>
+        <div style="display:flex;align-items:center;gap:6px;color:#34d399;font-size:13px;font-weight:600;">View Guide →</div>
+      </a>
+      <!-- KRA eTIMS Card -->
+      <a href="kastra-pos-manual.html#ch17" target="_blank" style="display:block;background:var(--bg3);border:1px solid var(--border2);border-radius:16px;padding:28px;transition:all .2s;text-decoration:none;" onmouseover="this.style.borderColor='rgba(239,68,68,.4)';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border2)';this.style.transform='none'">
+        <div style="width:48px;height:48px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:16px;">🇰🇪</div>
+        <h3 style="font-size:16px;font-weight:700;color:var(--text);margin:0 0 8px;">KRA eTIMS Setup Guide</h3>
+        <p style="font-size:13px;color:var(--text2);margin:0 0 16px;line-height:1.5;">Full eTIMS configuration — sandbox to production. Credentials, VSCU offline mode, batch submissions, void &amp; amendment, error codes.</p>
+        <div style="display:flex;align-items:center;gap:6px;color:#fca5a5;font-size:13px;font-weight:600;">View Guide →</div>
+      </a>
+      <!-- API Reference Card -->
+      <a href="kastra-pos-manual.html#ch25" target="_blank" style="display:block;background:var(--bg3);border:1px solid var(--border2);border-radius:16px;padding:28px;transition:all .2s;text-decoration:none;" onmouseover="this.style.borderColor='rgba(245,158,11,.4)';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border2)';this.style.transform='none'">
+        <div style="width:48px;height:48px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:16px;">🔌</div>
+        <h3 style="font-size:16px;font-weight:700;color:var(--text);margin:0 0 8px;">API Reference</h3>
+        <p style="font-size:13px;color:var(--text2);margin:0 0 16px;line-height:1.5;">REST API endpoints, authentication, webhook signatures, and integration examples for QuickBooks, Xero, Shopify, and WooCommerce.</p>
+        <div style="display:flex;align-items:center;gap:6px;color:#fbbf24;font-size:13px;font-weight:600;">View Reference →</div>
+      </a>
+    </div>
+    <!-- Download button -->
+    <div style="text-align:center;margin-top:40px;">
+      <a href="kastra-pos-manual.html" target="_blank" style="display:inline-flex;align-items:center;gap:10px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;font-size:15px;font-weight:700;padding:14px 32px;border-radius:12px;text-decoration:none;box-shadow:0 0 32px rgba(99,102,241,.35);transition:all .2s;" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 0 48px rgba(99,102,241,.5)'" onmouseout="this.style.transform='none';this.style.boxShadow='0 0 32px rgba(99,102,241,.35)'">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2v10M5 8l4 4 4-4M3 14h12" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Download Enterprise Manual (PDF)
+      </a>
+      <p style="font-size:12px;color:var(--text3);margin-top:10px;">Opens in browser → File → Print → Save as PDF &nbsp;|&nbsp; 100+ pages &nbsp;|&nbsp; Print-optimised layout</p>
+    </div>
+  </div>
+</section>
+
 <!-- ── CTA ── -->
 <section>
   <div class="container">
@@ -912,7 +1197,7 @@
       <h2>Ready to modernise your<br/><span class="gradient-text">Kenyan business?</span></h2>
       <p>Join forward-thinking Kenyan businesses using KASTRA POS. Full platform access for 30 days — no credit card, no commitment.</p>
       <div class="cta-actions">
-        <a href="http://localhost:3001/setup" class="btn btn-primary btn-lg">Start 30-Day Free Trial</a>
+        <a href="http://localhost:3001/login?mode=register" class="btn btn-primary btn-lg">Start 30-Day Free Trial</a>
         <a href="mailto:hello@kastrapos.co.ke" class="btn btn-ghost btn-lg">Talk to Sales →</a>
       </div>
       <div class="cta-trust">

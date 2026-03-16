@@ -1,31 +1,26 @@
 import { useState } from 'react';
 import { X, Printer, Bluetooth, Usb, Globe } from 'lucide-react';
-import { printToBrowser, printToUSB, printToBluetooth, type ReceiptData } from '../lib/printer';
+import { printToBrowser, printToUSB, printToBluetooth, openDrawerViaUSB, type ReceiptData } from '../lib/printer';
 
 interface PrintModalProps {
   receipt: ReceiptData;
   onClose: () => void;
+  enableCashDrawer?: boolean;
 }
 
-export default function PrintModal({ receipt, onClose }: PrintModalProps) {
+export default function PrintModal({ receipt, onClose, enableCashDrawer = false }: PrintModalProps) {
   const [printing, setPrinting] = useState(false);
   const [error, setError] = useState('');
+  const [drawerMsg, setDrawerMsg] = useState('');
 
   const handlePrint = async (method: 'browser' | 'usb' | 'bluetooth') => {
     setPrinting(true);
     setError('');
-    
     try {
       switch (method) {
-        case 'browser':
-          printToBrowser(receipt);
-          break;
-        case 'usb':
-          await printToUSB(receipt);
-          break;
-        case 'bluetooth':
-          await printToBluetooth(receipt);
-          break;
+        case 'browser': printToBrowser(receipt); break;
+        case 'usb':     await printToUSB(receipt, enableCashDrawer); break;
+        case 'bluetooth': await printToBluetooth(receipt, enableCashDrawer); break;
       }
       setTimeout(onClose, 500);
     } catch (err) {
@@ -33,6 +28,17 @@ export default function PrintModal({ receipt, onClose }: PrintModalProps) {
     } finally {
       setPrinting(false);
     }
+  };
+
+  const handleOpenDrawer = async () => {
+    setDrawerMsg('');
+    try {
+      await openDrawerViaUSB();
+      setDrawerMsg('Cash drawer opened');
+    } catch {
+      setDrawerMsg('Could not open drawer — check USB connection');
+    }
+    setTimeout(() => setDrawerMsg(''), 3000);
   };
 
   return (
@@ -92,6 +98,25 @@ export default function PrintModal({ receipt, onClose }: PrintModalProps) {
             <div className="text-center py-2 text-sm text-gray-500">
               <Printer className="w-5 h-5 animate-pulse mx-auto mb-1" />
               Printing...
+            </div>
+          )}
+
+          {enableCashDrawer && (
+            <div className="border-t pt-3 mt-1">
+              <button
+                onClick={handleOpenDrawer}
+                className="w-full flex items-center gap-3 p-3 border-2 border-dashed rounded-xl hover:border-yellow-400 hover:bg-yellow-50 transition-colors text-gray-600"
+                title="Manually trigger cash drawer pulse via USB printer"
+              >
+                <span className="text-xl">🗄️</span>
+                <div className="text-left flex-1">
+                  <div className="font-semibold text-sm">Open Cash Drawer</div>
+                  <div className="text-xs text-gray-400">Sends pulse via USB printer (RJ11 connection)</div>
+                </div>
+              </button>
+              {drawerMsg && (
+                <p className="text-xs text-center mt-1 text-gray-500">{drawerMsg}</p>
+              )}
             </div>
           )}
         </div>

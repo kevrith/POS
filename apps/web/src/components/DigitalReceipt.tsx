@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { X, Printer, Download, Share2 } from 'lucide-react';
 
 interface ReceiptItem {
@@ -46,18 +47,103 @@ function formatKES(cents: number): string {
 }
 
 export default function DigitalReceipt({ receipt, onClose }: DigitalReceiptProps) {
+  const receiptRef = useRef<HTMLDivElement>(null);
+
   const handlePrint = () => {
     window.print();
   };
 
   const handleDownload = () => {
-    // TODO: Generate PDF
-    alert('PDF download coming soon');
+    const content = receiptRef.current;
+    if (!content) return;
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Receipt ${receipt.receiptNumber}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Courier New', monospace; font-size: 13px; color: #000; background: #fff; padding: 20px; }
+    .receipt { max-width: 320px; margin: 0 auto; }
+    .center { text-align: center; }
+    .bold { font-weight: bold; }
+    .large { font-size: 16px; }
+    .small { font-size: 11px; color: #555; }
+    .row { display: flex; justify-content: space-between; margin: 3px 0; }
+    .dashed { border-top: 1px dashed #000; margin: 8px 0; padding-top: 8px; }
+    .total-row { font-size: 15px; font-weight: bold; border-top: 1px dashed #000; padding-top: 6px; margin-top: 4px; display: flex; justify-content: space-between; }
+    .muted { color: #666; font-size: 11px; }
+  </style>
+</head>
+<body>
+<div class="receipt">
+  <div class="center" style="margin-bottom:12px">
+    <div class="bold large">${receipt.businessName}</div>
+    <div class="small">${receipt.storeName}</div>
+    ${receipt.storeAddress ? `<div class="small">${receipt.storeAddress}</div>` : ''}
+  </div>
+  <div class="dashed">
+    <div class="row"><span>Receipt:</span><span class="bold">${receipt.receiptNumber}</span></div>
+    <div class="row"><span>Date:</span><span>${new Date(receipt.date).toLocaleString('en-KE')}</span></div>
+    <div class="row"><span>Cashier:</span><span>${receipt.cashierName}</span></div>
+    ${receipt.customerName ? `<div class="row"><span>Customer:</span><span>${receipt.customerName}</span></div>` : ''}
+  </div>
+  <div class="dashed">
+    ${receipt.items.map(item => `
+      <div style="margin-bottom:6px">
+        <div class="row"><span>${item.name}</span><span>${formatKES(item.totalCents)}</span></div>
+        <div class="muted">${item.quantity} × ${formatKES(item.unitPriceCents)}</div>
+      </div>`).join('')}
+  </div>
+  <div class="dashed">
+    <div class="row"><span>Subtotal:</span><span>${formatKES(receipt.subtotalCents)}</span></div>
+    ${receipt.serviceChargeCents && receipt.serviceChargeCents > 0 ? `<div class="row small"><span>Service Charge (10%):</span><span>${formatKES(receipt.serviceChargeCents)}</span></div>` : ''}
+    ${receipt.vatCents && receipt.vatCents > 0 ? `<div class="row small"><span>VAT (16%):</span><span>${formatKES(receipt.vatCents)}</span></div>` : ''}
+    ${receipt.totCents && receipt.totCents > 0 ? `<div class="row small"><span>TOT (3%):</span><span>${formatKES(receipt.totCents)}</span></div>` : ''}
+    <div class="total-row"><span>TOTAL:</span><span>${formatKES(receipt.totalCents)}</span></div>
+  </div>
+  <div class="dashed">
+    ${receipt.payments.map(p => `
+      <div class="row small"><span>${p.method}${p.reference ? ` (${p.reference})` : ''}:</span><span>${formatKES(p.amountCents)}</span></div>`).join('')}
+    ${receipt.changeCents && receipt.changeCents > 0 ? `<div class="row bold"><span>Change:</span><span>${formatKES(receipt.changeCents)}</span></div>` : ''}
+  </div>
+  <div class="center" style="margin-top:16px">
+    ${receipt.receiptHeader ? `<div class="bold" style="margin-bottom:4px">${receipt.receiptHeader}</div>` : ''}
+    <div>Thank you for your business!</div>
+    ${receipt.receiptFooter ? `<div style="margin-top:4px">${receipt.receiptFooter}</div>` : ''}
+    <div class="muted" style="margin-top:8px">Powered by: Kastra Systems</div>
+  </div>
+</div>
+<script>window.onload = function(){ window.print(); window.onafterprint = function(){ window.close(); }; }</script>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank', 'width=420,height=700');
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
   };
 
   const handleShare = () => {
-    // TODO: Share via WhatsApp/Email
-    alert('Share coming soon');
+    const text = [
+      `*${receipt.businessName} — ${receipt.storeName}*`,
+      `Receipt: ${receipt.receiptNumber}`,
+      `Date: ${new Date(receipt.date).toLocaleString('en-KE')}`,
+      `Cashier: ${receipt.cashierName}`,
+      receipt.customerName ? `Customer: ${receipt.customerName}` : '',
+      '',
+      receipt.items.map(i => `${i.name} × ${i.quantity}  ${formatKES(i.totalCents)}`).join('\n'),
+      '',
+      `Subtotal: ${formatKES(receipt.subtotalCents)}`,
+      receipt.vatCents && receipt.vatCents > 0 ? `VAT (16%): ${formatKES(receipt.vatCents)}` : '',
+      `*TOTAL: ${formatKES(receipt.totalCents)}*`,
+      '',
+      'Thank you for your business!',
+    ].filter(Boolean).join('\n');
+
+    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
   };
 
   return (
@@ -83,7 +169,7 @@ export default function DigitalReceipt({ receipt, onClose }: DigitalReceiptProps
             <button
               onClick={handleShare}
               className="p-2 rounded-lg hover:bg-gray-100"
-              title="Share"
+              title="Share via WhatsApp"
             >
               <Share2 className="w-5 h-5 text-gray-600" />
             </button>
@@ -94,7 +180,7 @@ export default function DigitalReceipt({ receipt, onClose }: DigitalReceiptProps
         </div>
 
         <div className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-sm mx-auto font-mono text-sm">
+          <div ref={receiptRef} className="max-w-sm mx-auto font-mono text-sm">
             {/* Header */}
             <div className="text-center mb-4">
               <div className="text-lg font-bold">{receipt.businessName}</div>

@@ -719,7 +719,7 @@ export class SupplierService {
   async getPriceAgreements(businessId: string, supplierId?: string) {
     return this.prisma.supplierPriceAgreement.findMany({
       where: { businessId, ...(supplierId ? { supplierId } : {}) },
-      include: { item: { select: { name: true, sku: true } } },
+      include: { supplier: { select: { name: true } } },
       orderBy: { createdAt: 'desc' },
     });
   }

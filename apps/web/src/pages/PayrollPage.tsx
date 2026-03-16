@@ -5,6 +5,7 @@ import {
   ChevronLeft, Loader2, Trash2, AlertCircle, Users,
   LayoutDashboard, FileText, X,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 
@@ -482,6 +483,8 @@ interface ClaimsTabProps {
 function ClaimsTab({ claims, employees, businessId, userRole, userId }: ClaimsTabProps) {
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
   const canManage = userRole === 'OWNER' || userRole === 'MANAGER';
 
   const approveMutation = useMutation({
@@ -510,10 +513,15 @@ function ClaimsTab({ claims, employees, businessId, userRole, userId }: ClaimsTa
   });
 
   function handleReject(id: string) {
-    const reason = window.prompt('Rejection reason:');
-    if (reason) {
-      rejectMutation.mutate({ id, reason });
-    }
+    setRejectingId(id);
+    setRejectReason('');
+  }
+
+  function confirmReject() {
+    if (!rejectingId || !rejectReason.trim()) { toast.warning('Please enter a rejection reason'); return; }
+    rejectMutation.mutate({ id: rejectingId, reason: rejectReason.trim() });
+    setRejectingId(null);
+    setRejectReason('');
   }
 
   return (
@@ -526,6 +534,29 @@ function ClaimsTab({ claims, employees, businessId, userRole, userId }: ClaimsTa
           onCreate={(data) => createClaimMutation.mutate(data)}
           isPending={createClaimMutation.isPending}
         />
+      )}
+
+      {/* Reject reason modal */}
+      {rejectingId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white">Rejection Reason</h3>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Enter reason for rejection…"
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500"
+              autoFocus
+            />
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => { setRejectingId(null); setRejectReason(''); }} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
+              <button onClick={confirmReject} disabled={rejectMutation.isPending} className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50">
+                {rejectMutation.isPending ? 'Rejecting…' : 'Reject Claim'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="flex items-center justify-between">
@@ -728,13 +759,13 @@ export default function PayrollPage() {
   const bulkSendMutation = useMutation({
     mutationFn: ({ runId, channel }: { runId: string; channel: string }) =>
       api.post<{ sent: number; channel: string }>(`/hr/payroll/${runId}/bulk-send`, { channel }),
-    onSuccess: (data) => alert(`Sent ${data.sent} payslips via ${data.channel}`),
+    onSuccess: (data) => toast.success(`Sent ${data.sent} payslips via ${data.channel}`),
     onError: (e: Error) => setError(e.message),
   });
 
   const b2cMutation = useMutation({
-    mutationFn: (runId: string) => api.post(`/payments/mpesa/b2c`, { businessId, remarks: `Payroll ${runId}`, amountCents: 0, phone: '254700000000' }),
-    onSuccess: () => alert('B2C disbursement initiated — check Safaricom dashboard for status'),
+    mutationFn: (runId: string) => api.post(`/payments/mpesa/b2c-bulk`, { businessId, payrollRunId: runId }),
+    onSuccess: () => toast.success('M-Pesa B2C disbursement initiated — check Safaricom dashboard for status'),
     onError: (e: Error) => setError(e.message),
   });
 

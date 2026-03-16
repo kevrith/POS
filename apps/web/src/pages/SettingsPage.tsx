@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import {
@@ -47,8 +48,12 @@ import { UserRole } from '@pos/shared';
 interface BusinessSettings {
   id: string;
   name: string;
-  taxType: 'VAT' | 'TOT';
+  taxType: 'VAT' | 'TOT' | 'NONE';
   serviceChargeRate: number;
+  serviceChargeDefault: boolean;
+  enableCashDrawer: boolean;
+  enableBarcodeScanner: boolean;
+  enablePoleDisplay: boolean;
   negativePolicyDefault: 'BLOCK' | 'WARN' | 'ALLOW';
   posMode: string;
   expiredItemPolicy: string;
@@ -367,8 +372,12 @@ export default function SettingsPage() {
   // ─── General form state ────────────────────────────────────────────────────
   const [form, setForm] = useState({
     name: '',
-    taxType: 'VAT' as 'VAT' | 'TOT',
+    taxType: 'VAT' as 'VAT' | 'TOT' | 'NONE',
     serviceChargeRate: 10,
+    serviceChargeDefault: false,
+    enableCashDrawer: false,
+    enableBarcodeScanner: true,
+    enablePoleDisplay: false,
     negativePolicyDefault: 'BLOCK' as 'BLOCK' | 'WARN' | 'ALLOW',
     expenseApprovalThresholdCents: 500000,
     posMode: 'RETAIL',
@@ -507,6 +516,11 @@ export default function SettingsPage() {
   const [tierForm, setTierForm] = useState({ name: '', minPoints: '', multiplier: '1', color: 'gray' });
   const [showAddTier, setShowAddTier] = useState(false);
   const [paystackPublicKeyInput, setPaystackPublicKeyInput] = useState('');
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelConfirmText, setCancelConfirmText] = useState('');
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
+  const [cancelDone, setCancelDone] = useState(false);
 
   // ─── Queries ───────────────────────────────────────────────────────────────
   const { data: settings, isLoading } = useQuery<BusinessSettings>({
@@ -654,8 +668,9 @@ export default function SettingsPage() {
     if (settings && !form.name && settings.name) {
       setForm({
         name: settings.name,
-        taxType: settings.taxType,
+        taxType: (settings.taxType ?? 'VAT') as 'VAT' | 'TOT' | 'NONE',
         serviceChargeRate: settings.serviceChargeRate,
+        serviceChargeDefault: settings.serviceChargeDefault ?? false,
         negativePolicyDefault: settings.negativePolicyDefault,
         expenseApprovalThresholdCents: settings.expenseApprovalThresholdCents,
         posMode: settings.posMode,
@@ -670,6 +685,9 @@ export default function SettingsPage() {
         tablePrefix: (settings as any).tablePrefix ?? 'T',
         receiptHeader: (settings as any).receiptHeader ?? '',
         receiptFooter: (settings as any).receiptFooter ?? '',
+        enableCashDrawer: (settings as any).enableCashDrawer ?? false,
+        enableBarcodeScanner: (settings as any).enableBarcodeScanner ?? true,
+        enablePoleDisplay: (settings as any).enablePoleDisplay ?? false,
       });
       // Populate selected display currencies
       if ((settings as any).displayCurrencies) {
@@ -1031,38 +1049,84 @@ export default function SettingsPage() {
             </select>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tax Type</label>
-            <select
-              value={form.taxType}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, taxType: e.target.value as 'VAT' | 'TOT' }))
-              }
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="VAT">VAT (16%) — Standard businesses</option>
-              <option value="TOT">TOT (3%) — Turnover tax for small businesses</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Service Charge Rate (%)
-            </label>
-            <input
-              type="number"
-              min={0}
-              max={100}
-              step={0.5}
-              value={form.serviceChargeRate}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, serviceChargeRate: Number(e.target.value) }))
-              }
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-            <p className="text-xs text-gray-400 mt-1">
-              Service charge is NOT included in the tax base (KRA compliance)
+          {/* ── Tax Configuration ── */}
+          <div className="border rounded-xl p-4 space-y-4 bg-gray-50">
+            <h3 className="text-sm font-semibold text-gray-800">Tax Configuration</h3>
+            <p className="text-xs text-gray-500 -mt-2">
+              All taxes are <strong>inclusive</strong> — they are extracted from the item price, not added on top.
             </p>
+
+            {/* Tax type selection */}
+            <div className="space-y-2">
+              {(
+                [
+                  { value: 'VAT',  label: 'VAT (16%)',  desc: 'Value Added Tax — for VAT-registered businesses' },
+                  { value: 'TOT',  label: 'TOT (3%)',   desc: 'Turnover Tax — for businesses with turnover < KES 5M/year' },
+                  { value: 'NONE', label: 'No Tax',     desc: 'Tax-exempt businesses or where tax is handled externally' },
+                ] as const
+              ).map(({ value, label, desc }) => (
+                <label
+                  key={value}
+                  className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+                    form.taxType === value
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 bg-white hover:border-gray-300'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="taxType"
+                    value={value}
+                    checked={form.taxType === value}
+                    onChange={() => setForm((f) => ({ ...f, taxType: value }))}
+                    className="mt-0.5 accent-blue-600"
+                  />
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">{label}</p>
+                    <p className="text-xs text-gray-500">{desc}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            {/* Service charge */}
+            <div className="border-t pt-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">Service Charge</p>
+                  <p className="text-xs text-gray-500">Auto-apply on every sale (cashier can still toggle per transaction)</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, serviceChargeDefault: !f.serviceChargeDefault }))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    form.serviceChargeDefault ? 'bg-blue-600' : 'bg-gray-300'
+                  }`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                    form.serviceChargeDefault ? 'translate-x-6' : 'translate-x-1'
+                  }`} />
+                </button>
+              </div>
+              {form.serviceChargeDefault && (
+                <div className="flex items-center gap-3">
+                  <label className="text-sm text-gray-600 w-24 shrink-0">Rate (%)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.5}
+                    value={form.serviceChargeRate}
+                    onChange={(e) => setForm((f) => ({ ...f, serviceChargeRate: Number(e.target.value) }))}
+                    className="w-28 px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span className="text-xs text-gray-400">Default: 10%</span>
+                </div>
+              )}
+              <p className="text-xs text-gray-400">
+                Service charge is not included in the VAT/TOT base (KRA compliance)
+              </p>
+            </div>
           </div>
 
           <div>
@@ -1262,6 +1326,35 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          {/* ── Hardware Toggles ──────────────────────────────────────────── */}
+          <div className="border rounded-xl p-4 space-y-4 bg-gray-50 dark:bg-gray-800/50">
+            <div>
+              <h3 className="font-semibold text-gray-800 dark:text-white">Hardware</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Enable only the hardware your business uses. Disabled hardware hides its buttons in the POS.
+              </p>
+            </div>
+            {[
+              { key: 'enableCashDrawer' as const, label: 'Cash Drawer', desc: 'Opens via printer RJ11 port after cash sales' },
+              { key: 'enableBarcodeScanner' as const, label: 'Camera Barcode Scanner', desc: 'Built-in camera scan button on the POS' },
+              { key: 'enablePoleDisplay' as const, label: 'Pole Display', desc: 'Customer-facing display at /pole-display' },
+            ].map(({ key, label, desc }) => (
+              <div key={key} className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-800 dark:text-white">{label}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{desc}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, [key]: !f[key] }))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form[key] ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${form[key] ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+            ))}
+          </div>
+
           <div className="flex items-center gap-3 pt-2">
             <button
               onClick={() => updateMutation.mutate(form)}
@@ -1341,7 +1434,7 @@ export default function SettingsPage() {
 
       {/* ── Users Tab ─────────────────────────────────────────────────────── */}
       {activeTab === 'users' && (() => {
-        const USER_LIMITS: Record<string, number> = { STARTER: 3, PRO: 10, ENTERPRISE: Infinity };
+        const USER_LIMITS: Record<string, number> = { STARTER: 10, PRO: 20, ENTERPRISE: Infinity };
         const currentTierU = settings?.subscriptionTier ?? 'STARTER';
         const userLimit = USER_LIMITS[currentTierU] ?? 3;
         const atLimitU = userLimit !== Infinity && users.length >= userLimit;
@@ -1358,7 +1451,7 @@ export default function SettingsPage() {
               )}
             </div>
             <button
-              onClick={() => { if (atLimitU) { alert(`Your ${currentTierU} plan allows up to ${userLimit} users. Upgrade to add more staff.`); return; } setShowAddUser(true); }}
+              onClick={() => { if (atLimitU) { toast.warning(`Your ${currentTierU} plan allows up to ${userLimit} users. Upgrade to add more staff.`); return; } setShowAddUser(true); }}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${atLimitU ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
             >
               <Plus className="w-4 h-4" />
@@ -1825,8 +1918,8 @@ export default function SettingsPage() {
       {/* ── Subscription Tab ──────────────────────────────────────────────── */}
       {activeTab === 'subscription' && (() => {
         const PLAN_LIMITS: Record<string, { stores: number; users: number }> = {
-          STARTER: { stores: 1, users: 3 },
-          PRO: { stores: 5, users: 10 },
+          STARTER: { stores: 1, users: 10 },
+          PRO: { stores: 5, users: 20 },
           ENTERPRISE: { stores: Infinity, users: Infinity },
         };
         const PLANS = [
@@ -1834,13 +1927,13 @@ export default function SettingsPage() {
             tier: 'STARTER',
             label: 'Starter',
             price: 'KES 2,999/mo',
-            features: ['1 store', '3 users', 'Basic POS', 'Reports', 'eTIMS'],
+            features: ['1 store', '10 users', 'Basic POS', 'Reports', 'eTIMS'],
           },
           {
             tier: 'PRO',
             label: 'Pro',
             price: 'KES 7,999/mo',
-            features: ['5 stores', '10 users', 'All features', 'M-Pesa STK', 'Loyalty', 'Webhooks'],
+            features: ['5 stores', '20 users', 'All features', 'M-Pesa STK', 'Loyalty', 'Webhooks'],
           },
           {
             tier: 'ENTERPRISE',
@@ -2000,7 +2093,122 @@ export default function SettingsPage() {
                 );
               })}
             </div>
-          </div>
+
+            {/* ── Cancel subscription ───────────────────────────────────────── */}
+            {subscription?.subscriptionStatus !== 'CANCELLED' && (
+              <div className="bg-white rounded-xl shadow p-6 border border-red-100">
+                <h4 className="font-semibold text-gray-900 mb-1">Cancel Subscription</h4>
+                <p className="text-sm text-gray-500 mb-4">
+                  Cancelling will downgrade your account at the end of the current billing period. Your data is preserved and you can resubscribe at any time.
+                </p>
+                <button
+                  onClick={() => { setShowCancelModal(true); setCancelReason(''); setCancelConfirmText(''); setCancelDone(false); }}
+                  className="px-4 py-2 border border-red-300 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors"
+                >
+                  Cancel Subscription
+                </button>
+              </div>
+            )}
+
+            {subscription?.subscriptionStatus === 'CANCELLED' && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+                Your subscription has been cancelled. Contact support to reactivate.
+              </div>
+            )}
+
+            {/* Cancel modal */}
+            {showCancelModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+                  {cancelDone ? (
+                    <div className="text-center py-4">
+                      <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
+                        <CheckCircle className="w-6 h-6 text-gray-500" />
+                      </div>
+                      <h3 className="font-bold text-gray-900 mb-1">Subscription Cancelled</h3>
+                      <p className="text-sm text-gray-500 mb-4">We're sorry to see you go. Your data remains intact.</p>
+                      <button onClick={() => { setShowCancelModal(false); }} className="px-5 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium">Close</button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-start justify-between mb-4">
+                        <div>
+                          <h3 className="font-bold text-gray-900">Cancel Subscription</h3>
+                          <p className="text-sm text-gray-500 mt-0.5">Help us improve — tell us why you're leaving</p>
+                        </div>
+                        <button onClick={() => setShowCancelModal(false)} className="text-gray-400 hover:text-gray-600">
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      </div>
+
+                      {/* Reason selection */}
+                      <div className="space-y-2 mb-5">
+                        {[
+                          { value: 'PRICE',           label: 'Too expensive',                icon: '💰' },
+                          { value: 'COMPETITOR',      label: 'Switching to a competitor',    icon: '🔄' },
+                          { value: 'MISSING_FEATURE', label: 'Missing a feature I need',     icon: '🧩' },
+                          { value: 'POOR_SUPPORT',    label: 'Poor customer support',        icon: '🎧' },
+                          { value: 'OTHER',           label: 'Other reason',                 icon: '💬' },
+                        ].map(r => (
+                          <label key={r.value} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${cancelReason === r.value ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                            <input
+                              type="radio"
+                              name="cancelReason"
+                              value={r.value}
+                              checked={cancelReason === r.value}
+                              onChange={() => setCancelReason(r.value)}
+                              className="accent-blue-600"
+                            />
+                            <span className="text-base">{r.icon}</span>
+                            <span className="text-sm font-medium text-gray-700">{r.label}</span>
+                          </label>
+                        ))}
+                      </div>
+
+                      {/* Confirm text */}
+                      <div className="mb-5">
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Type <strong>CANCEL</strong> to confirm
+                        </label>
+                        <input
+                          value={cancelConfirmText}
+                          onChange={e => setCancelConfirmText(e.target.value)}
+                          placeholder="CANCEL"
+                          className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-red-400 focus:border-red-400"
+                        />
+                      </div>
+
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => setShowCancelModal(false)}
+                          className="flex-1 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                        >
+                          Keep Subscription
+                        </button>
+                        <button
+                          disabled={!cancelReason || cancelConfirmText !== 'CANCEL' || cancelSubmitting}
+                          onClick={async () => {
+                            setCancelSubmitting(true);
+                            try {
+                              await api.post(`/business/${businessId}/cancel-subscription`, { reason: cancelReason });
+                              setCancelDone(true);
+                            } catch (e: any) {
+                              showNotification(e.message ?? 'Failed to cancel', 'error');
+                            } finally {
+                              setCancelSubmitting(false);
+                            }
+                          }}
+                          className="flex-1 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {cancelSubmitting ? 'Cancelling…' : 'Yes, Cancel'}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+        </div>
         );
       })()}
 

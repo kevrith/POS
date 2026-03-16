@@ -3,15 +3,16 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 model Business {
   id                              String   @id @default(uuid())
   name                            String
-  taxType                         String   @default("VAT")
+  taxType                         String   @default("VAT")   // 'VAT' | 'TOT' | 'NONE'
   serviceChargeRate               Float    @default(10)
+  serviceChargeDefault            Boolean  @default(false)   // auto-apply service charge on every sale
   negativePolicyDefault           String   @default("BLOCK")
   posMode                         String   @default("RETAIL")
   expiredItemPolicy               String   @default("BLOCK")
@@ -32,6 +33,8 @@ model Business {
   paystackSubscriptionId          String?
   paystackPublicKey               String?  // POS card payment public key
   referralCode                    String?  @unique
+  cancelledAt                     DateTime?
+  cancelReason                    String?  // PRICE | COMPETITOR | MISSING_FEATURE | POOR_SUPPORT | OTHER
   createdAt                       DateTime @default(now())
   updatedAt                       DateTime @updatedAt
 
@@ -56,6 +59,9 @@ model Business {
   tablePrefix                     String?  @default("T")
   receiptHeader                   String?
   receiptFooter                   String?
+  enableCashDrawer                Boolean  @default(false)
+  enableBarcodeScanner            Boolean  @default(true)
+  enablePoleDisplay               Boolean  @default(false)
   parentBusinessId                String?
   parentBusiness                  Business?  @relation("FranchiseHierarchy", fields: [parentBusinessId], references: [id])
   franchisees                     Business[] @relation("FranchiseHierarchy")
@@ -2044,4 +2050,26 @@ model UserPasswordHistory {
   createdAt    DateTime @default(now())
 
   @@index([userId])
+}
+
+model SuperAdminIpWhitelist {
+  id        String   @id @default(uuid())
+  ip        String   @unique
+  label     String?
+  addedBy   String?
+  createdAt DateTime @default(now())
+}
+
+model SuperAdminAuditLog {
+  id         String   @id @default(uuid())
+  adminEmail String
+  action     String
+  targetId   String?
+  targetType String?
+  details    String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([adminEmail])
+  @@index([createdAt])
 }

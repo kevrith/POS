@@ -179,7 +179,7 @@ export default function DeliveryTrackingPage() {
               { key: 'ASSIGNED', label: 'Driver Assigned', time: delivery.pickedUpAt },
               { key: 'ARRIVING', label: 'Driver Arriving', time: null },
               { key: 'DELIVERED', label: 'Delivered', time: delivery.deliveredAt },
-            ].map((step, index) => {
+            ].map((step) => {
               const isCompleted = delivery.status === step.key || 
                 (step.key === 'PENDING') ||
                 (step.key === 'ASSIGNED' && ['ASSIGNED', 'ARRIVING', 'DELIVERED'].includes(delivery.status)) ||

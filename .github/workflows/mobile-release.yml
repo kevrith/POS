@@ -1,0 +1,93 @@
+name: Mobile Apps Release (EAS Build)
+
+on:
+  push:
+    tags:
+      - 'mobile-v*'   # trigger on tags like mobile-v1.0.0
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'EAS build profile'
+        required: true
+        default: 'preview'
+        type: choice
+        options: [development, preview, production]
+      app:
+        description: 'Which app to build'
+        required: true
+        default: 'all'
+        type: choice
+        options: [all, mobile-pos, mobile-customer, mobile-driver]
+
+jobs:
+  build-pos:
+    name: Build KASTRA POS (Cashier)
+    if: ${{ github.event.inputs.app == 'all' || github.event.inputs.app == 'mobile-pos' || startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+      - name: Install dependencies
+        run: cd apps/mobile-pos && npm install --legacy-peer-deps
+      - name: Build Android APK (preview)
+        run: cd apps/mobile-pos && eas build --platform android --profile ${{ github.event.inputs.profile || 'preview' }} --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kastra-pos-cashier-apk
+          path: apps/mobile-pos/build/*.apk
+          if-no-files-found: ignore
+
+  build-customer:
+    name: Build KASTRA Order (Customer)
+    if: ${{ github.event.inputs.app == 'all' || github.event.inputs.app == 'mobile-customer' || startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+      - name: Install dependencies
+        run: cd apps/mobile-customer && npm install --legacy-peer-deps
+      - name: Build Android APK (preview)
+        run: cd apps/mobile-customer && eas build --platform android --profile ${{ github.event.inputs.profile || 'preview' }} --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kastra-order-customer-apk
+          path: apps/mobile-customer/build/*.apk
+          if-no-files-found: ignore
+
+  build-driver:
+    name: Build KASTRA Driver
+    if: ${{ github.event.inputs.app == 'all' || github.event.inputs.app == 'mobile-driver' || startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+      - name: Install dependencies
+        run: cd apps/mobile-driver && npm install --legacy-peer-deps
+      - name: Build Android APK (preview)
+        run: cd apps/mobile-driver && eas build --platform android --profile ${{ github.event.inputs.profile || 'preview' }} --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kastra-driver-apk
+          path: apps/mobile-driver/build/*.apk
+          if-no-files-found: ignore

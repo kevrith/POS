@@ -1,13 +1,17 @@
-import { useState } from 'react';
-import { getAdminToken, getAdminEmail, clearAdminToken } from './lib/api';
+import { useState, useEffect, useRef } from 'react';
+import { getAdminToken, getAdminEmail, clearAdminToken, adminApi } from './lib/api';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import BusinessesPage from './pages/BusinessesPage';
 import LicenseKeysPage from './pages/LicenseKeysPage';
 import SupportPage from './pages/SupportPage';
 import ReferralsPage from './pages/ReferralsPage';
+import UsersPage from './pages/UsersPage';
+import AnalyticsPage from './pages/AnalyticsPage';
+import WebhooksPage from './pages/WebhooksPage';
+import PlatformSettingsPage from './pages/PlatformSettingsPage';
 
-type Page = 'dashboard' | 'businesses' | 'license-keys' | 'support' | 'referrals';
+type Page = 'dashboard' | 'businesses' | 'users' | 'license-keys' | 'support' | 'referrals' | 'analytics' | 'webhooks' | 'platform-settings';
 
 const C = {
   bg: '#0a0f1e',
@@ -47,24 +51,71 @@ const Icons = {
 
 // Icon paths
 const MoreIcons = {
-  referral: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
+  referral:  'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
+  users:     'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
+  analytics: 'M18 20V10 M12 20V4 M6 20v-6',
+  webhooks:  'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71 M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71',
+  settings:  'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
 };
 
-const NAV: Array<{ id: Page; label: string; icon: string; color: string }> = [
-  { id: 'dashboard',    label: 'Dashboard',     icon: Icons.dashboard,   color: C.accent },
-  { id: 'businesses',  label: 'Businesses',    icon: Icons.businesses,  color: C.purple },
-  { id: 'license-keys',label: 'License Keys',  icon: Icons.license,     color: C.success },
-  { id: 'referrals',   label: 'Referrals',     icon: MoreIcons.referral, color: '#06b6d4' },
-  { id: 'support',     label: 'Support Tools', icon: Icons.support,     color: C.warning },
+const NAV: Array<{ id: Page; label: string; icon: string; color: string; group?: string }> = [
+  { id: 'dashboard',         label: 'Dashboard',        icon: Icons.dashboard,     color: C.accent },
+  { id: 'businesses',        label: 'Businesses',       icon: Icons.businesses,    color: C.purple },
+  { id: 'users',             label: 'Users',            icon: MoreIcons.users,     color: '#06b6d4' },
+  { id: 'analytics',         label: 'Analytics',        icon: MoreIcons.analytics, color: '#10b981' },
+  { id: 'license-keys',      label: 'License Keys',     icon: Icons.license,       color: C.success },
+  { id: 'referrals',         label: 'Referrals',        icon: MoreIcons.referral,  color: '#f472b6' },
+  { id: 'webhooks',          label: 'Webhooks',         icon: MoreIcons.webhooks,  color: '#f59e0b' },
+  { id: 'support',           label: 'Support Tools',    icon: Icons.support,       color: C.warning },
+  { id: 'platform-settings', label: 'Platform Settings',icon: MoreIcons.settings,  color: '#8b5cf6' },
 ];
 
 export default function App() {
   const [isAuth, setIsAuth] = useState(() => !!getAdminToken());
-  const [page, setPage] = useState<Page>('dashboard');
+  const [page,   setPage]   = useState<Page>('dashboard');
+  const [health, setHealth] = useState<any>(null);
+  const [alerts, setAlerts] = useState<any[]>([]);
+  const [alertOpen, setAlertOpen]   = useState(false);
+  const [alertSeen, setAlertSeen]   = useState(0);
+  const alertRef = useRef<HTMLDivElement>(null);
+
+  // Poll health + alerts every 30s
+  useEffect(() => {
+    if (!isAuth) return;
+    const fetchAll = () => {
+      adminApi.getHealth().then(setHealth).catch(() => null);
+      adminApi.getAlertFeed().then((a: any[]) => setAlerts(a ?? [])).catch(() => null);
+    };
+    fetchAll();
+    const id = setInterval(fetchAll, 30_000);
+    return () => clearInterval(id);
+  }, [isAuth]);
+
+  // Close alert dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (alertRef.current && !alertRef.current.contains(e.target as Node)) setAlertOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   if (!isAuth) return <LoginPage onLogin={() => setIsAuth(true)} />;
 
   const logout = () => { clearAdminToken(); setIsAuth(false); };
+
+  // Derive system status from live health data
+  const emailQ   = health?.queueDepths?.email    ?? 0;
+  const webhookQ = health?.queueDepths?.webhooks ?? 0;
+  const etimsQ   = health?.queueDepths?.etims    ?? 0;
+  const failRate = health?.etimsFailureRate       ?? 0;
+  const isIncident  = failRate > 20 || emailQ > 50 || webhookQ > 50 || etimsQ > 50;
+  const isDegraded  = !isIncident && (failRate > 0 || emailQ > 10 || webhookQ > 10 || etimsQ > 10);
+  const sysStatus   = isIncident ? 'INCIDENT' : isDegraded ? 'DEGRADED' : 'OPERATIONAL';
+  const sysColor    = isIncident ? '#ef4444'  : isDegraded ? '#f59e0b'  : '#10b981';
+
+  const unseenAlerts = alerts.length - alertSeen;
+  const criticalAlerts = alerts.filter(a => a.severity === 'critical').length;
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: C.bg }}>
@@ -97,10 +148,12 @@ export default function App() {
               <div style={{ fontSize: '0.6875rem', color: C.textMuted, marginTop: '1px' }}>Super Admin Console</div>
             </div>
           </div>
-          {/* Status dot */}
+          {/* Status dot — live */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '0.75rem' }}>
-            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: C.success, boxShadow: `0 0 6px ${C.success}` }} />
-            <span style={{ fontSize: '0.6875rem', color: C.textMuted }}>System operational</span>
+            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: sysColor, boxShadow: `0 0 6px ${sysColor}` }} />
+            <span style={{ fontSize: '0.6875rem', color: C.textMuted }}>
+              {sysStatus === 'OPERATIONAL' ? 'System operational' : sysStatus === 'DEGRADED' ? 'System degraded' : 'Active incident'}
+            </span>
           </div>
         </div>
 
@@ -250,15 +303,79 @@ export default function App() {
               KASTRA POS Platform Administration
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+
+            {/* Alert bell */}
+            <div ref={alertRef} style={{ position: 'relative' }}>
+              <button
+                onClick={() => { setAlertOpen(o => !o); setAlertSeen(alerts.length); }}
+                style={{
+                  position: 'relative', background: unseenAlerts > 0 ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.05)',
+                  border: `1px solid ${unseenAlerts > 0 ? 'rgba(239,68,68,0.3)' : C.sidebarBorder}`,
+                  borderRadius: '10px', width: '36px', height: '36px', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'all 0.15s',
+                }}
+              >
+                <Icon d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9 M13.73 21a2 2 0 0 1-3.46 0" size={15} color={unseenAlerts > 0 ? '#ef4444' : C.textMuted} />
+                {unseenAlerts > 0 && (
+                  <span style={{
+                    position: 'absolute', top: '4px', right: '4px',
+                    width: '8px', height: '8px', borderRadius: '50%',
+                    background: criticalAlerts > 0 ? '#ef4444' : '#f59e0b',
+                    boxShadow: `0 0 5px ${criticalAlerts > 0 ? '#ef4444' : '#f59e0b'}`,
+                  }} />
+                )}
+              </button>
+
+              {alertOpen && (
+                <div style={{
+                  position: 'absolute', top: '44px', right: 0, width: '340px',
+                  background: C.sidebar, border: `1px solid ${C.sidebarBorder}`,
+                  borderRadius: '14px', boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
+                  zIndex: 100, overflow: 'hidden',
+                }}>
+                  <div style={{ padding: '0.875rem 1rem', borderBottom: `1px solid ${C.sidebarBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontWeight: 700, color: C.text, fontSize: '0.875rem' }}>Platform Alerts</span>
+                    <span style={{ fontSize: '0.6875rem', color: C.textMuted }}>{alerts.length} total</span>
+                  </div>
+                  <div style={{ maxHeight: '360px', overflowY: 'auto' }}>
+                    {alerts.length === 0 ? (
+                      <div style={{ padding: '2rem', textAlign: 'center', color: C.textMuted, fontSize: '0.875rem' }}>No alerts — all clear</div>
+                    ) : alerts.map((a, i) => {
+                      const severityColor = a.severity === 'critical' ? '#ef4444' : a.severity === 'warning' ? '#f59e0b' : '#06b6d4';
+                      return (
+                        <div key={i} style={{
+                          padding: '0.75rem 1rem', borderBottom: `1px solid ${C.sidebarBorder}`,
+                          borderLeft: `3px solid ${severityColor}`,
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
+                            <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: C.text, lineHeight: 1.3 }}>{a.title}</span>
+                            <span style={{ fontSize: '0.625rem', fontWeight: 700, color: severityColor, background: `${severityColor}18`, padding: '1px 6px', borderRadius: 6, flexShrink: 0 }}>
+                              {String(a.severity).toUpperCase()}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: C.textMuted, marginTop: '3px', lineHeight: 1.4 }}>{a.body}</div>
+                          {a.businessName && (
+                            <button
+                              onClick={() => { setPage('businesses'); setAlertOpen(false); }}
+                              style={{ fontSize: '0.6875rem', color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', marginTop: '2px' }}
+                            >
+                              → {a.businessName}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div style={{
               padding: '0.375rem 0.75rem',
-              background: 'rgba(16,185,129,0.1)',
-              border: '1px solid rgba(16,185,129,0.2)',
-              borderRadius: '20px',
-              fontSize: '0.75rem',
-              color: C.success,
-              fontWeight: 600,
+              background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)',
+              borderRadius: '20px', fontSize: '0.75rem', color: C.success, fontWeight: 600,
             }}>
               LIVE
             </div>
@@ -266,11 +383,15 @@ export default function App() {
         </div>
 
         <div style={{ padding: '2rem' }} className="fade-in">
-          {page === 'dashboard'    && <DashboardPage />}
-          {page === 'businesses'   && <BusinessesPage />}
-          {page === 'license-keys' && <LicenseKeysPage />}
-          {page === 'referrals'    && <ReferralsPage />}
-          {page === 'support'      && <SupportPage />}
+          {page === 'dashboard'          && <DashboardPage />}
+          {page === 'businesses'         && <BusinessesPage />}
+          {page === 'users'              && <UsersPage />}
+          {page === 'analytics'          && <AnalyticsPage />}
+          {page === 'license-keys'       && <LicenseKeysPage />}
+          {page === 'referrals'          && <ReferralsPage />}
+          {page === 'webhooks'           && <WebhooksPage />}
+          {page === 'support'            && <SupportPage />}
+          {page === 'platform-settings'  && <PlatformSettingsPage />}
         </div>
       </main>
     </div>

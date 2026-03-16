@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
+import { EmailService } from '../email/email.service';
 import * as bcrypt from 'bcrypt';
 import * as speakeasy from 'speakeasy';
 import { UserRole } from '@pos/shared';
@@ -32,6 +33,7 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwt: JwtService,
+    private email: EmailService,
   ) {}
 
   // ─── Password complexity validation ─────────────────────────
@@ -428,6 +430,53 @@ export class AuthService {
 
   async revokeAllSessions(userId: string) {
     await this.prisma.userSession.updateMany({ where: { userId }, data: { isRevoked: true } });
+    return { success: true };
+  }
+
+  // ─── Forgot / Reset password ─────────────────────────────────
+
+  async forgotPassword(email: string): Promise<{ sent: boolean; resetUrl?: string }> {
+    const user = await this.prisma.user.findFirst({ where: { email } });
+    // Always return same response to avoid email enumeration
+    if (!user || !user.email) return { sent: true };
+
+    // Short-lived JWT (15 min) as the reset token — no DB storage needed
+    const token = this.jwt.sign(
+      { sub: user.id, type: 'password-reset' },
+      { expiresIn: '15m' },
+    );
+
+    const appUrl = process.env.APP_URL ?? 'http://localhost:3001';
+    const resetUrl = `${appUrl}/reset-password?token=${token}`;
+
+    // Send reset email (fire-and-forget — never reveal if email exists)
+    void this.email.sendPasswordReset({ to: user.email, name: user.name, resetUrl });
+
+    // Only expose resetUrl in non-production so developers can test without SMTP
+    const isDev = (process.env.NODE_ENV ?? 'development') !== 'production';
+    return { sent: true, ...(isDev ? { resetUrl } : {}) };
+  }
+
+  async resetPasswordWithToken(token: string, newPassword: string): Promise<{ success: boolean }> {
+    let payload: { sub: string; type: string };
+    try {
+      payload = this.jwt.verify(token) as { sub: string; type: string };
+    } catch {
+      throw new BadRequestException('Invalid or expired reset link. Please request a new one.');
+    }
+
+    if (payload.type !== 'password-reset') {
+      throw new BadRequestException('Invalid reset token.');
+    }
+
+    this.validatePasswordComplexity(newPassword);
+    const hash = await bcrypt.hash(newPassword, 12);
+
+    await this.prisma.user.update({
+      where: { id: payload.sub },
+      data: { passwordHash: hash, loginAttempts: 0, lockedUntil: null },
+    });
+
     return { success: true };
   }
 }

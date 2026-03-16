@@ -4,13 +4,16 @@ import { SuperAdminService } from './super-admin.service';
 import { SuperAdminController } from './super-admin.controller';
 import { SuperAdminAuthGuard } from './super-admin-auth.guard';
 import { PrismaModule } from '../prisma/prisma.module';
+import { SecretsRotationService } from '../security/secrets-rotation.service';
+import { EmailModule } from '../email/email.module';
 
 @Module({
   imports: [
     PrismaModule,
     JwtModule.register({}), // options provided per-call via jwt.sign(payload, opts)
+    EmailModule,
   ],
-  providers: [SuperAdminService, SuperAdminAuthGuard],
+  providers: [SuperAdminService, SuperAdminAuthGuard, SecretsRotationService],
   controllers: [SuperAdminController],
 })
 export class SuperAdminModule {}

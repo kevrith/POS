@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import {
   Search, Trash2, Plus, Minus, PauseCircle, PlayCircle, X,
   User, Star, Camera, AlertTriangle, Monitor, Zap, Hash,
@@ -815,7 +816,7 @@ export default function SupermarketPOSPage() {
                   Void Last
                 </button>
                 <button
-                  onClick={() => { if (cart.length > 0 && window.confirm('Clear all items?')) clearCart(); }}
+                  onClick={() => { if (cart.length > 0) { clearCart(); toast.info('Cart cleared'); } }}
                   disabled={cart.length === 0}
                   className="flex flex-col items-center justify-center gap-1 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-400 hover:text-red-500 transition-colors disabled:opacity-30 text-xs font-medium"
                 >

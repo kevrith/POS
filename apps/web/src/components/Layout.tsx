@@ -393,141 +393,228 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <div className="flex h-screen bg-gray-50 dark:bg-gray-950 overflow-hidden">
 
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
-      <aside className="hidden md:flex w-56 flex-col flex-shrink-0 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800">
+      <aside className="hidden md:flex w-[260px] flex-col flex-shrink-0 bg-[#f8f9fb] dark:bg-[#0d1117] border-r border-gray-200/80 dark:border-white/[0.055] relative">
 
-        {/* Brand header */}
-        <div className="px-4 pt-5 pb-4 border-b border-gray-100 dark:border-gray-800">
-          <div className="flex items-center gap-2.5 mb-3">
-            <img src="/logo.png" alt="KASTRA POS" className="w-8 h-8 rounded-lg object-contain flex-shrink-0" />
-            <div>
-              <div className="text-sm font-bold text-gray-900 dark:text-white leading-tight">KASTRA POS</div>
-              <div className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">Enterprise POS</div>
+        {/* 2px gradient accent line at the very top */}
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500 z-10" />
+
+        {/* ── Brand header ──────────────────────────────────────────────── */}
+        <div className="px-4 pt-6 pb-4 mt-[2px]">
+
+          {/* Logo + wordmark row */}
+          <div className="flex items-center gap-3 mb-4">
+            <div className="relative flex-shrink-0">
+              <div className="w-10 h-10 rounded-[10px] bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-blue-500/30 ring-1 ring-inset ring-white/15">
+                <img
+                  src="/logo.png"
+                  alt=""
+                  className="w-6 h-6 object-contain"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              </div>
+              {/* Online dot */}
+              <div className="absolute -bottom-0.5 -right-0.5 w-[11px] h-[11px] bg-emerald-400 rounded-full border-2 border-[#f8f9fb] dark:border-[#0d1117] shadow-sm" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[14.5px] font-extrabold text-gray-900 dark:text-white leading-tight tracking-[-0.01em]">KASTRA POS</div>
+              <div className="flex items-center gap-1.5 mt-[3px]">
+                <span className="text-[9.5px] font-bold tracking-[0.14em] uppercase text-blue-600 dark:text-blue-400">Enterprise</span>
+                <span className="w-[3px] h-[3px] rounded-full bg-gray-300 dark:bg-white/20 flex-shrink-0" />
+                <span className={`text-[9px] font-semibold px-1.5 py-[1px] rounded-full uppercase tracking-wide ${
+                  subscription?.subscriptionStatus === 'ACTIVE'
+                    ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                    : subscription?.subscriptionStatus === 'TRIAL'
+                      ? 'bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                      : 'bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-white/40'
+                }`}>
+                  {subscription?.subscriptionStatus === 'ACTIVE' ? 'Active' : subscription?.subscriptionStatus === 'TRIAL' ? 'Trial' : 'Free'}
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* User card */}
-          <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 rounded-lg px-2.5 py-1.5">
-            <div className={`w-6 h-6 rounded-md ${avatarColor(user?.name ?? 'U')} flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0`}>
+          {/* User identity card */}
+          <div className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl bg-white dark:bg-white/[0.05] border border-gray-200/70 dark:border-white/[0.08] shadow-sm hover:shadow dark:shadow-none hover:border-gray-300/70 dark:hover:border-white/[0.13] transition-all duration-200 cursor-default">
+            <div className={`w-8 h-8 rounded-full ${avatarColor(user?.name ?? 'U')} flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0 ring-2 ring-white dark:ring-white/20 shadow-sm`}>
               {getInitials(user?.name ?? 'U')}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-xs font-medium text-gray-800 dark:text-gray-100 truncate leading-tight">
-                {user?.name}
-              </div>
-              <div className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight capitalize">
-                {user?.role?.toLowerCase()}
+              <div className="text-[13px] font-semibold text-gray-800 dark:text-white/90 truncate leading-tight">{user?.name}</div>
+              <div className="flex items-center gap-1.5 mt-[3px]">
+                <div className="w-[5px] h-[5px] rounded-full bg-emerald-400 ring-[2px] ring-emerald-400/25 flex-shrink-0" />
+                <span className="text-[11px] text-gray-400 dark:text-white/35 capitalize font-medium leading-none">{user?.role?.toLowerCase()}</span>
               </div>
             </div>
           </div>
 
-          <div className="mt-2">
+          <div className="mt-2.5">
             <SyncStatusBadge />
           </div>
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-3 px-2">
+        {/* Section separator */}
+        <div className="mx-3.5 h-px bg-gray-200/70 dark:bg-white/[0.055]" />
+
+        {/* ── Navigation ────────────────────────────────────────────────── */}
+        <nav className="flex-1 overflow-y-auto py-2.5 px-2.5 scrollbar-thin scrollbar-thumb-gray-300/60 dark:scrollbar-thumb-white/10 scrollbar-track-transparent">
           {visibleGroups.map((group) => {
             const collapsed = collapsedGroups.has(group.label);
             return (
-              <div key={group.label} className="mb-1">
+              <div key={group.label} className="mb-2">
+
+                {/* Group header */}
                 <button
                   onClick={() => toggleGroup(group.label)}
-                  className="w-full flex items-center justify-between px-2 py-1 text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest rounded hover:text-gray-600 dark:hover:text-gray-300 transition-colors mb-0.5"
+                  className="w-full flex items-center justify-between px-2 py-[5px] mb-[3px] rounded-md transition-colors duration-150 group hover:bg-black/[0.03] dark:hover:bg-white/[0.03]"
                 >
-                  {group.label}
+                  <span className="text-[9.5px] font-bold text-gray-400/70 dark:text-white/22 uppercase tracking-[0.14em] group-hover:text-gray-500 dark:group-hover:text-white/45 transition-colors duration-150">
+                    {group.label}
+                  </span>
                   {collapsed
-                    ? <ChevronRight className="w-3 h-3" />
-                    : <ChevronDown className="w-3 h-3" />
+                    ? <ChevronRight className="w-[11px] h-[11px] text-gray-300/80 dark:text-white/15 group-hover:text-gray-400 dark:group-hover:text-white/35 transition-colors" />
+                    : <ChevronDown className="w-[11px] h-[11px] text-gray-300/80 dark:text-white/15 group-hover:text-gray-400 dark:group-hover:text-white/35 transition-colors" />
                   }
                 </button>
-                {!collapsed && group.items.map((item) => {
-                  const active = isActive(item.to);
-                  return (
-                    <Link
-                      key={item.to}
-                      to={item.to}
-                      className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-all duration-100 mb-0.5 ${
-                        active
-                          ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                          : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
-                      }`}
-                    >
-                      <item.icon className={`w-4 h-4 flex-shrink-0 transition-colors ${
-                        active ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'
-                      }`} />
-                      <span className="truncate text-[13px]">{item.label}</span>
-                      {active && (
-                        <div className="ml-auto w-1 h-1 rounded-full bg-blue-600 dark:bg-blue-400 flex-shrink-0" />
-                      )}
-                    </Link>
-                  );
-                })}
+
+                {/* Group items */}
+                <div className={`overflow-hidden transition-all duration-200 ease-out ${
+                  collapsed ? 'max-h-0 opacity-0' : 'max-h-[900px] opacity-100'
+                }`}>
+                  <div className="space-y-[2px]">
+                    {group.items.map((item) => {
+                      const active = isActive(item.to);
+                      return (
+                        <Link
+                          key={item.to}
+                          to={item.to}
+                          className={`group flex items-center gap-2.5 px-2 py-[6px] rounded-lg text-[13px] font-medium transition-all duration-150 ${
+                            active
+                              ? 'bg-blue-600/[0.09] dark:bg-blue-500/[0.14] text-blue-700 dark:text-blue-300'
+                              : 'text-gray-500/90 dark:text-white/38 hover:text-gray-800 dark:hover:text-white/75 hover:bg-gray-900/[0.04] dark:hover:bg-white/[0.05]'
+                          }`}
+                        >
+                          {/* Icon container — has its own subtle bg when active */}
+                          <div className={`flex-shrink-0 flex items-center justify-center w-[26px] h-[26px] rounded-md transition-all duration-150 ${
+                            active
+                              ? 'bg-blue-600/[0.12] dark:bg-blue-400/[0.18]'
+                              : 'bg-transparent group-hover:bg-gray-900/[0.05] dark:group-hover:bg-white/[0.07]'
+                          }`}>
+                            <item.icon className={`w-[14px] h-[14px] transition-colors duration-150 ${
+                              active
+                                ? 'text-blue-600 dark:text-blue-400'
+                                : 'text-gray-400 dark:text-white/32 group-hover:text-gray-600 dark:group-hover:text-white/60'
+                            }`} />
+                          </div>
+
+                          <span className={`flex-1 truncate transition-all duration-150 ${active ? 'font-semibold' : 'font-medium'}`}>
+                            {item.label}
+                          </span>
+
+                          {active && (
+                            <div className="flex-shrink-0 w-1 h-1 rounded-full bg-blue-500 dark:bg-blue-400 opacity-70" />
+                          )}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             );
           })}
         </nav>
 
-        {/* Footer */}
-        <div className="border-t border-gray-100 dark:border-gray-800 p-2 space-y-0.5">
-          <Link
-            to="/notifications"
-            className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-medium transition-colors ${
-              isActive('/notifications')
-                ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'
-            }`}
-          >
-            <Bell className="w-4 h-4 flex-shrink-0 text-gray-400 dark:text-gray-500" />
-            Notifications
-          </Link>
+        {/* ── Footer ────────────────────────────────────────────────────── */}
+        <div className="px-2.5 pb-3 pt-1">
+          {/* Separator above footer */}
+          <div className="mx-0.5 mb-2 h-px bg-gray-200/70 dark:bg-white/[0.055]" />
 
-          {showSettings && (
-            <>
-              <Link
-                to="/settings"
-                className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-medium transition-colors ${
-                  isActive('/settings')
-                    ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'
-                }`}
-              >
-                <Settings className="w-4 h-4 flex-shrink-0 text-gray-400 dark:text-gray-500" />
-                Settings
-              </Link>
-              <Link
-                to="/setup"
-                className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-medium transition-colors ${
-                  isActive('/setup')
-                    ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'
-                }`}
-              >
-                <Wand2 className="w-4 h-4 flex-shrink-0 text-gray-400 dark:text-gray-500" />
-                Setup Wizard
-              </Link>
-            </>
-          )}
+          {/* Footer actions grouped in a card */}
+          <div className="rounded-xl bg-white/70 dark:bg-white/[0.035] border border-gray-200/60 dark:border-white/[0.07] overflow-hidden divide-y divide-gray-200/50 dark:divide-white/[0.05]">
 
-          {/* Theme toggle */}
-          <button
-            onClick={toggleTheme}
-            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-colors"
-          >
-            {isDark
-              ? <Sun className="w-4 h-4 flex-shrink-0 text-amber-400" />
-              : <Moon className="w-4 h-4 flex-shrink-0 text-gray-400" />
-            }
-            {isDark ? 'Light Mode' : 'Dark Mode'}
-          </button>
+            {/* Notifications */}
+            <Link
+              to="/notifications"
+              className={`group flex items-center gap-2.5 px-3 py-[8px] text-[13px] font-medium transition-colors duration-150 ${
+                isActive('/notifications')
+                  ? 'bg-blue-600/[0.09] dark:bg-blue-500/[0.14] text-blue-700 dark:text-blue-300'
+                  : 'text-gray-500 dark:text-white/42 hover:text-gray-800 dark:hover:text-white/75 hover:bg-gray-50 dark:hover:bg-white/[0.05]'
+              }`}
+            >
+              <div className={`flex-shrink-0 flex items-center justify-center w-[26px] h-[26px] rounded-md transition-all duration-150 ${
+                isActive('/notifications')
+                  ? 'bg-blue-600/[0.12] dark:bg-blue-400/[0.18]'
+                  : 'bg-transparent group-hover:bg-gray-900/[0.05] dark:group-hover:bg-white/[0.07]'
+              }`}>
+                <Bell className={`w-[14px] h-[14px] ${isActive('/notifications') ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-white/32 group-hover:text-gray-600 dark:group-hover:text-white/60'}`} />
+              </div>
+              <span className="flex-1">Notifications</span>
+              <div className="flex-shrink-0 w-[7px] h-[7px] bg-red-500 rounded-full shadow-sm shadow-red-500/40" />
+            </Link>
 
-          <button
-            onClick={logout}
-            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-medium text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-          >
-            <LogOut className="w-4 h-4 flex-shrink-0" />
-            Sign Out
-          </button>
+            {showSettings && (
+              <>
+                <Link
+                  to="/settings"
+                  className={`group flex items-center gap-2.5 px-3 py-[8px] text-[13px] font-medium transition-colors duration-150 ${
+                    isActive('/settings')
+                      ? 'bg-blue-600/[0.09] dark:bg-blue-500/[0.14] text-blue-700 dark:text-blue-300'
+                      : 'text-gray-500 dark:text-white/42 hover:text-gray-800 dark:hover:text-white/75 hover:bg-gray-50 dark:hover:bg-white/[0.05]'
+                  }`}
+                >
+                  <div className={`flex-shrink-0 flex items-center justify-center w-[26px] h-[26px] rounded-md transition-all duration-150 ${
+                    isActive('/settings')
+                      ? 'bg-blue-600/[0.12] dark:bg-blue-400/[0.18]'
+                      : 'bg-transparent group-hover:bg-gray-900/[0.05] dark:group-hover:bg-white/[0.07]'
+                  }`}>
+                    <Settings className={`w-[14px] h-[14px] group-hover:rotate-90 transition-all duration-300 ${isActive('/settings') ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-white/32 group-hover:text-gray-600 dark:group-hover:text-white/60'}`} />
+                  </div>
+                  <span className="flex-1">Settings</span>
+                </Link>
+                <Link
+                  to="/setup"
+                  className={`group flex items-center gap-2.5 px-3 py-[8px] text-[13px] font-medium transition-colors duration-150 ${
+                    isActive('/setup')
+                      ? 'bg-blue-600/[0.09] dark:bg-blue-500/[0.14] text-blue-700 dark:text-blue-300'
+                      : 'text-gray-500 dark:text-white/42 hover:text-gray-800 dark:hover:text-white/75 hover:bg-gray-50 dark:hover:bg-white/[0.05]'
+                  }`}
+                >
+                  <div className={`flex-shrink-0 flex items-center justify-center w-[26px] h-[26px] rounded-md transition-all duration-150 ${
+                    isActive('/setup')
+                      ? 'bg-blue-600/[0.12] dark:bg-blue-400/[0.18]'
+                      : 'bg-transparent group-hover:bg-gray-900/[0.05] dark:group-hover:bg-white/[0.07]'
+                  }`}>
+                    <Wand2 className={`w-[14px] h-[14px] ${isActive('/setup') ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-white/32 group-hover:text-gray-600 dark:group-hover:text-white/60'}`} />
+                  </div>
+                  <span className="flex-1">Setup Wizard</span>
+                </Link>
+              </>
+            )}
+
+            {/* Theme toggle */}
+            <button
+              onClick={toggleTheme}
+              className="w-full group flex items-center gap-2.5 px-3 py-[8px] text-[13px] font-medium text-gray-500 dark:text-white/42 hover:text-gray-800 dark:hover:text-white/75 hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors duration-150"
+            >
+              <div className="flex-shrink-0 flex items-center justify-center w-[26px] h-[26px] rounded-md bg-transparent group-hover:bg-gray-900/[0.05] dark:group-hover:bg-white/[0.07] transition-all duration-150">
+                {isDark
+                  ? <Sun className="w-[14px] h-[14px] text-amber-500 group-hover:rotate-12 transition-transform duration-300" />
+                  : <Moon className="w-[14px] h-[14px] text-gray-400 group-hover:text-indigo-500 transition-colors duration-200" />
+                }
+              </div>
+              <span className="flex-1 text-left">{isDark ? 'Light Mode' : 'Dark Mode'}</span>
+            </button>
+
+            {/* Sign out — danger-tinted */}
+            <button
+              onClick={logout}
+              className="w-full group flex items-center gap-2.5 px-3 py-[8px] text-[13px] font-medium text-gray-400 dark:text-white/32 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50/80 dark:hover:bg-red-500/[0.07] transition-colors duration-150"
+            >
+              <div className="flex-shrink-0 flex items-center justify-center w-[26px] h-[26px] rounded-md bg-transparent group-hover:bg-red-100/60 dark:group-hover:bg-red-500/10 transition-all duration-150">
+                <LogOut className="w-[14px] h-[14px] group-hover:translate-x-0.5 transition-transform duration-200" />
+              </div>
+              <span className="flex-1 text-left">Sign Out</span>
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -562,8 +649,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-950 pb-16 md:pb-0">
-          {children}
+        <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-950 pb-16 md:pb-0 relative">
+          {/* Subtle background pattern */}
+          <div className="absolute inset-0 opacity-[0.02] dark:opacity-[0.01]">
+            <div className="absolute inset-0" style={{
+              backgroundImage: `radial-gradient(circle at 1px 1px, rgb(0 0 0) 1px, transparent 0)`,
+              backgroundSize: '20px 20px'
+            }} />
+          </div>
+          <div className="relative z-10">
+            {children}
+          </div>
         </main>
       </div>
     </div>

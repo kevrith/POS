@@ -143,6 +143,32 @@ export class EmailService {
     });
   }
 
+  async sendPasswordReset(opts: { to: string; name: string; resetUrl: string }) {
+    return this.send({
+      to: opts.to,
+      subject: 'Reset your KASTRA POS password',
+      html: `
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+          <h2 style="color:#2563eb">KASTRA POS — Password Reset</h2>
+          <p>Hi ${opts.name},</p>
+          <p>We received a request to reset your password. Click the button below to set a new password.
+             This link expires in <strong>15 minutes</strong>.</p>
+          <a href="${opts.resetUrl}"
+             style="display:inline-block;padding:12px 28px;background:#2563eb;color:#fff;border-radius:8px;text-decoration:none;font-weight:bold;margin:16px 0">
+            Reset Password
+          </a>
+          <p style="color:#6b7280;font-size:13px">
+            If you didn't request this, you can safely ignore this email — your password will not change.
+          </p>
+          <p style="color:#6b7280;font-size:12px;margin-top:24px">
+            Or copy this link into your browser:<br/>
+            <a href="${opts.resetUrl}" style="color:#2563eb;word-break:break-all">${opts.resetUrl}</a>
+          </p>
+          <p style="color:#9ca3af;font-size:11px;margin-top:24px">KASTRA POS — Enterprise POS for Kenyan Businesses</p>
+        </div>`,
+    });
+  }
+
   async sendReferralReward(opts: { to: string; businessName: string; rewardAmount: string; referredBusiness: string }) {
     return this.send({
       to: opts.to,

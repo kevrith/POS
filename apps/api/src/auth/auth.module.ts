@@ -10,6 +10,7 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 import { RolesGuard } from './roles.guard';
 import { TenantGuard } from './tenant.guard';
 import { SubscriptionGuard } from './subscription.guard';
+import { EmailModule } from '../email/email.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { SubscriptionGuard } from './subscription.guard';
         signOptions: { expiresIn: '15m' },
       }),
     }),
+    EmailModule,
   ],
   providers: [AuthService, JwtStrategy, GoogleStrategy, JwtAuthGuard, RolesGuard, TenantGuard, SubscriptionGuard],
   controllers: [AuthController],

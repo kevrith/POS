@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "KASTRA Order",
+    "slug": "kastra-customer",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "kastra-order",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#030712"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "co.ke.kastra.order",
+      "buildNumber": "1"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#030712"
+      },
+      "package": "co.ke.kastra.order",
+      "versionCode": 1
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "12b1a431-327b-43fa-bb56-981a3d085c0b"
+      }
+    },
+    "owner": "kevrith",
+    "updates": {
+      "url": "https://u.expo.dev/12b1a431-327b-43fa-bb56-981a3d085c0b"
+    }
+  }
+}

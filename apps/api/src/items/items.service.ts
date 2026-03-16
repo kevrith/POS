@@ -376,16 +376,21 @@ export class ItemsService {
     });
   }
 
-  /** Get items at or below their reorder level */
+  /** Get items at or below their reorder level, or completely out of stock */
   async getLowStock(businessId: string, storeId: string) {
     const items = await this.prisma.item.findMany({
-      where: { businessId, storeId, deletedAt: null, trackStock: true, reorderLevel: { gt: 0 } },
+      where: { businessId, storeId, deletedAt: null, trackStock: true },
       orderBy: { name: 'asc' },
     });
     const stockMap = await this.inventory.getStockLevels(items.map((i) => i.id), storeId);
     return items
       .map((item) => ({ ...item, currentStock: stockMap.get(item.id) ?? 0 }))
-      .filter((item) => item.currentStock <= (item.reorderLevel ?? 0));
+      .filter((item) => {
+        const stock = item.currentStock;
+        const reorder = item.reorderLevel ?? 0;
+        // Show if: out of stock (0), OR below explicit reorder level
+        return stock === 0 || (reorder > 0 && stock <= reorder);
+      });
   }
 
   decodeGS1Barcode(barcode: string): { itemBarcode?: string; weightGrams?: number; priceCents?: number; raw: string } {

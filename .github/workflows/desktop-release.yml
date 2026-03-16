@@ -1,0 +1,128 @@
+name: Desktop App Release
+
+on:
+  push:
+    tags:
+      - 'desktop-v*'   # trigger on tags like desktop-v1.0.0, desktop-v1.2.3
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 1.0.0)'
+        required: true
+
+permissions:
+  contents: write  # needed to create GitHub releases
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            artifact_name: kastra-pos
+            artifact_ext: .AppImage
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            artifact_name: kastra-pos
+            artifact_ext: .deb
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: kastra-pos
+            artifact_ext: .msi
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: kastra-pos
+            artifact_ext: .dmg
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: kastra-pos
+            artifact_ext: .dmg
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: './apps/desktop/src-tauri -> target'
+
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            pkg-config
+
+      - name: Install npm dependencies (monorepo root)
+        run: npm ci --legacy-peer-deps
+
+      - name: Build Web frontend (required by Tauri)
+        run: npm run build --workspace=apps/web
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+          # macOS code signing (optional — remove if not signing)
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          projectPath: apps/desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: 'KASTRA POS Desktop ${{ github.ref_name }}'
+          releaseBody: |
+            ## KASTRA POS Desktop ${{ github.ref_name }}
+
+            ### What's included
+            - Full POS functionality (web app wrapped in native window)
+            - **VSCU offline eTIMS** — sells and queues eTIMS submissions when offline
+            - **LAN sync** — sync sales across terminals on local network without internet
+            - **Local SQLite queue** — at `~/.local/share/kastra-pos/vscu.db`
+            - **Machine-bound license** validation
+            - Auto-update notifications
+
+            ### Downloads
+            | Platform | File | Notes |
+            |----------|------|-------|
+            | Windows 10/11 | `.msi` | Recommended for Windows |
+            | macOS 11+ (Intel) | `.dmg` | For Intel Macs |
+            | macOS 11+ (Apple Silicon) | `.dmg` | For M1/M2/M3 Macs |
+            | Ubuntu/Debian | `.deb` | Debian-based distros |
+            | Linux (all) | `.AppImage` | Portable, no install needed |
+
+            ### Requirements
+            - Server must be running and accessible (local network or internet)
+            - On first launch: enter your server URL in the setup wizard
+
+            ### Update from previous version
+            The app will prompt you automatically when a new version is available.
+          releaseDraft: false
+          prerelease: false
+          args: --target ${{ matrix.target }}

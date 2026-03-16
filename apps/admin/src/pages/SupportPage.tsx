@@ -38,6 +38,11 @@ export default function SupportPage() {
   const [bizData, setBizData] = useState<any>(null);
   const [bizLoading, setBizLoading] = useState(false);
   const [bizError, setBizError] = useState('');
+  const [auditLogs, setAuditLogs] = useState<any[] | null>(null);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const [showAudit, setShowAudit] = useState(false);
 
   const [fuVersion, setFuVersion] = useState('');
   const [fuMessage, setFuMessage] = useState('');
@@ -47,10 +52,23 @@ export default function SupportPage() {
 
   const lookupBiz = async () => {
     if (!bizId.trim()) return;
-    setBizLoading(true); setBizError(''); setBizData(null);
+    setBizLoading(true); setBizError(''); setBizData(null); setAuditLogs(null); setShowAudit(false);
     try { setBizData(await adminApi.getBusinessData(bizId.trim())); }
     catch (e: any) { setBizError(e.message ?? 'Not found'); }
     finally { setBizLoading(false); }
+  };
+
+  const loadAuditLog = async (page = 1) => {
+    if (!bizId.trim()) return;
+    setAuditLoading(true);
+    try {
+      const d = await adminApi.getBusinessAuditLog(bizId.trim(), page);
+      setAuditLogs(d.logs ?? []);
+      setAuditTotal(d.total ?? 0);
+      setAuditPage(page);
+      setShowAudit(true);
+    } catch (e: any) { console.error(e); }
+    finally { setAuditLoading(false); }
   };
 
   const submitForceUpdate = async () => {
@@ -186,6 +204,60 @@ export default function SupportPage() {
                 </div>
               </div>
             )}
+
+            {/* Audit Log button */}
+            <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: `1px solid ${C.cardBorder}` }}>
+              <button onClick={() => showAudit ? setShowAudit(false) : loadAuditLog(1)}
+                style={{ padding: '0.5rem 1rem', borderRadius: 8, border: `1px solid ${C.blue}40`, background: 'rgba(59,130,246,0.08)', color: C.blue, cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 600 }}>
+                {showAudit ? 'Hide Audit Log' : '📋 View Business Audit Log'}
+              </button>
+
+              {showAudit && (
+                <div style={{ marginTop: '1rem' }}>
+                  <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.625rem' }}>
+                    Audit Log ({auditTotal} entries)
+                  </div>
+                  {auditLoading ? (
+                    <div style={{ color: C.textMuted, fontSize: '0.8125rem', padding: '1rem 0' }}>Loading…</div>
+                  ) : auditLogs && auditLogs.length === 0 ? (
+                    <div style={{ color: C.textMuted, fontSize: '0.875rem' }}>No audit entries recorded for this business.</div>
+                  ) : (
+                    <div style={{ background: '#0a0f1e', borderRadius: '10px', overflow: 'hidden', border: `1px solid ${C.cardBorder}` }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ background: '#020617' }}>
+                            {['Actor', 'Action', 'Entity', 'Time'].map(h => (
+                              <th key={h} style={{ padding: '0.625rem 1rem', textAlign: 'left', color: C.textMuted, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(auditLogs ?? []).map((log: any) => (
+                            <tr key={log.id} style={{ borderTop: `1px solid ${C.cardBorder}` }}>
+                              <td style={{ padding: '0.625rem 1rem', color: C.textSecondary, fontSize: '0.75rem' }}>{log.actor} <span style={{ color: C.textMuted }}>({log.actorType})</span></td>
+                              <td style={{ padding: '0.625rem 1rem', color: C.blue, fontSize: '0.75rem', fontWeight: 600 }}>{log.action}</td>
+                              <td style={{ padding: '0.625rem 1rem', color: C.textMuted, fontSize: '0.75rem' }}>{log.entityType} {log.entityId ? `#${log.entityId.slice(0,8)}` : ''}</td>
+                              <td style={{ padding: '0.625rem 1rem', color: C.textMuted, fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                                {new Date(log.createdAt).toLocaleString('en-KE', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {auditTotal > 50 && (
+                        <div style={{ padding: '0.75rem 1rem', borderTop: `1px solid ${C.cardBorder}`, display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                          <button onClick={() => loadAuditLog(Math.max(1, auditPage - 1))} disabled={auditPage === 1}
+                            style={{ padding: '4px 12px', borderRadius: 6, border: `1px solid ${C.cardBorder}`, background: '#0a0f1e', color: C.textSecondary, cursor: 'pointer', fontSize: '0.75rem', opacity: auditPage === 1 ? 0.4 : 1 }}>Prev</button>
+                          <span style={{ fontSize: '0.75rem', color: C.textMuted, padding: '4px 8px' }}>{auditPage} / {Math.ceil(auditTotal / 50)}</span>
+                          <button onClick={() => loadAuditLog(auditPage + 1)} disabled={auditPage >= Math.ceil(auditTotal / 50)}
+                            style={{ padding: '4px 12px', borderRadius: 6, border: `1px solid ${C.cardBorder}`, background: '#0a0f1e', color: C.textSecondary, cursor: 'pointer', fontSize: '0.75rem', opacity: auditPage >= Math.ceil(auditTotal / 50) ? 0.4 : 1 }}>Next</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

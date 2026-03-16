@@ -3,6 +3,7 @@ import {
   CanActivate,
   ExecutionContext,
   ForbiddenException,
+  SetMetadata,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLE_PERMISSIONS, UserRole } from '@pos/shared';
@@ -10,6 +11,10 @@ import type { Request } from 'express';
 import type { AuthUser } from './auth.service';
 
 export const PERMISSION_KEY = 'required_permission';
+
+/** Decorator to declare a required permission on a controller handler. */
+export const RequirePermission = (permission: string) =>
+  SetMetadata(PERMISSION_KEY, permission);
 
 @Injectable()
 export class RolesGuard implements CanActivate {

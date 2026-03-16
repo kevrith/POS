@@ -66,7 +66,7 @@ import { SecurityModule } from './security/security.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
     ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([
       // Single global throttler for writes (GET requests are skipped by AppThrottlerGuard).

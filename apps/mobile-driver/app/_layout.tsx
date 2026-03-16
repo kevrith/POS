@@ -3,6 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
+import * as Font from 'expo-font';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../stores/auth';
 import { View, ActivityIndicator } from 'react-native';
 import { Colors } from '../constants/theme';
@@ -50,6 +52,12 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 }
 
 export default function RootLayout() {
+  const [fontsLoaded, fontError] = Font.useFonts(Ionicons.font);
+
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <StatusBar style="auto" />

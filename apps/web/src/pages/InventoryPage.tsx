@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import {
   Plus,
   Search,
@@ -23,7 +24,7 @@ import {
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
-import { downloadZPL } from '../lib/printer';
+import { downloadZPL, printZPLviaUSB } from '../lib/printer';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1179,6 +1180,25 @@ function BarcodeLabelModal({ items, onClose }: { items: Array<{ id: string; name
             title="Download ZPL files for Zebra thermal printers"
           >
             ↓ ZPL (Zebra)
+          </button>
+          <button
+            onClick={async () => {
+              const selectedItems = items.filter(i => selected.has(i.id) && i.barcode);
+              if (selectedItems.length === 0) { toast.warning('No items with barcodes selected'); return; }
+              try {
+                for (const item of selectedItems) {
+                  await printZPLviaUSB({ itemName: item.name, barcode: item.barcode!, priceCents: item.retailPriceCents });
+                }
+                toast.success(`Printed ${selectedItems.length} label${selectedItems.length !== 1 ? 's' : ''}`);
+              } catch (e: any) {
+                toast.error(`USB Zebra print failed: ${e.message}. Make sure your Zebra printer is connected via USB and you are using Chrome or Edge.`);
+              }
+            }}
+            disabled={selected.size === 0}
+            className="flex-1 py-2.5 bg-purple-700 text-white font-bold rounded-lg disabled:opacity-40 text-sm"
+            title="Print directly to USB Zebra printer (Chrome/Edge only)"
+          >
+            🖨 USB Zebra
           </button>
         </div>
       </div>

@@ -2,10 +2,10 @@ import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, HttpExcept
 import { CustomersService } from './customers.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../auth/tenant.guard';
-import { RoleGuard, RequirePermission } from '../auth/role.guard';
+import { RolesGuard, RequirePermission } from '../auth/roles.guard';
 
 @Controller('businesses/:businessId/customers')
-@UseGuards(JwtAuthGuard, TenantGuard, RoleGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class CustomersController {
   constructor(private customersService: CustomersService) {}
 

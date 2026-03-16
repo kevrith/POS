@@ -516,8 +516,8 @@ export class PdfService {
     const end = new Date(year, m, 0, 23, 59, 59);
 
     const expenses = await this.prisma.expense.findMany({
-      where: { submittedBy: employeeId, date: { gte: start, lte: end } },
-      orderBy: { date: 'asc' },
+      where: { submittedBy: employeeId, createdAt: { gte: start, lte: end } },
+      orderBy: { createdAt: 'asc' },
     });
 
     const total = expenses.reduce((s, e) => s + e.amountCents, 0);
@@ -525,9 +525,7 @@ export class PdfService {
     const vatAmount = Math.round(vatBase * 16 / 116);
 
     const rows = expenses.map(e => {
-      const dateStr = e.date
-        ? new Date(e.date).toISOString().slice(0, 10)
-        : new Date(e.createdAt).toISOString().slice(0, 10);
+      const dateStr = new Date(e.createdAt).toISOString().slice(0, 10);
       const statusBg = e.approvalStatus === 'APPROVED' ? '#d1fae5' : e.approvalStatus === 'REJECTED' ? '#fee2e2' : '#fef3c7';
       const statusColor = e.approvalStatus === 'APPROVED' ? '#065f46' : e.approvalStatus === 'REJECTED' ? '#991b1b' : '#92400e';
       return `<tr>

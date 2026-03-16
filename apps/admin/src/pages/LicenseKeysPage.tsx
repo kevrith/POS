@@ -36,6 +36,7 @@ export default function LicenseKeysPage() {
   const [expiresInDays, setExpiresInDays] = useState('365');
   const [creating, setCreating] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null); // keyId + action
 
   // Machine-bound key generator
   const [mbMachineId, setMbMachineId] = useState('');
@@ -88,6 +89,26 @@ export default function LicenseKeysPage() {
     if (!confirm('Revoke this license key? This cannot be undone.')) return;
     try { await adminApi.revokeKey(id); load(); }
     catch (e: any) { alert(e.message); }
+  };
+
+  const resend = async (id: string) => {
+    setActionLoading(`${id}-resend`);
+    try {
+      const res = await adminApi.resendLicenseKey(id);
+      alert(`License key email sent to ${res.sentTo}`);
+    } catch (e: any) { alert(e.message); }
+    finally { setActionLoading(null); }
+  };
+
+  const regenerate = async (id: string) => {
+    if (!confirm('Revoke this key and generate a new one? The new key will be emailed to the business owner.')) return;
+    setActionLoading(`${id}-regen`);
+    try {
+      const res = await adminApi.regenerateLicenseKey(id);
+      alert(`New key generated and sent to ${res.sentTo}\n\nNew key: ${res.newKey}`);
+      load();
+    } catch (e: any) { alert(e.message); }
+    finally { setActionLoading(null); }
   };
 
   const copyKey = async (key: string, id: string) => {
@@ -279,7 +300,16 @@ export default function LicenseKeysPage() {
                     </div>
                   </td>
                   <td style={{ padding: '0.875rem 1.25rem' }}><TierBadge tier={k.tier} /></td>
-                  <td style={{ padding: '0.875rem 1.25rem', color: C.textMuted, fontSize: '0.8125rem' }}>{k.businessId ?? '—'}</td>
+                  <td style={{ padding: '0.875rem 1.25rem', fontSize: '0.8125rem' }}>
+                    {k.business ? (
+                      <div>
+                        <div style={{ color: C.text, fontWeight: 600 }}>{k.business.name}</div>
+                        <div style={{ color: C.textMuted, fontSize: '0.75rem' }}>{k.business.users?.[0]?.email ?? ''}</div>
+                      </div>
+                    ) : (
+                      <span style={{ color: C.textMuted }}>—</span>
+                    )}
+                  </td>
                   <td style={{ padding: '0.875rem 1.25rem' }}>
                     <span style={{
                       padding: '2px 10px', borderRadius: '20px', fontSize: '0.6875rem', fontWeight: 700,
@@ -296,15 +326,45 @@ export default function LicenseKeysPage() {
                     {new Date(k.createdAt).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </td>
                   <td style={{ padding: '0.875rem 1.25rem' }}>
-                    {k.isActive && (
-                      <button onClick={() => revoke(k.id)} style={{
-                        padding: '0.3rem 0.75rem',
-                        background: 'rgba(239,68,68,0.12)', color: C.red,
-                        border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600,
-                      }}>
-                        Revoke
-                      </button>
-                    )}
+                    <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap' }}>
+                      {k.isActive && k.businessId && (
+                        <button
+                          onClick={() => resend(k.id)}
+                          disabled={actionLoading === `${k.id}-resend`}
+                          title="Re-email the existing key to the business owner"
+                          style={{
+                            padding: '0.3rem 0.625rem',
+                            background: 'rgba(59,130,246,0.12)', color: '#60a5fa',
+                            border: 'none', borderRadius: '6px', cursor: actionLoading === `${k.id}-resend` ? 'not-allowed' : 'pointer',
+                            fontSize: '0.6875rem', fontWeight: 600, opacity: actionLoading === `${k.id}-resend` ? 0.6 : 1,
+                          }}>
+                          {actionLoading === `${k.id}-resend` ? '⏳' : '📧 Resend'}
+                        </button>
+                      )}
+                      {k.isActive && k.businessId && (
+                        <button
+                          onClick={() => regenerate(k.id)}
+                          disabled={!!actionLoading}
+                          title="Revoke this key and issue a new one, then email the new key to the owner"
+                          style={{
+                            padding: '0.3rem 0.625rem',
+                            background: 'rgba(245,158,11,0.12)', color: C.amber,
+                            border: 'none', borderRadius: '6px', cursor: actionLoading === `${k.id}-regen` ? 'not-allowed' : 'pointer',
+                            fontSize: '0.6875rem', fontWeight: 600, opacity: actionLoading === `${k.id}-regen` ? 0.6 : 1,
+                          }}>
+                          {actionLoading === `${k.id}-regen` ? '⏳' : '🔄 Regen'}
+                        </button>
+                      )}
+                      {k.isActive && (
+                        <button onClick={() => revoke(k.id)} style={{
+                          padding: '0.3rem 0.625rem',
+                          background: 'rgba(239,68,68,0.12)', color: C.red,
+                          border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.6875rem', fontWeight: 600,
+                        }}>
+                          Revoke
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

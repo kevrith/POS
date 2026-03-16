@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import {
   MapPin, Clock, User, Package, Truck, Plus, Search,
   AlertTriangle, BarChart2, Loader2, Link, CheckCircle2,
@@ -190,7 +191,7 @@ export default function DeliveryManagementPage() {
     onSuccess: (data) => {
       if (data?.trackingUrl) {
         navigator.clipboard.writeText(data.trackingUrl).catch(() => {});
-        alert(`Tracking link ${data.sent ? 'sent via SMS & ' : ''}copied: ${data.trackingUrl}`);
+        toast.success(`Tracking link ${data.sent ? 'sent via SMS & ' : ''}copied to clipboard`);
       }
     },
   });

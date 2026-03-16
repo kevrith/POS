@@ -119,7 +119,7 @@ export class DeliveryService {
       entity: 'DeliveryOrder',
       entityId: deliveryOrder.id,
       after: { orderNumber, customerName: dto.customerName },
-      source: 'API',
+      source: 'SYSTEM',
     });
 
     return deliveryOrder;
@@ -230,11 +230,10 @@ export class DeliveryService {
 
     // Send SMS to customer with tracking link
     if (delivery.customerPhone) {
-      await this.notifications.sendDeliveryAssignedSMS(
+      await this.notifications.sendSMS(
         businessId,
         delivery.customerPhone,
-        delivery.orderNumber,
-        `${process.env.FRONTEND_URL}/track/${delivery.orderNumber}`,
+        `Your order #${delivery.orderNumber} has been assigned a driver. Track: ${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/track/${delivery.orderNumber}`,
       );
     }
 
@@ -329,9 +328,6 @@ export class DeliveryService {
           lte: new Date(endDate),
         },
       },
-      include: {
-        deliveryOrder: true,
-      },
     });
 
     const totalDeliveries = slas.length;
@@ -421,10 +417,10 @@ export class DeliveryService {
       });
 
       if (delivery.customerPhone) {
-        await this.notifications.sendDeliveryArrivingSMS(
+        await this.notifications.sendSMS(
           delivery.businessId,
           delivery.customerPhone,
-          delivery.orderNumber,
+          `Your delivery #${delivery.orderNumber} is arriving now!`,
         );
       }
     }
@@ -448,7 +444,7 @@ export class DeliveryService {
     if (!delivery) throw new NotFoundException('Delivery not found');
     const trackingUrl = `${process.env.WEB_URL ?? 'http://localhost:3001'}/track/${delivery.orderNumber}`;
     if (delivery.customerPhone) {
-      await this.notifications.sendDeliveryArrivingSMS(
+      await this.notifications.sendSMS(
         delivery.businessId,
         delivery.customerPhone,
         `Track your order #${delivery.orderNumber} here: ${trackingUrl}`,

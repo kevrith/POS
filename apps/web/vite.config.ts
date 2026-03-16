@@ -68,5 +68,10 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+    // Use polling to avoid ENOSPC inotify watcher limit on Linux
+    watch: {
+      usePolling: true,
+      interval: 500,
+    },
   },
 });

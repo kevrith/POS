@@ -91,6 +91,12 @@ interface PayslipInput {
   transportCents: number;
   commissionCents: number;
   overtimeCents?: number;
+  /** For mid-month joiners / leavers — prorates all earnings */
+  daysWorked?: number;
+  /** Calendar days in the pay period month (defaults to 30 if omitted) */
+  daysInMonth?: number;
+  /** Directors under the old NSSF Act pay a flat KES 200/month (20,000 cents) */
+  isDirector?: boolean;
 }
 
 interface PayslipResult {
@@ -112,7 +118,16 @@ export class PayrollService {
   // ─── Core calculation ───────────────────────────────────────────────────────
 
   calculatePayslip(employee: PayslipInput, overtimeHours = 0): PayslipResult {
-    const { salaryBaseCents, housingCents, transportCents, commissionCents, overtimeCents: overtimeCentsInput } = employee;
+    const {
+      salaryBaseCents,
+      housingCents,
+      transportCents,
+      commissionCents,
+      overtimeCents: overtimeCentsInput,
+      daysWorked,
+      daysInMonth = 30,
+      isDirector = false,
+    } = employee;
 
     // Compute overtime pay from hours if not pre-supplied
     let overtimeCents = overtimeCentsInput ?? 0;
@@ -123,11 +138,21 @@ export class PayrollService {
       overtimeCents = Math.round(overtimeHours * hourlyRateCents * overtimeRate);
     }
 
-    const grossPay = salaryBaseCents + housingCents + transportCents + commissionCents + overtimeCents;
+    let grossPay = salaryBaseCents + housingCents + transportCents + commissionCents + overtimeCents;
+
+    // Mid-month proration: scale all earnings by days worked
+    if (daysWorked !== undefined && daysWorked < daysInMonth) {
+      const ratio = daysWorked / daysInMonth;
+      grossPay = Math.round(grossPay * ratio);
+      overtimeCents = Math.round(overtimeCents * ratio);
+    }
 
     const payeAmount = calcPAYE(grossPay);
     const nhifAmount = calcNHIF(grossPay);
-    const { tier1: nssf1Amount, tier2: nssf2Amount } = calcNSSF(grossPay);
+    // Directors under old NSSF Act: flat KES 200/month (employee share)
+    const { tier1: nssf1Amount, tier2: nssf2Amount } = isDirector
+      ? { tier1: 20000, tier2: 0 }
+      : calcNSSF(grossPay);
     const housingLevyAmount = calcHousingLevy(grossPay);
 
     const totalDeductions = payeAmount + nhifAmount + nssf1Amount + nssf2Amount + housingLevyAmount;
@@ -399,11 +424,10 @@ export class PayrollService {
   async bulkSendPayslips(runId: string, channel: 'EMAIL' | 'WHATSAPP') {
     const payslips = await this.prisma.payslip.findMany({
       where: { payrollRunId: runId },
-      include: { employee: { include: { user: { select: { name: true, email: true } } } } },
     });
     const results = payslips.map(slip => ({
       employeeId: slip.employeeId,
-      name: slip.employee.user.name,
+      name: slip.employeeName,
       channel,
       status: 'SENT',
     }));

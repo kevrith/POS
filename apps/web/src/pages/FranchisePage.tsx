@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import {
@@ -167,9 +168,10 @@ export default function FranchisePage() {
     try {
       await api.delete(`/franchise/link/${franchiseeId}`);
       loadNetwork();
+      toast.success(`${name} removed from franchise network`);
     } catch (e: unknown) {
       const err = e as { message?: string };
-      alert(err?.message ?? 'Failed to unlink');
+      toast.error(err?.message ?? 'Failed to unlink');
     }
   };
 
@@ -188,7 +190,7 @@ export default function FranchisePage() {
       loadSettings();
     } catch (e: unknown) {
       const err = e as { message?: string };
-      alert(err?.message ?? 'Failed to save settings');
+      toast.error(err?.message ?? 'Failed to save settings');
     } finally {
       setSettingsSaving(false);
     }

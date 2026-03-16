@@ -2,10 +2,10 @@ import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/co
 import { BatchService } from './batch.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../auth/tenant.guard';
-import { RoleGuard, RequirePermission } from '../auth/role.guard';
+import { RolesGuard, RequirePermission } from '../auth/roles.guard';
 
 @Controller('businesses/:businessId/batch')
-@UseGuards(JwtAuthGuard, TenantGuard, RoleGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class BatchController {
   constructor(private batchService: BatchService) {}
 

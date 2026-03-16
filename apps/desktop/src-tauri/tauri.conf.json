@@ -23,6 +23,14 @@
     ],
     "security": {
       "csp": null
+    },
+    "updater": {
+      "active": true,
+      "dialog": true,
+      "pubkey": "PLACEHOLDER_TAURI_PUBLIC_KEY",
+      "endpoints": [
+        "https://api.kastrapos.co.ke/api/v1/super-admin/update-check"
+      ]
     }
   },
   "bundle": {
@@ -34,6 +42,16 @@
       "icons/128x128@2x.png",
       "icons/icon.ico",
       "icons/icon.png"
-    ]
+    ],
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "signingIdentity": null,
+      "providerShortName": null
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    }
   }
 }

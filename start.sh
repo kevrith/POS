@@ -16,25 +16,10 @@ if [ ! -d "$ROOT_DIR/node_modules" ]; then
   echo ""
 fi
 
-# Setup database if missing
-if [ ! -f "$ROOT_DIR/apps/api/dev.db" ] || [ ! -s "$ROOT_DIR/apps/api/dev.db" ]; then
-  echo "🗄️  Setting up database..."
-  
-  # Add DATABASE_URL to root .env if missing
-  if ! grep -q "DATABASE_URL" "$ROOT_DIR/.env" 2>/dev/null; then
-    echo 'DATABASE_URL="file:./apps/api/dev.db"' >> "$ROOT_DIR/.env"
-  fi
-  
-  # Run migrations and seed
-  cd "$ROOT_DIR"
-  export DATABASE_URL="file:./apps/api/dev.db"
-  npx prisma migrate dev --name init --skip-seed
-  npx ts-node prisma/seed.ts
-  
-  echo "✅ Database setup complete!"
-  echo "📋 Login: owner@premiercafe.co.ke / password123"
-  echo ""
-fi
+# Run migrations (deploy = no shadow DB, safe for any provider)
+echo "🗄️  Running database migrations..."
+cd "$ROOT_DIR/apps/api" && npx prisma migrate deploy --schema "$ROOT_DIR/prisma/schema.prisma"
+echo ""
 
 # Kill any existing processes on ports 3000-3003 and 3010
 echo "🧹 Cleaning up existing processes..."
@@ -52,7 +37,7 @@ PIDS=()
 # Start API (always exists)
 if [ -d "$ROOT_DIR/apps/api" ]; then
   echo "  • API (NestJS) on port 3010"
-  (cd "$ROOT_DIR/apps/api" && DATABASE_URL="file://$ROOT_DIR/prisma/dev.db" npm run start:dev) > /tmp/pos-api.log 2>&1 &
+  (cd "$ROOT_DIR/apps/api" && npm run start:dev) > /tmp/pos-api.log 2>&1 &
   PIDS+=($!)
 fi
 

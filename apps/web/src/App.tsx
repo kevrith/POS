@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'sonner';
 import { useAuthStore } from './stores/auth';
 import LoginPage from './pages/LoginPage';
 import Layout from './components/Layout';
@@ -22,7 +23,6 @@ const BatchManagementPage = lazy(() => import('./pages/BatchManagementPage'));
 const SerialTrackingPage = lazy(() => import('./pages/SerialTrackingPage'));
 const RecipeManagementPage = lazy(() => import('./pages/RecipeManagementPage'));
 const BundleManagementPage = lazy(() => import('./pages/BundleManagementPage'));
-const TablesPage = lazy(() => import('./pages/HospitalityPage'));
 const SalesListPage = lazy(() => import('./pages/SalesListPage'));
 const PromotionsPage = lazy(() => import('./pages/PromotionsPage'));
 const GiftCardsPage = lazy(() => import('./pages/GiftCardsPage'));
@@ -125,10 +125,13 @@ export default function App() {
   }
 
   if (!isAuthenticated) {
+    // Ensure any /login?... URL is preserved so LoginPage can read params
     return <LoginPage />;
   }
 
   return (
+    <>
+    <Toaster position="top-right" richColors closeButton duration={4000} />
     <Layout>
       <Suspense fallback={<PageLoader />}>
         <Routes>
@@ -147,7 +150,7 @@ export default function App() {
           <Route path="/recipe" element={<RecipeManagementPage />} />
           <Route path="/bundle" element={<BundleManagementPage />} />
           <Route path="/suppliers" element={<SuppliersPage />} />
-          <Route path="/tables" element={<TablesPage />} />
+          <Route path="/tables" element={<HospitalityPage />} />
           {/* Finance */}
           <Route path="/cash-drawer" element={<CashDrawerPage />} />
           <Route path="/expenses" element={<ExpensesPage />} />
@@ -198,5 +201,6 @@ export default function App() {
         </Routes>
       </Suspense>
     </Layout>
+    </>
   );
 }

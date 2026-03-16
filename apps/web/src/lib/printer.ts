@@ -59,7 +59,36 @@ export const ESCPOS = {
   FEED: '\n',
   DOUBLE_HEIGHT: ESC + '!' + '\x10',
   NORMAL_SIZE: ESC + '!' + '\x00',
+  // Cash drawer: ESC p pin on-time off-time  (pin2=0x00, pin5=0x01)
+  OPEN_DRAWER: ESC + 'p' + '\x00' + '\x19' + '\xFA',
 };
+
+/**
+ * Generate ESC/POS QR code command sequence.
+ * Uses GS ( k — Model 2 QR, error correction level M, size 4.
+ */
+function generateQRCommand(data: string, size = 4): string {
+  const bytes = Array.from(new TextEncoder().encode(data));
+  const dataLen = bytes.length + 3; // +3 for cn fn n
+  const pL = dataLen & 0xff;
+  const pH = (dataLen >> 8) & 0xff;
+
+  const chr = (n: number) => String.fromCharCode(n);
+
+  // 1. Set QR model (Model 2)
+  const setModel = GS + '(k' + chr(4) + chr(0) + chr(49) + chr(65) + chr(50) + chr(0);
+  // 2. Set size (1–8 dots per module)
+  const setSize  = GS + '(k' + chr(3) + chr(0) + chr(49) + chr(67) + chr(size);
+  // 3. Set error correction level M
+  const setECC   = GS + '(k' + chr(3) + chr(0) + chr(49) + chr(69) + chr(50);
+  // 4. Store data
+  const storeHdr = GS + '(k' + chr(pL) + chr(pH) + chr(49) + chr(80) + chr(48);
+  const storeData = bytes.map(chr).join('');
+  // 5. Print
+  const print    = GS + '(k' + chr(3) + chr(0) + chr(49) + chr(81) + chr(48);
+
+  return setModel + setSize + setECC + storeHdr + storeData + print;
+}
 
 function formatKES(cents: number): string {
   return `KES ${(cents / 100).toLocaleString('en-KE', {
@@ -79,8 +108,11 @@ function line(char: string = '-', width: number = 32): string {
 }
 
 // Generate ESC/POS commands for thermal printer
-export function generateESCPOS(receipt: ReceiptData): string {
-  let output = ESCPOS.INIT;
+export function generateESCPOS(receipt: ReceiptData, enableCashDrawer = false): string {
+  // Open cash drawer first if any payment is cash (drawer is wired to printer's RJ11 port)
+  const hasCash = enableCashDrawer && receipt.payments.some(p => p.method === 'CASH' || p.method === 'CASH_EXACT');
+  let output = hasCash ? ESCPOS.OPEN_DRAWER : '';
+  output += ESCPOS.INIT;
 
   // VOID watermark
   if (receipt.voided) {
@@ -178,7 +210,9 @@ export function generateESCPOS(receipt: ReceiptData): string {
     output += ESCPOS.ALIGN_CENTER;
     output += `KRA Control: ${receipt.kraControlNumber}` + ESCPOS.FEED;
     if (receipt.kraQRCode) {
-      output += '[QR CODE]' + ESCPOS.FEED; // TODO: Actual QR code printing
+      output += ESCPOS.ALIGN_CENTER;
+      output += generateQRCommand(receipt.kraQRCode, 4);
+      output += ESCPOS.FEED;
     }
   }
 
@@ -279,6 +313,7 @@ export function generateHTML(receipt: ReceiptData): string {
   </style>
 </head>
 <body>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"><\/script>
   <button class="print-btn no-print" onclick="window.print()">🖨 Print Receipt</button>
   ${receipt.voided ? `<div class="void-watermark">★ VOID ★</div>` : ''}
   ${receipt.etimsSubmitted === false && !receipt.voided ? `<div class="pending-watermark">⚠ PENDING KRA SUBMISSION</div>` : ''}
@@ -336,7 +371,10 @@ export function generateHTML(receipt: ReceiptData): string {
     <div class="line"></div>
     <div class="center small">
       <div>KRA Control: ${receipt.kraControlNumber}</div>
-      ${receipt.kraQRCode ? '<div>[QR CODE]</div>' : ''}
+      ${receipt.kraQRCode ? `<img id="kra-qr" style="width:80px;height:80px;margin:4px auto;display:block"/>
+      <script>
+        (function(){var q=new QRCode(document.getElementById('kra-qr'),{text:'${receipt.kraQRCode.replace(/'/g,"\\'")}',width:80,height:80,colorDark:'#000',colorLight:'#fff'});})();
+      <\/script>` : ''}
     </div>
   ` : ''}
   
@@ -577,9 +615,39 @@ export function printKOT(kot: KOTData): void {
   }
 }
 
+// ─── Cash Drawer ──────────────────────────────────────────────────────────────
+
+/** Send cash drawer open pulse to a network printer (connected via RJ11 to printer). */
+export async function openDrawerOnNetwork(printerId: string): Promise<void> {
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(ESCPOS.OPEN_DRAWER);
+  let binary = '';
+  bytes.forEach((b) => (binary += String.fromCharCode(b)));
+  const base64 = btoa(binary);
+  await fetch(`/api/v1/printers/${printerId}/print`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: base64 }),
+  });
+}
+
+/** Send cash drawer open pulse via WebUSB (printer must already be claimed). */
+export async function openDrawerViaUSB(): Promise<void> {
+  if (!('usb' in navigator)) return;
+  try {
+    const device = await (navigator as any).usb.requestDevice({ filters: [{ classCode: 7 }] });
+    await device.open();
+    await device.selectConfiguration(1);
+    await device.claimInterface(0);
+    const data = new TextEncoder().encode(ESCPOS.OPEN_DRAWER);
+    await device.transferOut(1, data);
+    await device.close();
+  } catch { /* drawer open is best-effort */ }
+}
+
 // Print to Network/LAN thermal printer via API proxy
-export async function printToNetwork(printerId: string, receipt: ReceiptData): Promise<void> {
-  const escpos = generateESCPOS(receipt);
+export async function printToNetwork(printerId: string, receipt: ReceiptData, enableCashDrawer = false): Promise<void> {
+  const escpos = generateESCPOS(receipt, enableCashDrawer);
   const encoder = new TextEncoder();
   const bytes = encoder.encode(escpos);
   // Convert to base64
@@ -600,7 +668,7 @@ export async function printToNetwork(printerId: string, receipt: ReceiptData): P
 }
 
 // Print to USB thermal printer (WebUSB)
-export async function printToUSB(receipt: ReceiptData): Promise<void> {
+export async function printToUSB(receipt: ReceiptData, enableCashDrawer = false): Promise<void> {
   if (!('usb' in navigator)) {
     throw new Error('WebUSB not supported in this browser');
   }
@@ -614,7 +682,7 @@ export async function printToUSB(receipt: ReceiptData): Promise<void> {
     await device.selectConfiguration(1);
     await device.claimInterface(0);
 
-    const escpos = generateESCPOS(receipt);
+    const escpos = generateESCPOS(receipt, enableCashDrawer);
     const encoder = new TextEncoder();
     const data = encoder.encode(escpos);
 
@@ -627,7 +695,7 @@ export async function printToUSB(receipt: ReceiptData): Promise<void> {
 }
 
 // Print to Bluetooth thermal printer
-export async function printToBluetooth(receipt: ReceiptData): Promise<void> {
+export async function printToBluetooth(receipt: ReceiptData, enableCashDrawer = false): Promise<void> {
   if (!('bluetooth' in navigator)) {
     throw new Error('Web Bluetooth not supported in this browser');
   }
@@ -641,7 +709,7 @@ export async function printToBluetooth(receipt: ReceiptData): Promise<void> {
     const service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
     const characteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
 
-    const escpos = generateESCPOS(receipt);
+    const escpos = generateESCPOS(receipt, enableCashDrawer);
     const encoder = new TextEncoder();
     const data = encoder.encode(escpos);
 

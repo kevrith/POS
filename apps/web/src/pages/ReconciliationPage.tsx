@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 import { api, getToken } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 
@@ -100,20 +101,21 @@ export default function ReconciliationPage() {
       });
       if (!res.ok) throw new Error(await res.text());
       await loadStatements();
-      alert('Statement uploaded and auto-matched successfully!');
+      toast.success('Statement uploaded and auto-matched successfully!');
     } catch (err: any) {
-      alert(`Upload failed: ${err.message}`);
+      toast.error(`Upload failed: ${err.message}`);
     }
     setUploading(false);
     if (fileRef.current) fileRef.current.value = '';
   };
 
   const handleDeleteStatement = async (id: string, name: string) => {
-    if (!confirm(`Delete statement "${name}"?`)) return;
+    if (!window.confirm(`Delete statement "${name}"?`)) return;
     try {
       await api.delete(`/payments/reconciliation/statements/${id}`);
       await loadStatements();
-    } catch (e: any) { alert(e.message || 'Error deleting'); }
+      toast.success('Statement deleted');
+    } catch (e: any) { toast.error(e.message || 'Error deleting'); }
   };
 
   const loadEntries = async () => {
@@ -131,12 +133,13 @@ export default function ReconciliationPage() {
 
   const handleManualMatch = async (entryId: string) => {
     const saleId = matchSaleId[entryId];
-    if (!saleId?.trim()) return alert('Enter a Sale ID');
+    if (!saleId?.trim()) { toast.warning('Enter a Sale ID first'); return; }
     try {
       await api.patch(`/payments/reconciliation/entries/${entryId}/match`, { saleId });
       await loadEntries();
       setMatchSaleId(prev => { const n = { ...prev }; delete n[entryId]; return n; });
-    } catch (e: any) { alert(e.message || 'Error matching'); }
+      toast.success('Entry matched successfully');
+    } catch (e: any) { toast.error(e.message || 'Error matching'); }
   };
 
   const loadSummary = async () => {

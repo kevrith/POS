@@ -484,7 +484,7 @@ export class HrService {
     // Kenya statutory: 21 days annual / 12 months = 1.75 days/month; 1 sick day/month
     const year = new Date().getFullYear();
     const employees = await this.prisma.employee.findMany({
-      where: { isActive: true },
+      where: {},
       select: { id: true },
     });
     for (const emp of employees) {
@@ -575,34 +575,42 @@ export class HrService {
 
   // ─── Biometric Clock-in ─────────────────────────────────────────────────────
 
-  async clockIn(businessId: string, pin: string, method = 'MANUAL') {
+  async biometricClockIn(businessId: string, pin: string, method = 'MANUAL') {
     const user = await this.prisma.user.findFirst({ where: { businessId, pin } });
     if (!user) throw new Error('Invalid PIN');
-    const employee = await this.prisma.employee.findFirst({ where: { businessId, userId: user.id, isActive: true } });
+    const employee = await this.prisma.employee.findFirst({ where: { businessId, userId: user.id } });
     if (!employee) throw new Error('No active employee record for this PIN');
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    const existing = await this.prisma.attendance.findFirst({
-      where: { employeeId: employee.id, date: today, clockOut: null },
+    const store = await this.prisma.store.findFirst({ where: { businessId } });
+    const storeId = store?.id ?? businessId;
+    const existing = await this.prisma.attendanceRecord.findFirst({
+      where: { employeeId: employee.id, shiftDate: today, clockOut: null },
     });
     if (existing) return { alreadyClockedIn: true, attendance: existing };
-    return this.prisma.attendance.create({
-      data: { employeeId: employee.id, businessId, date: today, clockIn: new Date(), notes: `Clocked in via ${method}` },
+    return this.prisma.attendanceRecord.create({
+      data: {
+        offlineId: `bio-${Date.now()}-${employee.id}`,
+        employeeId: employee.id,
+        storeId,
+        shiftDate: today,
+        clockIn: new Date(),
+      },
     });
   }
 
-  async clockOut(businessId: string, pin: string, method = 'MANUAL') {
+  async biometricClockOut(businessId: string, pin: string, method = 'MANUAL') {
     const user = await this.prisma.user.findFirst({ where: { businessId, pin } });
     if (!user) throw new Error('Invalid PIN');
-    const employee = await this.prisma.employee.findFirst({ where: { businessId, userId: user.id, isActive: true } });
+    const employee = await this.prisma.employee.findFirst({ where: { businessId, userId: user.id } });
     if (!employee) throw new Error('No active employee record for this PIN');
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    const record = await this.prisma.attendance.findFirst({
-      where: { employeeId: employee.id, date: today, clockOut: null },
+    const record = await this.prisma.attendanceRecord.findFirst({
+      where: { employeeId: employee.id, shiftDate: today, clockOut: null },
     });
     if (!record) throw new Error('No open clock-in found for today');
-    return this.prisma.attendance.update({
+    return this.prisma.attendanceRecord.update({
       where: { id: record.id },
-      data: { clockOut: new Date(), notes: record.notes ? `${record.notes} | Out via ${method}` : `Clocked out via ${method}` },
+      data: { clockOut: new Date() },
     });
   }
 
@@ -616,7 +624,7 @@ export class HrService {
         businessId,
         contractType: { not: 'PERMANENT' },
         contractEndDate: { lte: cutoff, gte: new Date() },
-        isActive: true,
+
       },
       include: { user: { select: { name: true, email: true } } },
       orderBy: { contractEndDate: 'asc' },

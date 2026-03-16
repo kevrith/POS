@@ -1,0 +1,70 @@
+{
+  "expo": {
+    "name": "KASTRA POS",
+    "slug": "kastra-pos-cashier",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "kastra-pos",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#030712"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "co.ke.kastra.pos",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Camera is used to scan product barcodes at point of sale.",
+        "NSPhotoLibraryUsageDescription": "Used to attach receipt photos to expense records."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#030712"
+      },
+      "package": "co.ke.kastra.pos",
+      "versionCode": 1,
+      "permissions": [
+        "CAMERA",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow KASTRA POS to access your camera for barcode scanning."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "3cd7f6fd-6fa7-4e28-a1cd-97fc5cfea9f1"
+      }
+    },
+    "owner": "kevrith",
+    "updates": {
+      "url": "https://u.expo.dev/3cd7f6fd-6fa7-4e28-a1cd-97fc5cfea9f1"
+    }
+  }
+}

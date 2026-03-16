@@ -216,7 +216,7 @@ export class SecurityService {
       action: 'PASSWORD_POLICY_UPDATED',
       entity: 'PasswordPolicy',
       entityId: policy.id,
-      after: dto,
+      after: dto as unknown as Record<string, unknown>,
       source: 'SYSTEM',
     });
 

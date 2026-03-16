@@ -13,34 +13,97 @@ async function main() {
   console.log('🌱 Seeding database…');
 
   // ─── Clean existing data (proper order to avoid FK violations) ────────────
-  // Delete in reverse dependency order
-  await prisma.inventoryMovement.deleteMany();
-  await prisma.saleItem.deleteMany();
-  await prisma.payment.deleteMany();
-  await prisma.return.deleteMany().catch(() => {});
-  await prisma.voidRecord.deleteMany();
-  await prisma.sale.deleteMany();
-  await prisma.serialRecord.deleteMany();
-  await prisma.gRNItem.deleteMany();
-  await prisma.gRN.deleteMany();
-  await prisma.pOItem.deleteMany();
-  await prisma.purchaseOrder.deleteMany();
-  await prisma.recipeIngredient.deleteMany();
-  await prisma.bundleComponent.deleteMany();
-  await prisma.batch.deleteMany();
-  await prisma.table.deleteMany();
-  await prisma.tableReservation.deleteMany().catch(() => {});
-  await prisma.expense.deleteMany();
-  await prisma.leave.deleteMany();
-  await prisma.attendanceRecord.deleteMany();
-  await prisma.employee.deleteMany();
-  await prisma.cashDrawerSession.deleteMany();
-  await prisma.supplier.deleteMany();
-  await prisma.customer.deleteMany();
-  await prisma.item.deleteMany();
-  await prisma.user.deleteMany();
-  await prisma.store.deleteMany();
-  await prisma.business.deleteMany();
+  // Wrap each in catch so a missing table in old DBs doesn't abort the cleanup
+  const d = (p: Promise<any> | undefined) => (p ?? Promise.resolve()).catch(() => {});
+  // Hotel / hospitality leaf tables
+  await d(prisma.guestFolioCharge.deleteMany());
+  await d(prisma.roomBooking.deleteMany());
+  await d(prisma.hotelRoom.deleteMany());
+  await d((prisma as any).barTab?.deleteMany());
+  await d(prisma.kOT.deleteMany());
+  await d(prisma.orderItem.deleteMany());
+  await d(prisma.order.deleteMany());
+  // Delivery
+  await d(prisma.deliverySLA.deleteMany());
+  await d(prisma.deliveryOrder.deleteMany());
+  await d(prisma.deliveryZone.deleteMany());
+  await d(prisma.courierIntegration.deleteMany());
+  // Stocktake
+  await d(prisma.stocktakeCount.deleteMany());
+  await d(prisma.stocktakeSession.deleteMany());
+  // Finance
+  await d(prisma.bankStatementEntry.deleteMany());
+  await d(prisma.bankStatement.deleteMany());
+  await d(prisma.payslip.deleteMany());
+  await d(prisma.payrollRun.deleteMany());
+  await d(prisma.franchiseReport.deleteMany());
+  await d(prisma.dataDeletionRequest.deleteMany());
+  await d(prisma.referral.deleteMany());
+  await d(prisma.licenseKey.deleteMany());
+  // Notifications / scheduling
+  await d(prisma.notification.deleteMany());
+  await d(prisma.reportSchedule.deleteMany());
+  await d(prisma.budget.deleteMany());
+  await d(prisma.shift.deleteMany());
+  await d(prisma.leaveBalance.deleteMany());
+  // Settings tables
+  await d(prisma.webhook.deleteMany());
+  await d(prisma.apiKey.deleteMany());
+  await d(prisma.printer.deleteMany());
+  await d(prisma.integration.deleteMany());
+  // Sales / loyalty leaf records
+  await d((prisma as any).creditNote?.deleteMany());
+  await d(prisma.loyaltyTransaction.deleteMany());
+  await d(prisma.giftCard.deleteMany());
+  await d(prisma.promotion.deleteMany());
+  await d((prisma as any).proforma?.deleteMany());
+  await d((prisma as any).layaway?.deleteMany());
+  await d(prisma.prescription.deleteMany());
+  await d(prisma.appointment.deleteMany());
+  await d(prisma.auditLog.deleteMany());
+  // Core transaction records
+  await d(prisma.inventoryMovement.deleteMany());
+  await d(prisma.saleItem.deleteMany());
+  await d(prisma.payment.deleteMany());
+  await d(prisma.return.deleteMany());
+  await d(prisma.voidRecord.deleteMany());
+  await d(prisma.sale.deleteMany());
+  await d(prisma.serialRecord.deleteMany());
+  await d(prisma.gRNItem.deleteMany());
+  await d(prisma.gRN.deleteMany());
+  await d(prisma.pOItem.deleteMany());
+  await d(prisma.supplierPriceAgreement.deleteMany());
+  await d(prisma.purchaseOrder.deleteMany());
+  await d(prisma.supplier.deleteMany());
+  // Inventory
+  await d(prisma.recipeIngredient.deleteMany());
+  await d(prisma.bundleComponent.deleteMany());
+  await d(prisma.itemVariant.deleteMany());
+  await d(prisma.batch.deleteMany());
+  // Hospitality
+  await d(prisma.tableReservation.deleteMany());
+  await d(prisma.table.deleteMany());
+  // HR
+  await d(prisma.expense.deleteMany());
+  await d(prisma.leave.deleteMany());
+  await d(prisma.attendanceRecord.deleteMany());
+  await d((prisma as any).commission?.deleteMany());
+  await d(prisma.employee.deleteMany());
+  await d(prisma.cashDrawerSession.deleteMany());
+  // Customers / items
+  await d(prisma.customer.deleteMany());
+  await d(prisma.item.deleteMany());
+  // Users
+  await d(prisma.userStore.deleteMany());
+  await d(prisma.userSession.deleteMany());
+  await d(prisma.user.deleteMany());
+  // Business settings
+  await d(prisma.passwordPolicy.deleteMany());
+  await d(prisma.taxConfiguration.deleteMany());
+  await d(prisma.customRole.deleteMany());
+  await d(prisma.terminal.deleteMany());
+  await d(prisma.store.deleteMany());
+  await d(prisma.business.deleteMany());
 
   console.log('✅ Cleaned existing data');
 
@@ -130,23 +193,23 @@ async function main() {
   // ─── Items ──────────────────────────────────────────────────────────────
   await prisma.item.createMany({
     data: [
-      { id: 'item-001', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Unga Jogoo 2kg',          type: 'PRODUCT', retailPriceCents:   22000, wholesalePriceCents: 19000, costPriceCents: 17000, trackStock: true,  vatApplicable: false, totApplicable: true,  barcode: '6001020003001', category: 'Groceries' },
-      { id: 'item-002', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Brookside Milk 500ml',    type: 'PRODUCT', retailPriceCents:    6500,                              costPriceCents:  5000, trackStock: true,  vatApplicable: false, totApplicable: true,  barcode: '6001020003002', category: 'Dairy',      trackExpiry: true, defaultExpiryDays: 7 },
-      { id: 'item-003', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Tusker Beer 500ml',       type: 'PRODUCT', retailPriceCents:   35000,                              costPriceCents: 25000, trackStock: true,  vatApplicable: true,                        barcode: '6001020003003', category: 'Beverages' },
-      { id: 'item-004', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Coca-Cola 300ml',         type: 'PRODUCT', retailPriceCents:    5500,                              costPriceCents:  3500, trackStock: true,  vatApplicable: true,                        barcode: '6001020003004', category: 'Beverages' },
-      { id: 'item-005', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Sugar 1kg',               type: 'PRODUCT', retailPriceCents:   18000,                              costPriceCents: 14000, trackStock: true,  vatApplicable: false, totApplicable: true,  category: 'Groceries' },
-      { id: 'item-006', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Cooking Oil 1L',          type: 'PRODUCT', retailPriceCents:   32000,                              costPriceCents: 25000, trackStock: true,  vatApplicable: false, totApplicable: true,  category: 'Groceries' },
+      { id: 'item-001', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Unga Jogoo 2kg',          type: 'PRODUCT', retailPriceCents:   22000, wholesalePriceCents: 19000, costPriceCents: 17000, trackStock: true,  vatApplicable: false, totApplicable: true,  barcode: '6001020003001', category: 'Groceries', reorderLevel: 10, reorderQty: 50 },
+      { id: 'item-002', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Brookside Milk 500ml',    type: 'PRODUCT', retailPriceCents:    6500,                              costPriceCents:  5000, trackStock: true,  vatApplicable: false, totApplicable: true,  barcode: '6001020003002', category: 'Dairy',      trackExpiry: true, defaultExpiryDays: 7,  reorderLevel: 20, reorderQty: 100 },
+      { id: 'item-003', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Tusker Beer 500ml',       type: 'PRODUCT', retailPriceCents:   35000,                              costPriceCents: 25000, trackStock: true,  vatApplicable: true,                        barcode: '6001020003003', category: 'Beverages', reorderLevel: 24, reorderQty: 72 },
+      { id: 'item-004', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Coca-Cola 300ml',         type: 'PRODUCT', retailPriceCents:    5500,                              costPriceCents:  3500, trackStock: true,  vatApplicable: true,                        barcode: '6001020003004', category: 'Beverages', reorderLevel: 24, reorderQty: 72 },
+      { id: 'item-005', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Sugar 1kg',               type: 'PRODUCT', retailPriceCents:   18000,                              costPriceCents: 14000, trackStock: true,  vatApplicable: false, totApplicable: true,  category: 'Groceries', reorderLevel: 10, reorderQty: 30 },
+      { id: 'item-006', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Cooking Oil 1L',          type: 'PRODUCT', retailPriceCents:   32000,                              costPriceCents: 25000, trackStock: true,  vatApplicable: false, totApplicable: true,  category: 'Groceries', reorderLevel: 6,  reorderQty: 24 },
       { id: 'item-007', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Club Sandwich',           type: 'PRODUCT', retailPriceCents:   85000,                              costPriceCents: 40000, trackStock: false, vatApplicable: true,                        category: 'Food' },
       { id: 'item-008', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Chips Large',             type: 'PRODUCT', retailPriceCents:   20000,                              costPriceCents:  8000, trackStock: false, vatApplicable: true,                        category: 'Food' },
       { id: 'item-009', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Espresso Shot',           type: 'PRODUCT', retailPriceCents:   25000,                              costPriceCents:  8000, trackStock: false, vatApplicable: true,                        category: 'Coffee' },
       { id: 'item-010', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Cappuccino',              type: 'PRODUCT', retailPriceCents:   35000,                              costPriceCents: 12000, trackStock: false, vatApplicable: true,                        category: 'Coffee' },
       { id: 'item-011', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Dawa Cocktail',           type: 'PRODUCT', retailPriceCents:   45000,                              costPriceCents: 15000, trackStock: false, vatApplicable: true,                        category: 'Drinks' },
       { id: 'item-012', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Delivery Service',        type: 'SERVICE', retailPriceCents:   15000,                              costPriceCents:  5000, trackStock: false, vatApplicable: true,                        category: 'Services' },
-      { id: 'item-013', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Samsung Galaxy A55',      type: 'PRODUCT', retailPriceCents: 4500000, wholesalePriceCents: 4200000, costPriceCents: 3800000, trackStock: true, trackSerials: true, vatApplicable: true, barcode: '8806094917772', category: 'Electronics' },
-      { id: 'item-014', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Redmi Note 13',           type: 'PRODUCT', retailPriceCents: 2800000,                              costPriceCents: 2200000, trackStock: true, trackSerials: true, vatApplicable: true, barcode: '6934177794872', category: 'Electronics' },
-      { id: 'item-015', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Bread Loaf',              type: 'PRODUCT', retailPriceCents:    7000,                              costPriceCents:  4500, trackStock: true,  vatApplicable: false,                       category: 'Bakery',     unitWeightGrams: 600 },
-      { id: 'item-016', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Chicken Breast (raw)',    type: 'PRODUCT', retailPriceCents:   80000,                              costPriceCents: 60000, trackStock: true,  vatApplicable: false,                       category: 'Meat',       unitWeightGrams: 1000, trackExpiry: true, defaultExpiryDays: 3 },
-      { id: 'item-017', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Lettuce',                 type: 'PRODUCT', retailPriceCents:    4000,                              costPriceCents:  2500, trackStock: true,  vatApplicable: false,                       category: 'Vegetables', unitWeightGrams: 300,  trackExpiry: true, defaultExpiryDays: 5 },
+      { id: 'item-013', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Samsung Galaxy A55',      type: 'PRODUCT', retailPriceCents: 4500000, wholesalePriceCents: 4200000, costPriceCents: 3800000, trackStock: true, trackSerials: true, vatApplicable: true, barcode: '8806094917772', category: 'Electronics', reorderLevel: 2, reorderQty: 5 },
+      { id: 'item-014', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Redmi Note 13',           type: 'PRODUCT', retailPriceCents: 2800000,                              costPriceCents: 2200000, trackStock: true, trackSerials: true, vatApplicable: true, barcode: '6934177794872', category: 'Electronics', reorderLevel: 2, reorderQty: 5 },
+      { id: 'item-015', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Bread Loaf',              type: 'PRODUCT', retailPriceCents:    7000,                              costPriceCents:  4500, trackStock: true,  vatApplicable: false,                       category: 'Bakery',     unitWeightGrams: 600,  reorderLevel: 10, reorderQty: 30 },
+      { id: 'item-016', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Chicken Breast (raw)',    type: 'PRODUCT', retailPriceCents:   80000,                              costPriceCents: 60000, trackStock: true,  vatApplicable: false,                       category: 'Meat',       unitWeightGrams: 1000, trackExpiry: true, defaultExpiryDays: 3,  reorderLevel: 5, reorderQty: 10 },
+      { id: 'item-017', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Lettuce',                 type: 'PRODUCT', retailPriceCents:    4000,                              costPriceCents:  2500, trackStock: true,  vatApplicable: false,                       category: 'Vegetables', unitWeightGrams: 300,  trackExpiry: true, defaultExpiryDays: 5,  reorderLevel: 5, reorderQty: 20 },
       { id: 'item-018', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Club Sandwich (Recipe)',  type: 'RECIPE',  retailPriceCents:   85000,                              costPriceCents:     0, trackStock: false, vatApplicable: true,                        category: 'Food' },
       { id: 'item-019', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Breakfast Bundle',        type: 'BUNDLE',  retailPriceCents:   45000,                              costPriceCents:     0, trackStock: false, vatApplicable: true,                        category: 'Food' },
       { id: 'item-020', offlineId: uuidv4(), businessId: business.id, storeId: store.id, name: 'Paracetamol 500mg x24',  type: 'PRODUCT', retailPriceCents:    8500,                              costPriceCents:  5000, trackStock: true,  trackBatches: true, trackExpiry: true, defaultExpiryDays: 730, vatApplicable: false, barcode: '6001020003020', category: 'Pharmacy' },

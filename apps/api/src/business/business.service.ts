@@ -11,8 +11,9 @@ import { UserRole } from '@pos/shared';
 
 interface UpdateBusinessDto {
   name?: string;
-  taxType?: 'VAT' | 'TOT';
+  taxType?: 'VAT' | 'TOT' | 'NONE';
   serviceChargeRate?: number;
+  serviceChargeDefault?: boolean;
   negativePolicyDefault?: 'BLOCK' | 'WARN' | 'ALLOW';
   posMode?: string;
   expiredItemPolicy?: string;
@@ -30,6 +31,9 @@ interface UpdateBusinessDto {
   tablePrefix?: string;
   receiptHeader?: string;
   receiptFooter?: string;
+  enableCashDrawer?: boolean;
+  enableBarcodeScanner?: boolean;
+  enablePoleDisplay?: boolean;
 }
 
 interface CreateStoreDto {
@@ -330,6 +334,20 @@ export class BusinessService {
   }
 
   // ─── Subscription ─────────────────────────────────────────────────────────────
+
+  async cancelSubscription(businessId: string, reason: string) {
+    const valid = ['PRICE', 'COMPETITOR', 'MISSING_FEATURE', 'POOR_SUPPORT', 'OTHER'];
+    const cancelReason = valid.includes(reason) ? reason : 'OTHER';
+    return this.prisma.business.update({
+      where: { id: businessId },
+      data: {
+        subscriptionStatus: 'CANCELLED',
+        cancelledAt: new Date(),
+        cancelReason,
+      },
+      select: { id: true, subscriptionStatus: true, cancelReason: true, cancelledAt: true },
+    });
+  }
 
   async getSubscriptionStatus(businessId: string) {
     const business = await this.prisma.business.findUnique({

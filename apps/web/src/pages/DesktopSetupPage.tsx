@@ -11,6 +11,7 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import {
   ShoppingCart, Key, Server, Monitor, Wifi, CheckCircle,
   ChevronRight, ChevronLeft, AlertCircle, Loader2, RefreshCw,
@@ -214,7 +215,7 @@ export default function DesktopSetupPage() {
       localStorage.setItem('desktop-setup-done', '1');
       navigate('/');
     } catch (e) {
-      alert('Failed to save configuration: ' + String(e));
+      toast.error('Failed to save configuration: ' + String(e));
     } finally {
       setSaving(false);
     }

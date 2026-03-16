@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { X } from 'lucide-react';
@@ -42,9 +43,9 @@ export default function ProformaPage() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['proformas', businessId] });
       setSelectedProforma(null);
-      alert(`Converted! Receipt: ${data.receiptNumber ?? 'N/A'}`);
+      toast.success(`Converted! Receipt: ${data.receiptNumber ?? 'N/A'}`);
     },
-    onError: (err: any) => alert(err?.message ?? 'Conversion failed'),
+    onError: (err: any) => toast.error(err?.message ?? 'Conversion failed'),
   });
 
   const cancelMutation = useMutation({

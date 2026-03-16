@@ -3,7 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, LineChart, Line, Area, AreaChart,
-  ComposedChart, ReferenceLine, Brush, ScatterChart, Scatter,
+  ReferenceLine,
 } from 'recharts';
 import {
   DollarSign, ShoppingBag, TrendingUp, Package, FileText,
@@ -300,7 +300,7 @@ function getDateRange(range: Range, from: string, to: string): { startDate: stri
   return { startDate: new Date(from).toISOString(), endDate: new Date(to + 'T23:59:59').toISOString() };
 }
 
-function getComparisonDateRange(range: Range, comparison: ComparisonPeriod, startDate: string, endDate: string): { startDate: string; endDate: string } | null {
+function getComparisonDateRange(_range: Range, comparison: ComparisonPeriod, startDate: string, endDate: string): { startDate: string; endDate: string } | null {
   if (comparison === 'none') return null;
   
   const start = new Date(startDate);
@@ -453,7 +453,7 @@ export default function ReportsPage() {
   const [comparisonPeriod, setComparisonPeriod] = useState<ComparisonPeriod>('none');
   const [chartType, setChartType] = useState<'bar' | 'line' | 'area'>('bar');
   const [showTrendlines, setShowTrendlines] = useState(false);
-  const [selectedMetrics, setSelectedMetrics] = useState<string[]>(['revenue', 'transactions']);
+  const [_selectedMetrics, _setSelectedMetrics] = useState<string[]>(['revenue', 'transactions']);
 
   const { startDate, endDate } = getDateRange(range, customFrom, customTo);
   const comparisonRange = getComparisonDateRange(range, comparisonPeriod, startDate, endDate);

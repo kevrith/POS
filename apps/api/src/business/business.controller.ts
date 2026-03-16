@@ -63,6 +63,15 @@ export class BusinessController {
     return this.businessService.getSubscriptionStatus(businessId);
   }
 
+  @SkipSubscriptionCheck()
+  @Post(':businessId/cancel-subscription')
+  async cancelSubscription(
+    @Param('businessId') businessId: string,
+    @Body() body: { reason: string },
+  ) {
+    return this.businessService.cancelSubscription(businessId, body.reason);
+  }
+
   // ─── User Management ────────────────────────────────────────────────────────
 
   @Get(':businessId/users')

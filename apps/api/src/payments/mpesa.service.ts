@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../prisma/prisma.service';
 
 interface STKPushRequest {
   phone: string;
@@ -38,7 +39,10 @@ interface MpesaCallbackBody {
 export class MpesaService {
   private readonly logger = new Logger(MpesaService.name);
 
-  constructor(private config: ConfigService) {}
+  constructor(
+    private config: ConfigService,
+    private prisma: PrismaService,
+  ) {}
 
   private get isProduction(): boolean {
     return this.config.get<string>('MPESA_ENV') === 'production';
@@ -285,7 +289,23 @@ export class MpesaService {
       this.logger.log(
         `M-Pesa payment success: ${CheckoutRequestID} | Code: ${mpesaCode} | Amount: ${amount} | Phone: ${phone}`,
       );
-      // TODO: update payment record with mpesaCode when payment table tracks checkoutRequestId
+
+      // Update Payment.reference from checkoutRequestId → real M-Pesa receipt code
+      if (mpesaCode) {
+        try {
+          const updated = await this.prisma.payment.updateMany({
+            where: { method: 'MPESA_STK', reference: CheckoutRequestID as string },
+            data: { reference: String(mpesaCode) },
+          });
+          if (updated.count > 0) {
+            this.logger.log(`Updated ${updated.count} payment(s) with M-Pesa receipt: ${mpesaCode}`);
+          } else {
+            this.logger.warn(`No payment found for CheckoutRequestID ${CheckoutRequestID} — receipt ${mpesaCode} not persisted`);
+          }
+        } catch (err: any) {
+          this.logger.error(`Failed to persist M-Pesa receipt code: ${err.message}`);
+        }
+      }
     } else {
       this.logger.warn(`M-Pesa payment failed: ${CheckoutRequestID} | ${ResultDesc}`);
     }

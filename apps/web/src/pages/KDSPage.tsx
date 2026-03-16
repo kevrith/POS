@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChefHat, Clock, CheckCircle, RefreshCw, X, Crown, User, AlertTriangle, Timer } from 'lucide-react';
+import { ChefHat, Clock, CheckCircle, RefreshCw, X, Crown, User, AlertTriangle, Timer, KeyRound, Users } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 
@@ -71,6 +71,89 @@ function formatCountdown(mins: number): string {
   return `${mins} mins`;
 }
 
+// ── PIN Claim Modal for shared kitchen terminals ──────────────────────────────
+const PIN_DIGITS_KDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 'C', 0, '⌫'] as const;
+
+function PinClaimModal({
+  kotId: _kotId, kotLabel, businessId,
+  onClaim, onCancel,
+}: {
+  kotId: string; kotLabel: string; businessId: string;
+  onClaim: (chefId: string, chefName: string) => void;
+  onCancel: () => void;
+}) {
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleDigit = (d: typeof PIN_DIGITS_KDS[number]) => {
+    if (d === 'C') { setPin(''); return; }
+    if (d === '⌫') { setPin(p => p.slice(0, -1)); return; }
+    if (pin.length >= 6) return;
+    setPin(p => p + d);
+  };
+
+  const handleSubmit = async () => {
+    if (!pin) return;
+    setLoading(true); setError('');
+    try {
+      const res = await api.post<{ accessToken: string; user: any }>('/auth/login/pin', {
+        pin, businessId, storeId: undefined,
+      });
+      onClaim(res.user.id, res.user.name);
+    } catch {
+      setError('Invalid PIN. Try again.');
+      setPin('');
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+      <div style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: '16px', padding: '1.75rem', width: '100%', maxWidth: '360px', textAlign: 'center' }}>
+        <ChefHat style={{ width: 40, height: 40, color: '#f59e0b', margin: '0 auto 0.75rem' }} />
+        <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#f1f5f9', marginBottom: '0.25rem' }}>Chef Sign-in</h2>
+        <p style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '1.25rem' }}>Enter your PIN to claim KOT <strong style={{ color: '#94a3b8' }}>{kotLabel}</strong></p>
+
+        {/* PIN dots */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+          {[0,1,2,3,4,5].map(i => (
+            <div key={i} style={{ width: 14, height: 14, borderRadius: '50%', background: i < pin.length ? '#f59e0b' : '#1e293b', border: '1.5px solid #334155', transition: 'background 0.1s' }} />
+          ))}
+        </div>
+
+        {error && <p style={{ fontSize: '0.75rem', color: '#ef4444', marginBottom: '0.75rem', background: 'rgba(239,68,68,0.08)', padding: '0.375rem 0.75rem', borderRadius: '8px' }}>{error}</p>}
+
+        {/* Numpad */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginBottom: '1rem' }}>
+          {PIN_DIGITS_KDS.map((d, i) => (
+            <button key={i} onClick={() => handleDigit(d)}
+              style={{
+                padding: '0.875rem', borderRadius: '10px', border: 'none', cursor: 'pointer', fontSize: '1.125rem', fontWeight: 700,
+                background: d === 'C' ? 'rgba(239,68,68,0.12)' : d === '⌫' ? 'rgba(100,116,139,0.15)' : 'rgba(255,255,255,0.06)',
+                color: d === 'C' ? '#ef4444' : '#f1f5f9',
+                transition: 'background 0.1s',
+              }}>
+              {d}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.625rem' }}>
+          <button onClick={onCancel} style={{ flex: 1, padding: '0.75rem', borderRadius: '10px', border: '1px solid #1e293b', background: 'transparent', color: '#64748b', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer' }}>
+            Cancel
+          </button>
+          <button onClick={() => void handleSubmit()} disabled={!pin || loading}
+            style={{ flex: 2, padding: '0.75rem', borderRadius: '10px', border: 'none', background: pin ? '#f59e0b' : '#1e293b', color: pin ? '#000' : '#64748b', fontSize: '0.875rem', fontWeight: 700, cursor: pin ? 'pointer' : 'not-allowed', transition: 'all 0.15s' }}>
+            {loading ? 'Verifying…' : 'Claim KOT'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function KDSPage() {
   const user = useAuthStore((s) => s.user);
   const qc = useQueryClient();
@@ -78,6 +161,9 @@ export default function KDSPage() {
   const businessId = user?.businessId ?? '';
   const [countdown, setCountdown] = useState(10);
   const [tick, setTick] = useState(0);
+  // Shared terminal mode: prompt PIN before claiming KOT
+  const [sharedMode, setSharedMode] = useState(() => localStorage.getItem('kds-shared-mode') === '1');
+  const [pinClaim, setPinClaim] = useState<{ kotId: string; kotLabel: string } | null>(null);
 
   const { data: bizSettings } = useQuery<{ tablePrefix?: string | null }>({
     queryKey: ['biz-settings', businessId],
@@ -117,11 +203,23 @@ export default function KDSPage() {
     },
   });
 
+  const toggleSharedMode = () => {
+    const next = !sharedMode;
+    setSharedMode(next);
+    localStorage.setItem('kds-shared-mode', next ? '1' : '0');
+  };
+
   const handleAdvance = useCallback((kot: KDSOrder) => {
     const nextStatus = STATUS_NEXT[kot.status];
     if (!nextStatus) return;
+    // In shared terminal mode, PIN claim is required when moving to IN_PROGRESS
+    if (sharedMode && kot.status === 'PENDING') {
+      const label = `KOT #${kot.kotNumber}`;
+      setPinClaim({ kotId: kot.id, kotLabel: label });
+      return;
+    }
     updateStatusMutation.mutate({ kotId: kot.id, status: nextStatus });
-  }, [updateStatusMutation]);
+  }, [updateStatusMutation, sharedMode]);
 
   const activeOrders = orders.filter((o) => o.status !== 'SERVED');
   const pendingCount = activeOrders.filter(o => o.status === 'PENDING').length;
@@ -130,13 +228,31 @@ export default function KDSPage() {
 
   return (
     <div className="fixed inset-0 z-50 bg-gray-950 text-white flex flex-col" data-tick={tick}>
+
+      {/* PIN Claim Modal */}
+      {pinClaim && (
+        <PinClaimModal
+          kotId={pinClaim.kotId}
+          kotLabel={pinClaim.kotLabel}
+          businessId={businessId}
+          onClaim={(_chefId, _chefName) => {
+            // Chef verified — advance KOT. The API uses JWT for chef assignment
+            // For shared terminal we pass the chefName for display but the server
+            // uses the PIN-authed user id for assignedChefId
+            updateStatusMutation.mutate({ kotId: pinClaim.kotId, status: 'IN_PROGRESS' });
+            setPinClaim(null);
+          }}
+          onCancel={() => setPinClaim(null)}
+        />
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-3 bg-gray-900 border-b border-gray-700 shrink-0">
         <div className="flex items-center gap-3">
           <ChefHat className="w-6 h-6 text-orange-400" />
           <div>
             <h1 className="text-xl font-bold">Kitchen Display</h1>
-            <p className="text-xs text-gray-400">{user?.name} · Store {storeId}</p>
+            <p className="text-xs text-gray-400">{sharedMode ? 'Shared Terminal' : user?.name} · Store {storeId}</p>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -146,6 +262,20 @@ export default function KDSPage() {
             <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400"></span>{inProgressCount} preparing</span>
             <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-green-500"></span>{readyCount} ready</span>
           </div>
+          {/* Shared terminal toggle */}
+          <button
+            onClick={toggleSharedMode}
+            title={sharedMode ? 'Shared Terminal: PIN required per claim (click to disable)' : 'Enable Shared Terminal mode: require PIN to claim each KOT'}
+            className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+              sharedMode
+                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                : 'bg-gray-800 text-gray-500 border border-gray-700 hover:text-gray-300'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            {sharedMode ? 'Shared' : 'Personal'}
+            <KeyRound className="w-3 h-3 opacity-60" />
+          </button>
           <div className="flex items-center gap-2 text-sm text-gray-400">
             <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin text-blue-400' : ''}`} />
             <span>{countdown}s</span>

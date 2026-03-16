@@ -266,7 +266,7 @@ export class ExpenseService {
         businessId,
         vatReclaimable: true,
         approvalStatus: 'APPROVED',
-        date: { gte: new Date(startDate), lte: new Date(endDate) },
+        createdAt: { gte: new Date(startDate), lte: new Date(endDate) },
       },
     });
     const totalCents = expenses.reduce((s, e) => s + e.amountCents, 0);

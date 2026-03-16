@@ -325,11 +325,11 @@ export class HrController {
   async biometricClockIn(@Body() body: { businessId: string; employeePin: string; deviceId?: string }) {
     // Real implementation: query ZKTeco device via TCP on port 4370 using zklib
     // For now: verify employeePin against Employee.user.pin and create attendance record
-    return this.hrService.clockIn(body.businessId, body.employeePin, 'BIOMETRIC');
+    return this.hrService.biometricClockIn(body.businessId, body.employeePin, 'BIOMETRIC');
   }
 
   @Post('biometric/clock-out')
   async biometricClockOut(@Body() body: { businessId: string; employeePin: string; deviceId?: string }) {
-    return this.hrService.clockOut(body.businessId, body.employeePin, 'BIOMETRIC');
+    return this.hrService.biometricClockOut(body.businessId, body.employeePin, 'BIOMETRIC');
   }
 }

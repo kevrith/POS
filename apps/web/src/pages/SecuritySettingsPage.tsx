@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import {
-  Shield, Users, Key, Eye, Plus, Edit, Trash2,
+  Shield, Users, Key, Eye, Plus, Trash2,
   X, Search, Download, AlertCircle, CheckCircle2,
   Tag, Loader2, RefreshCw,
 } from 'lucide-react';
@@ -499,7 +500,7 @@ export default function SecuritySettingsPage() {
                   setEtimsSaving(true);
                   await api.patch(`/business/${businessId}/settings`, { etimsEnvironment: etimsMode }).catch(() => {});
                   setEtimsSaving(false);
-                  alert(`eTIMS mode set to ${etimsMode}`);
+                  toast.success(`eTIMS mode set to ${etimsMode}`);
                 }}
                 disabled={etimsSaving}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">

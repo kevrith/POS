@@ -1,0 +1,45 @@
+services:
+  - type: web
+    name: kastra-api
+    runtime: node
+    region: frankfurt  # closest to Kenya; or use oregon
+    plan: starter      # $7/month — upgrade to standard for production
+    buildCommand: |
+      cd packages/shared && npm install && npm run build && cd ../.. &&
+      cd apps/api && npm ci &&
+      npx prisma generate --schema ../../prisma/schema.prisma &&
+      npm run build
+    startCommand: cd apps/api && npx prisma migrate deploy --schema ../../prisma/schema.prisma && node dist/main
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kastra-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        sync: false   # set manually in Render dashboard (64 hex chars)
+      - key: FRONTEND_URL
+        sync: false   # e.g. https://kastra-pos.vercel.app
+      - key: ADMIN_URL
+        sync: false   # e.g. https://kastra-admin.vercel.app
+      - key: SUPER_ADMIN_EMAIL
+        sync: false
+      - key: SUPER_ADMIN_PASSWORD
+        sync: false
+      - key: SUPER_ADMIN_SECRET
+        generateValue: true
+      - key: ETIMS_ENV
+        value: test   # change to production when KRA approves
+      - key: MPESA_ENV
+        value: sandbox
+
+databases:
+  - name: kastra-db
+    databaseName: kastra_pos
+    user: kastra
+    plan: starter   # $7/month — free tier available but limited
+    region: frankfurt

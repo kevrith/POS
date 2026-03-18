@@ -45,13 +45,12 @@ async function bootstrap() {
     }));
 
     logger.log('Enabling CORS...');
-    app.enableCors({
-      origin: [
-        process.env.FRONTEND_URL ?? 'http://localhost:3001',
-        process.env.ADMIN_URL ?? 'http://localhost:3002',
-      ],
-      credentials: true,
-    });
+    const allowedOrigins = [
+      process.env.FRONTEND_URL ?? 'http://localhost:3001',
+      process.env.ADMIN_URL ?? 'http://localhost:3002',
+      ...(process.env.EXTRA_ORIGINS ? process.env.EXTRA_ORIGINS.split(',') : []),
+    ];
+    app.enableCors({ origin: allowedOrigins, credentials: true });
 
     logger.log('Setting global prefix to /api...');
     app.setGlobalPrefix('api');
@@ -70,9 +69,14 @@ async function bootstrap() {
     SwaggerModule.setup('api/docs', app, document);
 
     logger.log('Starting server on port 3010...');
-    await app.listen(3010);
+    // Lightweight health check for Render (no auth required)
+    const httpAdapter = app.getHttpAdapter();
+    httpAdapter.get('/api/v1/health', (_req: any, res: any) => res.json({ status: 'ok' }));
 
-    logger.log('🚀 API running on http://localhost:3010/api');
+    const port = process.env.PORT ?? 3010;
+    await app.listen(port);
+
+    logger.log(`🚀 API running on port ${port}/api`);
     logger.log('📋 Health check: http://localhost:3010/api/auth/me');
     logger.log('📖 Swagger docs: http://localhost:3010/api/docs');
     logger.log('🔑 Super Admin: POST /api/v1/super-admin/login');

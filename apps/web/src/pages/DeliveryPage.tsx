@@ -83,7 +83,8 @@ export default function DeliveryPage() {
   });
 
   const assignMutation = useMutation({
-    mutationFn: ({ id, driverId }: { id: string; driverId: string }) => api.patch(`/delivery/${id}/assign`, { driverId }),
+    mutationFn: ({ id, driverId }: { id: string; driverId: string }) =>
+      api.patch(`/delivery/${id}/assign`, { driverId, businessId }),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['deliveries'] }); setAssignTarget(null); setSelectedDriver(''); },
   });
 
@@ -117,7 +118,10 @@ export default function DeliveryPage() {
   };
 
   const canManage = user?.role === 'OWNER' || user?.role === 'MANAGER';
-  const drivers = users.filter((u) => ['CASHIER', 'MANAGER', 'OWNER'].includes(u.role));
+  // Prefer users with DRIVER role; fall back to all staff if none are designated
+  const designatedDrivers = users.filter((u) => u.role === 'DRIVER');
+  const drivers = designatedDrivers.length > 0 ? designatedDrivers : users.filter((u) => u.role !== 'KITCHEN');
+  const usingFallbackDrivers = designatedDrivers.length === 0;
 
   const TABS = [
     { id: 'PENDING', label: 'Pending' },
@@ -218,12 +222,17 @@ export default function DeliveryPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-sm shadow-2xl">
             <div className="p-6">
-              <h3 className="font-bold text-gray-900 dark:text-white mb-4">Assign Driver — {assignTarget.orderNumber}</h3>
+              <h3 className="font-bold text-gray-900 dark:text-white mb-1">Assign Driver — {assignTarget.orderNumber}</h3>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">Destination: {assignTarget.deliveryAddress}</p>
+              {usingFallbackDrivers && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg px-3 py-2 mb-3">
+                  No users with <strong>DRIVER</strong> role found — showing all staff. To designate official drivers, set their role to "Driver" in Settings → Users.
+                </p>
+              )}
               <select value={selectedDriver} onChange={(e) => setSelectedDriver(e.target.value)}
                 className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white mb-4">
                 <option value="">Select driver…</option>
-                {drivers.map((d) => <option key={d.id} value={d.id}>{d.name} ({d.role})</option>)}
+                {drivers.map((d) => <option key={d.id} value={d.id}>{d.name} — {d.role}</option>)}
               </select>
               <div className="flex gap-2 justify-end">
                 <button onClick={() => setAssignTarget(null)} className="px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">Cancel</button>

@@ -24,7 +24,7 @@ interface AuthState {
   // OAuth token (returned via URL query param after Google callback redirect)
   loginWithOAuth: (accessToken: string, user: AuthUser) => Promise<void>;
   // PIN login (Cashier / Waiter / Kitchen)
-  loginWithPin: (pin: string, businessId: string, storeId?: string) => Promise<void>;
+  loginWithPin: (pin: string, businessId: string, storeId?: string, userId?: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -92,11 +92,11 @@ export const useAuthStore = create<AuthState>()(
         set({ user, isAuthenticated: true });
       },
 
-      loginWithPin: async (pin, businessId, storeId) => {
+      loginWithPin: async (pin, businessId, storeId, userId) => {
         const res = await fetch(`${API_V1}/auth/login/pin`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pin, businessId, storeId }),
+          body: JSON.stringify({ pin, businessId, storeId, userId }),
         });
 
         if (!res.ok) {

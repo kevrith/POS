@@ -66,4 +66,12 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   emitDeliveryUpdated(businessId: string, payload: Record<string, unknown>) {
     this.server.to(`business:${businessId}`).emit('delivery_updated', payload);
   }
+
+  emitNotificationCreated(businessId: string, payload: Record<string, unknown>) {
+    this.server.to(`business:${businessId}`).emit('notification_created', payload);
+  }
+
+  emitC2BPaymentReceived(businessId: string, payload: Record<string, unknown>) {
+    this.server.to(`business:${businessId}`).emit('mpesa_c2b_payment', payload);
+  }
 }

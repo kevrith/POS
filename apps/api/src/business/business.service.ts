@@ -12,6 +12,7 @@ import { UserRole } from '@pos/shared';
 interface UpdateBusinessDto {
   name?: string;
   taxType?: 'VAT' | 'TOT' | 'NONE';
+  totRate?: number;
   serviceChargeRate?: number;
   serviceChargeDefault?: boolean;
   negativePolicyDefault?: 'BLOCK' | 'WARN' | 'ALLOW';
@@ -237,9 +238,15 @@ export class BusinessService {
 
   async saveEtimsCredentials(
     businessId: string,
-    creds: { bhfId: string; tin: string; cmcKey: string },
+    creds: { bhfId: string; tin: string; dvcSrno: string },
   ) {
-    const encrypted = this.encrypt(creds);
+    // Normalise into the shape the eTIMS service expects
+    const normalised = {
+      kraPin: creds.tin,
+      branchId: creds.bhfId,
+      dvcSrno: creds.dvcSrno,
+    };
+    const encrypted = this.encrypt(normalised);
     await this.prisma.business.update({
       where: { id: businessId },
       data: { etimsCredentialsEncrypted: encrypted },

@@ -5,7 +5,7 @@ import {
   X, Loader2, AlertCircle, TrendingDown, RefreshCw, Target, Trash2,
   FileText, ShieldCheck, Users, Download,
 } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, openPdfReport } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -393,13 +393,14 @@ interface SetBudgetModalProps {
   month: number;
   year: number;
   existing?: BudgetRow;
+  initialCategory?: string;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-function SetBudgetModal({ businessId, month, year, existing, onClose, onSuccess }: SetBudgetModalProps) {
+function SetBudgetModal({ businessId, month, year, existing, initialCategory, onClose, onSuccess }: SetBudgetModalProps) {
   const [form, setForm] = useState({
-    category: existing?.category ?? 'Rent',
+    category: existing?.category ?? initialCategory ?? 'Rent',
     amountStr: existing ? String(existing.amountCents / 100) : '',
   });
   const [error, setError] = useState('');
@@ -485,6 +486,7 @@ export default function ExpensesPage() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [editBudget, setEditBudget] = useState<BudgetRow | undefined>();
+  const [preselectedCategory, setPreselectedCategory] = useState<string | undefined>();
   const [approvalExpense, setApprovalExpense] = useState<Expense | null>(null);
 
   const now = new Date();
@@ -902,7 +904,7 @@ export default function ExpensesPage() {
                               )}
                               {/* PDF download */}
                               <button
-                                onClick={() => window.open(`/api/v1/reports/pdf/expense-report?employeeId=${expense.submittedBy}&month=${new Date(expense.createdAt).toISOString().slice(0,7)}`, '_blank')}
+                                onClick={() => openPdfReport(`/reports/pdf/expense-report?employeeId=${expense.submittedBy}&month=${new Date(expense.createdAt).toISOString().slice(0,7)}`)}
                                 title="Download PDF report"
                                 className="p-1.5 text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg">
                                 <FileText className="w-4 h-4" />
@@ -1064,7 +1066,7 @@ export default function ExpensesPage() {
                       {categoriesWithoutBudget.map((cat) => (
                         <button
                           key={cat}
-                          onClick={() => { setEditBudget(undefined); setShowBudgetModal(true); }}
+                          onClick={() => { setEditBudget(undefined); setPreselectedCategory(cat); setShowBudgetModal(true); }}
                           className="px-3 py-1.5 text-sm bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-300 hover:border-blue-400 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
                         >
                           + {cat}
@@ -1210,7 +1212,8 @@ export default function ExpensesPage() {
           month={budgetMonth}
           year={budgetYear}
           existing={editBudget}
-          onClose={() => { setShowBudgetModal(false); setEditBudget(undefined); }}
+          initialCategory={preselectedCategory}
+          onClose={() => { setShowBudgetModal(false); setEditBudget(undefined); setPreselectedCategory(undefined); }}
           onSuccess={() => void refetchBudgets()}
         />
       )}

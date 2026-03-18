@@ -171,10 +171,12 @@ export class AuthService {
     pin: string,
     businessId: string,
     storeId?: string,
+    userId?: string,
   ): Promise<{ accessToken: string; user: AuthUser }> {
-    const users = await this.prisma.user.findMany({
-      where: { businessId, pinHash: { not: null } },
-    });
+    // If userId provided, only check that specific user's PIN
+    const users = userId
+      ? await this.prisma.user.findMany({ where: { id: userId, businessId, pinHash: { not: null } } })
+      : await this.prisma.user.findMany({ where: { businessId, pinHash: { not: null } } });
 
     let matchedUser: (typeof users)[0] | undefined;
     for (const u of users) {

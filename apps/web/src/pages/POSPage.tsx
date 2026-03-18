@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { MessageSquare, X, ShoppingCart } from 'lucide-react';
+import { MessageSquare, X, ShoppingCart, Clock } from 'lucide-react';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { api } from '../lib/api';
 import { usePOSStore, type ApiItem, type PriceLevel, type CartItem } from '../stores/pos';
@@ -17,6 +17,7 @@ import PriceOverrideModal from '../components/pos/PriceOverrideModal';
 import ExpiryWarningModal from '../components/pos/ExpiryWarningModal';
 import CameraModal from '../components/pos/CameraModal';
 import type { ReceiptData } from '../lib/printer';
+import { subscribeToEvent, SocketEvents } from '../lib/socket';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -116,6 +117,10 @@ export default function POSPage() {
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   // Price override
   const [priceOverrideItem, setPriceOverrideItem] = useState<CartItem | null>(null);
+  const [pendingC2BCount, setPendingC2BCount] = useState(0);
+  // NPS
+  const [showNPS, setShowNPS] = useState(false);
+  const [lastSaleId, setLastSaleId] = useState('');
 
   const searchRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -136,12 +141,10 @@ export default function POSPage() {
   const effectiveStoreName = firstStore?.name ?? 'Main Store';
 
   const { data: items = [] } = useQuery<ApiItem[]>({
-    queryKey: ['items', businessId, effectiveStoreId, search],
+    queryKey: ['items', businessId, effectiveStoreId],
     queryFn: () =>
       api.get<ApiItem[]>(
-        `/items?businessId=${businessId}${effectiveStoreId ? `&storeId=${effectiveStoreId}` : ''}&activeOnly=true${
-          search ? `&search=${encodeURIComponent(search)}` : ''
-        }`,
+        `/items?businessId=${businessId}${effectiveStoreId ? `&storeId=${effectiveStoreId}` : ''}&activeOnly=true`,
       ),
     enabled: !!businessId,
   });
@@ -190,6 +193,30 @@ export default function POSPage() {
   const enableBarcodeScanner = businessSettings?.enableBarcodeScanner ?? true;
   const enablePoleDisplay = businessSettings?.enablePoleDisplay ?? false;
 
+  // ─── Clock In/Out ─────────────────────────────────────────────────────────
+
+  const { data: clockStatus, refetch: refetchClock } = useQuery<{ isClockedIn: boolean; clockedInSince: string | null }>({
+    queryKey: ['clock-status', businessId, user?.id],
+    queryFn: () => api.get(`/hr/time-entries/status?businessId=${businessId}&userId=${user?.id}`),
+    enabled: !!businessId && !!user?.id,
+    refetchInterval: 60000,
+  });
+
+  const clockMut = useMutation({
+    mutationFn: () => clockStatus?.isClockedIn
+      ? api.post('/hr/time-entries/clock-out', { userId: user?.id, businessId })
+      : api.post('/hr/time-entries/clock-in', { userId: user?.id, businessId, storeId: effectiveStoreId }),
+    onSuccess: () => { void refetchClock(); },
+  });
+
+  function clockedInDuration(since: string | null): string {
+    if (!since) return '';
+    const mins = Math.floor((Date.now() - new Date(since).getTime()) / 60000);
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  }
+
   // Sync service charge toggle from business default when settings first load
   const serviceChargeDefaultRef = useRef(false);
   useEffect(() => {
@@ -199,6 +226,17 @@ export default function POSPage() {
       setServiceChargeEnabled(businessSettings.serviceChargeDefault);
     }
   }, [businessSettings?.serviceChargeDefault]);
+
+  // C2B incoming payment badge
+  useEffect(() => {
+    if (!businessId) return;
+    api.get<{ pendingCount: number }>(`/payments/mpesa/c2b/stats?businessId=${businessId}`)
+      .then((s) => setPendingC2BCount(s.pendingCount))
+      .catch(() => {});
+    return subscribeToEvent(SocketEvents.MPESA_C2B_PAYMENT, () => {
+      setPendingC2BCount((n) => n + 1);
+    });
+  }, [businessId]);
 
   const { data: fefoSuggestions = [] } = useQuery<Array<{ itemId: string; itemName: string; daysLeft: number | null; lotNumber: string; status: string }>>({
     queryKey: ['fefo-suggestions', effectiveStoreId, cart.map((c) => c.id).join(',')],
@@ -251,7 +289,13 @@ export default function POSPage() {
 
   // ─── Totals ───────────────────────────────────────────────────────────────
 
-  const filteredItems = activeCategory === 'all' ? items : items.filter((i) => i.category === activeCategory);
+  const filteredItems = search
+    ? items.filter(i => 
+        i.name.toLowerCase().includes(search.toLowerCase()) || 
+        i.barcode?.toLowerCase().includes(search.toLowerCase()) ||
+        (i as any).sku?.toLowerCase().includes(search.toLowerCase())
+      )
+    : activeCategory === 'all' ? items : items.filter((i) => i.category === activeCategory);
   const subtotalCents = cart.reduce((s, i) => s + i.totalCents, 0);
   const serviceChargeCents = serviceChargeEnabled ? Math.round(subtotalCents * serviceChargeRate / 100) : 0;
   const cartItemIds = cart.map((i) => i.id);
@@ -278,6 +322,54 @@ export default function POSPage() {
   const totCentsDisplay = taxType === 'TOT' ? Math.round(Math.max(taxBase, 0) * 3 / 103) : 0;
   const tipCents = Math.round(parseFloat(tipInput || '0') * 100);
   const totalCents = Math.max(0, taxBase) + serviceChargeCents + tipCents;
+
+  // ─── Pole Display broadcast ───────────────────────────────────────────────
+  useEffect(() => {
+    try {
+      const ch = new BroadcastChannel('pos-pole-display');
+      ch.postMessage({
+        businessName: businessSettings?.name ?? 'KASTRA POS',
+        items: cart.map((i) => ({
+          id: i.id,
+          name: i.name,
+          quantity: i.quantity,
+          unitPriceCents: i.unitPriceCents,
+          totalCents: i.totalCents,
+        })),
+        subtotalCents,
+        discountCents: totalDiscountCents,
+        vatCents,
+        totalCents,
+        status: cart.length === 0 ? 'idle' : 'cart',
+      });
+      ch.close();
+    } catch { /* non-critical */ }
+  }, [cart, subtotalCents, vatCents, totalCents, totalDiscountCents, businessSettings?.name]);
+
+  // Broadcast 'payment' status when payment modal opens
+  useEffect(() => {
+    if (!showPayment) return;
+    try {
+      const ch = new BroadcastChannel('pos-pole-display');
+      ch.postMessage({
+        businessName: businessSettings?.name ?? 'KASTRA POS',
+        items: cart.map((i) => ({
+          id: i.id,
+          name: i.name,
+          quantity: i.quantity,
+          unitPriceCents: i.unitPriceCents,
+          totalCents: i.totalCents,
+        })),
+        subtotalCents,
+        discountCents: totalDiscountCents,
+        vatCents,
+        totalCents,
+        status: 'payment',
+      });
+      ch.close();
+    } catch { /* non-critical */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showPayment]);
 
   // ─── Checkout ─────────────────────────────────────────────────────────────
 
@@ -337,29 +429,39 @@ export default function POSPage() {
       };
       setReceiptData(receipt);
 
-      void api.post<{ success: boolean }>(`/etims/submit/${result.id}`).then((res) => {
-        if (res.success) setReceiptData((prev) => prev ? { ...prev, etimsSubmitted: true } : prev);
+      void api.post<{ success: boolean; controlNumber?: string; intrlData?: string }>(`/etims/submit/${result.id}`).then((res) => {
+        if (res.success) setReceiptData((prev) => prev ? {
+          ...prev,
+          etimsSubmitted: true,
+          // intrlData is the KRA cryptographic receipt signature — encoded in the QR code
+          // controlNumber is the human-readable KRA reference printed on the receipt
+          kraQRCode: res.intrlData ?? res.controlNumber,
+          etimsControlNumber: res.controlNumber,
+        } : prev);
       }).catch(() => {});
 
-      if (enablePoleDisplay) try {
+      try {
+        const bizName = businessSettings?.name ?? 'KASTRA POS';
         const ch = new BroadcastChannel('pos-pole-display');
-        ch.postMessage({ businessName: 'KASTRA POS', items: [], subtotalCents: 0, discountCents: 0, vatCents: 0, totalCents: result.totalCents, status: 'complete' });
+        ch.postMessage({ businessName: bizName, items: [], subtotalCents: 0, discountCents: 0, vatCents: 0, totalCents: result.totalCents, status: 'complete' });
         ch.close();
         setTimeout(() => {
           try {
             const ch2 = new BroadcastChannel('pos-pole-display');
-            ch2.postMessage({ businessName: 'KASTRA POS', items: [], subtotalCents: 0, discountCents: 0, vatCents: 0, totalCents: 0, status: 'idle' });
+            ch2.postMessage({ businessName: bizName, items: [], subtotalCents: 0, discountCents: 0, vatCents: 0, totalCents: 0, status: 'idle' });
             ch2.close();
           } catch { /* non-critical */ }
         }, 4000);
       } catch { /* non-critical */ }
 
+      setLastSaleId(result.id);
       clearCart();
       setLoyaltyDiscountApplied(false);
       setLoyaltyDiscountCents(0);
       setTipInput('');
       setAgeConfirmed(false);
       setShowPayment(false);
+      setShowNPS(true);
       void qc.invalidateQueries({ queryKey: ['items'] });
     },
   });
@@ -394,7 +496,7 @@ export default function POSPage() {
     }
     const gs1 = parseGS1Weight(raw);
     if (gs1) {
-      const hit = items.find(i => i.barcode === gs1.plu || i.barcode?.startsWith(gs1.plu) || i.sku === gs1.plu);
+      const hit = items.find(i => i.barcode?.toLowerCase() === gs1.plu.toLowerCase() || i.barcode?.toLowerCase().startsWith(gs1.plu.toLowerCase()) || (i.sku as any)?.toLowerCase() === gs1.plu.toLowerCase());
       if (hit) {
         const tareGrams = hit.tareWeightGrams ?? 0;
         if (gs1.weightGrams > 0) {
@@ -411,7 +513,8 @@ export default function POSPage() {
         setSearch(''); return;
       }
     }
-    const item = items.find(i => i.barcode === raw);
+    // Case-insensitive barcode match
+    const item = items.find(i => i.barcode?.toLowerCase() === raw.toLowerCase());
     if (item) { addToCart(item); setSearch(''); }
   }, [items, addToCart, addWeightedToCart]);
 
@@ -447,6 +550,55 @@ export default function POSPage() {
     }
     setShowCamera(false);
     setCameraError(null);
+  }, []);
+
+  // ─── Hardware barcode scanner (keyboard-wedge) ────────────────────────────
+  // Scanners type very fast (<50ms between chars) then send Enter.
+  // Buffer keystrokes and flush on Enter if typed quickly enough.
+
+  const barcodeBuffer = useRef('');
+  const barcodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastKeyTime = useRef(0);
+
+  useEffect(() => {
+    function onScanKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement).tagName;
+      // If user is typing in an input let it through normally
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+      const now = Date.now();
+      const gap = now - lastKeyTime.current;
+      lastKeyTime.current = now;
+
+      // Scanners type chars with < 50ms gap; humans are > 100ms
+      if (e.key === 'Enter' && barcodeBuffer.current.length >= 3) {
+        // Flush buffer as barcode search
+        const code = barcodeBuffer.current;
+        barcodeBuffer.current = '';
+        if (barcodeTimer.current) clearTimeout(barcodeTimer.current);
+        setSearch(code);
+        searchRef.current?.focus();
+        return;
+      }
+
+      if (e.key.length === 1 && gap < 80) {
+        barcodeBuffer.current += e.key;
+        if (barcodeTimer.current) clearTimeout(barcodeTimer.current);
+        // Auto-flush if no Enter comes within 200ms (some scanners omit Enter)
+        barcodeTimer.current = setTimeout(() => {
+          if (barcodeBuffer.current.length >= 3) {
+            setSearch(barcodeBuffer.current);
+            searchRef.current?.focus();
+          }
+          barcodeBuffer.current = '';
+        }, 200);
+      } else if (e.key.length === 1) {
+        // Slow keystroke — not a scanner, reset buffer
+        barcodeBuffer.current = '';
+      }
+    }
+    window.addEventListener('keydown', onScanKey);
+    return () => window.removeEventListener('keydown', onScanKey);
   }, []);
 
   // ─── Keyboard shortcuts ───────────────────────────────────────────────────
@@ -515,13 +667,34 @@ export default function POSPage() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-full overflow-hidden flex-col md:flex-row relative">
+    <div className="flex h-full overflow-hidden flex-col md:flex-row relative bg-slate-950 text-slate-100">
       {/* GS1 barcode scan toast */}
       {barcodeToast && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-green-700 text-white px-6 py-3 rounded-xl shadow-lg text-sm font-medium max-w-sm text-center">
           {barcodeToast}
         </div>
       )}
+
+      {/* Clock In/Out widget — top-right corner of item grid area */}
+      <div className="fixed top-2 right-[320px] z-40 hidden md:flex">
+        <button
+          onClick={() => clockMut.mutate()}
+          disabled={clockMut.isPending}
+          title={clockStatus?.isClockedIn ? 'Clock out' : 'Clock in'}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold shadow-lg transition-colors disabled:opacity-50 ${
+            clockStatus?.isClockedIn
+              ? 'bg-emerald-700 hover:bg-emerald-600 text-white'
+              : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+          }`}
+        >
+          <Clock className="w-3.5 h-3.5" />
+          {clockStatus?.isClockedIn ? (
+            <span>● Clocked In{clockStatus.clockedInSince ? ` · ${clockedInDuration(clockStatus.clockedInSince)}` : ''}</span>
+          ) : (
+            <span>○ Clock In</span>
+          )}
+        </button>
+      </div>
 
       {/* Left: Item Grid */}
       <ItemGrid
@@ -586,39 +759,51 @@ export default function POSPage() {
         onPay={() => void handlePayClick()}
       />
 
-      {/* Mobile bottom bar */}
-      {cart.length > 0 && (
-        <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex shadow-2xl border-t bg-white">
-          <button
-            onClick={() => setShowCartMobile(true)}
-            className="flex-1 flex items-center justify-center gap-2 py-4 bg-gray-50 text-gray-700 font-semibold text-sm border-r"
-          >
-            <div className="relative">
-              <ShoppingCart className="w-5 h-5" />
-              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
+      {/* Mobile bottom bar — always visible on mobile so cashier knows cart state */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex shadow-2xl border-t border-slate-800 bg-slate-900">
+        <button
+          onClick={() => setShowCartMobile(true)}
+          className="flex items-center gap-3 px-4 py-3.5 bg-slate-800 border-r border-slate-700"
+        >
+          <div className="relative">
+            <ShoppingCart className="w-5 h-5 text-slate-300" />
+            {cart.length > 0 && (
+              <span className="absolute -top-2 -right-2 bg-blue-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
                 {cart.length}
               </span>
-            </div>
-            Cart
-          </button>
-          <button
-            onClick={() => void handlePayClick()}
-            disabled={checkoutMutation.isPending}
-            className="flex-[2] py-4 bg-blue-600 text-white font-bold text-sm disabled:opacity-50"
-          >
-            {checkoutMutation.isPending ? 'Processing…' : `Pay ${formatKES(totalCents)}`}
-          </button>
-        </div>
-      )}
+            )}
+          </div>
+          <div className="text-left">
+            <p className="text-xs text-slate-400 leading-none">Cart</p>
+            <p className="text-sm font-bold text-slate-100 leading-tight">{formatKES(totalCents)}</p>
+          </div>
+        </button>
+        <button
+          onClick={() => void handlePayClick()}
+          disabled={cart.length === 0 || checkoutMutation.isPending}
+          className="relative flex-1 py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm disabled:opacity-40 transition-colors"
+        >
+          {checkoutMutation.isPending ? 'Processing…' : cart.length > 0 ? `Pay ${formatKES(totalCents)}` : 'Pay'}
+          {pendingC2BCount > 0 && (
+            <span className="absolute top-1 right-2 bg-green-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full animate-pulse">
+              {pendingC2BCount} M-Pesa
+            </span>
+          )}
+        </button>
+      </div>
 
       {/* ── Modals ── */}
       {showPayment && (
         <PaymentModal
           totalCents={totalCents}
-          onComplete={(payments) => checkoutMutation.mutate(payments)}
+          onComplete={(payments) => {
+            checkoutMutation.mutate(payments);
+            setPendingC2BCount(0);
+          }}
           onCancel={() => setShowPayment(false)}
           isProcessing={checkoutMutation.isPending}
           error={checkoutMutation.error?.message}
+          businessId={businessId}
         />
       )}
 
@@ -721,6 +906,41 @@ export default function POSPage() {
           onClose={() => setShowExpiryWarning(false)}
           onProceed={() => { setShowExpiryWarning(false); setShowPayment(true); }}
         />
+      )}
+
+      {showNPS && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-6 max-w-sm w-full text-center">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1">How was your experience?</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Rate from 0 (worst) to 10 (best)</p>
+            <div className="flex gap-1 justify-center flex-wrap mb-4">
+              {Array.from({ length: 11 }, (_, i) => i).map(score => (
+                <button
+                  key={score}
+                  onClick={() => {
+                    // Use plain fetch — NPS is a public endpoint, api.post would redirect on any 401
+                    void fetch('/api/v1/nps', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ businessId, saleId: lastSaleId, score }),
+                    }).catch(() => {});
+                    setShowNPS(false);
+                  }}
+                  className={`w-9 h-9 rounded-lg text-sm font-bold transition-colors ${
+                    score <= 6 ? 'bg-red-100 hover:bg-red-500 hover:text-white text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                    : score <= 8 ? 'bg-yellow-100 hover:bg-yellow-500 hover:text-white text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                    : 'bg-green-100 hover:bg-green-500 hover:text-white text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                  }`}
+                >
+                  {score}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setShowNPS(false)} className="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+              Skip
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

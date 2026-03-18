@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChefHat, Clock, CheckCircle, RefreshCw, X, Crown, User, AlertTriangle, Timer, KeyRound, Users } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
+import { printKOTDirect, type KOTPrinterConfig, type KOTData } from '../lib/printer';
 
 interface KOTItem {
   id: string;
@@ -165,6 +166,16 @@ export default function KDSPage() {
   const [sharedMode, setSharedMode] = useState(() => localStorage.getItem('kds-shared-mode') === '1');
   const [pinClaim, setPinClaim] = useState<{ kotId: string; kotLabel: string } | null>(null);
 
+  // Kitchen printer config — read from localStorage (set in Settings → Printers)
+  const kotPrinterConfig: KOTPrinterConfig = (() => {
+    try {
+      const stored = localStorage.getItem('kot-printer-config');
+      return stored ? JSON.parse(stored) as KOTPrinterConfig : { type: 'BROWSER' };
+    } catch {
+      return { type: 'BROWSER' };
+    }
+  })();
+
   const { data: bizSettings } = useQuery<{ tablePrefix?: string | null }>({
     queryKey: ['biz-settings', businessId],
     queryFn: () => api.get(`/business/${businessId}/settings`),
@@ -198,8 +209,31 @@ export default function KDSPage() {
   const updateStatusMutation = useMutation({
     mutationFn: ({ kotId, status }: { kotId: string; status: string }) =>
       api.patch(`/hospitality/kot/${kotId}/status`, { status }),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       void qc.invalidateQueries({ queryKey: ['kds-orders'] });
+      // When a KOT moves to IN_PROGRESS, print it to the kitchen printer
+      if (variables.status === 'IN_PROGRESS') {
+        const kot = orders.find((o) => o.id === variables.kotId);
+        if (kot) {
+          const rawNum = kot.order.table?.number ?? '';
+          const tableLabel = kot.order.table
+            ? (/\D/.test(rawNum) ? rawNum : `T${rawNum}`)
+            : kot.order.roomNumber ?? 'Takeaway';
+          const kotData: KOTData = {
+            kotNumber: String(kot.kotNumber),
+            tableNumber: tableLabel,
+            orderType: 'NEW_ORDER',
+            createdAt: kot.createdAt,
+            waiterName: kot.order.waiter.name,
+            items: kot.order.items.map((i) => ({
+              name: i.name,
+              quantity: i.quantity,
+              specialInstructions: i.specialInstructions,
+            })),
+          };
+          void printKOTDirect(kotPrinterConfig, kotData);
+        }
+      }
     },
   });
 

@@ -45,8 +45,9 @@ export class ReportsController {
     @Query('businessId') businessId: string,
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
+    @Query('storeId') storeId?: string,
   ) {
-    return this.reports.vatReport(businessId, new Date(startDate), new Date(endDate));
+    return this.reports.vatReport(businessId, new Date(startDate), new Date(endDate), storeId);
   }
 
   @Get('tot')
@@ -54,8 +55,9 @@ export class ReportsController {
     @Query('businessId') businessId: string,
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
+    @Query('storeId') storeId?: string,
   ) {
-    return this.reports.totReport(businessId, new Date(startDate), new Date(endDate));
+    return this.reports.totReport(businessId, new Date(startDate), new Date(endDate), storeId);
   }
 
   @Get('vat-return-itax')
@@ -63,8 +65,9 @@ export class ReportsController {
     @Query('businessId') businessId: string,
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
+    @Query('storeId') storeId?: string,
   ) {
-    return this.reports.vatReturn(businessId, new Date(startDate), new Date(endDate));
+    return this.reports.vatReturn(businessId, new Date(startDate), new Date(endDate), storeId);
   }
 
   @Get('stock-valuation')
@@ -80,8 +83,9 @@ export class ReportsController {
     @Query('businessId') businessId: string,
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
+    @Query('storeId') storeId?: string,
   ) {
-    return this.reports.profitAndLoss(businessId, new Date(startDate), new Date(endDate));
+    return this.reports.profitAndLoss(businessId, new Date(startDate), new Date(endDate), storeId);
   }
 
   @Get('x-report')
@@ -103,12 +107,14 @@ export class ReportsController {
   @Get('expenses')
   async expenseReport(
     @Query('businessId') businessId: string,
+    @Query('storeId') storeId?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('category') category?: string,
   ) {
     return this.reports.expenseReport(
       businessId,
+      storeId,
       startDate ? new Date(startDate) : undefined,
       endDate ? new Date(endDate) : undefined,
       category,
@@ -118,12 +124,14 @@ export class ReportsController {
   @Get('commissions')
   async commissionReport(
     @Query('businessId') businessId: string,
+    @Query('storeId') storeId?: string,
     @Query('employeeId') employeeId?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
     return this.reports.commissionReport(
       businessId,
+      storeId,
       employeeId,
       startDate ? new Date(startDate) : undefined,
       endDate ? new Date(endDate) : undefined,
@@ -133,12 +141,14 @@ export class ReportsController {
   @Get('attendance')
   async attendanceReport(
     @Query('businessId') businessId: string,
+    @Query('storeId') storeId?: string,
     @Query('employeeId') employeeId?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
     return this.reports.attendanceReport(
       businessId,
+      storeId,
       employeeId,
       startDate ? new Date(startDate) : undefined,
       endDate ? new Date(endDate) : undefined,
@@ -221,9 +231,12 @@ export class ReportsController {
     @Query('asOfDate') asOfDate: string,
     @Query('storeId') storeId?: string,
   ) {
+    // Always use end-of-day so the full selected date is included
+    const endOfDay = new Date(asOfDate);
+    endOfDay.setUTCHours(23, 59, 59, 999);
     return this.reports.historicalStockReport(
       businessId,
-      new Date(asOfDate),
+      endOfDay,
       storeId,
     );
   }
@@ -493,6 +506,23 @@ export class ReportsController {
     res.send(csv);
   }
 
+  @Get('stock-transfers')
+  async stockTransfers(
+    @Query('businessId') businessId: string,
+    @Query('storeId') storeId?: string,
+    @Query('status') status?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reports.stockTransfers(
+      businessId,
+      storeId,
+      status,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
+
   @Get('dead-stock')
   async deadStockReport(
     @Query('businessId') businessId: string,
@@ -571,5 +601,36 @@ export class ReportsController {
       storeId,
       days ? parseInt(days) : 30,
     );
+  }
+
+  @Get('menu-engineering')
+  async menuEngineering(
+    @Query('businessId') businessId: string,
+    @Query('storeId') storeId?: string,
+    @Query('days') days = '30',
+  ) {
+    return this.reports.menuEngineering(businessId, storeId, parseInt(days));
+  }
+
+  @Get('basket-analysis')
+  async basketAnalysis(
+    @Query('businessId') businessId: string,
+    @Query('days') days = '30',
+  ) {
+    return this.reports.basketAnalysis(businessId, parseInt(days));
+  }
+
+  @Get('clv')
+  async clv(@Query('businessId') businessId: string) {
+    return this.reports.customerLifetimeValue(businessId);
+  }
+
+  @Get('nps-summary')
+  async npsSummary(
+    @Query('businessId') businessId: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reports.npsSummary(businessId, startDate, endDate);
   }
 }

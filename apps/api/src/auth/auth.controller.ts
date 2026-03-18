@@ -17,6 +17,7 @@ interface PinLoginDto {
   pin: string;
   businessId: string;
   storeId?: string;
+  userId?: string; // optional: scope PIN check to a specific user
 }
 
 interface RegisterDto {
@@ -41,7 +42,7 @@ export class AuthController {
   @Throttle({ default: { limit: 20, ttl: 60000 } })
   @Post('login/pin')
   async loginPin(@Body() dto: PinLoginDto) {
-    return this.authService.loginWithPin(dto.pin, dto.businessId, dto.storeId);
+    return this.authService.loginWithPin(dto.pin, dto.businessId, dto.storeId, dto.userId);
   }
 
   @Post('register')

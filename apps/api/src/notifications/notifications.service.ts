@@ -1,10 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { EventsGateway } from '../events/events.gateway';
 import { createDecipheriv } from 'crypto';
 
 @Injectable()
 export class NotificationsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private events: EventsGateway,
+  ) {}
 
   // ─── AT Credentials ─────────────────────────────────────────────────────────
 
@@ -24,6 +28,7 @@ export class NotificationsService {
   }
 
   private async getAtInstance(businessId: string) {
+    if (!businessId) return null;
     const business = await this.prisma.business.findUnique({
       where: { id: businessId },
       select: { atCredentialsEncrypted: true },
@@ -48,7 +53,22 @@ export class NotificationsService {
     entityId?: string;
     entityType?: string;
   }) {
-    return this.prisma.notification.create({ data: { ...data, priority: data.priority ?? 'NORMAL' } });
+    const notification = await this.prisma.notification.create({
+      data: { ...data, priority: data.priority ?? 'NORMAL' },
+    });
+    // Push real-time event to all staff connected to this business
+    this.events.emitNotificationCreated(data.businessId, {
+      id: notification.id,
+      type: notification.type,
+      priority: notification.priority,
+      title: notification.title,
+      body: notification.body,
+      entityId: notification.entityId,
+      entityType: notification.entityType,
+      isRead: notification.isRead,
+      createdAt: notification.createdAt,
+    });
+    return notification;
   }
 
   async getNotifications(businessId: string, unreadOnly?: boolean) {

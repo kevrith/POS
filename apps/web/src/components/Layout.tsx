@@ -6,14 +6,15 @@ import {
   Bell, ChevronDown, ChevronRight, Wallet, Hash, ChefHat, Box,
   Tag, Gift, Sun, Moon, Monitor, Wand2, ArrowRightLeft, LayoutDashboard,
   AlertTriangle, X, Pill, CalendarClock, TrendingUp, GitBranch, Landmark,
-  Lock, BedDouble, CheckCircle2, Trash2, Radio, BookOpen,
+  Fuel, Lock, BedDouble, CheckCircle2, Trash2, Radio, BookOpen,
   Link2, FileText, Clock, Send, Tablet, Shield,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../lib/api';
+import { api, getToken } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { useThemeStore } from '../stores/theme';
-import { connectSocket, disconnectSocket } from '../lib/socket';
+import { connectSocket, disconnectSocket, subscribeToEvent, SocketEvents } from '../lib/socket';
+import { toast } from 'sonner';
 import SyncStatusBadge, { OfflineBanner } from './SyncStatusBadge';
 import MobileNav from './MobileNav';
 
@@ -32,6 +33,7 @@ interface NavGroup {
 
 interface NavItemWithBusinessTypes extends NavItem {
   businessTypes?: string[];
+  newTab?: boolean; // open in new browser tab
 }
 
 interface NavGroupWithBusinessTypes extends Omit<NavGroup, 'items'> {
@@ -50,12 +52,14 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
     label: 'Sales',
     items: [
       { to: '/pos', icon: ShoppingCart, label: 'Point of Sale', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
+      { to: '/supermart', icon: ShoppingCart, label: 'Supermarket POS', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['SUPERMARKET'] },
       { to: '/hospitality', icon: Coffee, label: 'Hospitality', roles: ['OWNER', 'MANAGER', 'WAITER'], businessTypes: ['HOSPITALITY', 'FAST_FOOD'] },
       { to: '/kds', icon: Monitor, label: 'Kitchen Display', roles: ['OWNER', 'MANAGER', 'WAITER', 'KITCHEN'], businessTypes: ['HOSPITALITY', 'FAST_FOOD'] },
-      { to: '/kiosk', icon: Tablet, label: 'Kiosk Mode', roles: ['OWNER', 'MANAGER'] },
+      { to: '/kiosk', icon: Tablet, label: 'Kiosk Mode', roles: ['OWNER', 'MANAGER'], newTab: true },
       { to: '/layaway', icon: Layers, label: 'Layaway', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['RETAIL', 'SUPERMARKET'] },
       { to: '/proforma', icon: CreditCard, label: 'Proformas', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
       { to: '/prescriptions', icon: Pill, label: 'Prescriptions', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['CLINIC'] },
+      { to: '/pharmacy', icon: Pill, label: 'Pharmacy Mgmt', roles: ['OWNER', 'MANAGER'], businessTypes: ['CLINIC'] },
       { to: '/appointments', icon: CalendarClock, label: 'Appointments', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['CLINIC', 'SALON'] },
     ],
   },
@@ -68,6 +72,7 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
       { to: '/waitlist', icon: Clock, label: 'Waitlist', roles: ['OWNER', 'MANAGER', 'WAITER'], businessTypes: ['HOSPITALITY', 'FAST_FOOD'] },
       { to: '/hotel', icon: BedDouble, label: 'Hotel Integration', roles: ['OWNER', 'MANAGER'], businessTypes: ['HOSPITALITY'] },
       { to: '/channel-manager', icon: Radio, label: 'Channel Manager', roles: ['OWNER', 'MANAGER'], businessTypes: ['HOSPITALITY'] },
+      { to: '/fuel-pump', icon: Fuel, label: 'Fuel Pumps', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['FUEL_PUMP'] },
     ],
   },
   {
@@ -206,6 +211,34 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       return () => { cancelled = true; clearTimeout(t); disconnectSocket(); };
     }
     return () => { disconnectSocket(); };
+  }, [user?.businessId]);
+
+  // ─── Notification unread count + real-time badge ──────────────────────────
+  const [unreadCount, setUnreadCount] = useState(0);
+  const { data: unreadData } = useQuery<{ count: number }>({
+    queryKey: ['notifications-unread', user?.businessId],
+    queryFn: () => api.get(`/notifications/unread-count?businessId=${user!.businessId}`),
+    enabled: !!user?.businessId,
+    refetchInterval: 60_000,
+  });
+  useEffect(() => {
+    if (unreadData?.count !== undefined) setUnreadCount(unreadData.count);
+  }, [unreadData?.count]);
+  // Clear badge when user opens notifications page
+  useEffect(() => {
+    if (location.pathname === '/notifications') setUnreadCount(0);
+  }, [location.pathname]);
+  useEffect(() => {
+    if (!user?.businessId) return;
+    return subscribeToEvent(SocketEvents.NOTIFICATION_CREATED, (data) => {
+      setUnreadCount((n) => n + 1);
+      if (data.priority === 'HIGH') {
+        toast(data.title as string, {
+          description: data.body as string,
+          duration: 8000,
+        });
+      }
+    });
   }, [user?.businessId]);
 
   // ─── Auto-lock ────────────────────────────────────────────────────────────
@@ -483,17 +516,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   <div className="space-y-[2px]">
                     {group.items.map((item) => {
                       const active = isActive(item.to);
-                      return (
-                        <Link
-                          key={item.to}
-                          to={item.to}
-                          className={`group flex items-center gap-2.5 px-2 py-[6px] rounded-lg text-[13px] font-medium transition-all duration-150 ${
-                            active
-                              ? 'bg-blue-600/[0.09] dark:bg-blue-500/[0.14] text-blue-700 dark:text-blue-300'
-                              : 'text-gray-500/90 dark:text-white/38 hover:text-gray-800 dark:hover:text-white/75 hover:bg-gray-900/[0.04] dark:hover:bg-white/[0.05]'
-                          }`}
-                        >
-                          {/* Icon container — has its own subtle bg when active */}
+                      const navCls = `group flex items-center gap-2.5 px-2 py-[6px] rounded-lg text-[13px] font-medium transition-all duration-150 ${
+                        active
+                          ? 'bg-blue-600/[0.09] dark:bg-blue-500/[0.14] text-blue-700 dark:text-blue-300'
+                          : 'text-gray-500/90 dark:text-white/38 hover:text-gray-800 dark:hover:text-white/75 hover:bg-gray-900/[0.04] dark:hover:bg-white/[0.05]'
+                      }`;
+                      const navInner = (
+                        <>
                           <div className={`flex-shrink-0 flex items-center justify-center w-[26px] h-[26px] rounded-md transition-all duration-150 ${
                             active
                               ? 'bg-blue-600/[0.12] dark:bg-blue-400/[0.18]'
@@ -505,14 +534,35 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                                 : 'text-gray-400 dark:text-white/32 group-hover:text-gray-600 dark:group-hover:text-white/60'
                             }`} />
                           </div>
-
                           <span className={`flex-1 truncate transition-all duration-150 ${active ? 'font-semibold' : 'font-medium'}`}>
                             {item.label}
                           </span>
-
-                          {active && (
-                            <div className="flex-shrink-0 w-1 h-1 rounded-full bg-blue-500 dark:bg-blue-400 opacity-70" />
-                          )}
+                          {active && <div className="flex-shrink-0 w-1 h-1 rounded-full bg-blue-500 dark:bg-blue-400 opacity-70" />}
+                        </>
+                      );
+                      return item.newTab ? (
+                        <button
+                          key={item.to}
+                          onClick={() => {
+                            const biz = user?.businessId ?? '';
+                            const store = user?.storeId ?? '';
+                            // Pass token via localStorage so the new tab can pick it up
+                            // (sessionStorage is tab-scoped and not shared with new tabs)
+                            const token = getToken();
+                            if (token) localStorage.setItem('kiosk-tab-token', token);
+                            window.open(`${item.to}?businessId=${biz}&storeId=${store}`, '_blank', 'noopener');
+                          }}
+                          className={`w-full text-left cursor-pointer ${navCls}`}
+                        >
+                          {navInner}
+                        </button>
+                      ) : (
+                        <Link
+                          key={item.to}
+                          to={item.to}
+                          className={navCls}
+                        >
+                          {navInner}
                         </Link>
                       );
                     })}
@@ -548,7 +598,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 <Bell className={`w-[14px] h-[14px] ${isActive('/notifications') ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-white/32 group-hover:text-gray-600 dark:group-hover:text-white/60'}`} />
               </div>
               <span className="flex-1">Notifications</span>
-              <div className="flex-shrink-0 w-[7px] h-[7px] bg-red-500 rounded-full shadow-sm shadow-red-500/40" />
+              {unreadCount > 0 && (
+                <div className="flex-shrink-0 flex items-center justify-center min-w-[16px] h-4 bg-red-500 rounded-full px-1 text-[10px] font-bold text-white shadow-sm shadow-red-500/40">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </div>
+              )}
             </Link>
 
             {showSettings && (

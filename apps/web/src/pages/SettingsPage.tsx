@@ -49,6 +49,7 @@ interface BusinessSettings {
   id: string;
   name: string;
   taxType: 'VAT' | 'TOT' | 'NONE';
+  totRate?: number;
   serviceChargeRate: number;
   serviceChargeDefault: boolean;
   enableCashDrawer: boolean;
@@ -373,6 +374,7 @@ export default function SettingsPage() {
   const [form, setForm] = useState({
     name: '',
     taxType: 'VAT' as 'VAT' | 'TOT' | 'NONE',
+    totRate: 3,
     serviceChargeRate: 10,
     serviceChargeDefault: false,
     enableCashDrawer: false,
@@ -400,7 +402,7 @@ export default function SettingsPage() {
   const [currencySaved, setCurrencySaved] = useState(false);
 
   // ─── eTIMS credentials ─────────────────────────────────────────────────────
-  const [etimsForm, setEtimsForm] = useState({ bhfId: '', tin: '', cmcKey: '' });
+  const [etimsForm, setEtimsForm] = useState({ bhfId: '', tin: '', dvcSrno: '' });
   const [etimsSaved, setEtimsSaved] = useState(false);
 
   // ─── M-Pesa credentials ────────────────────────────────────────────────────
@@ -669,6 +671,7 @@ export default function SettingsPage() {
       setForm({
         name: settings.name,
         taxType: (settings.taxType ?? 'VAT') as 'VAT' | 'TOT' | 'NONE',
+        totRate: settings.totRate ?? 3,
         serviceChargeRate: settings.serviceChargeRate,
         serviceChargeDefault: settings.serviceChargeDefault ?? false,
         negativePolicyDefault: settings.negativePolicyDefault,
@@ -772,7 +775,7 @@ export default function SettingsPage() {
       void queryClient.invalidateQueries({ queryKey: ['business-settings'] });
       setEtimsSaved(true);
       setTimeout(() => setEtimsSaved(false), 3000);
-      setEtimsForm({ bhfId: '', tin: '', cmcKey: '' });
+      setEtimsForm({ bhfId: '', tin: '', dvcSrno: '' });
     },
   });
 
@@ -1046,6 +1049,7 @@ export default function SettingsPage() {
               <option value="SUPERMARKET">Supermarket — High-volume retail</option>
               <option value="CLINIC">Clinic / Pharmacy — Prescriptions & appointments</option>
               <option value="SALON">Salon / Spa — Appointments & services</option>
+              <option value="FUEL_PUMP">Fuel Station — Pump management & fuel sales</option>
             </select>
           </div>
 
@@ -1088,6 +1092,30 @@ export default function SettingsPage() {
                 </label>
               ))}
             </div>
+
+            {/* TOT Rate — shown only when TOT is selected */}
+            {form.taxType === 'TOT' && (
+              <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-amber-900">TOT Rate (%)</p>
+                    <p className="text-xs text-amber-700">KRA Finance Act 2023 current rate: <strong>3%</strong>. Update here if KRA revises the rate.</p>
+                  </div>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.5}
+                    value={form.totRate}
+                    onChange={(e) => setForm((f) => ({ ...f, totRate: Number(e.target.value) }))}
+                    className="w-24 px-3 py-1.5 border border-amber-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 text-center font-bold"
+                  />
+                </div>
+                <p className="text-xs text-amber-600">
+                  ⚠ TOT applies to businesses with annual turnover between KES 1M–25M. Verify current rate at <strong>kra.go.ke</strong> before changing.
+                </p>
+              </div>
+            )}
 
             {/* Service charge */}
             <div className="border-t pt-4 space-y-3">
@@ -1691,16 +1719,18 @@ export default function SettingsPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">CMC Key</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Device Serial No. <span className="text-gray-400 font-normal">(dvcSrno)</span>
+              </label>
               <input
-                type="password"
-                value={etimsForm.cmcKey}
-                onChange={(e) => setEtimsForm((f) => ({ ...f, cmcKey: e.target.value }))}
+                type="text"
+                value={etimsForm.dvcSrno}
+                onChange={(e) => setEtimsForm((f) => ({ ...f, dvcSrno: e.target.value }))}
                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 font-mono"
-                placeholder="Your eTIMS CMC key"
+                placeholder="e.g. VSCU12345678"
               />
               <p className="text-xs text-gray-400 mt-1">
-                Credentials are encrypted with AES-256 before storage
+                Assigned by KRA when you register your device on the eTIMS portal. Credentials are encrypted with AES-256 before storage.
               </p>
             </div>
 
@@ -1710,7 +1740,7 @@ export default function SettingsPage() {
                 disabled={
                   !etimsForm.bhfId ||
                   !etimsForm.tin ||
-                  !etimsForm.cmcKey ||
+                  !etimsForm.dvcSrno ||
                   saveEtimsMutation.isPending
                 }
                 className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
@@ -2704,21 +2734,27 @@ export default function SettingsPage() {
                     onChange={(e) => setPrinterForm((f) => ({ ...f, connectionType: e.target.value }))}
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="USB">USB (WebUSB)</option>
-                    <option value="BLUETOOTH">Bluetooth</option>
-                    <option value="NETWORK">Network (IP)</option>
+                    <option value="USB">USB (WebUSB — ESC/POS)</option>
+                    <option value="BLUETOOTH">Bluetooth (ESC/POS)</option>
+                    <option value="NETWORK">Network IP (ESC/POS proxy)</option>
+                    <option value="STAR">Star WebPRNT (LAN)</option>
+                    <option value="EPSON">Epson ePOS (LAN)</option>
                   </select>
                 </div>
               </div>
-              {printerForm.connectionType === 'NETWORK' && (
+              {(printerForm.connectionType === 'NETWORK' || printerForm.connectionType === 'STAR' || printerForm.connectionType === 'EPSON') && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">IP Address:Port</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {printerForm.connectionType === 'STAR' ? 'IP Address (port defaults to 8008)' :
+                     printerForm.connectionType === 'EPSON' ? 'IP Address' :
+                     'IP Address:Port'}
+                  </label>
                   <input
                     type="text"
                     value={printerForm.connectionDetails}
                     onChange={(e) => setPrinterForm((f) => ({ ...f, connectionDetails: e.target.value }))}
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 font-mono"
-                    placeholder="192.168.1.100:9100"
+                    placeholder={printerForm.connectionType === 'NETWORK' ? '192.168.1.100:9100' : '192.168.1.100'}
                   />
                 </div>
               )}
@@ -2755,7 +2791,25 @@ export default function SettingsPage() {
                 Set as default printer
               </label>
               <button
-                onClick={() => createPrinterMutation.mutate(printerForm)}
+                onClick={() => {
+                  // Save Star/Epson config to localStorage for PrintModal + KDS
+                  if (printerForm.connectionType === 'STAR' && printerForm.connectionDetails) {
+                    localStorage.setItem('star-printer', JSON.stringify({ host: printerForm.connectionDetails }));
+                    if (printerForm.handles.includes('KOT')) {
+                      localStorage.setItem('kot-printer-config', JSON.stringify({ type: 'STAR', host: printerForm.connectionDetails }));
+                    }
+                  } else if (printerForm.connectionType === 'EPSON' && printerForm.connectionDetails) {
+                    localStorage.setItem('epson-printer', JSON.stringify({ host: printerForm.connectionDetails }));
+                    if (printerForm.handles.includes('KOT')) {
+                      localStorage.setItem('kot-printer-config', JSON.stringify({ type: 'EPSON', host: printerForm.connectionDetails }));
+                    }
+                  } else if (printerForm.connectionType === 'NETWORK' && printerForm.connectionDetails) {
+                    if (printerForm.handles.includes('KOT')) {
+                      localStorage.setItem('kot-printer-config', JSON.stringify({ type: 'NETWORK_ESCPOS', networkPrinterId: printerForm.connectionDetails }));
+                    }
+                  }
+                  createPrinterMutation.mutate(printerForm);
+                }}
                 disabled={!printerForm.name || printerForm.handles.length === 0 || createPrinterMutation.isPending}
                 className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
               >

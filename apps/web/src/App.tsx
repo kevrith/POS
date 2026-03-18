@@ -32,6 +32,7 @@ const TransfersPage = lazy(() => import('./pages/TransfersPage'));
 const OwnerDashboardPage = lazy(() => import('./pages/OwnerDashboardPage'));
 const PoleDisplayPage = lazy(() => import('./pages/PoleDisplayPage'));
 const PrescriptionsPage = lazy(() => import('./pages/PrescriptionsPage'));
+const PharmacyPage = lazy(() => import('./pages/PharmacyPage'));
 const AppointmentsPage = lazy(() => import('./pages/AppointmentsPage'));
 const DeliveryPage = lazy(() => import('./pages/DeliveryPage'));
 const CustomerPortalPage = lazy(() => import('./pages/CustomerPortalPage'));
@@ -49,11 +50,16 @@ const ChannelManagerPage = lazy(() => import('./pages/ChannelManagerPage'));
 const ChequesPage = lazy(() => import('./pages/ChequesPage'));
 const LedgerPage = lazy(() => import('./pages/LedgerPage'));
 const PaymentLinksPage = lazy(() => import('./pages/PaymentLinksPage'));
+const PayCheckoutPage = lazy(() => import('./pages/PayCheckoutPage'));
 const RFQPage = lazy(() => import('./pages/RFQPage'));
 const KioskPage = lazy(() => import('./pages/KioskPage'));
+const SupermarketPOSPage = lazy(() => import('./pages/SupermarketPOSPage'));
 const ReservationWidgetPage = lazy(() => import('./pages/ReservationWidgetPage'));
 const SecuritySettingsPage = lazy(() => import('./pages/SecuritySettingsPage'));
 const DeliveryManagementPage = lazy(() => import('./pages/DeliveryManagementPage'));
+const QRMenuPage = lazy(() => import('./pages/QRMenuPage'));
+const OnlineOrderPage = lazy(() => import('./pages/OnlineOrderPage'));
+const FuelPumpPage = lazy(() => import('./pages/FuelPumpPage'));
 
 function PageLoader() {
   return (
@@ -124,6 +130,35 @@ export default function App() {
     );
   }
 
+  // Payment link checkout — public, no auth, no layout
+  if (window.location.pathname.startsWith('/pay/')) {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-slate-900" />}>
+        <Routes>
+          <Route path="/pay/:code" element={<PayCheckoutPage />} />
+        </Routes>
+      </Suspense>
+    );
+  }
+
+  // QR Menu — public, no auth
+  if (window.location.pathname.startsWith('/menu/')) {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+        <Routes><Route path="/menu/:businessId" element={<QRMenuPage />} /></Routes>
+      </Suspense>
+    );
+  }
+
+  // Online Ordering — public, no auth
+  if (window.location.pathname.startsWith('/order/')) {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-white" />}>
+        <Routes><Route path="/order/:businessId" element={<OnlineOrderPage />} /></Routes>
+      </Suspense>
+    );
+  }
+
   if (!isAuthenticated) {
     // Ensure any /login?... URL is preserved so LoginPage can read params
     return <LoginPage />;
@@ -140,6 +175,8 @@ export default function App() {
           <Route path="/stocktake" element={<StocktakePage />} />
           {/* Sales */}
           <Route path="/pos" element={<POSPage />} />
+          <Route path="/supermart" element={<SupermarketPOSPage />} />
+          <Route path="/kiosk" element={<KioskPage />} />
           <Route path="/hospitality" element={<HospitalityPage />} />
           <Route path="/layaway" element={<LayawayPage />} />
           <Route path="/proforma" element={<ProformaPage />} />
@@ -170,6 +207,7 @@ export default function App() {
           <Route path="/owner-dashboard" element={<OwnerDashboardPage />} />
           {/* Clinic / Pharmacy */}
           <Route path="/prescriptions" element={<PrescriptionsPage />} />
+          <Route path="/pharmacy" element={<PharmacyPage />} />
           {/* Appointments / Service */}
           <Route path="/appointments" element={<AppointmentsPage />} />
           {/* Delivery */}
@@ -196,6 +234,8 @@ export default function App() {
           {/* Security & Delivery */}
           <Route path="/security-settings" element={<SecuritySettingsPage />} />
           <Route path="/delivery-management" element={<DeliveryManagementPage />} />
+          {/* Fuel Pump */}
+          <Route path="/fuel-pump" element={<FuelPumpPage />} />
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/pos" replace />} />
         </Routes>

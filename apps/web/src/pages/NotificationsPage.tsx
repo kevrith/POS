@@ -1,6 +1,8 @@
+import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
+import { subscribeToEvent, SocketEvents } from '../lib/socket';
 import {
   Bell, CheckCircle, AlertTriangle, Info, Trash2, CheckCheck,
   Package, Clock, ShieldAlert, CreditCard, DollarSign,
@@ -68,6 +70,29 @@ export default function NotificationsPage() {
     mutationFn: (id: string) => api.delete(`/notifications/${id}`),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['notifications', businessId] }),
   });
+
+  // Prepend new notifications in real-time without waiting for the 30s poll
+  useEffect(() => {
+    if (!businessId) return;
+    return subscribeToEvent(SocketEvents.NOTIFICATION_CREATED, (data) => {
+      qc.setQueryData<Notification[]>(['notifications', businessId], (prev = []) => {
+        const incoming: Notification = {
+          id: data.id as string,
+          type: data.type as string,
+          priority: data.priority as string,
+          title: data.title as string,
+          body: data.body as string,
+          entityId: data.entityId as string | undefined,
+          entityType: data.entityType as string | undefined,
+          isRead: false,
+          createdAt: data.createdAt as string,
+        };
+        // Avoid duplicates if a refetch also brings it in
+        if (prev.some((n) => n.id === incoming.id)) return prev;
+        return [incoming, ...prev];
+      });
+    });
+  }, [businessId, qc]);
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
   const highPriorityUnread = notifications.filter((n) => !n.isRead && n.priority === 'HIGH').length;

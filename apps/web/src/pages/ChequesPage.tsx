@@ -25,6 +25,7 @@ interface Cheque {
 
 interface CreateChequeDto {
   businessId: string;
+  storeId: string;
   chequeNumber: string;
   bankName: string;
   drawerName: string;
@@ -55,6 +56,7 @@ function fmt(cents: number) {
 export default function ChequesPage() {
   const user = useAuthStore((s) => s.user);
   const businessId = user?.businessId ?? '';
+  const storeId = user?.storeId ?? '';
   const qc = useQueryClient();
 
   const [tab, setTab] = useState<ChequeType>('RECEIVED');
@@ -285,6 +287,7 @@ export default function ChequesPage() {
                 e.preventDefault();
                 createMut.mutate({
                   businessId,
+                  storeId,
                   chequeNumber: form.chequeNumber.trim(),
                   bankName: form.bankName.trim(),
                   drawerName: form.drawerName.trim(),

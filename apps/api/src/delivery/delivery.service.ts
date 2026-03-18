@@ -228,13 +228,13 @@ export class DeliveryService {
       },
     });
 
-    // Send SMS to customer with tracking link
-    if (delivery.customerPhone) {
-      await this.notifications.sendSMS(
+    // Send SMS to customer with tracking link (fire-and-forget, don't fail the request)
+    if (delivery.customerPhone && businessId) {
+      this.notifications.sendSMS(
         businessId,
         delivery.customerPhone,
         `Your order #${delivery.orderNumber} has been assigned a driver. Track: ${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/track/${delivery.orderNumber}`,
-      );
+      ).catch(() => {});
     }
 
     return delivery;
@@ -424,6 +424,29 @@ export class DeliveryService {
         );
       }
     }
+  }
+
+  async updateDeliveryOrder(id: string, dto: { status?: string; notes?: string; scheduledAt?: string; deliveryFeeCents?: number }) {
+    const delivery = await this.prisma.deliveryOrder.findUnique({ where: { id } });
+    if (!delivery) throw new NotFoundException('Delivery not found');
+    return this.prisma.deliveryOrder.update({
+      where: { id },
+      data: {
+        ...(dto.status && { status: dto.status }),
+        ...(dto.notes !== undefined && { notes: dto.notes }),
+        ...(dto.scheduledAt && { scheduledAt: new Date(dto.scheduledAt) }),
+        ...(dto.deliveryFeeCents !== undefined && { deliveryFeeCents: dto.deliveryFeeCents }),
+      },
+    });
+  }
+
+  async cancelDeliveryOrder(id: string) {
+    const delivery = await this.prisma.deliveryOrder.findUnique({ where: { id } });
+    if (!delivery) throw new NotFoundException('Delivery not found');
+    return this.prisma.deliveryOrder.update({
+      where: { id },
+      data: { status: 'CANCELLED' },
+    });
   }
 
   async markFailed(deliveryOrderId: string, reason: string) {

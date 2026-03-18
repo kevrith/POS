@@ -3,7 +3,8 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { MpesaService } from './mpesa.service';
 import { ReconciliationService } from './reconciliation.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtAuthGuard, Public } from '../auth/jwt-auth.guard';
+import { SkipSubscriptionCheck } from '../auth/subscription.guard';
 import { Throttle } from '@nestjs/throttler';
 
 @Controller('payments')
@@ -204,5 +205,188 @@ export class PaymentsController {
   @UseGuards(JwtAuthGuard)
   async deleteStatement(@Param('id') id: string) {
     return this.reconciliation.deleteStatement(id);
+  }
+
+  // ─── M-Pesa C2B (Paybill/Till incoming payments) ─────────────────────────────
+
+  /** Safaricom calls this to validate a payment — always approve */
+  @Post('mpesa/c2b/validate')
+  c2bValidate() {
+    return { ResultCode: 0, ResultDesc: 'Accepted' };
+  }
+
+  /** Safaricom calls this when a payment is confirmed */
+  @Post('mpesa/c2b/confirm')
+  async c2bConfirm(@Body() body: Record<string, unknown>, @Query('businessId') businessId: string) {
+    if (!businessId) return { ResultCode: 0, ResultDesc: 'No businessId' };
+    await this.mpesa.handleC2BConfirmation(businessId, body);
+    return { ResultCode: 0, ResultDesc: 'Success' };
+  }
+
+  /** Register C2B URLs with Safaricom (one-time setup) */
+  @Post('mpesa/c2b/register')
+  @UseGuards(JwtAuthGuard)
+  async c2bRegister(
+    @Body() body: { shortCode: string; baseUrl: string; businessId: string },
+  ) {
+    const validationUrl = `${body.baseUrl}/api/v1/payments/mpesa/c2b/validate?businessId=${body.businessId}`;
+    const confirmationUrl = `${body.baseUrl}/api/v1/payments/mpesa/c2b/confirm?businessId=${body.businessId}`;
+    return this.mpesa.registerC2BUrls({
+      shortCode: body.shortCode,
+      validationUrl,
+      confirmationUrl,
+    });
+  }
+
+  /** Get recent incoming C2B payments for this business */
+  @Get('mpesa/c2b/incoming')
+  @UseGuards(JwtAuthGuard)
+  async c2bIncoming(
+    @Query('businessId') businessId: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.mpesa.getPendingC2BPayments(businessId, limit ? parseInt(limit) : 50);
+  }
+
+  /** Get count of pending unmatched payments (for badge) */
+  @Get('mpesa/c2b/stats')
+  @UseGuards(JwtAuthGuard)
+  async c2bStats(@Query('businessId') businessId: string) {
+    return this.mpesa.getC2BStats(businessId);
+  }
+
+  /** Match a C2B payment to a sale */
+  @Patch('mpesa/c2b/:id/match')
+  @UseGuards(JwtAuthGuard)
+  async c2bMatch(
+    @Param('id') id: string,
+    @Body() body: { saleId: string; matchedBy: string },
+  ) {
+    await this.mpesa.matchC2BPayment(id, body.saleId, body.matchedBy);
+    return { success: true };
+  }
+
+  /** Dismiss a C2B payment (not for this sale) */
+  @Patch('mpesa/c2b/:id/dismiss')
+  @UseGuards(JwtAuthGuard)
+  async c2bDismiss(@Param('id') id: string) {
+    await this.mpesa.dismissC2BPayment(id);
+    return { success: true };
+  }
+
+  // ─── Payment Links ────────────────────────────────────────────────────────────
+
+  @Get('links')
+  @UseGuards(JwtAuthGuard)
+  async getPaymentLinks(@Query('businessId') businessId: string) {
+    return this.prisma.paymentLink.findMany({
+      where: { businessId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  @Post('links')
+  @UseGuards(JwtAuthGuard)
+  async createPaymentLink(
+    @Body() body: {
+      businessId: string;
+      storeId?: string;
+      description?: string;
+      amountCents?: number;
+      currency?: string;
+      expiresAt?: string;
+      maxUses?: number;
+      createdBy?: string;
+    },
+  ) {
+    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    return this.prisma.paymentLink.create({
+      data: {
+        businessId: body.businessId,
+        storeId: body.storeId,
+        code,
+        description: body.description ?? '',
+        amountCents: body.amountCents ?? 0,
+        currency: body.currency ?? 'KES',
+        expiresAt: body.expiresAt ? new Date(body.expiresAt) : undefined,
+        maxUses: body.maxUses,
+        createdBy: body.createdBy ?? 'system',
+        status: 'ACTIVE',
+      },
+    });
+  }
+
+  @Patch('links/:id/disable')
+  @UseGuards(JwtAuthGuard)
+  async disablePaymentLink(@Param('id') id: string) {
+    return this.prisma.paymentLink.update({
+      where: { id },
+      data: { status: 'DISABLED' },
+    });
+  }
+
+  /** Public — fetch link details by code (no auth required) */
+  @Get('links/public/:code')
+  @Public()
+  @SkipSubscriptionCheck()
+  async getPublicLink(@Param('code') code: string) {
+    const link = await this.prisma.paymentLink.findUnique({ where: { code } });
+    if (!link) throw new Error('Payment link not found');
+    if (link.status !== 'ACTIVE') throw new Error('Payment link is no longer active');
+    if (link.expiresAt && link.expiresAt < new Date()) {
+      await this.prisma.paymentLink.update({ where: { id: link.id }, data: { status: 'EXPIRED' } });
+      throw new Error('Payment link has expired');
+    }
+    // Fetch business name for display
+    const biz = await this.prisma.business.findUnique({
+      where: { id: link.businessId },
+      select: { name: true },
+    });
+    return {
+      id: link.id,
+      code: link.code,
+      description: link.description,
+      amountCents: link.amountCents,
+      currency: link.currency,
+      expiresAt: link.expiresAt,
+      maxUses: link.maxUses,
+      usesCount: link.usesCount,
+      businessName: biz?.name ?? 'Merchant',
+    };
+  }
+
+  /** Public — trigger M-Pesa STK push for a payment link */
+  @Post('links/public/:code/pay')
+  @Public()
+  @SkipSubscriptionCheck()
+  async payLink(
+    @Param('code') code: string,
+    @Body() body: { phone: string; amountCents?: number },
+  ) {
+    const link = await this.prisma.paymentLink.findUnique({ where: { code } });
+    if (!link) throw new Error('Payment link not found');
+    if (link.status !== 'ACTIVE') throw new Error('Payment link is no longer active');
+    if (link.expiresAt && link.expiresAt < new Date()) throw new Error('Payment link has expired');
+    if (link.maxUses && link.usesCount >= link.maxUses) throw new Error('Payment link has reached its maximum uses');
+
+    const amount = link.amountCents > 0 ? link.amountCents : (body.amountCents ?? 0);
+    if (!amount || amount <= 0) throw new Error('Amount is required for open payment links');
+
+    const result = await this.mpesa.initiateSTKPush({
+      phone: body.phone,
+      amountCents: amount,
+      accountReference: `PAY-${code}`,
+    });
+
+    // Increment use count
+    await this.prisma.paymentLink.update({
+      where: { id: link.id },
+      data: {
+        usesCount: { increment: 1 },
+        ...(link.maxUses && link.usesCount + 1 >= link.maxUses ? { status: 'EXPIRED' } : {}),
+      },
+    });
+
+    return result;
   }
 }

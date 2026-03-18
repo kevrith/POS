@@ -113,7 +113,7 @@ export class ForecastingService {
   ): Promise<{ items: ForecastItem[] }> {
     const now = new Date();
     const since90 = new Date(now.getTime() - 90 * 24 * 3600 * 1000);
-    const sinceMs = since90.getTime(); // SQLite stores DateTime as ms timestamps
+    const sinceMs = since90.toISOString(); // PostgreSQL ISO timestamp
     const storeFilter = storeId ? `AND s."storeId" = '${storeId}'` : '';
 
     // Check if we have sufficient historical data (90 days)
@@ -137,17 +137,17 @@ export class ForecastingService {
       SELECT
         si."itemId",
         si."name" AS "itemName",
-        CAST((s."createdAt" / (7 * 86400 * 1000)) AS INTEGER) AS "weekIndex",
+        CAST(EXTRACT(EPOCH FROM s."createdAt") / (7 * 86400) AS INTEGER) AS "weekIndex",
         SUM(si."quantity") AS "totalQty",
         SUM(si."totalCents") AS "totalRevenueCents"
       FROM "SaleItem" si
       JOIN "Sale" s ON s."id" = si."saleId"
       WHERE s."businessId" = '${businessId}'
         AND s."status" IN ('PAID', 'COMPLETED', 'AMENDED')
-        AND s."createdAt" >= ${sinceMs}
+        AND s."createdAt" >= '${sinceMs}'
         ${storeFilter}
         AND si."itemId" IS NOT NULL
-      GROUP BY si."itemId", si."name", CAST((s."createdAt" / (7 * 86400 * 1000)) AS INTEGER)
+      GROUP BY si."itemId", si."name", CAST(EXTRACT(EPOCH FROM s."createdAt") / (7 * 86400) AS INTEGER)
       ORDER BY si."itemId", "weekIndex"
       LIMIT 5000
     `);
@@ -166,7 +166,7 @@ export class ForecastingService {
       JOIN "Item" it ON it."id" = im."itemId"
       WHERE it."businessId" = '${businessId}'
         ${storeId ? `AND im."storeId" = '${storeId}'` : ''}
-        AND im."createdAt" >= ${now.getTime() - 365 * 24 * 3600 * 1000}
+        AND im."createdAt" >= '${new Date(now.getTime() - 365 * 24 * 3600 * 1000).toISOString()}'
       GROUP BY im."itemId"
       LIMIT 1000
     `);
@@ -188,7 +188,7 @@ export class ForecastingService {
       entry.weeks.set(row.weekIndex, existing + this.toNum(row.totalQty));
     }
 
-    const currentWeekBucket = Math.floor(now.getTime() / 1000 / (7 * 86400));
+    const currentWeekBucket = Math.floor(now.getTime() / 1000 / (7 * 86400)); // matches EXTRACT(EPOCH)/week
     const results: ForecastItem[] = [];
 
     // Limit to top 50 items to prevent UI performance issues
@@ -303,7 +303,7 @@ export class ForecastingService {
   ): Promise<{ fastMovers: TopMover[]; slowMovers: TopMover[] }> {
     const days = period === '30d' ? 30 : period === '14d' ? 14 : 7;
     const since = new Date(Date.now() - days * 24 * 3600 * 1000);
-    const sinceMs = since.getTime();
+    const sinceMs = since.toISOString();
     const storeFilter = storeId ? `AND s."storeId" = '${storeId}'` : '';
 
     // Use optimized SQL query with date filtering and limits for performance
@@ -317,7 +317,7 @@ export class ForecastingService {
       JOIN "Sale" s ON s."id" = si."saleId"
       WHERE s."businessId" = '${businessId}'
         AND s."status" IN ('PAID', 'COMPLETED', 'AMENDED')
-        AND s."createdAt" >= ${sinceMs}
+        AND s."createdAt" >= '${sinceMs}'
         ${storeFilter}
         AND si."itemId" IS NOT NULL
       GROUP BY si."itemId", si."name"
@@ -375,38 +375,38 @@ export class ForecastingService {
     storeId?: string,
   ): Promise<{ hourly: HourlyPattern[]; daily: DailyPattern[] }> {
     const since = new Date(Date.now() - 90 * 24 * 3600 * 1000); // Last 90 days for performance
-    const sinceMs = since.getTime();
+    const sinceMs = since.toISOString();
     const storeFilter = storeId ? `AND "storeId" = '${storeId}'` : '';
 
-    // SQLite: createdAt stored as ms timestamp — convert with datetime("createdAt"/1000, 'unixepoch')
+    // PostgreSQL: use EXTRACT for hour/day-of-week from timestamp
     const hourlyRaw = await this.prisma.$queryRawUnsafe<RawHourlyRow[]>(`
       SELECT
-        CAST(strftime('%H', datetime("createdAt"/1000, 'unixepoch')) AS INTEGER) AS "hour",
+        EXTRACT(HOUR FROM "createdAt")::INTEGER AS "hour",
         COUNT(*) AS "saleCount",
         SUM("totalCents") AS "totalRevenueCents",
-        COUNT(DISTINCT date(datetime("createdAt"/1000, 'unixepoch'))) AS "dayCount"
+        COUNT(DISTINCT "createdAt"::DATE) AS "dayCount"
       FROM "Sale"
       WHERE "businessId" = '${businessId}'
         AND "status" IN ('PAID', 'COMPLETED', 'AMENDED')
-        AND "createdAt" >= ${sinceMs}
+        AND "createdAt" >= '${sinceMs}'
         ${storeFilter}
-      GROUP BY CAST(strftime('%H', datetime("createdAt"/1000, 'unixepoch')) AS INTEGER)
+      GROUP BY EXTRACT(HOUR FROM "createdAt")::INTEGER
       ORDER BY "hour"
       LIMIT 24
     `);
 
     const dailyRaw = await this.prisma.$queryRawUnsafe<RawDailyRow[]>(`
       SELECT
-        CAST(strftime('%w', datetime("createdAt"/1000, 'unixepoch')) AS INTEGER) AS "dayOfWeek",
+        EXTRACT(DOW FROM "createdAt")::INTEGER AS "dayOfWeek",
         COUNT(*) AS "saleCount",
         SUM("totalCents") AS "totalRevenueCents",
-        COUNT(DISTINCT strftime('%Y-%W', datetime("createdAt"/1000, 'unixepoch'))) AS "weekCount"
+        COUNT(DISTINCT TO_CHAR("createdAt", 'IYYY-IW')) AS "weekCount"
       FROM "Sale"
       WHERE "businessId" = '${businessId}'
         AND "status" IN ('PAID', 'COMPLETED', 'AMENDED')
-        AND "createdAt" >= ${sinceMs}
+        AND "createdAt" >= '${sinceMs}'
         ${storeFilter}
-      GROUP BY CAST(strftime('%w', datetime("createdAt"/1000, 'unixepoch')) AS INTEGER)
+      GROUP BY EXTRACT(DOW FROM "createdAt")::INTEGER
       ORDER BY "dayOfWeek"
       LIMIT 7
     `);

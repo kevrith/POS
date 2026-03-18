@@ -101,6 +101,9 @@ interface CreateItemPayload {
   imageUrl?: string;
   allergens?: string;
   reorderQty?: number;
+  availableFrom?: string;
+  availableTo?: string;
+  availableDays?: number[];
 }
 
 interface ItemVariant {
@@ -458,6 +461,10 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
     allergens: (() => { try { return JSON.parse(item.allergens ?? '[]') as string[]; } catch { return [] as string[]; } })(),
     reorderQty: item.reorderQty ?? 1,
     binLocation: item.binLocation ?? '',
+    restrictHours: !!((item as any).availableFrom || (item as any).availableTo),
+    availableFrom: (item as any).availableFrom ?? '',
+    availableTo: (item as any).availableTo ?? '',
+    availableDays: ((item as any).availableDays as number[] | undefined) ?? [] as number[],
   });
   const [error, setError] = useState('');
 
@@ -490,6 +497,15 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
       allergens: JSON.stringify(form.allergens),
       reorderQty: form.reorderQty,
       binLocation: form.binLocation.trim() || undefined,
+      ...(form.restrictHours ? {
+        availableFrom: form.availableFrom || undefined,
+        availableTo: form.availableTo || undefined,
+        availableDays: form.availableDays,
+      } : {
+        availableFrom: undefined,
+        availableTo: undefined,
+        availableDays: [],
+      }),
     } as Partial<CreateItemPayload>);
   }
 
@@ -592,6 +608,67 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
                 </label>
               ))}
             </div>
+          </div>
+
+          {/* Availability Schedule */}
+          <div className="border border-gray-200 rounded-xl p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="restrict-hours"
+                checked={form.restrictHours}
+                onChange={(e) => setForm(f => ({ ...f, restrictHours: e.target.checked }))}
+                className="w-4 h-4 rounded"
+              />
+              <label htmlFor="restrict-hours" className="text-sm font-medium text-gray-700 cursor-pointer">Restrict to specific hours</label>
+            </div>
+            {form.restrictHours && (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Available From</label>
+                    <input
+                      type="time"
+                      value={form.availableFrom}
+                      onChange={(e) => setForm(f => ({ ...f, availableFrom: e.target.value }))}
+                      className={inputCls}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Available To</label>
+                    <input
+                      type="time"
+                      value={form.availableTo}
+                      onChange={(e) => setForm(f => ({ ...f, availableTo: e.target.value }))}
+                      className={inputCls}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-2">Available Days</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
+                      <label key={day} className="flex items-center gap-1 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={form.availableDays.includes(idx)}
+                          onChange={(e) => setForm(f => ({
+                            ...f,
+                            availableDays: e.target.checked
+                              ? [...f.availableDays, idx].sort((a, b) => a - b)
+                              : f.availableDays.filter(d => d !== idx),
+                          }))}
+                          className="w-3.5 h-3.5 rounded"
+                        />
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                          form.availableDays.includes(idx) ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                        }`}>{day}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="flex gap-6">

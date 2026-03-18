@@ -10,7 +10,7 @@ import {
   BarChart3, Calendar, Download, RefreshCw, AlertCircle,
   ChefHat, Truck, Layers, CreditCard, History, BookOpen,
   ClipboardList, Hash, Flag, Shield, AlertTriangle, DatabaseBackup,
-  Users, Smartphone, X, Pencil, Printer, BarChart2,
+  Users, Smartphone, X, Pencil, Printer, BarChart2, ArrowRightLeft,
 } from 'lucide-react';
 import { api, openPdfReport } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
@@ -217,6 +217,40 @@ interface DeadStockData {
   daysThreshold: number;
 }
 
+interface StockTransferItem {
+  itemId: string;
+  itemName: string;
+  quantity: number;
+}
+
+interface StockTransfer {
+  id: string;
+  status: string;
+  fromStoreId: string;
+  fromStoreName: string;
+  toStoreId: string;
+  toStoreName: string;
+  items: StockTransferItem[];
+  initiatedBy: string | null;
+  initiatedByName: string | null;
+  receivedBy: string | null;
+  receivedByName: string | null;
+  createdAt: string;
+  completedAt: string | null;
+  notes: string | null;
+}
+
+interface StockTransfersData {
+  transfers: StockTransfer[];
+  summary: {
+    total: number;
+    pending: number;
+    completed: number;
+    cancelled: number;
+    inTransitToStore: number;
+  };
+}
+
 interface GrossMarginItem {
   name: string;
   qty: number;
@@ -252,7 +286,52 @@ interface RecipeComponent { name: string; quantity: number; costPriceCents: numb
 interface RecipeCostItem { itemId: string; name: string; category: string; sellingPriceCents: number; totalIngredientCostCents: number; foodCostPct: number | null; grossMarginPct: number | null; status: 'HIGH_COST' | 'ACCEPTABLE' | 'LOW_COST' | 'NO_PRICE'; components: RecipeComponent[]; }
 interface RecipeCostData { items: RecipeCostItem[]; summary: { totalItems: number; avgFoodCostPct: number; highCostItems: number }; }
 
-type Tab = 'overview' | 'sales' | 'customer-analytics' | 'forecasting' | 'item-summary' | 'tax' | 'vat-return' | 'pl' | 'inventory' | 'fiscal' | 'attendance' | 'commissions' | 'employee-sales' | 'recipes' | 'bundles' | 'suppliers' | 'supplier-ageing' | 'credit' | 'stock-history' | 'layaway' | 'proforma' | 'serials' | 'kra' | 'audit' | 'grn' | 'export' | 'dead-stock' | 'gross-margin' | 'shrinkage' | 'dept-pnl' | 'recipe-costing';
+interface MenuEngineeringItem {
+  id: string;
+  name: string;
+  category: string;
+  qty: number;
+  revenueCents: number;
+  marginCents: number;
+  marginPct: number;
+  quadrant: 'STAR' | 'PLOWHORSE' | 'PUZZLE' | 'DOG';
+}
+interface MenuEngineeringData {
+  items: MenuEngineeringItem[];
+  avgQty: number;
+  avgMarginPct: number;
+}
+
+interface BasketPair { item1: string; item2: string; count: number; name1: string; name2: string; }
+interface BasketAnalysisData { pairs: BasketPair[]; totalSales: number; }
+
+interface ClvRow {
+  id: string;
+  name: string;
+  phone: string;
+  visitCount: number;
+  totalSpendCents: number;
+  avgOrderCents: number;
+  firstVisit: string;
+  lastVisit: string;
+  daysSinceLast: number;
+  visitFrequencyDays: number;
+  churnRisk: 'HIGH' | 'MEDIUM' | 'LOW';
+}
+
+interface NpsSummary {
+  total: number;
+  avg: number;
+  npsScore: number;
+  promoters: number;
+  passives: number;
+  detractors: number;
+  trend: Array<{ date: string; avg: number; count: number }>;
+  recent: Array<{ score: number; comment: string; createdAt: string }>;
+}
+
+type Tab = 'overview' | 'sales' | 'customer-analytics' | 'forecasting' | 'item-summary' | 'tax' | 'vat-return' | 'pl' | 'inventory' | 'fiscal' | 'attendance' | 'commissions' | 'employee-sales' | 'recipes' | 'bundles' | 'suppliers' | 'supplier-ageing' | 'credit' | 'layaway' | 'proforma' | 'serials' | 'kra' | 'audit' | 'grn' | 'export' | 'dead-stock' | 'gross-margin' | 'shrinkage' | 'dept-pnl' | 'recipe-costing' | 'transfers' | 'menu-engineering' | 'basket-analysis' | 'clv' | 'nps';
+type TabGroup = 'financial' | 'inventory' | 'customers' | 'hr' | 'suppliers' | 'compliance';
 type Range = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom';
 type ComparisonPeriod = 'none' | 'previous' | 'yoy' | 'mom';
 
@@ -427,7 +506,18 @@ ${bodyHtml}
 export default function ReportsPage() {
   const user = useAuthStore((s) => s.user);
   const businessId = user?.businessId ?? 'default';
-  const storeId = user?.storeId ?? '';
+  const isOwner = user?.role === 'OWNER';
+
+  // Owner/Manager can switch branches; others are locked to their assigned store
+  const [selectedStoreId, setSelectedStoreId] = useState<string>(user?.storeId ?? '');
+  const storeId = selectedStoreId;
+
+  const { data: stores = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ['stores', businessId],
+    queryFn: () => api.get(`/business/${businessId}/stores`),
+    enabled: !!businessId && isOwner,
+    staleTime: 5 * 60_000,
+  });
 
   const [tab, setTab] = useState<Tab>('overview');
   const [range, setRange] = useState<Range>('month');
@@ -447,6 +537,9 @@ export default function ReportsPage() {
   const [writeOffReason, setWriteOffReason] = useState('WRITE_OFF');
   const [writeOffNotes, setWriteOffNotes] = useState('');
   const [historyAsOf, setHistoryAsOf] = useState(() => new Date().toISOString().substring(0, 10));
+  const [stockViewMode, setStockViewMode] = useState<'live' | 'historical'>('live');
+  const [tabGroup, setTabGroup] = useState<TabGroup>('financial');
+  const [reportSearch, setReportSearch] = useState('');
   const [layawayStatus, setLayawayStatus] = useState('');
   const [deadStockDays, setDeadStockDays] = useState(90);
   const [expandedGrossMarginCategory, setExpandedGrossMarginCategory] = useState<string | null>(null);
@@ -475,10 +568,11 @@ export default function ReportsPage() {
     return p.toString();
   }, [businessId, storeId, comparisonRange]);
 
-  const taxQs = useMemo(
-    () => new URLSearchParams({ businessId, startDate, endDate }).toString(),
-    [businessId, startDate, endDate],
-  );
+  const taxQs = useMemo(() => {
+    const p = new URLSearchParams({ businessId, startDate, endDate });
+    if (storeId) p.set('storeId', storeId);
+    return p.toString();
+  }, [businessId, storeId, startDate, endDate]);
 
   // ── Queries ───────────────────────────────────────────────────
 
@@ -594,7 +688,7 @@ export default function ReportsPage() {
       api.get<StockValuation>(
         `/reports/stock-valuation?businessId=${businessId}${storeId ? `&storeId=${storeId}` : ''}`,
       ),
-    enabled: !!businessId && tab === 'inventory',
+    enabled: !!businessId && tab === 'inventory' && stockViewMode === 'live',
     staleTime: 0,                   // always consider stale → refetch on focus/nav
     refetchInterval: 15_000,        // poll every 15 s while tab is open
     refetchIntervalInBackground: false,
@@ -625,7 +719,7 @@ export default function ReportsPage() {
   }>>({
     queryKey: ['report-attendance', businessId, startDate, endDate],
     queryFn: () =>
-      api.get(`/reports/attendance?businessId=${businessId}&startDate=${startDate}&endDate=${endDate}`),
+      api.get(`/reports/attendance?businessId=${businessId}${storeId ? `&storeId=${storeId}` : ''}&startDate=${startDate}&endDate=${endDate}`),
     enabled: !!businessId && tab === 'attendance',
   });
 
@@ -640,7 +734,7 @@ export default function ReportsPage() {
   }>>({
     queryKey: ['report-commissions', businessId, startDate, endDate],
     queryFn: () =>
-      api.get(`/reports/commissions?businessId=${businessId}&startDate=${startDate}&endDate=${endDate}`),
+      api.get(`/reports/commissions?businessId=${businessId}${storeId ? `&storeId=${storeId}` : ''}&startDate=${startDate}&endDate=${endDate}`),
     enabled: !!businessId && tab === 'commissions',
   });
 
@@ -694,8 +788,13 @@ export default function ReportsPage() {
     totalItems: number;
   }>({
     queryKey: ['report-historical-stock', businessId, storeId, historyAsOf],
-    queryFn: () => api.get(`/reports/historical-stock?businessId=${businessId}${storeId ? `&storeId=${storeId}` : ''}&asOfDate=${new Date(historyAsOf).toISOString()}`),
-    enabled: !!businessId && tab === 'stock-history',
+    queryFn: () => {
+      // Send end-of-day so the selected date is fully included (not just midnight start)
+      const endOfDay = new Date(historyAsOf);
+      endOfDay.setHours(23, 59, 59, 999);
+      return api.get(`/reports/historical-stock?businessId=${businessId}${storeId ? `&storeId=${storeId}` : ''}&asOfDate=${endOfDay.toISOString()}`);
+    },
+    enabled: !!businessId && tab === 'inventory' && stockViewMode === 'historical',
   });
 
   const { data: layawayBook } = useQuery<{
@@ -825,6 +924,51 @@ export default function ReportsPage() {
     enabled: !!businessId && tab === 'recipe-costing',
   });
 
+  const [transferStatusFilter, setTransferStatusFilter] = useState('');
+
+  const { data: transfersData } = useQuery<StockTransfersData>({
+    queryKey: ['report-transfers', businessId, storeId, startDate, endDate, transferStatusFilter],
+    queryFn: () =>
+      api.get<StockTransfersData>(
+        `/reports/stock-transfers?businessId=${businessId}${storeId ? `&storeId=${storeId}` : ''}&startDate=${startDate}&endDate=${endDate}${transferStatusFilter ? `&status=${transferStatusFilter}` : ''}`,
+      ),
+    enabled: !!businessId && tab === 'transfers',
+  });
+
+  // ── New analytics tab state ───────────────────────────────────
+  const [menuEngDays, setMenuEngDays] = useState(30);
+  const [basketDays, setBasketDays] = useState(30);
+
+  const { data: menuEngineeringData } = useQuery<MenuEngineeringData>({
+    queryKey: ['report-menu-engineering', businessId, storeId, menuEngDays],
+    queryFn: () =>
+      api.get<MenuEngineeringData>(
+        `/reports/menu-engineering?businessId=${businessId}${storeId ? `&storeId=${storeId}` : ''}&days=${menuEngDays}`,
+      ),
+    enabled: !!businessId && tab === 'menu-engineering',
+  });
+
+  const { data: basketAnalysisData } = useQuery<BasketAnalysisData>({
+    queryKey: ['report-basket-analysis', businessId, storeId, basketDays],
+    queryFn: () =>
+      api.get<BasketAnalysisData>(
+        `/reports/basket-analysis?businessId=${businessId}${storeId ? `&storeId=${storeId}` : ''}&days=${basketDays}`,
+      ),
+    enabled: !!businessId && tab === 'basket-analysis',
+  });
+
+  const { data: clvData = [] } = useQuery<ClvRow[]>({
+    queryKey: ['report-clv', businessId],
+    queryFn: () => api.get<ClvRow[]>(`/reports/clv?businessId=${businessId}`),
+    enabled: !!businessId && tab === 'clv',
+  });
+
+  const { data: npsData } = useQuery<NpsSummary>({
+    queryKey: ['report-nps', businessId],
+    queryFn: () => api.get<NpsSummary>(`/reports/nps-summary?businessId=${businessId}`),
+    enabled: !!businessId && tab === 'nps',
+  });
+
   const writeOffMutation = useMutation({
     mutationFn: (vars: { itemId: string; qty: number; reason: string; notes: string }) =>
       api.post('/inventory/adjustment', {
@@ -902,41 +1046,101 @@ export default function ReportsPage() {
 
   const maxHourlyBucket = useMemo(() => Math.max(...hourlyBuckets, 1), [hourlyBuckets]);
 
-  // ── Tab config ────────────────────────────────────────────────
+  // ── Tab config (grouped) ──────────────────────────────────────
 
-  const tabs: Array<{ id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-    { id: 'overview', label: 'Overview', icon: BarChart3 },
-    { id: 'sales', label: 'Sales', icon: ShoppingBag },
-    { id: 'customer-analytics', label: 'Customer Analytics', icon: Users },
-    { id: 'forecasting', label: 'Forecasting', icon: TrendingUp },
-    { id: 'item-summary', label: 'Item Summary', icon: Package },
-    { id: 'tax', label: 'Tax Report', icon: FileText },
-    { id: 'vat-return', label: 'VAT Return', icon: FileText },
-    { id: 'pl', label: 'P&L', icon: TrendingUp },
-    { id: 'inventory', label: 'Stock', icon: Package },
-    { id: 'fiscal', label: 'X / Z Report', icon: DollarSign },
-    { id: 'attendance', label: 'Attendance', icon: BarChart3 },
-    { id: 'commissions', label: 'Commissions', icon: TrendingUp },
-    { id: 'employee-sales', label: 'Employee Sales', icon: Users },
-    { id: 'recipes', label: 'Recipe Variance', icon: ChefHat },
-    { id: 'bundles', label: 'Bundles', icon: Layers },
-    { id: 'suppliers', label: 'Suppliers', icon: Truck },
-    { id: 'supplier-ageing', label: 'Supplier Ageing', icon: Truck },
-    { id: 'credit', label: 'Credit Book', icon: CreditCard },
-    { id: 'stock-history', label: 'Stock History', icon: History },
-    { id: 'layaway', label: 'Layaway Book', icon: BookOpen },
-    { id: 'proforma', label: 'Proforma Pipeline', icon: ClipboardList },
-    { id: 'serials', label: 'Serial Registry', icon: Hash },
-    { id: 'grn', label: 'GRN Discrepancy', icon: AlertTriangle },
-    { id: 'kra', label: 'KRA Export', icon: Flag },
-    { id: 'audit', label: 'Audit Log', icon: Shield },
-    { id: 'export', label: 'Full Export', icon: DatabaseBackup },
-    { id: 'dead-stock', label: 'Dead Stock', icon: Package },
-    { id: 'gross-margin', label: 'Gross Margin', icon: TrendingUp },
-    { id: 'shrinkage', label: 'Shrinkage', icon: AlertTriangle },
-    { id: 'dept-pnl', label: 'Dept P&L', icon: BarChart3 },
-    { id: 'recipe-costing', label: 'Food Cost', icon: Package },
+  type TabDef = { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> };
+  type GroupDef = { id: TabGroup; label: string; icon: React.ComponentType<{ className?: string }>; tabs: TabDef[] };
+
+  const TAB_GROUPS: GroupDef[] = [
+    {
+      id: 'financial', label: 'Financial', icon: DollarSign,
+      tabs: [
+        { id: 'overview', label: 'Overview', icon: BarChart3 },
+        { id: 'sales', label: 'Sales', icon: ShoppingBag },
+        { id: 'tax', label: 'Tax Report', icon: FileText },
+        { id: 'vat-return', label: 'VAT Return', icon: FileText },
+        { id: 'pl', label: 'P & L', icon: TrendingUp },
+        { id: 'gross-margin', label: 'Gross Margin', icon: TrendingUp },
+        { id: 'dept-pnl', label: 'Dept P&L', icon: BarChart3 },
+        { id: 'menu-engineering', label: 'Menu Engineering', icon: BarChart2 },
+        { id: 'fiscal', label: 'X / Z Report', icon: DollarSign },
+      ],
+    },
+    {
+      id: 'inventory', label: 'Inventory', icon: Package,
+      tabs: [
+        { id: 'inventory', label: 'Stock', icon: Package },
+        { id: 'transfers', label: 'Transfers', icon: ArrowRightLeft },
+        { id: 'dead-stock', label: 'Dead Stock', icon: Package },
+        { id: 'shrinkage', label: 'Shrinkage', icon: AlertTriangle },
+        { id: 'grn', label: 'GRN Discrepancy', icon: AlertTriangle },
+        { id: 'serials', label: 'Serials', icon: Hash },
+        { id: 'recipes', label: 'Recipe Variance', icon: ChefHat },
+        { id: 'bundles', label: 'Bundles', icon: Layers },
+        { id: 'recipe-costing', label: 'Food Cost', icon: ChefHat },
+      ],
+    },
+    {
+      id: 'customers', label: 'Customers', icon: Users,
+      tabs: [
+        { id: 'customer-analytics', label: 'Analytics', icon: BarChart2 },
+        { id: 'item-summary', label: 'Item Summary', icon: Package },
+        { id: 'forecasting', label: 'Forecasting', icon: TrendingUp },
+        { id: 'credit', label: 'Credit Book', icon: CreditCard },
+        { id: 'layaway', label: 'Layaway', icon: BookOpen },
+        { id: 'proforma', label: 'Proforma', icon: ClipboardList },
+        { id: 'basket-analysis', label: 'Basket Analysis', icon: ShoppingBag },
+        { id: 'clv', label: 'Customer LTV', icon: Users },
+        { id: 'nps', label: 'NPS', icon: TrendingUp },
+      ],
+    },
+    {
+      id: 'hr', label: 'HR & Staff', icon: Users,
+      tabs: [
+        { id: 'attendance', label: 'Attendance', icon: BarChart3 },
+        { id: 'commissions', label: 'Commissions', icon: TrendingUp },
+        { id: 'employee-sales', label: 'Sales by Staff', icon: Smartphone },
+      ],
+    },
+    {
+      id: 'suppliers', label: 'Suppliers', icon: Truck,
+      tabs: [
+        { id: 'suppliers', label: 'Performance', icon: Truck },
+        { id: 'supplier-ageing', label: 'Ageing', icon: Calendar },
+      ],
+    },
+    {
+      id: 'compliance', label: 'Compliance', icon: Shield,
+      tabs: [
+        { id: 'kra', label: 'KRA Export', icon: Flag },
+        { id: 'audit', label: 'Audit Log', icon: Shield },
+        { id: 'export', label: 'Full Export', icon: DatabaseBackup },
+      ],
+    },
   ];
+
+  const activeGroup = TAB_GROUPS.find((g) => g.tabs.some((t) => t.id === tab)) ?? TAB_GROUPS[0];
+  const allTabs = TAB_GROUPS.flatMap((g) => g.tabs.map((t) => ({ ...t, group: g.label })));
+  const searchResults = reportSearch.trim()
+    ? allTabs.filter((t) => t.label.toLowerCase().includes(reportSearch.toLowerCase()) || t.group.toLowerCase().includes(reportSearch.toLowerCase()))
+    : [];
+  const visibleTabs = reportSearch.trim() ? [] : (TAB_GROUPS.find((g) => g.id === tabGroup)?.tabs ?? TAB_GROUPS[0].tabs);
+
+  function handleTabClick(t: Tab) {
+    setTab(t);
+    setReportSearch('');
+    const grp = TAB_GROUPS.find((g) => g.tabs.some((x) => x.id === t));
+    if (grp) setTabGroup(grp.id);
+  }
+
+  function handleGroupClick(gid: TabGroup) {
+    setTabGroup(gid);
+    setReportSearch('');
+    const grp = TAB_GROUPS.find((g) => g.id === gid);
+    if (grp && !grp.tabs.some((t) => t.id === tab)) {
+      setTab(grp.tabs[0].id);
+    }
+  }
 
   // ── Render ────────────────────────────────────────────────────
 
@@ -949,6 +1153,20 @@ export default function ReportsPage() {
 
           {/* Mobile-responsive controls */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
+            {/* Branch / Store selector — Owner only */}
+            {isOwner && stores.length > 0 && (
+              <select
+                value={selectedStoreId}
+                onChange={(e) => setSelectedStoreId(e.target.value)}
+                className="text-xs sm:text-sm border border-blue-300 rounded-lg px-3 py-1.5 bg-blue-50 text-blue-800 font-medium focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                title="Filter reports by branch"
+              >
+                <option value="">All Branches</option>
+                {stores.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            )}
             {/* Date range selectors */}
             <div className="flex items-center gap-2 flex-wrap">
               <Calendar className="w-4 h-4 text-gray-400" />
@@ -1024,26 +1242,95 @@ export default function ReportsPage() {
           </div>
         )}
 
-        {/* Mobile-responsive tabs */}
-        <div className="flex gap-1 mt-4 -mb-4 overflow-x-auto">
-          {tabs.map((t) => {
-            const Icon = t.icon;
-            return (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`flex items-center gap-1.5 px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                  tab === t.id
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <Icon className="w-3 h-3 sm:w-4 sm:h-4" />
-                <span className="hidden sm:inline">{t.label}</span>
-                <span className="sm:hidden">{t.label.split(' ')[0]}</span>
+        {/* ── Report search + group nav ── */}
+        <div className="mt-4 space-y-2">
+          {/* Search bar */}
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search reports… (e.g. sales, stock, VAT)"
+              value={reportSearch}
+              onChange={(e) => setReportSearch(e.target.value)}
+              className="w-full sm:w-72 border border-gray-200 rounded-lg pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
+            />
+            <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx={11} cy={11} r={8}/><path d="m21 21-4.35-4.35"/></svg>
+            {reportSearch && (
+              <button onClick={() => setReportSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                <X className="w-3.5 h-3.5" />
               </button>
-            );
-          })}
+            )}
+            {/* Search dropdown */}
+            {searchResults.length > 0 && (
+              <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-200 rounded-xl shadow-lg z-50 py-1 max-h-72 overflow-y-auto">
+                {searchResults.map((t) => {
+                  const Icon = t.icon;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => handleTabClick(t.id)}
+                      className="flex items-center gap-3 w-full px-3 py-2 text-sm hover:bg-blue-50 text-left"
+                    >
+                      <Icon className="w-4 h-4 text-gray-400 shrink-0" />
+                      <div>
+                        <div className="font-medium text-gray-800">{t.label}</div>
+                        <div className="text-xs text-gray-400">{t.group}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {reportSearch && searchResults.length === 0 && (
+              <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-200 rounded-xl shadow-lg z-50 px-4 py-3 text-sm text-gray-400">
+                No reports found for "{reportSearch}"
+              </div>
+            )}
+          </div>
+
+          {/* Group pills */}
+          <div className="flex items-center gap-1 overflow-x-auto pb-1 border-b border-gray-100">
+            {TAB_GROUPS.map((g) => {
+              const GIcon = g.icon;
+              const isActive = !reportSearch && (activeGroup.id === g.id || tabGroup === g.id);
+              return (
+                <button
+                  key={g.id}
+                  onClick={() => handleGroupClick(g.id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                    isActive
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                  }`}
+                >
+                  <GIcon className="w-3.5 h-3.5" />
+                  {g.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Sub-tabs for active group */}
+          {!reportSearch && (
+            <div className="flex gap-0.5 -mb-4 overflow-x-auto">
+              {visibleTabs.map((t) => {
+                const Icon = t.icon;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => handleTabClick(t.id)}
+                    className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors whitespace-nowrap rounded-t-md ${
+                      tab === t.id
+                        ? 'border-blue-600 text-blue-700 bg-blue-50/60'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
@@ -2213,7 +2500,38 @@ export default function ReportsPage() {
             {/* ── INVENTORY ── */}
             {tab === 'inventory' && (
               <div className="space-y-4">
-                {stockData ? (
+                {/* Live / Historical toggle */}
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-gray-600">View:</span>
+                  <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
+                    <button
+                      onClick={() => setStockViewMode('live')}
+                      className={`px-4 py-1.5 font-medium transition-colors ${stockViewMode === 'live' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                    >
+                      Live Stock
+                    </button>
+                    <button
+                      onClick={() => setStockViewMode('historical')}
+                      className={`px-4 py-1.5 font-medium transition-colors flex items-center gap-1.5 ${stockViewMode === 'historical' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                    >
+                      <History className="w-3.5 h-3.5" />
+                      Stock by Date
+                    </button>
+                  </div>
+                  {stockViewMode === 'historical' && (
+                    <div className="flex items-center gap-2 ml-2">
+                      <label className="text-sm font-medium text-gray-600">As of:</label>
+                      <input
+                        type="date"
+                        value={historyAsOf}
+                        max={new Date().toISOString().substring(0, 10)}
+                        onChange={(e) => setHistoryAsOf(e.target.value)}
+                        className="border rounded-lg px-3 py-1.5 text-sm"
+                      />
+                    </div>
+                  )}
+                </div>
+                {stockViewMode === 'live' && stockData ? (
                   <>
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                       <StatCard
@@ -2227,7 +2545,7 @@ export default function ReportsPage() {
 
                     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                       <div className="px-5 py-4 border-b flex justify-between items-center">
-                        <h2 className="font-semibold text-gray-800">Stock Valuation</h2>
+                        <h2 className="font-semibold text-gray-800">Live Stock Valuation</h2>
                         <div className="flex items-center gap-3">
                           <button
                             onClick={() => { void refetchStock(); }}
@@ -2300,10 +2618,151 @@ export default function ReportsPage() {
                       </div>
                     </div>
                   </>
-                ) : (
+                ) : stockViewMode === 'live' ? (
                   <div className="flex items-center justify-center py-16 text-gray-400">
                     <RefreshCw className="w-6 h-6 animate-spin mr-2" />
                     Loading stock data…
+                  </div>
+                ) : null}
+
+                {/* ── Historical view ── */}
+                {stockViewMode === 'historical' && historicalStock && (
+                  <>
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                      <StatCard label="Stock Lines" value={historicalStock.totalItems} icon={Package} color="bg-blue-500" />
+                      <StatCard label="Total Value" value={formatKES(historicalStock.totalValueCents)} icon={DollarSign} color="bg-green-500" />
+                      <StatCard label="As-of Date" value={new Date(historyAsOf).toLocaleDateString('en-KE')} icon={History} color="bg-purple-500" />
+                    </div>
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                      <div className="px-5 py-4 border-b flex justify-between items-center">
+                        <h2 className="font-semibold text-gray-800">Historical Stock Levels — {new Date(historyAsOf).toLocaleDateString('en-KE')}</h2>
+                        <button
+                          onClick={() => {
+                            if (!historicalStock.items.length) return;
+                            downloadCsv(`stock-history-${historyAsOf}.csv`, [
+                              ['Item', 'Category', 'Barcode', 'Qty', 'Cost (KES)', 'Value (KES)'],
+                              ...historicalStock.items.map((i) => [
+                                i.name, i.category, i.barcode, String(i.quantity),
+                                (i.costPriceCents / 100).toFixed(2), (i.valueCents / 100).toFixed(2),
+                              ]),
+                            ]);
+                          }}
+                          className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700"
+                        >
+                          <Download className="w-4 h-4" /> Export CSV
+                        </button>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="text-left px-5 py-3 font-medium text-gray-600">Item</th>
+                              <th className="text-left px-5 py-3 font-medium text-gray-600">Category</th>
+                              <th className="text-right px-5 py-3 font-medium text-gray-600">Qty</th>
+                              <th className="text-right px-5 py-3 font-medium text-gray-600">Cost/Unit</th>
+                              <th className="text-right px-5 py-3 font-medium text-gray-600">Value</th>
+                              <th className="px-5 py-3"></th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {historicalStock.items.length === 0 && (
+                              <tr>
+                                <td colSpan={6} className="px-5 py-10 text-center text-gray-400">
+                                  <Package className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                                  No stock data for this date.
+                                </td>
+                              </tr>
+                            )}
+                            {historicalStock.items.map((item) => (
+                              <tr key={item.itemId} className={`hover:bg-gray-50 ${item.quantity === 0 ? 'opacity-50' : ''}`}>
+                                <td className="px-5 py-3 font-medium">{item.name}</td>
+                                <td className="px-5 py-3 text-gray-500">{item.category || '—'}</td>
+                                <td className={`px-5 py-3 text-right font-semibold ${item.quantity === 0 ? 'text-gray-400' : ''}`}>{item.quantity}</td>
+                                <td className="px-5 py-3 text-right text-gray-500">{formatKES(item.costPriceCents)}</td>
+                                <td className="px-5 py-3 text-right font-semibold text-green-700">{item.quantity > 0 ? formatKES(item.valueCents) : '—'}</td>
+                                <td className="px-5 py-3 text-right">
+                                  <button
+                                    onClick={() => {
+                                      setWriteOffItem({ itemId: item.itemId, name: item.name, qty: item.quantity });
+                                      setWriteOffQty('');
+                                      setWriteOffReason('WRITE_OFF');
+                                      setWriteOffNotes('');
+                                    }}
+                                    className="flex items-center gap-1 text-xs text-orange-600 hover:text-orange-700 border border-orange-200 rounded px-2 py-1"
+                                    title="Write-off / Adjust stock"
+                                  >
+                                    <Pencil className="w-3 h-3" /> Adjust
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot className="bg-gray-50 font-bold">
+                            <tr>
+                              <td colSpan={4} className="px-5 py-3">TOTAL VALUE</td>
+                              <td className="px-5 py-3 text-right text-green-700">{formatKES(historicalStock.totalValueCents)}</td>
+                              <td></td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                )}
+                {stockViewMode === 'historical' && !historicalStock && (
+                  <div className="flex items-center justify-center py-16 text-gray-400">
+                    <RefreshCw className="w-6 h-6 animate-spin mr-2" />
+                    Loading historical stock…
+                  </div>
+                )}
+
+                {/* Write-off / Adjustment modal */}
+                {writeOffItem && (
+                  <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+                      <div className="flex items-center justify-between px-6 py-4 border-b">
+                        <h3 className="font-bold text-gray-900">Stock Adjustment — {writeOffItem.name}</h3>
+                        <button onClick={() => setWriteOffItem(null)} className="text-gray-400 hover:text-gray-600">
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                      <div className="px-6 py-5 space-y-4">
+                        <p className="text-sm text-gray-600">Current stock on selected date: <strong>{writeOffItem.qty}</strong> units</p>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
+                          <select value={writeOffReason} onChange={(e) => setWriteOffReason(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm">
+                            <option value="WRITE_OFF">Write-Off (General)</option>
+                            <option value="DAMAGED">Damaged</option>
+                            <option value="EXPIRED">Expired / Spoilage</option>
+                            <option value="THEFT">Theft / Shrinkage</option>
+                            <option value="ADJUSTMENT">Manual Correction</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Quantity to remove</label>
+                          <input type="number" min="1" max={writeOffItem.qty} value={writeOffQty} onChange={(e) => setWriteOffQty(e.target.value)} placeholder="e.g. 5" className="w-full border rounded-lg px-3 py-2 text-sm" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
+                          <textarea value={writeOffNotes} onChange={(e) => setWriteOffNotes(e.target.value)} rows={2} placeholder="e.g. Found 5 units mouldy during stock count" className="w-full border rounded-lg px-3 py-2 text-sm resize-none" />
+                        </div>
+                        {writeOffMutation.isError && <p className="text-sm text-red-600">Failed to save adjustment. Please try again.</p>}
+                        {writeOffMutation.isSuccess && <p className="text-sm text-green-600">Adjustment recorded successfully.</p>}
+                      </div>
+                      <div className="px-6 py-4 border-t flex gap-3 justify-end">
+                        <button onClick={() => setWriteOffItem(null)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+                        <button
+                          disabled={!writeOffQty || Number(writeOffQty) <= 0 || writeOffMutation.isPending}
+                          onClick={() => {
+                            if (!writeOffItem || !writeOffQty) return;
+                            writeOffMutation.mutate({ itemId: writeOffItem.itemId, qty: Number(writeOffQty), reason: writeOffReason, notes: writeOffNotes });
+                          }}
+                          className="px-4 py-2 text-sm bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
+                        >
+                          {writeOffMutation.isPending ? 'Saving…' : 'Save Adjustment'}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -2843,19 +3302,19 @@ export default function ReportsPage() {
                           </tr>
                         ) : (
                           supplierPerformance
-                            .sort((a, b) => b.onTimeRate - a.onTimeRate)
+                            .sort((a, b) => (b.onTimeRate ?? 0) - (a.onTimeRate ?? 0))
                             .map((s) => (
                               <tr key={s.supplierId} className="hover:bg-gray-50">
                                 <td className="px-5 py-3 font-medium">{s.supplierName}</td>
                                 <td className="px-5 py-3 text-center">
-                                  <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${s.onTimeRate >= 80 ? 'bg-green-100 text-green-700' : s.onTimeRate >= 60 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
-                                    {s.onTimeRate.toFixed(1)}%
+                                  <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${(s.onTimeRate ?? 0) >= 80 ? 'bg-green-100 text-green-700' : (s.onTimeRate ?? 0) >= 60 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+                                    {s.onTimeRate != null ? `${s.onTimeRate.toFixed(1)}%` : '—'}
                                   </span>
                                 </td>
-                                <td className="px-5 py-3 text-center">{s.avgLeadTimeDays.toFixed(1)} days</td>
+                                <td className="px-5 py-3 text-center">{s.avgLeadTimeDays != null ? `${s.avgLeadTimeDays.toFixed(1)} days` : '—'}</td>
                                 <td className="px-5 py-3 text-center">
-                                  <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${s.fillRate >= 90 ? 'bg-green-100 text-green-700' : s.fillRate >= 70 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
-                                    {s.fillRate.toFixed(1)}%
+                                  <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${(s.fillRate ?? 0) >= 90 ? 'bg-green-100 text-green-700' : (s.fillRate ?? 0) >= 70 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+                                    {s.fillRate != null ? `${s.fillRate.toFixed(1)}%` : '—'}
                                   </span>
                                 </td>
                               </tr>
@@ -3119,190 +3578,6 @@ export default function ReportsPage() {
                   <div className="flex items-center justify-center py-16 text-gray-400">
                     <RefreshCw className="w-6 h-6 animate-spin mr-2" />
                     Loading credit book…
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ── STOCK HISTORY ── */}
-            {tab === 'stock-history' && (
-              <div className="space-y-4">
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">As-of Date</label>
-                      <input
-                        type="date"
-                        value={historyAsOf}
-                        max={new Date().toISOString().substring(0, 10)}
-                        onChange={(e) => setHistoryAsOf(e.target.value)}
-                        className="border rounded-lg px-3 py-2 text-sm"
-                      />
-                    </div>
-                    <p className="text-sm text-gray-500 mt-4">
-                      Shows stock levels at the end of the selected date (based on inventory movements).
-                    </p>
-                  </div>
-                </div>
-
-                {historicalStock && (
-                  <>
-                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                      <StatCard label="Stock Lines" value={historicalStock.totalItems} icon={Package} color="bg-blue-500" />
-                      <StatCard label="Total Value" value={formatKES(historicalStock.totalValueCents)} icon={DollarSign} color="bg-green-500" />
-                      <StatCard label="As-of Date" value={new Date(historyAsOf).toLocaleDateString('en-KE')} icon={History} color="bg-purple-500" />
-                    </div>
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                      <div className="px-5 py-4 border-b flex justify-between items-center">
-                        <h2 className="font-semibold text-gray-800">Historical Stock Levels</h2>
-                        <button
-                          onClick={() => {
-                            if (!historicalStock.items.length) return;
-                            downloadCsv(`stock-history-${historyAsOf}.csv`, [
-                              ['Item', 'Category', 'Barcode', 'Qty', 'Cost (KES)', 'Value (KES)'],
-                              ...historicalStock.items.map((i) => [
-                                i.name, i.category, i.barcode, String(i.quantity),
-                                (i.costPriceCents / 100).toFixed(2), (i.valueCents / 100).toFixed(2),
-                              ]),
-                            ]);
-                          }}
-                          className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700"
-                        >
-                          <Download className="w-4 h-4" /> Export CSV
-                        </button>
-                      </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="text-left px-5 py-3 font-medium text-gray-600">Item</th>
-                              <th className="text-left px-5 py-3 font-medium text-gray-600">Category</th>
-                              <th className="text-right px-5 py-3 font-medium text-gray-600">Qty</th>
-                              <th className="text-right px-5 py-3 font-medium text-gray-600">Cost/Unit</th>
-                              <th className="text-right px-5 py-3 font-medium text-gray-600">Value</th>
-                              <th className="px-5 py-3"></th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100">
-                            {historicalStock.items.length === 0 && (
-                              <tr>
-                                <td colSpan={6} className="px-5 py-10 text-center text-gray-400">
-                                  <Package className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                                  No stock data for this date. Add items with initial stock quantity or receive goods via a Purchase Order.
-                                </td>
-                              </tr>
-                            )}
-                            {historicalStock.items.map((item) => (
-                              <tr key={item.itemId} className={`hover:bg-gray-50 ${item.quantity === 0 ? 'opacity-50' : ''}`}>
-                                <td className="px-5 py-3 font-medium">{item.name}</td>
-                                <td className="px-5 py-3 text-gray-500">{item.category || '—'}</td>
-                                <td className={`px-5 py-3 text-right font-semibold ${item.quantity === 0 ? 'text-gray-400' : ''}`}>{item.quantity}</td>
-                                <td className="px-5 py-3 text-right text-gray-500">{formatKES(item.costPriceCents)}</td>
-                                <td className="px-5 py-3 text-right font-semibold text-green-700">{item.quantity > 0 ? formatKES(item.valueCents) : '—'}</td>
-                                <td className="px-5 py-3 text-right">
-                                  <button
-                                    onClick={() => {
-                                      setWriteOffItem({ itemId: item.itemId, name: item.name, qty: item.quantity });
-                                      setWriteOffQty('');
-                                      setWriteOffReason('WRITE_OFF');
-                                      setWriteOffNotes('');
-                                    }}
-                                    className="flex items-center gap-1 text-xs text-orange-600 hover:text-orange-700 border border-orange-200 rounded px-2 py-1"
-                                    title="Write-off / Adjust stock"
-                                  >
-                                    <Pencil className="w-3 h-3" /> Adjust
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                          <tfoot className="bg-gray-50 font-bold">
-                            <tr>
-                              <td colSpan={4} className="px-5 py-3">TOTAL VALUE</td>
-                              <td className="px-5 py-3 text-right text-green-700">{formatKES(historicalStock.totalValueCents)}</td>
-                              <td></td>
-                            </tr>
-                          </tfoot>
-                        </table>
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Write-off / Adjustment modal */}
-                {writeOffItem && (
-                  <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
-                      <div className="flex items-center justify-between px-6 py-4 border-b">
-                        <h3 className="font-bold text-gray-900">Stock Adjustment — {writeOffItem.name}</h3>
-                        <button onClick={() => setWriteOffItem(null)} className="text-gray-400 hover:text-gray-600">
-                          <X className="w-5 h-5" />
-                        </button>
-                      </div>
-                      <div className="px-6 py-5 space-y-4">
-                        <p className="text-sm text-gray-600">Current stock on selected date: <strong>{writeOffItem.qty}</strong> units</p>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
-                          <select
-                            value={writeOffReason}
-                            onChange={(e) => setWriteOffReason(e.target.value)}
-                            className="w-full border rounded-lg px-3 py-2 text-sm"
-                          >
-                            <option value="WRITE_OFF">Write-Off (General)</option>
-                            <option value="DAMAGED">Damaged</option>
-                            <option value="EXPIRED">Expired / Spoilage</option>
-                            <option value="THEFT">Theft / Shrinkage</option>
-                            <option value="ADJUSTMENT">Manual Correction</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Quantity to remove</label>
-                          <input
-                            type="number"
-                            min="1"
-                            max={writeOffItem.qty}
-                            value={writeOffQty}
-                            onChange={(e) => setWriteOffQty(e.target.value)}
-                            placeholder="e.g. 5"
-                            className="w-full border rounded-lg px-3 py-2 text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
-                          <textarea
-                            value={writeOffNotes}
-                            onChange={(e) => setWriteOffNotes(e.target.value)}
-                            rows={2}
-                            placeholder="e.g. Found 5 units mouldy during stock count"
-                            className="w-full border rounded-lg px-3 py-2 text-sm resize-none"
-                          />
-                        </div>
-                        {writeOffMutation.isError && (
-                          <p className="text-sm text-red-600">Failed to save adjustment. Please try again.</p>
-                        )}
-                        {writeOffMutation.isSuccess && (
-                          <p className="text-sm text-green-600">Adjustment recorded successfully.</p>
-                        )}
-                      </div>
-                      <div className="px-6 py-4 border-t flex gap-3 justify-end">
-                        <button onClick={() => setWriteOffItem(null)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
-                        <button
-                          disabled={!writeOffQty || Number(writeOffQty) <= 0 || writeOffMutation.isPending}
-                          onClick={() => {
-                            if (!writeOffItem || !writeOffQty) return;
-                            writeOffMutation.mutate({
-                              itemId: writeOffItem.itemId,
-                              qty: Number(writeOffQty),
-                              reason: writeOffReason,
-                              notes: writeOffNotes,
-                            });
-                          }}
-                          className="px-4 py-2 text-sm bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
-                        >
-                          {writeOffMutation.isPending ? 'Saving…' : 'Save Adjustment'}
-                        </button>
-                      </div>
-                    </div>
                   </div>
                 )}
               </div>
@@ -4014,6 +4289,132 @@ export default function ReportsPage() {
                     <p className="text-xs text-gray-400">
                       Note: Large datasets may take a moment to generate. Sales limited to last 10,000 transactions.
                     </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── STOCK TRANSFERS ── */}
+            {tab === 'transfers' && (
+              <div className="space-y-4">
+                {/* In-transit alert for selected store */}
+                {storeId && transfersData && transfersData.summary.inTransitToStore > 0 && (
+                  <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-5 py-3">
+                    <ArrowRightLeft className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                    <p className="text-sm text-blue-800 font-medium">
+                      {transfersData.summary.inTransitToStore} pending transfer{transfersData.summary.inTransitToStore !== 1 ? 's' : ''} in transit to this branch. Stock will appear once transfers are marked received.
+                    </p>
+                  </div>
+                )}
+
+                {/* Summary cards */}
+                {transfersData && (
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <StatCard label="Total Transfers" value={transfersData.summary.total} icon={ArrowRightLeft} color="bg-blue-500" />
+                    <StatCard label="Pending / In-Transit" value={transfersData.summary.pending} icon={Package} color="bg-amber-500" sub="Awaiting receipt" />
+                    <StatCard label="Completed" value={transfersData.summary.completed} icon={Package} color="bg-green-500" sub="Stock received" />
+                    <StatCard label="Cancelled" value={transfersData.summary.cancelled} icon={Package} color="bg-red-400" />
+                  </div>
+                )}
+
+                {/* Filter + export row */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex gap-2">
+                    {(['', 'PENDING', 'COMPLETED', 'CANCELLED'] as const).map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setTransferStatusFilter(s)}
+                        className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${transferStatusFilter === s ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                      >{s === '' ? 'All' : s.charAt(0) + s.slice(1).toLowerCase()}</button>
+                    ))}
+                  </div>
+                  <div className="ml-auto">
+                    <button
+                      onClick={() => {
+                        if (!transfersData?.transfers.length) return;
+                        downloadCsv(`stock-transfers-${startDate.substring(0, 10)}.csv`, [
+                          ['Date', 'Status', 'From Store', 'To Store', 'Items', 'Total Qty', 'Initiated By', 'Completed At'],
+                          ...transfersData.transfers.map((t) => [
+                            new Date(t.createdAt).toLocaleDateString('en-KE'),
+                            t.status,
+                            t.fromStoreName,
+                            t.toStoreName,
+                            t.items.map((i) => `${i.itemName} (${i.quantity})`).join('; '),
+                            String(t.items.reduce((s, i) => s + i.quantity, 0)),
+                            t.initiatedByName ?? '—',
+                            t.completedAt ? new Date(t.completedAt).toLocaleDateString('en-KE') : '—',
+                          ]),
+                        ]);
+                      }}
+                      className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700"
+                    >
+                      <Download className="w-4 h-4" /> Export CSV
+                    </button>
+                  </div>
+                </div>
+
+                {/* Transfers table */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="px-5 py-4 border-b">
+                    <h2 className="font-semibold text-gray-800">Transfer History ({transfersData?.transfers.length ?? 0})</h2>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="text-left px-5 py-3 font-medium text-gray-600">Date</th>
+                          <th className="text-left px-5 py-3 font-medium text-gray-600">Status</th>
+                          <th className="text-left px-5 py-3 font-medium text-gray-600">From → To</th>
+                          <th className="text-left px-5 py-3 font-medium text-gray-600">Items</th>
+                          <th className="text-right px-5 py-3 font-medium text-gray-600">Total Qty</th>
+                          <th className="text-left px-5 py-3 font-medium text-gray-600">Initiated By</th>
+                          <th className="text-left px-5 py-3 font-medium text-gray-600">Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {!transfersData || transfersData.transfers.length === 0 ? (
+                          <tr><td colSpan={7} className="px-5 py-10 text-center text-gray-400">No transfers found for this period</td></tr>
+                        ) : transfersData.transfers.map((t) => (
+                          <tr key={t.id} className="hover:bg-gray-50">
+                            <td className="px-5 py-3 text-gray-500 text-xs whitespace-nowrap">
+                              {new Date(t.createdAt).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            </td>
+                            <td className="px-5 py-3">
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                t.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
+                                t.status === 'PENDING' ? 'bg-amber-100 text-amber-700' :
+                                t.status === 'CANCELLED' ? 'bg-red-100 text-red-700' :
+                                'bg-gray-100 text-gray-600'
+                              }`}>{t.status}</span>
+                            </td>
+                            <td className="px-5 py-3">
+                              <div className="flex items-center gap-1.5 text-sm">
+                                <span className="font-medium text-gray-800">{t.fromStoreName}</span>
+                                <ArrowRightLeft className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                                <span className="font-medium text-gray-800">{t.toStoreName}</span>
+                              </div>
+                            </td>
+                            <td className="px-5 py-3">
+                              <div className="space-y-0.5">
+                                {t.items.slice(0, 3).map((item, idx) => (
+                                  <div key={idx} className="text-xs text-gray-600">
+                                    {item.itemName} <span className="font-semibold text-gray-800">×{item.quantity}</span>
+                                  </div>
+                                ))}
+                                {t.items.length > 3 && (
+                                  <div className="text-xs text-blue-500">+{t.items.length - 3} more items</div>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-5 py-3 text-right font-semibold">
+                              {t.items.reduce((s, i) => s + i.quantity, 0)}
+                            </td>
+                            <td className="px-5 py-3 text-gray-500 text-xs">{t.initiatedByName ?? '—'}</td>
+                            <td className="px-5 py-3 text-gray-400 text-xs max-w-32 truncate">{t.notes ?? '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </div>
@@ -4732,6 +5133,399 @@ export default function ReportsPage() {
                 </div>
               </div>
             )}
+            {/* ── MENU ENGINEERING ── */}
+            {tab === 'menu-engineering' && (
+              <div className="space-y-4">
+                {/* Days selector + export */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-sm font-medium text-gray-600">Period:</span>
+                  {([7, 30, 90] as const).map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setMenuEngDays(d)}
+                      className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${menuEngDays === d ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    >{d === 7 ? '7 Days' : d === 30 ? '30 Days' : '90 Days'}</button>
+                  ))}
+                  <div className="ml-auto">
+                    <button
+                      onClick={() => {
+                        if (!menuEngineeringData?.items.length) return;
+                        downloadCsv(`menu-engineering-${menuEngDays}d.csv`, [
+                          ['Item', 'Category', 'Sold Qty', 'Revenue (KES)', 'Margin %', 'Quadrant'],
+                          ...menuEngineeringData.items.map((i) => [
+                            i.name, i.category, String(i.qty),
+                            (i.revenueCents / 100).toFixed(2),
+                            i.marginPct.toFixed(1) + '%', i.quadrant,
+                          ]),
+                        ]);
+                      }}
+                      className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700"
+                    >
+                      <Download className="w-4 h-4" /> Export CSV
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quadrant visual grid */}
+                {menuEngineeringData && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      {(
+                        [
+                          { key: 'STAR', label: 'Stars', desc: 'High margin + High sales', color: 'bg-yellow-50 border-yellow-300', badge: 'bg-yellow-100 text-yellow-800' },
+                          { key: 'PLOWHORSE', label: 'Plowhorses', desc: 'Low margin + High sales', color: 'bg-blue-50 border-blue-300', badge: 'bg-blue-100 text-blue-800' },
+                          { key: 'PUZZLE', label: 'Puzzles', desc: 'High margin + Low sales', color: 'bg-purple-50 border-purple-300', badge: 'bg-purple-100 text-purple-800' },
+                          { key: 'DOG', label: 'Dogs', desc: 'Low margin + Low sales', color: 'bg-gray-50 border-gray-300', badge: 'bg-gray-100 text-gray-600' },
+                        ] as const
+                      ).map((q) => {
+                        const count = menuEngineeringData.items.filter((i) => i.quadrant === q.key).length;
+                        return (
+                          <div key={q.key} className={`rounded-xl border-2 p-4 ${q.color}`}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${q.badge}`}>{q.key}</span>
+                              <span className="text-2xl font-bold text-gray-800">{count}</span>
+                            </div>
+                            <p className="font-semibold text-gray-800 text-sm">{q.label}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">{q.desc}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Items table */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                      <div className="px-5 py-4 border-b flex items-center justify-between">
+                        <h2 className="font-semibold text-gray-800">All Items ({menuEngineeringData.items.length})</h2>
+                        <span className="text-xs text-gray-400">Avg Qty: {menuEngineeringData.avgQty.toFixed(0)} · Avg Margin: {menuEngineeringData.avgMarginPct.toFixed(1)}%</span>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="text-left px-5 py-3 font-medium text-gray-600">Item</th>
+                              <th className="text-left px-5 py-3 font-medium text-gray-600">Category</th>
+                              <th className="text-right px-5 py-3 font-medium text-gray-600">Sold Qty</th>
+                              <th className="text-right px-5 py-3 font-medium text-gray-600">Revenue</th>
+                              <th className="text-right px-5 py-3 font-medium text-gray-600">Margin %</th>
+                              <th className="text-center px-5 py-3 font-medium text-gray-600">Quadrant</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {menuEngineeringData.items.length === 0 ? (
+                              <tr><td colSpan={6} className="px-5 py-10 text-center text-gray-400">No data for this period</td></tr>
+                            ) : menuEngineeringData.items.map((item) => (
+                              <tr key={item.id} className="hover:bg-gray-50">
+                                <td className="px-5 py-3 font-medium text-gray-800">{item.name}</td>
+                                <td className="px-5 py-3 text-gray-500">{item.category}</td>
+                                <td className="px-5 py-3 text-right text-gray-700">{item.qty.toLocaleString()}</td>
+                                <td className="px-5 py-3 text-right text-gray-700">{formatKES(item.revenueCents)}</td>
+                                <td className="px-5 py-3 text-right text-gray-700">{item.marginPct.toFixed(1)}%</td>
+                                <td className="px-5 py-3 text-center">
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                    item.quadrant === 'STAR' ? 'bg-yellow-100 text-yellow-800' :
+                                    item.quadrant === 'PLOWHORSE' ? 'bg-blue-100 text-blue-800' :
+                                    item.quadrant === 'PUZZLE' ? 'bg-purple-100 text-purple-800' :
+                                    'bg-gray-100 text-gray-600'
+                                  }`}>{item.quadrant}</span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                )}
+                {!menuEngineeringData && (
+                  <div className="flex items-center justify-center py-16 text-gray-400">
+                    <RefreshCw className="w-5 h-5 animate-spin mr-2" /> Loading menu engineering data…
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── BASKET ANALYSIS ── */}
+            {tab === 'basket-analysis' && (
+              <div className="space-y-4">
+                {/* Days selector */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-sm font-medium text-gray-600">Period:</span>
+                  {([7, 30, 90] as const).map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setBasketDays(d)}
+                      className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${basketDays === d ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    >{d === 7 ? '7 Days' : d === 30 ? '30 Days' : '90 Days'}</button>
+                  ))}
+                  {basketAnalysisData && (
+                    <span className="ml-2 text-sm text-gray-500">{basketAnalysisData.totalSales.toLocaleString()} total sales analyzed</span>
+                  )}
+                </div>
+
+                {/* Pairs table */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="px-5 py-4 border-b">
+                    <h2 className="font-semibold text-gray-800">Frequently Bought Together</h2>
+                    <p className="text-xs text-gray-500 mt-0.5">Items most often purchased in the same transaction</p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="text-left px-5 py-3 font-medium text-gray-600">Rank</th>
+                          <th className="text-left px-5 py-3 font-medium text-gray-600">Item A</th>
+                          <th className="text-left px-5 py-3 font-medium text-gray-600">Item B</th>
+                          <th className="text-right px-5 py-3 font-medium text-gray-600">Bought Together</th>
+                          <th className="text-right px-5 py-3 font-medium text-gray-600">% of Sales</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {!basketAnalysisData ? (
+                          <tr><td colSpan={5} className="px-5 py-10 text-center text-gray-400"><RefreshCw className="w-5 h-5 animate-spin inline mr-2" />Loading…</td></tr>
+                        ) : basketAnalysisData.pairs.length === 0 ? (
+                          <tr><td colSpan={5} className="px-5 py-10 text-center text-gray-400">No co-purchase data for this period</td></tr>
+                        ) : basketAnalysisData.pairs.map((pair, idx) => {
+                          const pct = basketAnalysisData.totalSales > 0 ? ((pair.count / basketAnalysisData.totalSales) * 100).toFixed(1) : '0.0';
+                          return (
+                            <tr key={`${pair.item1}-${pair.item2}`} className="hover:bg-gray-50">
+                              <td className="px-5 py-3 text-gray-400 font-mono text-xs">{idx + 1}</td>
+                              <td className="px-5 py-3 font-medium text-gray-800">{pair.name1}</td>
+                              <td className="px-5 py-3 font-medium text-gray-800">{pair.name2}</td>
+                              <td className="px-5 py-3 text-right text-gray-700">{pair.count.toLocaleString()}</td>
+                              <td className="px-5 py-3 text-right">
+                                <span className="inline-block px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-semibold">{pct}%</span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── CUSTOMER LTV ── */}
+            {tab === 'clv' && (
+              <div className="space-y-4">
+                {/* Summary cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                  <StatCard
+                    label="Total Customers"
+                    value={clvData.length}
+                    icon={Users}
+                    color="bg-blue-500"
+                  />
+                  <StatCard
+                    label="Avg Lifetime Value"
+                    value={clvData.length > 0 ? formatKES(Math.round(clvData.reduce((s, r) => s + r.totalSpendCents, 0) / clvData.length)) : '—'}
+                    icon={DollarSign}
+                    color="bg-green-500"
+                    valueColor="text-green-600"
+                  />
+                  <StatCard
+                    label="High Churn Risk"
+                    value={clvData.filter((r) => r.churnRisk === 'HIGH').length}
+                    icon={AlertCircle}
+                    color="bg-red-500"
+                    valueColor="text-red-600"
+                    sub="Customers at risk"
+                  />
+                </div>
+
+                {/* Export */}
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => {
+                      if (!clvData.length) return;
+                      downloadCsv('customer-ltv.csv', [
+                        ['Customer', 'Phone', 'Visits', 'Total Spend (KES)', 'Avg Order (KES)', 'First Visit', 'Last Visit', 'Days Since Last', 'Frequency (days)', 'Churn Risk'],
+                        ...clvData.map((r) => [
+                          r.name, r.phone, String(r.visitCount),
+                          (r.totalSpendCents / 100).toFixed(2),
+                          (r.avgOrderCents / 100).toFixed(2),
+                          new Date(r.firstVisit).toLocaleDateString('en-KE'),
+                          new Date(r.lastVisit).toLocaleDateString('en-KE'),
+                          String(r.daysSinceLast),
+                          r.visitFrequencyDays > 0 ? r.visitFrequencyDays.toFixed(0) : '—',
+                          r.churnRisk,
+                        ]),
+                      ]);
+                    }}
+                    className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700"
+                  >
+                    <Download className="w-4 h-4" /> Export CSV
+                  </button>
+                </div>
+
+                {/* Table sorted by total spend desc */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="px-5 py-4 border-b">
+                    <h2 className="font-semibold text-gray-800">Customer Lifetime Value ({clvData.length})</h2>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="text-left px-5 py-3 font-medium text-gray-600">Customer</th>
+                          <th className="text-right px-5 py-3 font-medium text-gray-600">Visits</th>
+                          <th className="text-right px-5 py-3 font-medium text-gray-600">Total Spend</th>
+                          <th className="text-right px-5 py-3 font-medium text-gray-600">Avg Order</th>
+                          <th className="text-left px-5 py-3 font-medium text-gray-600">Last Visit</th>
+                          <th className="text-right px-5 py-3 font-medium text-gray-600">Frequency</th>
+                          <th className="text-center px-5 py-3 font-medium text-gray-600">Churn Risk</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {clvData.length === 0 ? (
+                          <tr><td colSpan={7} className="px-5 py-10 text-center text-gray-400">No customer data available</td></tr>
+                        ) : [...clvData].sort((a, b) => b.totalSpendCents - a.totalSpendCents).map((row) => (
+                          <tr key={row.id} className="hover:bg-gray-50">
+                            <td className="px-5 py-3">
+                              <p className="font-medium text-gray-800">{row.name}</p>
+                              <p className="text-xs text-gray-400">{row.phone}</p>
+                            </td>
+                            <td className="px-5 py-3 text-right text-gray-700">{row.visitCount}</td>
+                            <td className="px-5 py-3 text-right font-semibold text-gray-800">{formatKES(row.totalSpendCents)}</td>
+                            <td className="px-5 py-3 text-right text-gray-600">{formatKES(row.avgOrderCents)}</td>
+                            <td className="px-5 py-3 text-gray-500 text-xs whitespace-nowrap">
+                              {new Date(row.lastVisit).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              <span className="ml-1 text-gray-400">({row.daysSinceLast}d ago)</span>
+                            </td>
+                            <td className="px-5 py-3 text-right text-gray-600 text-xs">
+                              {row.visitFrequencyDays > 0 ? `every ${row.visitFrequencyDays.toFixed(0)}d` : '—'}
+                            </td>
+                            <td className="px-5 py-3 text-center">
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                row.churnRisk === 'HIGH' ? 'bg-red-100 text-red-700' :
+                                row.churnRisk === 'MEDIUM' ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-green-100 text-green-700'
+                              }`}>{row.churnRisk}</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── NPS DASHBOARD ── */}
+            {tab === 'nps' && (
+              <div className="space-y-4">
+                {npsData ? (
+                  <>
+                    {/* Big NPS score + promoter/passive/detractor cards */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                      {/* NPS score */}
+                      <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 flex flex-col items-center justify-center lg:col-span-1">
+                        <p className="text-xs text-gray-500 mb-1 font-medium uppercase tracking-wide">NPS Score</p>
+                        <p className={`text-5xl font-extrabold ${
+                          npsData.npsScore == null ? 'text-gray-400' :
+                          npsData.npsScore >= 50 ? 'text-green-600' :
+                          npsData.npsScore >= 0 ? 'text-yellow-500' :
+                          'text-red-600'
+                        }`}>{npsData.npsScore == null ? '—' : (npsData.npsScore > 0 ? '+' : '') + npsData.npsScore}</p>
+                        <p className="text-xs text-gray-400 mt-1">-100 to +100 scale</p>
+                        <p className="text-sm text-gray-600 mt-2 font-medium">Avg rating: {npsData.avg != null ? npsData.avg.toFixed(1) : '—'} / 10</p>
+                        <p className="text-xs text-gray-400">{npsData.total} responses</p>
+                      </div>
+                      {/* Promoters */}
+                      <div className="bg-green-50 rounded-xl p-5 shadow-sm border border-green-200 text-center">
+                        <p className="text-xs text-green-600 font-semibold uppercase tracking-wide mb-1">Promoters</p>
+                        <p className="text-3xl font-bold text-green-700">{npsData.promoters}</p>
+                        <p className="text-xs text-green-600 mt-1">Score 9 – 10</p>
+                        <p className="text-sm text-green-600 font-medium mt-2">
+                          {npsData.total > 0 ? ((npsData.promoters / npsData.total) * 100).toFixed(0) : 0}%
+                        </p>
+                      </div>
+                      {/* Passives */}
+                      <div className="bg-yellow-50 rounded-xl p-5 shadow-sm border border-yellow-200 text-center">
+                        <p className="text-xs text-yellow-600 font-semibold uppercase tracking-wide mb-1">Passives</p>
+                        <p className="text-3xl font-bold text-yellow-700">{npsData.passives}</p>
+                        <p className="text-xs text-yellow-600 mt-1">Score 7 – 8</p>
+                        <p className="text-sm text-yellow-600 font-medium mt-2">
+                          {npsData.total > 0 ? ((npsData.passives / npsData.total) * 100).toFixed(0) : 0}%
+                        </p>
+                      </div>
+                      {/* Detractors */}
+                      <div className="bg-red-50 rounded-xl p-5 shadow-sm border border-red-200 text-center">
+                        <p className="text-xs text-red-600 font-semibold uppercase tracking-wide mb-1">Detractors</p>
+                        <p className="text-3xl font-bold text-red-700">{npsData.detractors}</p>
+                        <p className="text-xs text-red-600 mt-1">Score 0 – 6</p>
+                        <p className="text-sm text-red-600 font-medium mt-2">
+                          {npsData.total > 0 ? ((npsData.detractors / npsData.total) * 100).toFixed(0) : 0}%
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Trend sparkline (div-based bar chart) */}
+                    {npsData.trend.length > 0 && (
+                      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                        <h2 className="font-semibold text-gray-800 mb-4">Rating Trend</h2>
+                        <div className="flex items-end gap-1 h-24">
+                          {npsData.trend.map((point, idx) => {
+                            const maxAvg = Math.max(...npsData.trend.map((p) => p.avg), 10);
+                            const heightPct = maxAvg > 0 ? (point.avg / maxAvg) * 100 : 0;
+                            return (
+                              <div key={idx} className="flex-1 flex flex-col items-center gap-1 group relative">
+                                <div
+                                  className={`w-full rounded-t transition-all ${
+                                    point.avg >= 9 ? 'bg-green-400' :
+                                    point.avg >= 7 ? 'bg-yellow-400' :
+                                    'bg-red-400'
+                                  }`}
+                                  style={{ height: `${heightPct}%`, minHeight: '4px' }}
+                                />
+                                <span className="text-xs text-gray-400 whitespace-nowrap hidden group-hover:block absolute -top-5 left-1/2 -translate-x-1/2 bg-gray-800 text-white px-1 py-0.5 rounded text-[10px]">
+                                  {point.avg.toFixed(1)} ({point.count})
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="flex justify-between mt-1 text-xs text-gray-400">
+                          <span>{npsData.trend[0]?.date ? new Date(npsData.trend[0].date).toLocaleDateString('en-KE', { month: 'short', day: 'numeric' }) : ''}</span>
+                          <span>{npsData.trend[npsData.trend.length - 1]?.date ? new Date(npsData.trend[npsData.trend.length - 1].date).toLocaleDateString('en-KE', { month: 'short', day: 'numeric' }) : ''}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Recent responses */}
+                    {npsData.recent.length > 0 && (
+                      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                        <div className="px-5 py-4 border-b">
+                          <h2 className="font-semibold text-gray-800">Recent Responses</h2>
+                        </div>
+                        <div className="divide-y divide-gray-100">
+                          {npsData.recent.map((r, idx) => (
+                            <div key={idx} className="px-5 py-3 flex items-start gap-3">
+                              <span className={`mt-0.5 px-2 py-0.5 rounded-full text-xs font-bold shrink-0 ${
+                                r.score >= 9 ? 'bg-green-100 text-green-700' :
+                                r.score >= 7 ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-red-100 text-red-700'
+                              }`}>{r.score}/10</span>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm text-gray-700">{r.comment || <span className="text-gray-400 italic">No comment</span>}</p>
+                                <p className="text-xs text-gray-400 mt-0.5">
+                                  {new Date(r.createdAt).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex items-center justify-center py-16 text-gray-400">
+                    <RefreshCw className="w-5 h-5 animate-spin mr-2" /> Loading NPS data…
+                  </div>
+                )}
+              </div>
+            )}
+
           </>
         )}
       </div>

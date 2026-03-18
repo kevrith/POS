@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
-import { Plus, Pill, CheckCircle, XCircle, Clock, Search, Printer } from 'lucide-react';
+import { Plus, Pill, CheckCircle, XCircle, Clock, Search, Printer, History, AlertTriangle } from 'lucide-react';
 
 interface RxItem {
   itemId?: string;
@@ -134,6 +134,23 @@ export default function PrescriptionsPage() {
     win.close();
   };
 
+  const [checkingInteractions, setCheckingInteractions] = useState(false);
+  const [interactionResults, setInteractionResults] = useState<any[] | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+
+  const checkInteractionsMut = useMutation({
+    mutationFn: ({ businessId: bId, drugNames }: { businessId: string; drugNames: string[] }) =>
+      api.post<any[]>('/prescriptions/check-interactions', { businessId: bId, drugNames }),
+    onSuccess: (results) => { setInteractionResults(results); setCheckingInteractions(false); },
+    onError: () => setCheckingInteractions(false),
+  });
+
+  const { data: patientHistory = [] } = useQuery<any[]>({
+    queryKey: ['prescriptions-history', businessId, selected?.id],
+    queryFn: () => api.get(`/prescriptions?businessId=${businessId}&storeId=${storeId}&status=ALL`),
+    enabled: showHistory && !!selected,
+  });
+
   const canManage = user?.role === 'OWNER' || user?.role === 'MANAGER' || user?.role === 'CASHIER';
 
   return (
@@ -253,10 +270,52 @@ export default function PrescriptionsPage() {
                   <p className="text-xs text-gray-400">Dispensed {new Date(selected.dispensedAt).toLocaleString()} by {selected.dispensedBy}</p>
                 )}
               </div>
-              <div className="p-4 border-t dark:border-gray-700 flex gap-2 justify-between">
-                <button onClick={() => handlePrintDispense(selected)} className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">
-                  <Printer className="w-4 h-4" /> Print
-                </button>
+              {/* Drug interaction results */}
+              {interactionResults !== null && (
+                <div className={`mx-6 mb-2 rounded-lg p-3 text-sm ${interactionResults.length === 0 ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                  {interactionResults.length === 0 ? (
+                    <p className="font-medium">No known drug interactions detected.</p>
+                  ) : (
+                    <>
+                      <p className="font-bold mb-1"><AlertTriangle className="w-4 h-4 inline mr-1" />{interactionResults.length} interaction(s) detected:</p>
+                      {interactionResults.map((it: any) => (
+                        <div key={it.id} className="mt-1">
+                          <span className="font-medium">{it.drug1Name} + {it.drug2Name}</span>
+                          <span className={`ml-2 px-1.5 py-0.5 rounded text-xs ${it.severity === 'SEVERE' || it.severity === 'CONTRAINDICATED' ? 'bg-red-200' : 'bg-amber-100 text-amber-700'}`}>{it.severity}</span>
+                          <p className="text-xs mt-0.5">{it.description}</p>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              )}
+
+              <div className="p-4 border-t dark:border-gray-700 flex gap-2 justify-between flex-wrap">
+                <div className="flex gap-2">
+                  <button onClick={() => handlePrintDispense(selected)} className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">
+                    <Printer className="w-4 h-4" /> Print
+                  </button>
+                  <button
+                    onClick={() => {
+                      setInteractionResults(null);
+                      setCheckingInteractions(true);
+                      const itemsParsed: RxItem[] = (() => { try { return JSON.parse(selected.items); } catch { return []; } })();
+                      const names = itemsParsed.map((i) => i.name).filter(Boolean);
+                      if (names.length < 2) { setInteractionResults([]); setCheckingInteractions(false); return; }
+                      checkInteractionsMut.mutate({ businessId, drugNames: names });
+                    }}
+                    disabled={checkingInteractions}
+                    className="flex items-center gap-1.5 px-3 py-2 text-sm text-amber-600 border border-amber-300 rounded-lg hover:bg-amber-50 disabled:opacity-50"
+                  >
+                    <AlertTriangle className="w-4 h-4" /> Check Interactions
+                  </button>
+                  <button
+                    onClick={() => { setShowHistory(true); }}
+                    className="flex items-center gap-1.5 px-3 py-2 text-sm text-purple-600 border border-purple-300 rounded-lg hover:bg-purple-50"
+                  >
+                    <History className="w-4 h-4" /> Patient History
+                  </button>
+                </div>
                 <div className="flex gap-2">
                   {selected.status === 'PENDING' && canManage && (
                     <>
@@ -266,11 +325,14 @@ export default function PrescriptionsPage() {
                       </button>
                       <button onClick={() => handleDispense(selected)} disabled={dispenseMutation.isPending}
                         className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium disabled:opacity-50">
-                        {dispenseMutation.isPending ? 'Dispensing…' : '✓ Dispense'}
+                        {dispenseMutation.isPending ? 'Dispensing…' : (() => {
+                          const itemsParsed: RxItem[] = (() => { try { return JSON.parse(selected.items); } catch { return []; } })();
+                          return itemsParsed.some((i) => i.itemId) ? '✓ Dispense & Deduct Stock' : '✓ Dispense';
+                        })()}
                       </button>
                     </>
                   )}
-                  <button onClick={() => setSelected(null)} className="px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">
+                  <button onClick={() => { setSelected(null); setInteractionResults(null); setShowHistory(false); }} className="px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">
                     Close
                   </button>
                 </div>
@@ -279,6 +341,57 @@ export default function PrescriptionsPage() {
           </div>
         );
       })()}
+
+      {/* Patient History Modal */}
+      {showHistory && selected && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[80vh] flex flex-col">
+            <div className="p-4 border-b dark:border-gray-700 flex items-center justify-between">
+              <h2 className="text-lg font-bold dark:text-white flex items-center gap-2">
+                <History className="w-5 h-5 text-purple-600" /> Patient History — {selected.patientName}
+              </h2>
+              <button onClick={() => setShowHistory(false)} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 sticky top-0">
+                  <tr>
+                    <th className="text-left px-4 py-2">RX #</th>
+                    <th className="text-left px-4 py-2">Doctor</th>
+                    <th className="text-left px-4 py-2">Status</th>
+                    <th className="text-left px-4 py-2">Items</th>
+                    <th className="text-left px-4 py-2">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {patientHistory
+                    .filter((rx: any) => rx.patientName.toLowerCase() === selected.patientName.toLowerCase())
+                    .map((rx: any) => {
+                      const rxItems: RxItem[] = (() => { try { return JSON.parse(rx.items); } catch { return []; } })();
+                      return (
+                        <tr key={rx.id} className="border-t hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                          <td className="px-4 py-2 font-mono text-xs text-blue-600">{rx.prescriptionNumber}</td>
+                          <td className="px-4 py-2 text-gray-600 dark:text-gray-400">Dr. {rx.doctorName}</td>
+                          <td className="px-4 py-2">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[rx.status] ?? ''}`}>{rx.status}</span>
+                          </td>
+                          <td className="px-4 py-2 text-gray-600 dark:text-gray-400 text-xs">{rxItems.map((i) => `${i.name} ×${i.qty}`).join(', ')}</td>
+                          <td className="px-4 py-2 text-gray-400 text-xs">{new Date(rx.createdAt).toLocaleDateString()}</td>
+                        </tr>
+                      );
+                    })}
+                  {patientHistory.filter((rx: any) => rx.patientName.toLowerCase() === selected.patientName.toLowerCase()).length === 0 && (
+                    <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">No prescription history for this patient</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="p-4 border-t dark:border-gray-700 flex justify-end">
+              <button onClick={() => setShowHistory(false)} className="px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create Modal */}
       {showCreate && (

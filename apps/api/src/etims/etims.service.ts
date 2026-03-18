@@ -31,12 +31,17 @@ interface EtimsInvoicePayload {
   tradeTerms: string;
   saleDate: string;
   stockRlsDt?: string;
+  cfmDt?: string;
   cnclReqDt?: string;
   cnclDate?: string;
   rfdRsnCd?: string;
   orgInvcNo?: string;
   pmtTyCd: string;
   rcptTyCd: string;
+  salesSttsCd?: string;
+  totItemCnt?: number;
+  prchrAcptcYn?: string;
+  remark?: string;
   taxblAmtA: number;
   taxblAmtB: number;
   taxblAmtC: number;
@@ -252,34 +257,47 @@ export class EtimsService {
 
   // ─── Sale submission ──────────────────────────────────────────────────────
 
-  async submitSale(saleId: string): Promise<{ success: boolean; controlNumber?: string; reason?: string }> {
+  async submitSale(saleId: string): Promise<{ success: boolean; controlNumber?: string; intrlData?: string; reason?: string }> {
     const sale = await this.prisma.sale.findUnique({ where: { id: saleId } });
     if (!sale) throw new BadRequestException('Sale not found');
-    if (sale.etimsSubmitted) return { success: true, controlNumber: sale.etimsControlNumber ?? undefined };
+    if (sale.etimsSubmitted) return {
+      success: true,
+      controlNumber: sale.etimsControlNumber ?? undefined,
+      intrlData: (sale as any).etimsIntrlData ?? sale.etimsControlNumber ?? undefined,
+    };
 
     const business = await this.prisma.business.findUnique({ where: { id: sale.businessId } });
     let controlNumber: string;
+    let intrlData: string;
 
     if (business?.etimsMode === 'PRODUCTION' && business.etimsCredentialsEncrypted) {
       // Real KRA eTIMS submission
-      controlNumber = await this.submitToEtims(sale, business);
+      const result = await this.submitToEtims(sale, business);
+      controlNumber = result.controlNumber;
+      intrlData = result.intrlData;
     } else {
-      // Sandbox: generate mock control number
+      // Sandbox: generate realistic mock values
       controlNumber = `ETM${Date.now()}`;
+      intrlData = `${sale.receiptNumber}|${controlNumber}|${new Date().toISOString().slice(0,10)}`;
     }
 
     await this.prisma.sale.update({
       where: { id: saleId },
-      data: { etimsSubmitted: true, etimsControlNumber: controlNumber },
+      data: {
+        etimsSubmitted: true,
+        etimsControlNumber: controlNumber,
+        ...(intrlData && { etimsInvoiceNo: intrlData }),
+      },
     });
 
     await this.audit.createEntry({
       businessId: sale.businessId, action: 'ETIMS_SUBMIT',
       entity: 'Sale', entityId: saleId, source: 'SYSTEM',
       actor: 'system', actorType: 'SYSTEM',
+      after: { controlNumber },
     });
 
-    return { success: true, controlNumber };
+    return { success: true, controlNumber, intrlData };
   }
 
   async submitAmendment(saleId: string): Promise<{ success: boolean }> {
@@ -351,52 +369,78 @@ export class EtimsService {
 
   // ─── Real KRA eTIMS HTTP calls ────────────────────────────────────────────
 
-  private async submitToEtims(sale: any, business: any): Promise<string> {
+  /** Map POS payment method to KRA eTIMS payment type code */
+  private mapPaymentType(payments: any[]): string {
+    if (!payments?.length) return '01'; // default cash
+    const methods = payments.map((p: any) => p.method ?? p.paymentMethod ?? '');
+    if (methods.some((m: string) => m.includes('MPESA') || m.includes('MOBILE'))) return '04'; // Mobile money
+    if (methods.some((m: string) => m.includes('CARD') || m.includes('PAYSTACK'))) return '05'; // Card
+    if (methods.some((m: string) => m.includes('BANK') || m.includes('TRANSFER'))) return '03'; // Bank transfer
+    if (methods.some((m: string) => m.includes('CREDIT'))) return '02'; // Credit
+    return '01'; // Cash
+  }
+
+  private async submitToEtims(sale: any, business: any): Promise<{ controlNumber: string; intrlData: string }> {
     const creds = this.decryptCredentials(business.etimsCredentialsEncrypted);
     const saleWithItems = await this.prisma.sale.findUnique({
       where: { id: sale.id },
-      include: { items: { include: { item: true } } },
+      include: {
+        items: { include: { item: true } },
+        payments: true,
+      },
     });
+
+    const saleDateStr = new Date(sale.createdAt).toISOString().slice(0, 10).replace(/-/g, '');
 
     const itemList: EtimsInvoiceItem[] = (saleWithItems?.items ?? []).map((si, idx) => {
       const unitPrice = si.unitPriceCents / 100;
       const qty = si.quantity;
-      const totalAmt = si.totalCents / 100;
+      const totalAmt = Math.round(si.totalCents) / 100;
+      // Extract VAT from inclusive price (16/116)
       const taxblAmt = Math.round((totalAmt / 1.16) * 100) / 100;
       const taxAmt = Math.round((totalAmt - taxblAmt) * 100) / 100;
+      // Use KRA item classification code stored on item, fall back to generic goods code
+      const itemClsCd = (si.item as any)?.kraItemCode ?? '5020230602';
 
       return {
         itemSeq: idx + 1,
-        itemCd: (si.item as any)?.sku ?? (si.item as any)?.barcode ?? `ITEM${idx + 1}`,
-        itemClsCd: '5020230602', // default KRA item classification code
+        itemCd: (si.item as any)?.barcode ?? (si.item as any)?.sku ?? `KA${String(idx + 1).padStart(5,'0')}`,
+        itemClsCd,
         itemNm: si.item?.name ?? 'Item',
-        pkgUnitCd: 'NT', // each
+        bcd: (si.item as any)?.barcode ?? '',
+        pkgUnitCd: 'NT',
         pkg: qty,
         qtyUnitCd: 'U',
         qty,
         prc: unitPrice,
         splyAmt: totalAmt,
-        dcRt: 0,
-        dcAmt: 0,
+        dcRt: (si as any).discountPercent ?? 0,
+        dcAmt: (si as any).discountCents ? (si as any).discountCents / 100 : 0,
         taxblAmt,
-        taxTyCd: 'B', // VAT B (16%)
+        taxTyCd: 'B', // VAT 16%
         taxAmt,
         totAmt: totalAmt,
       };
     });
 
     const totalAmt = sale.totalCents / 100;
-    const vatAmt = sale.vatCents / 100;
-    const taxblAmt = totalAmt - vatAmt;
+    const vatAmt = (sale.vatCents ?? 0) / 100;
+    const taxblAmt = Math.round((totalAmt - vatAmt) * 100) / 100;
+    const pmtTyCd = this.mapPaymentType(saleWithItems?.payments ?? []);
 
     const payload: EtimsInvoicePayload = {
       invoiceNo: sale.receiptNumber,
       tpin: creds.kraPin,
       branchId: creds.branchId ?? '00',
       tradeTerms: 'CSH',
-      saleDate: new Date(sale.createdAt).toISOString().slice(0, 10).replace(/-/g, ''),
-      pmtTyCd: 'CASH',
-      rcptTyCd: 'S', // standard sale
+      saleDate: saleDateStr,
+      stockRlsDt: saleDateStr,
+      pmtTyCd,
+      rcptTyCd: 'S',
+      salesSttsCd: '02',           // 02 = Approved/Confirmed
+      totItemCnt: itemList.length,
+      cfmDt: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
+      prchrAcptcYn: 'N',           // N = walk-in retail customer
       taxblAmtA: 0,
       taxblAmtB: taxblAmt,
       taxblAmtC: 0,
@@ -412,7 +456,12 @@ export class EtimsService {
     };
 
     const response = await this.callEtimsApiWithAuth(creds, '/api/trnsSales/saveTaxInvoice', payload);
-    return response.controlNo ?? response.intrlData ?? `ETM${Date.now()}`;
+
+    // KRA returns intrlData (the cryptographic receipt signature) — this is what goes in the QR code
+    const controlNumber = response.controlNo ?? response.rcptNo ?? `ETM${Date.now()}`;
+    const intrlData = response.intrlData ?? response.rcptSign ?? controlNumber;
+
+    return { controlNumber, intrlData };
   }
 
   private async submitToEtimsAmendment(sale: any, business: any): Promise<void> {
@@ -485,10 +534,16 @@ export class EtimsService {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'deviceId': creds.deviceId,
-        'bhfId': creds.branchId ?? '00',
+        'tin': creds.kraPin ?? creds.tin,
+        'bhfId': creds.branchId ?? creds.bhfId ?? '00',
+        'dvcSrlNo': creds.dvcSrno ?? creds.deviceId ?? '',
       },
-      body: JSON.stringify({ ...body, deviceId: creds.deviceId, bhfId: creds.branchId ?? '00' }),
+      body: JSON.stringify({
+        ...body,
+        tpin: creds.kraPin ?? creds.tin,
+        bhfId: creds.branchId ?? creds.bhfId ?? '00',
+        dvcSrlNo: creds.dvcSrno ?? creds.deviceId ?? '',
+      }),
     });
 
     if (!response.ok) {

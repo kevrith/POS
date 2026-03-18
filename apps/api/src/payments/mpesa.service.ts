@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { EventsGateway } from '../events/events.gateway';
 
 interface STKPushRequest {
   phone: string;
@@ -42,6 +43,7 @@ export class MpesaService {
   constructor(
     private config: ConfigService,
     private prisma: PrismaService,
+    private events: EventsGateway,
   ) {}
 
   private get isProduction(): boolean {
@@ -309,5 +311,146 @@ export class MpesaService {
     } else {
       this.logger.warn(`M-Pesa payment failed: ${CheckoutRequestID} | ${ResultDesc}`);
     }
+  }
+
+  // ─── M-Pesa C2B (Customer-to-Business / Paybill & Till) ─────────────────────
+
+  /** Register C2B callback URLs with Safaricom Daraja */
+  async registerC2BUrls(params: {
+    shortCode: string;
+    validationUrl: string;
+    confirmationUrl: string;
+  }): Promise<{ ResponseCode: string; ResponseDescription: string; CustomerMessage: string }> {
+    const token = await this.getAccessToken();
+    const res = await fetch(`${this.baseUrl}/mpesa/c2b/v1/registerurl`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ShortCode: params.shortCode,
+        ResponseType: 'Completed',
+        ConfirmationURL: params.confirmationUrl,
+        ValidationURL: params.validationUrl,
+      }),
+    });
+    return res.json() as Promise<{ ResponseCode: string; ResponseDescription: string; CustomerMessage: string }>;
+  }
+
+  /** Handle Safaricom C2B confirmation webhook — saves to DB and emits socket event */
+  async handleC2BConfirmation(businessId: string, payload: Record<string, unknown>): Promise<void> {
+    const transactionId = String(payload.TransID ?? payload.TransId ?? `MOCK-${Date.now()}`);
+    const phoneRaw = String(payload.MSISDN ?? '');
+    const firstName = String(payload.FirstName ?? '');
+    const middleName = String(payload.MiddleName ?? '').trim();
+    const lastName = String(payload.LastName ?? '');
+    const customerName = [firstName, middleName, lastName].filter(Boolean).join(' ') || phoneRaw;
+    const amountRaw = parseFloat(String(payload.TransAmount ?? payload.Amount ?? '0'));
+    const amountCents = Math.round(amountRaw * 100);
+    const billRefNumber = String(payload.BillRefNumber ?? payload.AccountReference ?? '');
+    const transactionType = String(payload.TransactionType ?? 'CustomerPayBillOnline');
+    const shortCode = String(payload.BusinessShortCode ?? payload.ShortCode ?? '');
+    const orgBalance = payload.OrgAccountBalance
+      ? Math.round(parseFloat(String(payload.OrgAccountBalance)) * 100)
+      : null;
+
+    // Idempotent upsert — Safaricom can send duplicates
+    let record: { id: string; amountCents: number; customerName: string; phoneNumber: string; billRefNumber: string; status: string; createdAt: Date };
+    try {
+      record = await this.prisma.mpesaC2BTransaction.upsert({
+        where: { transactionId },
+        create: {
+          businessId,
+          transactionId,
+          transactionType,
+          phoneNumber: phoneRaw,
+          customerName,
+          amountCents,
+          billRefNumber,
+          orgAccountBalance: orgBalance,
+          shortCode,
+          rawPayload: payload as any,
+        },
+        update: {}, // Already exists — don't overwrite
+      });
+    } catch (err: any) {
+      this.logger.error(`C2B upsert failed: ${err.message}`);
+      return;
+    }
+
+    this.logger.log(`C2B payment: ${transactionId} | ${customerName} | KES ${amountRaw} | Ref: ${billRefNumber}`);
+
+    // Emit real-time event to all cashiers in this business
+    this.events.emitC2BPaymentReceived(businessId, {
+      id: record.id,
+      transactionId,
+      customerName,
+      phoneNumber: phoneRaw,
+      amountCents,
+      billRefNumber,
+      status: 'PENDING',
+      createdAt: record.createdAt,
+    });
+
+    // Also fire an in-app notification
+    try {
+      await this.prisma.notification.create({
+        data: {
+          businessId,
+          type: 'MPESA_C2B_PAYMENT',
+          priority: 'HIGH',
+          title: `M-Pesa Payment: KES ${amountRaw.toFixed(0)}`,
+          body: `${customerName} paid KES ${amountRaw.toFixed(2)} via ${transactionType === 'CustomerBuyGoodsOnline' ? 'Till' : 'Paybill'}. Ref: ${billRefNumber || transactionId}`,
+          entityId: record.id,
+          entityType: 'MpesaC2BTransaction',
+        },
+      });
+      this.events.emitNotificationCreated(businessId, {
+        type: 'MPESA_C2B_PAYMENT',
+        priority: 'HIGH',
+        title: `M-Pesa Payment: KES ${amountRaw.toFixed(0)}`,
+        body: `${customerName} · ${billRefNumber || transactionId}`,
+      });
+    } catch { /* non-critical */ }
+  }
+
+  async getPendingC2BPayments(businessId: string, limit = 50): Promise<{
+    id: string; transactionId: string; customerName: string; phoneNumber: string;
+    amountCents: number; billRefNumber: string; status: string; createdAt: Date;
+    shortCode: string | null; transactionType: string;
+  }[]> {
+    return this.prisma.mpesaC2BTransaction.findMany({
+      where: { businessId, status: { in: ['PENDING', 'MATCHED'] } },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: {
+        id: true, transactionId: true, customerName: true, phoneNumber: true,
+        amountCents: true, billRefNumber: true, status: true, createdAt: true,
+        shortCode: true, transactionType: true,
+      },
+    });
+  }
+
+  async matchC2BPayment(id: string, saleId: string, matchedBy: string): Promise<void> {
+    await this.prisma.mpesaC2BTransaction.update({
+      where: { id },
+      data: { status: 'MATCHED', saleId, matchedBy, matchedAt: new Date() },
+    });
+  }
+
+  async dismissC2BPayment(id: string): Promise<void> {
+    await this.prisma.mpesaC2BTransaction.update({
+      where: { id },
+      data: { status: 'DISMISSED' },
+    });
+  }
+
+  async getC2BStats(businessId: string): Promise<{ pendingCount: number; pendingAmountCents: number }> {
+    const rows = await this.prisma.mpesaC2BTransaction.findMany({
+      where: { businessId, status: 'PENDING' },
+      select: { amountCents: true },
+    });
+    return {
+      pendingCount: rows.length,
+      pendingAmountCents: rows.reduce((s, r) => s + r.amountCents, 0),
+    };
   }
 }

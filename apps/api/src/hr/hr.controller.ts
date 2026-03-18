@@ -319,6 +319,33 @@ export class HrController {
     return this.payrollService.bulkSendPayslips(runId, body.channel as 'EMAIL' | 'WHATSAPP');
   }
 
+  // ─── Time Entries (user-level clock in/out) ──────────────────────────────────
+
+  @Post('time-entries/clock-in')
+  async timeClockIn(@Body() body: { userId: string; businessId: string; storeId?: string; notes?: string }) {
+    return this.hrService.timeClockIn(body.userId, body.businessId, body.storeId, body.notes);
+  }
+
+  @Post('time-entries/clock-out')
+  async timeClockOut(@Body() body: { userId: string; businessId: string }) {
+    return this.hrService.timeClockOut(body.userId, body.businessId);
+  }
+
+  @Get('time-entries')
+  async getTimeEntries(
+    @Query('businessId') businessId: string,
+    @Query('userId') userId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.hrService.getTimeEntries(businessId, userId, startDate, endDate);
+  }
+
+  @Get('time-entries/status')
+  async clockStatus(@Query('businessId') businessId: string, @Query('userId') userId: string) {
+    return this.hrService.getClockStatus(userId, businessId);
+  }
+
   // ─── Biometric Clock-in (ZKTeco integration stub) ──────────────────────────
 
   @Post('biometric/clock-in')

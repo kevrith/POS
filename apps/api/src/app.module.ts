@@ -47,6 +47,7 @@ import { SuperAdminModule } from './super-admin/super-admin.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { KdpaModule } from './kdpa/kdpa.module';
 import { PrescriptionsModule } from './prescriptions/prescriptions.module';
+import { PharmacyModule } from './pharmacy/pharmacy.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { DeliveryModule } from './delivery/delivery.module';
 import { PortalModule } from './portal/portal.module';
@@ -63,6 +64,8 @@ import { ChequeModule } from './cheque/cheque.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { PaymentLinksModule } from './payment-links/payment-links.module';
 import { SecurityModule } from './security/security.module';
+import { NpsModule } from './nps/nps.module';
+import { FuelPumpModule } from './fuel-pump/fuel-pump.module';
 
 @Module({
   imports: [
@@ -116,6 +119,7 @@ import { SecurityModule } from './security/security.module';
     ReferralsModule,
     KdpaModule,
     PrescriptionsModule,
+    PharmacyModule,
     AppointmentsModule,
     DeliveryModule,
     PortalModule,
@@ -132,6 +136,8 @@ import { SecurityModule } from './security/security.module';
     LedgerModule,
     PaymentLinksModule,
     SecurityModule,
+    NpsModule,
+    FuelPumpModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AppThrottlerGuard },

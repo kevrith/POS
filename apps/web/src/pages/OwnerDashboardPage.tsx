@@ -278,6 +278,12 @@ export default function OwnerDashboardPage() {
     enabled: !!businessId,
   });
 
+  const { data: stockData } = useQuery<{ totalValueCents: number; items: Array<{ itemId: string; name: string; quantity: number; costPriceCents: number; valueCents: number }> }>({
+    queryKey: ['owner-stock', businessId],
+    queryFn: () => api.get(`/reports/stock-valuation?businessId=${businessId}`),
+    enabled: !!businessId,
+  });
+
   const stores = data?.stores ?? [];
   const summary = data?.summary;
   const ranked = useMemo(() => [...stores].sort((a, b) => b.totalRevenueCents - a.totalRevenueCents), [stores]);
@@ -623,6 +629,57 @@ export default function OwnerDashboardPage() {
               </div>
             )}
 
+            {/* ── Inventory Overview ── */}
+            {stockData && (
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
+                <div className="px-5 py-4 border-b border-gray-50 dark:border-gray-700 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Package className="w-4 h-4 text-purple-600" />
+                    <h2 className="font-bold text-gray-900 dark:text-white text-sm">Inventory Overview</h2>
+                    <span className="text-xs bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 px-2 py-0.5 rounded-full font-semibold">
+                      All Branches
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <p className="text-xs text-gray-400">Total Stock Value</p>
+                      <p className="font-black text-gray-900 dark:text-white text-sm">{formatKES(stockData.totalValueCents)}</p>
+                    </div>
+                    <button
+                      onClick={() => navigate('/reports')}
+                      className="text-xs text-purple-600 hover:text-purple-700 font-medium flex items-center gap-1"
+                    >
+                      Full Report <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+                <div className="divide-y divide-gray-50 dark:divide-gray-700/50">
+                  {[...stockData.items].sort((a, b) => b.valueCents - a.valueCents).slice(0, 5).map((item, idx) => {
+                    const share = stockData.totalValueCents > 0 ? (item.valueCents / stockData.totalValueCents) * 100 : 0;
+                    const colors = ['bg-purple-500', 'bg-blue-500', 'bg-indigo-500', 'bg-violet-500', 'bg-sky-500'];
+                    return (
+                      <div key={item.itemId} className="px-5 py-3 flex items-center gap-4">
+                        <span className={`w-6 h-6 rounded-md ${colors[idx]} flex items-center justify-center text-white text-[10px] font-black flex-shrink-0`}>
+                          {idx + 1}
+                        </span>
+                        <span className="flex-1 text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{item.name}</span>
+                        <span className="text-xs text-gray-400">{item.quantity.toLocaleString()} units</span>
+                        <div className="w-24 hidden sm:block">
+                          <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                            <div className={`h-full ${colors[idx]} rounded-full`} style={{ width: `${share}%` }} />
+                          </div>
+                        </div>
+                        <span className="text-sm font-bold text-gray-900 dark:text-white w-28 text-right">{formatKES(item.valueCents)}</span>
+                      </div>
+                    );
+                  })}
+                  {stockData.items.length === 0 && (
+                    <div className="px-5 py-8 text-center text-gray-400 text-sm">No stock data available</div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* ── Quick Actions ── */}
             <div>
               <h2 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -655,7 +712,7 @@ export default function OwnerDashboardPage() {
                   icon={AlertTriangle}
                   label="Expiry Alerts"
                   desc="Batches near expiry"
-                  onClick={() => navigate('/reports?tab=expiry')}
+                  onClick={() => navigate('/batch')}
                   color="bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400"
                 />
                 <QuickAction
@@ -676,7 +733,7 @@ export default function OwnerDashboardPage() {
                   icon={CheckCircle2}
                   label="Sales History"
                   desc="Transactions, voids"
-                  onClick={() => navigate('/sales')}
+                  onClick={() => navigate('/sales-list')}
                   color="bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400"
                 />
                 <QuickAction

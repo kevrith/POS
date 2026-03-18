@@ -81,4 +81,6 @@ export const SocketEvents = {
   KOT_CREATED: 'kot_created',
   ORDER_UPDATED: 'order_updated',
   DELIVERY_UPDATED: 'delivery_updated',
+  NOTIFICATION_CREATED: 'notification_created',
+  MPESA_C2B_PAYMENT: 'mpesa_c2b_payment',
 } as const;

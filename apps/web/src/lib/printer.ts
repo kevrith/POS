@@ -30,8 +30,9 @@ export interface ReceiptData {
   }>;
   changeCents?: number;
   tipCents?: number;
-  kraQRCode?: string;
-  kraControlNumber?: string;
+  kraQRCode?: string;          // intrlData from KRA — encoded in QR code
+  kraControlNumber?: string;   // legacy
+  etimsControlNumber?: string; // human-readable KRA control/receipt number shown on receipt
   etimsSubmitted?: boolean;
   voided?: boolean;
   notes?: string;
@@ -204,16 +205,25 @@ export function generateESCPOS(receipt: ReceiptData, enableCashDrawer = false): 
     output += ESCPOS.BOLD_OFF;
   }
 
-  // KRA Info
-  if (receipt.kraControlNumber) {
+  // KRA eTIMS Section
+  const kraRef = receipt.etimsControlNumber ?? receipt.kraControlNumber;
+  if (receipt.etimsSubmitted && kraRef) {
     output += ESCPOS.FEED + line('=', 32) + ESCPOS.FEED;
-    output += ESCPOS.ALIGN_CENTER;
-    output += `KRA Control: ${receipt.kraControlNumber}` + ESCPOS.FEED;
+    output += ESCPOS.ALIGN_CENTER + ESCPOS.BOLD_ON;
+    output += 'KRA eTIMS VERIFIED' + ESCPOS.FEED;
+    output += ESCPOS.BOLD_OFF;
+    output += `Control No: ${kraRef}` + ESCPOS.FEED;
     if (receipt.kraQRCode) {
       output += ESCPOS.ALIGN_CENTER;
       output += generateQRCommand(receipt.kraQRCode, 4);
       output += ESCPOS.FEED;
+      output += ESCPOS.FONT_SMALL + 'Scan QR to verify on KRA portal' + ESCPOS.FEED + ESCPOS.FONT_NORMAL;
     }
+    output += line('-', 32) + ESCPOS.FEED;
+  } else if (receipt.etimsSubmitted === false && !receipt.voided) {
+    output += ESCPOS.FEED + ESCPOS.ALIGN_CENTER + ESCPOS.FONT_SMALL;
+    output += '** PENDING KRA SUBMISSION **' + ESCPOS.FEED;
+    output += ESCPOS.FONT_NORMAL;
   }
 
   // Footer
@@ -367,15 +377,24 @@ export function generateHTML(receipt: ReceiptData): string {
     ${receipt.changeCents && receipt.changeCents > 0 ? `<tr class="bold"><td>CHANGE:</td><td class="right">${formatKES(receipt.changeCents)}</td></tr>` : ''}
   </table>
   
-  ${receipt.kraControlNumber ? `
+  ${receipt.etimsSubmitted && (receipt.etimsControlNumber ?? receipt.kraControlNumber) ? `
     <div class="line"></div>
     <div class="center small">
-      <div>KRA Control: ${receipt.kraControlNumber}</div>
-      ${receipt.kraQRCode ? `<img id="kra-qr" style="width:80px;height:80px;margin:4px auto;display:block"/>
-      <script>
-        (function(){var q=new QRCode(document.getElementById('kra-qr'),{text:'${receipt.kraQRCode.replace(/'/g,"\\'")}',width:80,height:80,colorDark:'#000',colorLight:'#fff'});})();
-      <\/script>` : ''}
+      <div style="font-weight:bold;font-size:11px;letter-spacing:0.5px">✔ KRA eTIMS VERIFIED</div>
+      <div style="margin:2px 0">Control No: <strong>${receipt.etimsControlNumber ?? receipt.kraControlNumber}</strong></div>
+      ${receipt.kraQRCode ? `
+        <div id="kra-qr" style="margin:6px auto;display:inline-block"></div>
+        <script>
+          (function(){
+            var el=document.getElementById('kra-qr');
+            new QRCode(el,{text:'${receipt.kraQRCode.replace(/'/g,"\\'")}',width:90,height:90,colorDark:'#000000',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});
+          })();
+        <\/script>
+        <div style="font-size:9px;margin-top:2px">Scan to verify on KRA eTIMS portal</div>
+      ` : ''}
     </div>
+  ` : receipt.etimsSubmitted === false && !receipt.voided ? `
+    <div class="center small" style="color:#b45309;font-size:10px;margin:4px 0">⚠ PENDING KRA SUBMISSION</div>
   ` : ''}
   
   <div class="line"></div>
@@ -694,6 +713,10 @@ export async function printToUSB(receipt: ReceiptData, enableCashDrawer = false)
   }
 }
 
+// Standard Bluetooth GATT service/characteristic UUIDs for generic thermal printers
+const BT_PRINTER_SERVICE_UUID        = '000018f0-0000-1000-8000-00805f9b34fb';
+const BT_PRINTER_CHARACTERISTIC_UUID = '00002af1-0000-1000-8000-00805f9b34fb';
+
 // Print to Bluetooth thermal printer
 export async function printToBluetooth(receipt: ReceiptData, enableCashDrawer = false): Promise<void> {
   if (!('bluetooth' in navigator)) {
@@ -702,12 +725,12 @@ export async function printToBluetooth(receipt: ReceiptData, enableCashDrawer = 
 
   try {
     const device = await (navigator as any).bluetooth.requestDevice({
-      filters: [{ services: ['000018f0-0000-1000-8000-00805f9b34fb'] }]
+      filters: [{ services: [BT_PRINTER_SERVICE_UUID] }]
     });
 
     const server = await device.gatt.connect();
-    const service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
-    const characteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
+    const service = await server.getPrimaryService(BT_PRINTER_SERVICE_UUID);
+    const characteristic = await service.getCharacteristic(BT_PRINTER_CHARACTERISTIC_UUID);
 
     const escpos = generateESCPOS(receipt, enableCashDrawer);
     const encoder = new TextEncoder();
@@ -865,4 +888,340 @@ export function printBarcodeLabel(label: BarcodeLabelData): void {
     w.document.write(html);
     w.document.close();
   }
+}
+
+// ─── Star Micronics SDK ───────────────────────────────────────────────────────
+// Supports: Star CloudPRNT, Star WebPRNT (mC-Print3, TSP100IV, TSP650II, etc.)
+// Star printers expose a local HTTP server on the LAN.
+
+export interface StarPrinterConfig {
+  /** LAN IP or hostname of the Star printer, e.g. "192.168.1.100" */
+  host: string;
+  /** Port — Star WebPRNT default is 8008 */
+  port?: number;
+}
+
+/**
+ * Generate Star WebPRNT XML for a receipt.
+ * Compatible with mC-Print3, TSP100IV, TSP650II running WebPRNT firmware.
+ */
+export function generateStarWebPRNT(receipt: ReceiptData): string {
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const total = (receipt.totalCents / 100).toFixed(2);
+
+  const itemLines = receipt.items.map((item) => `
+    <line>
+      <text width="2" height="1">${esc(item.name.substring(0, 22))}</text>
+    </line>
+    <line>
+      <text>${item.quantity} x KES ${(item.unitPriceCents / 100).toFixed(2)}</text>
+      <text align="right">KES ${(item.totalCents / 100).toFixed(2)}</text>
+    </line>`).join('');
+
+  const paymentLines = receipt.payments.map((p) => `
+    <line>
+      <text>${esc(p.method)}${p.reference ? ` (${esc(p.reference)})` : ''}</text>
+      <text align="right">KES ${(p.amountCents / 100).toFixed(2)}</text>
+    </line>`).join('');
+
+  const kraSection = receipt.etimsSubmitted && receipt.etimsControlNumber ? `
+    <line><text align="center">--- KRA eTIMS VERIFIED ---</text></line>
+    <line><text align="center">Control: ${esc(receipt.etimsControlNumber)}</text></line>
+    ${receipt.kraQRCode ? `<qrcode model="2" level="M" cell="4" align="center">${esc(receipt.kraQRCode)}</qrcode>` : ''}` : '';
+
+  return `<?xml version="1.0" encoding="utf-8"?>
+<starwebprnt>
+  <body>
+    <initialization/>
+    <align value="center"/>
+    <bold><text>${esc(receipt.businessName)}</text></bold>
+    <text>${esc(receipt.storeName)}</text>
+    ${receipt.storeAddress ? `<text>${esc(receipt.storeAddress)}</text>` : ''}
+    ${receipt.storePhone ? `<text>${esc(receipt.storePhone)}</text>` : ''}
+    <align value="left"/>
+    <line><text>Receipt: ${esc(receipt.receiptNumber)}</text></line>
+    <line><text>Date: ${new Date(receipt.date).toLocaleString('en-KE')}</text></line>
+    <line><text>Cashier: ${esc(receipt.cashierName)}</text></line>
+    ${receipt.customerName ? `<line><text>Customer: ${esc(receipt.customerName)}</text></line>` : ''}
+    <line><text>--------------------------------</text></line>
+    ${itemLines}
+    <line><text>--------------------------------</text></line>
+    <line>
+      <text>Subtotal:</text>
+      <text align="right">KES ${((receipt.subtotalCents - (receipt.vatCents ?? 0) - (receipt.totCents ?? 0)) / 100).toFixed(2)}</text>
+    </line>
+    ${receipt.vatCents ? `<line><text>VAT (16%):</text><text align="right">KES ${(receipt.vatCents / 100).toFixed(2)}</text></line>` : ''}
+    ${receipt.totCents ? `<line><text>TOT (3%):</text><text align="right">KES ${(receipt.totCents / 100).toFixed(2)}</text></line>` : ''}
+    <line>
+      <bold><text>TOTAL:</text></bold>
+      <bold><text align="right">KES ${total}</text></bold>
+    </line>
+    <line><text>--------------------------------</text></line>
+    ${paymentLines}
+    ${receipt.changeCents && receipt.changeCents > 0 ? `<line><text>CHANGE:</text><text align="right">KES ${(receipt.changeCents / 100).toFixed(2)}</text></line>` : ''}
+    ${kraSection}
+    <align value="center"/>
+    <text>Thank you for your business!</text>
+    <cut type="partial"/>
+  </body>
+</starwebprnt>`;
+}
+
+/**
+ * Print a receipt to a Star printer via WebPRNT (LAN HTTP POST).
+ * The printer must be on the same network and have WebPRNT enabled.
+ */
+export async function printToStarWebPRNT(
+  config: StarPrinterConfig,
+  receipt: ReceiptData,
+): Promise<void> {
+  const port = config.port ?? 8008;
+  const xml = generateStarWebPRNT(receipt);
+  const res = await fetch(`http://${config.host}:${port}/WebPRNT/SendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/xml; charset=utf-8' },
+    body: xml,
+  });
+  if (!res.ok) throw new Error(`Star WebPRNT error: ${res.status} ${res.statusText}`);
+}
+
+/**
+ * Print a KOT to a Star printer via WebPRNT.
+ */
+export async function printKOTToStar(config: StarPrinterConfig, kot: KOTData): Promise<void> {
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const itemLines = kot.items.map((item) => `
+    <line>
+      <bold><text width="2" height="2">${item.quantity}x ${esc(item.name)}</text></bold>
+    </line>
+    ${item.specialInstructions ? `<line><text>  !! ${esc(item.specialInstructions)}</text></line>` : ''}
+    ${(item.modifiers ?? []).map((m) => `<line><text>  + ${esc(m)}</text></line>`).join('')}`).join('');
+
+  const xml = `<?xml version="1.0" encoding="utf-8"?>
+<starwebprnt>
+  <body>
+    <initialization/>
+    <align value="center"/>
+    <bold><text width="2" height="2">KITCHEN ORDER</text></bold>
+    <bold><text width="3" height="3">T${esc(kot.tableNumber)}</text></bold>
+    <text>${new Date(kot.createdAt).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}${kot.waiterName ? ` · ${esc(kot.waiterName)}` : ''}${kot.kotNumber ? ` · KOT #${esc(kot.kotNumber)}` : ''}</text>
+    <text>${kot.orderType === 'ADDITION' ? '+ ADDITION' : '★ NEW ORDER'}</text>
+    <align value="left"/>
+    <line><text>================================</text></line>
+    ${itemLines}
+    <line><text>================================</text></line>
+    <cut type="partial"/>
+  </body>
+</starwebprnt>`;
+
+  const port = config.port ?? 8008;
+  const res = await fetch(`http://${config.host}:${port}/WebPRNT/SendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/xml; charset=utf-8' },
+    body: xml,
+  });
+  if (!res.ok) throw new Error(`Star KOT print error: ${res.status}`);
+}
+
+// ─── Epson ePOS SDK ───────────────────────────────────────────────────────────
+// Supports: TM-T88VI, TM-T20III, TM-T82III, TM-m30II via ePOS-Print XML over HTTP.
+// Epson printers expose a local SOAP/XML endpoint on port 80 at /cgi-bin/epos/service.cgi
+
+export interface EpsonPrinterConfig {
+  /** LAN IP or hostname of the Epson printer */
+  host: string;
+  /** Printer device ID — default "local_printer" */
+  deviceId?: string;
+}
+
+/**
+ * Generate Epson ePOS-Print XML for a receipt.
+ * Compatible with TM-T88VI, TM-T20III, TM-T82III, TM-m30II.
+ */
+export function generateEpsonEPOS(receipt: ReceiptData): string {
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const total = (receipt.totalCents / 100).toFixed(2);
+
+  const itemLines = receipt.items.map((item) => `
+      <text>${esc(item.name.substring(0, 24))}&#10;</text>
+      <text>${item.quantity} x KES ${(item.unitPriceCents / 100).toFixed(2)}        KES ${(item.totalCents / 100).toFixed(2)}&#10;</text>`).join('');
+
+  const paymentLines = receipt.payments.map((p) =>
+    `<text>${esc(p.method)}${p.reference ? ` (${esc(p.reference)})` : ''}        KES ${(p.amountCents / 100).toFixed(2)}&#10;</text>`).join('');
+
+  const kraSection = receipt.etimsSubmitted && receipt.etimsControlNumber
+    ? `<text align="center">--- KRA eTIMS VERIFIED ---&#10;</text>
+       <text align="center">Control: ${esc(receipt.etimsControlNumber)}&#10;</text>
+       ${receipt.kraQRCode ? `<symbol type="qrcode_model_2" level="level_m" width="4" align="center">${esc(receipt.kraQRCode)}</symbol>` : ''}`
+    : '';
+
+  return `<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">
+      <initialize/>
+      <text align="center" font="font_a" width="2" height="2" bold="true">${esc(receipt.businessName)}&#10;</text>
+      <text align="center">${esc(receipt.storeName)}&#10;</text>
+      ${receipt.storeAddress ? `<text align="center">${esc(receipt.storeAddress)}&#10;</text>` : ''}
+      ${receipt.storePhone ? `<text align="center">${esc(receipt.storePhone)}&#10;</text>` : ''}
+      <text align="left">Receipt: ${esc(receipt.receiptNumber)}&#10;</text>
+      <text>Date: ${new Date(receipt.date).toLocaleString('en-KE')}&#10;</text>
+      <text>Cashier: ${esc(receipt.cashierName)}&#10;</text>
+      ${receipt.customerName ? `<text>Customer: ${esc(receipt.customerName)}&#10;</text>` : ''}
+      <text>--------------------------------&#10;</text>
+      ${itemLines}
+      <text>--------------------------------&#10;</text>
+      <text>Subtotal:        KES ${((receipt.subtotalCents - (receipt.vatCents ?? 0) - (receipt.totCents ?? 0)) / 100).toFixed(2)}&#10;</text>
+      ${receipt.vatCents ? `<text>VAT (16%):       KES ${(receipt.vatCents / 100).toFixed(2)}&#10;</text>` : ''}
+      ${receipt.totCents ? `<text>TOT (3%):        KES ${(receipt.totCents / 100).toFixed(2)}&#10;</text>` : ''}
+      <text bold="true" width="2" height="1">TOTAL:           KES ${total}&#10;</text>
+      <text>--------------------------------&#10;</text>
+      ${paymentLines}
+      ${receipt.changeCents && receipt.changeCents > 0 ? `<text bold="true">CHANGE:          KES ${(receipt.changeCents / 100).toFixed(2)}&#10;</text>` : ''}
+      ${kraSection}
+      <text align="center">Thank you for your business!&#10;</text>
+      <cut type="part"/>
+    </epos-print>
+  </s:Body>
+</s:Envelope>`;
+}
+
+/**
+ * Print a receipt to an Epson printer via ePOS-Print XML (LAN HTTP POST).
+ */
+export async function printToEpsonEPOS(
+  config: EpsonPrinterConfig,
+  receipt: ReceiptData,
+): Promise<void> {
+  const deviceId = config.deviceId ?? 'local_printer';
+  const xml = generateEpsonEPOS(receipt);
+  const res = await fetch(`http://${config.host}/cgi-bin/epos/service.cgi?devid=${deviceId}&timeout=10000`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/xml; charset=utf-8',
+      SOAPAction: '""',
+    },
+    body: xml,
+  });
+  if (!res.ok) throw new Error(`Epson ePOS error: ${res.status} ${res.statusText}`);
+  const text = await res.text();
+  if (text.includes('SchemaError') || text.includes('DeviceNotFound')) {
+    throw new Error(`Epson ePOS rejected request: ${text.substring(0, 200)}`);
+  }
+}
+
+/**
+ * Print a KOT to an Epson printer via ePOS-Print XML.
+ */
+export async function printKOTToEpson(config: EpsonPrinterConfig, kot: KOTData): Promise<void> {
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const deviceId = config.deviceId ?? 'local_printer';
+
+  const itemLines = kot.items.map((item) => `
+      <text bold="true" width="2" height="2">${item.quantity}x ${esc(item.name)}&#10;</text>
+      ${item.specialInstructions ? `<text>  !! ${esc(item.specialInstructions)}&#10;</text>` : ''}
+      ${(item.modifiers ?? []).map((m) => `<text>  + ${esc(m)}&#10;</text>`).join('')}`).join('');
+
+  const xml = `<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">
+      <initialize/>
+      <text align="center" bold="true" width="2" height="2">KITCHEN ORDER&#10;</text>
+      <text align="center" bold="true" width="3" height="3">T${esc(kot.tableNumber)}&#10;</text>
+      <text align="center">${new Date(kot.createdAt).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}${kot.waiterName ? ` · ${esc(kot.waiterName)}` : ''}${kot.kotNumber ? ` · KOT #${esc(kot.kotNumber)}` : ''}&#10;</text>
+      <text align="center">${kot.orderType === 'ADDITION' ? '+ ADDITION' : '★ NEW ORDER'}&#10;</text>
+      <text align="left">================================&#10;</text>
+      ${itemLines}
+      <text>================================&#10;</text>
+      <cut type="part"/>
+    </epos-print>
+  </s:Body>
+</s:Envelope>`;
+
+  const res = await fetch(`http://${config.host}/cgi-bin/epos/service.cgi?devid=${deviceId}&timeout=10000`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/xml; charset=utf-8', SOAPAction: '""' },
+    body: xml,
+  });
+  if (!res.ok) throw new Error(`Epson KOT print error: ${res.status}`);
+}
+
+// ─── KOT Direct Print (unified) ───────────────────────────────────────────────
+
+export type KOTPrinterType = 'STAR' | 'EPSON' | 'NETWORK_ESCPOS' | 'BROWSER';
+
+export interface KOTPrinterConfig {
+  type: KOTPrinterType;
+  /** For STAR / EPSON: LAN IP of the printer */
+  host?: string;
+  /** For STAR: port (default 8008) */
+  port?: number;
+  /** For EPSON: device ID (default "local_printer") */
+  deviceId?: string;
+  /** For NETWORK_ESCPOS: printer ID registered in the API */
+  networkPrinterId?: string;
+}
+
+/**
+ * Print a KOT directly to a hardware printer.
+ * Falls back to browser popup if type is BROWSER or on any error.
+ */
+export async function printKOTDirect(config: KOTPrinterConfig, kot: KOTData): Promise<void> {
+  try {
+    if (config.type === 'STAR' && config.host) {
+      await printKOTToStar({ host: config.host, port: config.port }, kot);
+      return;
+    }
+    if (config.type === 'EPSON' && config.host) {
+      await printKOTToEpson({ host: config.host, deviceId: config.deviceId }, kot);
+      return;
+    }
+    if (config.type === 'NETWORK_ESCPOS' && config.networkPrinterId) {
+      // Build ESC/POS KOT bytes and send via API proxy
+      const kotEscpos = buildKOTEscPos(kot);
+      const encoder = new TextEncoder();
+      const bytes = encoder.encode(kotEscpos);
+      let binary = '';
+      bytes.forEach((b) => (binary += String.fromCharCode(b)));
+      const base64 = btoa(binary);
+      const res = await fetch(`/api/v1/printers/${config.networkPrinterId}/print`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: base64 }),
+      });
+      if (!res.ok) throw new Error(`Network KOT print error: ${res.status}`);
+      return;
+    }
+  } catch (err) {
+    console.warn('KOT direct print failed, falling back to browser:', err);
+  }
+  // Fallback: browser popup
+  printKOT(kot);
+}
+
+/** Build raw ESC/POS bytes for a KOT (for network/USB ESC/POS printers). */
+function buildKOTEscPos(kot: KOTData): string {
+  let out = ESCPOS.INIT;
+  out += ESCPOS.ALIGN_CENTER + ESCPOS.BOLD_ON + ESCPOS.DOUBLE_HEIGHT;
+  out += 'KITCHEN ORDER' + ESCPOS.FEED;
+  out += ESCPOS.NORMAL_SIZE + ESCPOS.BOLD_OFF;
+  out += ESCPOS.BOLD_ON + ESCPOS.DOUBLE_HEIGHT;
+  out += `T${kot.tableNumber}` + ESCPOS.FEED;
+  out += ESCPOS.NORMAL_SIZE + ESCPOS.BOLD_OFF;
+  out += new Date(kot.createdAt).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' });
+  if (kot.waiterName) out += ` · ${kot.waiterName}`;
+  if (kot.kotNumber) out += ` · KOT #${kot.kotNumber}`;
+  out += ESCPOS.FEED;
+  out += (kot.orderType === 'ADDITION' ? '+ ADDITION' : '* NEW ORDER') + ESCPOS.FEED;
+  out += ESCPOS.ALIGN_LEFT;
+  out += '================================' + ESCPOS.FEED;
+  for (const item of kot.items) {
+    out += ESCPOS.BOLD_ON + ESCPOS.DOUBLE_HEIGHT;
+    out += `${item.quantity}x ${item.name}` + ESCPOS.FEED;
+    out += ESCPOS.NORMAL_SIZE + ESCPOS.BOLD_OFF;
+    if (item.specialInstructions) out += `  !! ${item.specialInstructions}` + ESCPOS.FEED;
+    for (const mod of item.modifiers ?? []) out += `  + ${mod}` + ESCPOS.FEED;
+  }
+  out += '================================' + ESCPOS.FEED + ESCPOS.FEED;
+  out += ESCPOS.CUT;
+  return out;
 }

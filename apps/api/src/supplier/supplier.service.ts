@@ -641,22 +641,36 @@ export class SupplierService {
 
   async createPriceAgreement(supplierId: string, dto: {
     businessId: string;
-    itemId: string;
+    itemId?: string;
+    itemName?: string;
     agreedPriceCents: number;
+    minQty?: number;
     minQuantity?: number;
+    validFrom?: string;
+    validTo?: string;
     effectiveTo?: string;
     notes?: string;
   }) {
+    // Resolve itemId — if only itemName provided, look up or use a placeholder
+    let itemId = dto.itemId ?? '';
+    if (!itemId && dto.itemName) {
+      const found = await this.prisma.item.findFirst({
+        where: { name: { equals: dto.itemName, mode: 'insensitive' } },
+        select: { id: true },
+      });
+      itemId = found?.id ?? dto.itemName; // fallback: store name as id
+    }
     return this.prisma.supplierPriceAgreement.create({
       data: {
         supplierId,
         businessId: dto.businessId,
-        itemId: dto.itemId,
+        itemId,
         agreedPriceCents: dto.agreedPriceCents,
-        minQuantity: dto.minQuantity ?? 1,
-        effectiveTo: dto.effectiveTo ? new Date(dto.effectiveTo) : undefined,
+        minQuantity: dto.minQty ?? dto.minQuantity ?? 1,
+        effectiveTo: (dto.validTo ?? dto.effectiveTo) ? new Date((dto.validTo ?? dto.effectiveTo)!) : undefined,
         notes: dto.notes,
       },
+      include: { supplier: { select: { name: true } } },
     });
   }
 
@@ -717,18 +731,110 @@ export class SupplierService {
   // ── Price Agreements (cross-business view) ────────────────────────────────────
 
   async getPriceAgreements(businessId: string, supplierId?: string) {
-    return this.prisma.supplierPriceAgreement.findMany({
-      where: { businessId, ...(supplierId ? { supplierId } : {}) },
+    const rows = await this.prisma.supplierPriceAgreement.findMany({
+      where: { businessId, isActive: true, ...(supplierId ? { supplierId } : {}) },
       include: { supplier: { select: { name: true } } },
       orderBy: { createdAt: 'desc' },
     });
+    // Enrich with itemName for frontend display
+    const itemIds = rows.map(r => r.itemId).filter(id => id.length === 36);
+    const items = itemIds.length
+      ? await this.prisma.item.findMany({ where: { id: { in: itemIds } }, select: { id: true, name: true } })
+      : [];
+    const itemMap = new Map(items.map(i => [i.id, i.name]));
+    return rows.map(r => ({ ...r, itemName: itemMap.get(r.itemId) ?? r.itemId }));
   }
 
   async deletePriceAgreement(id: string) {
     return this.prisma.supplierPriceAgreement.delete({ where: { id } });
   }
 
-  // ── Auto-reorder PO from reorder points ────────────────────────────────────
+  // ── Vendor Catalogue ──────────────────────────────────────────────────────
+
+  async getCatalogueItems(businessId: string, supplierId: string, search?: string) {
+    return this.prisma.supplierCatalogueItem.findMany({
+      where: {
+        businessId,
+        supplierId,
+        isActive: true,
+        ...(search ? { name: { contains: search, mode: 'insensitive' as const } } : {}),
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async bulkUpsertCatalogueItems(
+    businessId: string,
+    supplierId: string,
+    items: Array<{ name: string; sku?: string; barcode?: string; unitCostCents: number; unitLabel?: string }>,
+  ) {
+    const results = await Promise.all(
+      items.map((item) =>
+        this.prisma.supplierCatalogueItem.create({
+          data: { businessId, supplierId, ...item },
+        }),
+      ),
+    );
+    return { created: results.length };
+  }
+
+  async deleteCatalogueItem(id: string) {
+    return this.prisma.supplierCatalogueItem.update({ where: { id }, data: { isActive: false } });
+  }
+
+  async createPOFromCatalogue(
+    businessId: string,
+    supplierId: string,
+    lines: Array<{ catalogueItemId: string; quantity: number }>,
+  ) {
+    const catalogueItems = await this.prisma.supplierCatalogueItem.findMany({
+      where: { id: { in: lines.map((l) => l.catalogueItemId) } },
+    });
+    const itemMap = new Map(catalogueItems.map((c) => [c.id, c]));
+
+    // Try to match catalogue items to inventory items by barcode/sku
+    const inventoryItems = await this.prisma.item.findMany({
+      where: {
+        businessId,
+        OR: [
+          { barcode: { in: catalogueItems.map((c) => c.barcode).filter(Boolean) as string[] } },
+          { name: { in: catalogueItems.map((c) => c.name) } },
+        ],
+      },
+    });
+    const byBarcode = new Map(inventoryItems.filter((i) => i.barcode).map((i) => [i.barcode!, i.id]));
+    const byName = new Map(inventoryItems.map((i) => [i.name.toLowerCase(), i.id]));
+
+    const count = await this.prisma.purchaseOrder.count({ where: { businessId } });
+    const poNumber = `PO-CAT-${String(count + 1).padStart(5, '0')}`;
+
+    const po = await this.prisma.purchaseOrder.create({
+      data: {
+        poNumber,
+        businessId,
+        supplierId,
+        status: 'DRAFT',
+        expectedDelivery: new Date(Date.now() + 7 * 86400000),
+        items: {
+          create: lines.flatMap((line) => {
+            const cat = itemMap.get(line.catalogueItemId);
+            if (!cat) return [];
+            const itemId = (cat.barcode && byBarcode.get(cat.barcode)) ?? byName.get(cat.name.toLowerCase());
+            if (!itemId) return []; // skip catalogue items with no matching inventory item
+            return [{
+              itemId,
+              quantityOrdered: line.quantity,
+              agreedPriceCents: cat.unitCostCents,
+            }];
+          }),
+        },
+      },
+      include: { items: true, supplier: { select: { name: true } } },
+    });
+    return po;
+  }
+
+  // ── Auto-reorder (existing method kept, adding cron-friendly version) ──────
 
   async autoReorderCheck(businessId: string, storeId: string, supplierId?: string) {
     // Find items at or below reorder level with positive reorderQty

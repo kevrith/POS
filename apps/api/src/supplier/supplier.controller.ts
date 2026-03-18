@@ -210,6 +210,32 @@ export class SupplierController {
     return this.supplierService.autoReorderCheck(body.businessId, body.storeId, body.supplierId);
   }
 
+  // ── Vendor Catalogue ──────────────────────────────────────────────────────
+
+  @Get('catalogue')
+  async getCatalogueItems(
+    @Query('businessId') businessId: string,
+    @Query('supplierId') supplierId: string,
+    @Query('search') search?: string,
+  ) {
+    return this.supplierService.getCatalogueItems(businessId, supplierId, search);
+  }
+
+  @Post('catalogue/create-po')
+  async createPOFromCatalogue(@Body() body: { businessId: string; supplierId: string; lines: Array<{ catalogueItemId: string; quantity: number }> }) {
+    return this.supplierService.createPOFromCatalogue(body.businessId, body.supplierId, body.lines);
+  }
+
+  @Post('catalogue')
+  async bulkUpsertCatalogue(@Body() body: { businessId: string; supplierId: string; items: any[] }) {
+    return this.supplierService.bulkUpsertCatalogueItems(body.businessId, body.supplierId, body.items);
+  }
+
+  @Delete('catalogue/:id')
+  async deleteCatalogueItem(@Param('id') id: string) {
+    return this.supplierService.deleteCatalogueItem(id);
+  }
+
   // ── Price Agreements ──────────────────────────────────────────────────────
 
   @Get(':id/price-agreements')

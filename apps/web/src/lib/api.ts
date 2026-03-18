@@ -13,7 +13,14 @@ export function getToken(): string {
   if (_accessToken) return _accessToken;
   // Restore from sessionStorage on page refresh
   const stored = sessionStorage.getItem('pos-access-token');
-  if (stored) _accessToken = stored;
+  if (stored) { _accessToken = stored; return _accessToken; }
+  // Pick up token passed from a parent tab (kiosk new-tab handoff)
+  const kioskToken = localStorage.getItem('kiosk-tab-token');
+  if (kioskToken) {
+    _accessToken = kioskToken;
+    sessionStorage.setItem('pos-access-token', kioskToken);
+    localStorage.removeItem('kiosk-tab-token'); // consume so it's not reused
+  }
   return _accessToken;
 }
 
@@ -95,9 +102,30 @@ export const api = {
   },
 };
 
-export function openPdfReport(path: string): void {
-  // Opens the HTML report in a new tab where user can print/save as PDF
-  window.open(`/api/v1${path}`, '_blank');
+export async function openPdfReport(path: string): Promise<void> {
+  // Fetch the HTML report with auth token, then open in a new tab as a Blob URL
+  // (window.open directly would fail because the new tab has no JWT in sessionStorage)
+  const token = getToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    console.error(`PDF report failed: ${res.status}`);
+    return;
+  }
+  const html = await res.text();
+  const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const w = window.open(url, '_blank');
+  // Revoke the blob URL after a delay so the new tab has time to load
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  if (!w) {
+    // Popup blocked — fall back: create a hidden link and click it
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.click();
+  }
 }
 
 export default api;

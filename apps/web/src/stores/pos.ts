@@ -41,6 +41,7 @@ export interface ApiItem {
   tareWeightGrams?: number;
   binLocation?: string;
   sku?: string;
+  soldOut?: boolean;
 }
 
 export interface HeldSale {

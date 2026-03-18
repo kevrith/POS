@@ -5,6 +5,7 @@ import {
   ChevronRight, RotateCcw,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { useAuthStore } from '../stores/auth';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -34,7 +35,7 @@ function fmtShort(cents: number) {
   return v >= 1000 ? `${(v / 1000).toFixed(1)}K` : v.toFixed(2);
 }
 
-function getParams() {
+function getUrlParams() {
   const p = new URLSearchParams(window.location.search);
   return { businessId: p.get('businessId') ?? '', storeId: p.get('storeId') ?? '' };
 }
@@ -68,16 +69,16 @@ function SuccessScreen({ onDone }: { onDone: () => void }) {
 function CashScreen({ total, onBack, onDone }: { total: number; onBack: () => void; onDone: () => void }) {
   return (
     <div className="fixed inset-0 z-50 bg-gray-900 flex items-center justify-center p-6">
-      <div className="bg-white rounded-3xl p-10 max-w-md w-full text-center shadow-2xl">
-        <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-          <Banknote className="w-10 h-10 text-green-600" />
+      <div className="bg-gray-900 rounded-3xl p-10 max-w-md w-full text-center shadow-2xl">
+        <div className="w-20 h-20 rounded-full bg-green-900 flex items-center justify-center mx-auto mb-4">
+          <Banknote className="w-10 h-10 text-green-400" />
         </div>
-        <h2 className="text-3xl font-bold text-gray-900 mb-1">Pay with Cash</h2>
-        <p className="text-gray-500 mb-4">Present this amount to the cashier</p>
-        <div className="text-6xl font-black text-green-600 my-6">{fmt(total)}</div>
-        <p className="text-gray-400 mb-8 text-sm">Please give the exact amount at the counter</p>
+        <h2 className="text-3xl font-bold text-white mb-1">Pay with Cash</h2>
+        <p className="text-gray-400 mb-4">Present this amount to the cashier</p>
+        <div className="text-6xl font-black text-green-400 my-6">{fmt(total)}</div>
+        <p className="text-gray-500 mb-8 text-sm">Please give the exact amount at the counter</p>
         <div className="flex gap-3">
-          <button onClick={onBack} className="flex-1 py-4 rounded-2xl bg-gray-100 text-gray-700 text-lg font-semibold hover:bg-gray-200 transition-colors">
+          <button onClick={onBack} className="flex-1 py-4 rounded-2xl bg-gray-700 text-gray-200 text-lg font-semibold hover:bg-gray-600 transition-colors">
             ← Back
           </button>
           <button onClick={onDone} className="flex-[2] py-4 rounded-2xl bg-green-600 text-white text-lg font-bold hover:bg-green-700 transition-colors flex items-center justify-center gap-2">
@@ -92,24 +93,24 @@ function CashScreen({ total, onBack, onDone }: { total: number; onBack: () => vo
 function MpesaScreen({ total, qr, onBack, onDone }: { total: number; qr: string | null; onBack: () => void; onDone: () => void }) {
   return (
     <div className="fixed inset-0 z-50 bg-gray-900 flex items-center justify-center p-6">
-      <div className="bg-white rounded-3xl p-10 max-w-md w-full text-center shadow-2xl">
-        <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-          <Phone className="w-10 h-10 text-green-600" />
+      <div className="bg-gray-900 rounded-3xl p-10 max-w-md w-full text-center shadow-2xl">
+        <div className="w-20 h-20 rounded-full bg-green-900 flex items-center justify-center mx-auto mb-4">
+          <Phone className="w-10 h-10 text-green-400" />
         </div>
-        <h2 className="text-3xl font-bold text-gray-900 mb-1">M-Pesa</h2>
-        <p className="text-gray-500 mb-1">Scan QR with M-Pesa app</p>
-        <div className="text-4xl font-black text-green-600 my-4">{fmt(total)}</div>
+        <h2 className="text-3xl font-bold text-white mb-1">M-Pesa</h2>
+        <p className="text-gray-400 mb-1">Scan QR with M-Pesa app</p>
+        <div className="text-4xl font-black text-green-400 my-4">{fmt(total)}</div>
         {qr ? (
-          <img src={qr} alt="M-Pesa QR" className="mx-auto w-52 h-52 my-4 border-4 border-green-200 rounded-2xl" />
+          <img src={qr} alt="M-Pesa QR" className="mx-auto w-52 h-52 my-4 border-4 border-green-700 rounded-2xl" />
         ) : (
-          <div className="w-52 h-52 mx-auto my-4 bg-gray-100 rounded-2xl flex flex-col items-center justify-center text-gray-400 gap-2">
+          <div className="w-52 h-52 mx-auto my-4 bg-gray-800 rounded-2xl flex flex-col items-center justify-center text-gray-500 gap-2">
             <ScanLine className="w-12 h-12" />
             <span className="text-sm">QR loading…</span>
           </div>
         )}
-        <p className="text-gray-400 text-sm mb-6">Or enter till number manually in the M-Pesa app</p>
+        <p className="text-gray-500 text-sm mb-6">Or enter till number manually in the M-Pesa app</p>
         <div className="flex gap-3">
-          <button onClick={onBack} className="flex-1 py-4 rounded-2xl bg-gray-100 text-gray-700 text-lg font-semibold hover:bg-gray-200 transition-colors">
+          <button onClick={onBack} className="flex-1 py-4 rounded-2xl bg-gray-700 text-gray-200 text-lg font-semibold hover:bg-gray-600 transition-colors">
             ← Back
           </button>
           <button onClick={onDone} className="flex-[2] py-4 rounded-2xl bg-green-600 text-white text-lg font-bold hover:bg-green-700 transition-colors flex items-center justify-center gap-2">
@@ -121,12 +122,17 @@ function MpesaScreen({ total, qr, onBack, onDone }: { total: number; qr: string 
   );
 }
 
-function CallStaffScreen({ onCancel }: { onCancel: () => void }) {
+function CallStaffScreen({ onCancel, notified }: { onCancel: () => void; notified: boolean }) {
   return (
     <div className="fixed inset-0 z-50 bg-red-600 flex flex-col items-center justify-center p-8 text-white">
       <AlertCircle className="w-28 h-28 mb-6 animate-pulse" />
       <h2 className="text-5xl font-black mb-3">Staff Called</h2>
       <p className="text-red-100 text-xl">A staff member will be with you shortly.</p>
+      {notified && (
+        <p className="mt-3 text-red-200 text-sm bg-red-700/50 px-4 py-2 rounded-lg">
+          ✓ Staff notified via in-app notification
+        </p>
+      )}
       <button onClick={onCancel} className="mt-10 px-12 py-5 bg-white text-red-600 rounded-2xl text-xl font-bold hover:bg-red-50 transition-colors">
         Cancel
       </button>
@@ -137,20 +143,26 @@ function CallStaffScreen({ onCancel }: { onCancel: () => void }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function KioskPage() {
-  const { businessId, storeId } = getParams();
+  const authUser = useAuthStore((s) => s.user);
+  const urlParams = getUrlParams();
+  // When accessed from within the app (staff sidebar), use auth store; URL params take priority for standalone kiosk URLs
+  const businessId = urlParams.businessId || authUser?.businessId || '';
+  const storeId = urlParams.storeId || authUser?.storeId || '';
   const [items, setItems] = useState<KioskItem[]>([]);
   const [cart, setCart] = useState<CartEntry[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [search, setSearch] = useState('');
   const [screen, setScreen] = useState<'shop' | 'cash' | 'mpesa' | 'success' | 'staff'>('shop');
+  const [staffNotified, setStaffNotified] = useState(false);
   const [mpesaQR, setMpesaQR] = useState<string | null>(null);
   const [mpesaLoading, setMpesaLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [businessName, setBusinessName] = useState('Self Checkout');
+  const [storeName, setStoreName] = useState<string>('');
   const [logo, setLogo] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // Fetch items
+  // Fetch items + business/store name
   useEffect(() => {
     if (!businessId) return;
     api.get<KioskItem[]>(`/items?businessId=${businessId}&activeOnly=true${storeId ? `&storeId=${storeId}` : ''}`)
@@ -162,7 +174,33 @@ export default function KioskPage() {
         if (b.logoUrl) setLogo(b.logoUrl);
       })
       .catch(() => {});
+    if (storeId) {
+      api.get<{ id: string; name: string }[]>(`/business/${businessId}/stores`)
+        .then(stores => {
+          const match = stores.find(s => s.id === storeId);
+          if (match) setStoreName(match.name);
+        })
+        .catch(() => {});
+    }
   }, [businessId, storeId]);
+
+  // Call staff — shows screen + fires in-app notification so staff see it on their devices
+  const callStaff = useCallback(() => {
+    setScreen('staff');
+    setStaffNotified(false);
+    if (!businessId) return;
+    const locationLabel = storeName ? `at ${storeName}` : 'at the kiosk';
+    api.post('/notifications', {
+      businessId,
+      ...(storeId && { storeId }),
+      type: 'KIOSK_HELP',
+      title: `Kiosk Help — ${storeName || 'Self Checkout'}`,
+      body: `A customer ${locationLabel} (self-service kiosk) has pressed the Help button and needs assistance.`,
+      priority: 'HIGH',
+    })
+      .then(() => setStaffNotified(true))
+      .catch(() => {}); // Fail silently — visual screen still shows
+  }, [businessId, storeId, storeName]);
 
   // Cart helpers
   const addItem = useCallback((item: KioskItem) => {
@@ -186,7 +224,7 @@ export default function KioskPage() {
   const handleSearch = useCallback((val: string) => {
     setSearch(val);
     if (val.length >= 8) {
-      const match = items.find(i => i.barcode === val);
+      const match = items.find(i => i.barcode?.toLowerCase() === val.toLowerCase());
       if (match) {
         addItem(match);
         setSearch('');
@@ -204,7 +242,7 @@ export default function KioskPage() {
   // Categories
   const categories = ['all', ...Array.from(new Set(items.map(i => i.category ?? 'Other')))];
   const filtered = (activeCategory === 'all' ? items : items.filter(i => (i.category ?? 'Other') === activeCategory))
-    .filter(i => !search || i.name.toLowerCase().includes(search.toLowerCase()) || i.barcode?.includes(search));
+    .filter(i => !search || i.name.toLowerCase().includes(search.toLowerCase()) || i.barcode?.toLowerCase().includes(search.toLowerCase()));
 
   // Cart map for quick lookup
   const cartMap = Object.fromEntries(cart.map(e => [e.item.id, e.qty]));
@@ -239,11 +277,11 @@ export default function KioskPage() {
   if (screen === 'success') return <SuccessScreen onDone={resetToShop} />;
   if (screen === 'cash')    return <CashScreen total={totalCents} onBack={() => setScreen('shop')} onDone={completeSale} />;
   if (screen === 'mpesa')   return <MpesaScreen total={totalCents} qr={mpesaQR} onBack={() => setScreen('shop')} onDone={completeSale} />;
-  if (screen === 'staff')   return <CallStaffScreen onCancel={() => setScreen('shop')} />;
+  if (screen === 'staff')   return <CallStaffScreen onCancel={() => setScreen('shop')} notified={staffNotified} />;
 
   // ── Main shop screen ──────────────────────────────────────────────────────
   return (
-    <div className="h-screen flex flex-col bg-gray-100 overflow-hidden select-none" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+    <div className="h-screen flex flex-col bg-gray-950 overflow-hidden select-none" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header className="bg-gray-900 text-white flex items-center gap-4 px-5 py-3 shrink-0">
@@ -288,7 +326,7 @@ export default function KioskPage() {
 
         {/* Call staff */}
         <button
-          onClick={() => setScreen('staff')}
+          onClick={callStaff}
           className="flex items-center gap-2 bg-red-600 hover:bg-red-700 px-4 py-2.5 rounded-xl text-sm font-semibold shrink-0 transition-colors"
         >
           <Phone className="w-4 h-4" /> Help
@@ -296,7 +334,7 @@ export default function KioskPage() {
       </header>
 
       {/* ── Category strip ──────────────────────────────────────────────────── */}
-      <div className="bg-white border-b shrink-0 flex items-center gap-2 px-4 py-2.5 overflow-x-auto">
+      <div className="bg-gray-900 border-b border-gray-700 shrink-0 flex items-center gap-2 px-4 py-2.5 overflow-x-auto">
         {categories.map(cat => {
           const color = cat === 'all' ? '#3b82f6' : catColor(cat);
           const active = activeCategory === cat;
@@ -306,7 +344,7 @@ export default function KioskPage() {
               onClick={() => setActiveCategory(cat)}
               style={active ? { background: color, color: '#fff', borderColor: color } : {}}
               className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap border transition-all shrink-0 ${
-                active ? '' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                active ? '' : 'bg-gray-800 text-gray-300 border-gray-700 hover:bg-gray-700'
               }`}
             >
               {cat === 'all' ? 'All Items' : cat}
@@ -321,7 +359,7 @@ export default function KioskPage() {
         {/* Item grid */}
         <div className="flex-1 overflow-y-auto p-4">
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 text-red-700 text-center text-base flex items-center gap-2 justify-center">
+            <div className="bg-red-950 border border-red-800 rounded-xl p-4 mb-4 text-red-300 text-center text-base flex items-center gap-2 justify-center">
               <AlertCircle className="w-5 h-5" /> {error}
             </div>
           )}
@@ -334,7 +372,7 @@ export default function KioskPage() {
                 <button
                   key={item.id}
                   onClick={() => addItem(item)}
-                  className="relative bg-white rounded-2xl shadow-sm hover:shadow-md transition-all active:scale-95 text-left overflow-hidden border border-gray-100 hover:border-blue-200 flex flex-col"
+                  className="relative bg-gray-900 rounded-2xl shadow-sm hover:shadow-md transition-all active:scale-95 text-left overflow-hidden border border-gray-700 hover:border-blue-500 flex flex-col"
                   style={{ outline: qtyInCart > 0 ? `2px solid ${color}` : 'none' }}
                 >
                   {/* Category color bar */}
@@ -363,10 +401,10 @@ export default function KioskPage() {
                   {/* Info */}
                   <div className="p-3 flex flex-col flex-1">
                     <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">{item.category ?? 'Other'}</p>
-                    <p className="font-semibold text-gray-900 text-sm leading-tight flex-1 line-clamp-2">{item.name}</p>
+                    <p className="font-semibold text-white text-sm leading-tight flex-1 line-clamp-2">{item.name}</p>
                     <div className="flex items-end justify-between mt-2">
                       <div>
-                        <p className="text-base font-black text-gray-900">{fmt(item.retailPriceCents)}</p>
+                        <p className="text-base font-black text-white">{fmt(item.retailPriceCents)}</p>
                         {item.vatApplicable && <p className="text-[10px] text-gray-400">VAT incl.</p>}
                       </div>
                       <div
@@ -383,7 +421,7 @@ export default function KioskPage() {
           </div>
 
           {filtered.length === 0 && !error && (
-            <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+            <div className="flex flex-col items-center justify-center py-20 text-gray-500">
               <ShoppingCart className="w-16 h-16 mb-3 opacity-20" />
               <p className="text-lg font-medium">No items found</p>
               {search && <p className="text-sm mt-1">Try a different search term</p>}
@@ -392,13 +430,13 @@ export default function KioskPage() {
         </div>
 
         {/* ── Cart Sidebar ──────────────────────────────────────────────────── */}
-        <div className="w-80 bg-white border-l flex flex-col shrink-0 shadow-lg">
+        <div className="w-80 bg-gray-900 border-l border-gray-700 flex flex-col shrink-0 shadow-lg">
 
           {/* Cart header */}
-          <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-between shrink-0">
+          <div className="px-4 py-3 border-b border-gray-700 bg-gray-800 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
-              <ShoppingCart className="w-5 h-5 text-blue-600" />
-              <span className="font-bold text-gray-900">Your Order</span>
+              <ShoppingCart className="w-5 h-5 text-blue-500" />
+              <span className="font-bold text-white">Your Order</span>
               {cartQty > 0 && (
                 <span className="bg-blue-600 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">{cartQty}</span>
               )}
@@ -413,7 +451,7 @@ export default function KioskPage() {
           {/* Cart items */}
           <div className="flex-1 overflow-y-auto py-2">
             {cart.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-gray-400 py-12 px-4">
+              <div className="flex flex-col items-center justify-center h-full text-gray-500 py-12 px-4">
                 <ShoppingCart className="w-12 h-12 mb-3 opacity-20" />
                 <p className="text-sm font-medium text-center">Tap an item to add it to your order</p>
               </div>
@@ -421,13 +459,13 @@ export default function KioskPage() {
               cart.map(({ item, qty }) => {
                 const color = catColor(item.category ?? 'Other');
                 return (
-                  <div key={item.id} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0">
+                  <div key={item.id} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-gray-800 transition-colors border-b border-gray-700 last:border-0">
                     {/* Color indicator */}
                     <div className="w-1 h-12 rounded-full shrink-0" style={{ background: color }} />
 
                     {/* Name + price */}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 truncate leading-tight">{item.name}</p>
+                      <p className="text-sm font-semibold text-white truncate leading-tight">{item.name}</p>
                       <p className="text-xs text-gray-400">{fmt(item.retailPriceCents)} each</p>
                       <p className="text-sm font-bold" style={{ color }}>{fmt(item.retailPriceCents * qty)}</p>
                     </div>
@@ -436,11 +474,11 @@ export default function KioskPage() {
                     <div className="flex items-center gap-1 shrink-0">
                       <button
                         onClick={() => updateQty(item.id, qty - 1)}
-                        className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors active:scale-90"
+                        className="w-8 h-8 rounded-full bg-gray-700 hover:bg-gray-600 flex items-center justify-center transition-colors active:scale-90"
                       >
-                        {qty === 1 ? <Trash2 className="w-3.5 h-3.5 text-red-500" /> : <Minus className="w-3.5 h-3.5 text-gray-600" />}
+                        {qty === 1 ? <Trash2 className="w-3.5 h-3.5 text-red-400" /> : <Minus className="w-3.5 h-3.5 text-gray-300" />}
                       </button>
-                      <span className="w-6 text-center font-bold text-sm text-gray-900">{qty}</span>
+                      <span className="w-6 text-center font-bold text-sm text-white">{qty}</span>
                       <button
                         onClick={() => updateQty(item.id, qty + 1)}
                         className="w-8 h-8 rounded-full flex items-center justify-center transition-colors active:scale-90 text-white"
@@ -456,9 +494,9 @@ export default function KioskPage() {
           </div>
 
           {/* Totals + payment */}
-          <div className="border-t p-4 shrink-0 space-y-3">
+          <div className="border-t border-gray-700 p-4 shrink-0 space-y-3">
             {/* VAT breakdown */}
-            <div className="space-y-1 text-sm text-gray-600 bg-gray-50 rounded-xl p-3">
+            <div className="space-y-1 text-sm text-gray-300 bg-gray-800 rounded-xl p-3">
               <div className="flex justify-between">
                 <span>Subtotal (ex-VAT)</span>
                 <span className="font-medium">{fmt(subtotalCents - vatCents)}</span>
@@ -467,9 +505,9 @@ export default function KioskPage() {
                 <span>VAT (16%)</span>
                 <span className="font-medium">{fmt(vatCents)}</span>
               </div>
-              <div className="flex justify-between font-black text-base text-gray-900 pt-1.5 border-t border-gray-200 mt-1.5">
+              <div className="flex justify-between font-black text-base text-white pt-1.5 border-t border-gray-700 mt-1.5">
                 <span>Total</span>
-                <span className="text-blue-700">KES {fmtShort(totalCents)}</span>
+                <span className="text-blue-400">KES {fmtShort(totalCents)}</span>
               </div>
             </div>
 
@@ -486,7 +524,7 @@ export default function KioskPage() {
                 <button
                   onClick={() => void handleMpesa()}
                   disabled={mpesaLoading}
-                  className="w-full bg-gray-900 hover:bg-gray-800 text-white py-4 rounded-2xl text-base font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 active:scale-98 shadow-sm"
+                  className="w-full bg-gray-700 hover:bg-gray-600 text-white py-4 rounded-2xl text-base font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 active:scale-98 shadow-sm"
                 >
                   <CreditCard className="w-5 h-5" />
                   {mpesaLoading ? 'Loading…' : 'Pay with M-Pesa'}
@@ -494,7 +532,7 @@ export default function KioskPage() {
                 </button>
               </div>
             ) : (
-              <div className="text-center text-gray-400 text-sm py-3 flex items-center justify-center gap-1.5">
+              <div className="text-center text-gray-500 text-sm py-3 flex items-center justify-center gap-1.5">
                 <ShoppingCart className="w-4 h-4 opacity-50" />
                 Add items to continue
               </div>

@@ -4,9 +4,10 @@ import { MpesaService } from './mpesa.service';
 import { ReconciliationService } from './reconciliation.service';
 import { PaymentsController } from './payments.controller';
 import { PrismaModule } from '../prisma/prisma.module';
+import { EventsModule } from '../events/events.module';
 
 @Module({
-  imports: [PrismaModule, MulterModule.register({ limits: { fileSize: 5 * 1024 * 1024 } })],
+  imports: [PrismaModule, MulterModule.register({ limits: { fileSize: 5 * 1024 * 1024 } }), EventsModule],
   providers: [MpesaService, ReconciliationService],
   controllers: [PaymentsController],
   exports: [MpesaService, ReconciliationService],

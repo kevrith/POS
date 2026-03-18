@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Put, Body, Param, Query, UseGuards, Patch } from '@nestjs/common';
+import { Controller, Post, Get, Put, Body, Param, Query, UseGuards, Patch, Delete } from '@nestjs/common';
 import { DeliveryService } from './delivery.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../auth/tenant.guard';
@@ -33,6 +33,33 @@ export class DeliveryController {
   @Post('orders')
   async createDeliveryOrder(@Body() dto: any) {
     return this.deliveryService.createDeliveryOrder(dto);
+  }
+
+  // Alias: POST /delivery (frontend shorthand)
+  @Post()
+  async createDeliveryAlias(@Body() dto: any) {
+    return this.deliveryService.createDeliveryOrder(dto);
+  }
+
+  // PATCH /delivery/:id — update status / notes
+  @Patch(':id')
+  async updateDelivery(@Param('id') id: string, @Body() dto: any) {
+    return this.deliveryService.updateDeliveryOrder(id, dto);
+  }
+
+  // PATCH /delivery/:id/assign — assign driver
+  @Patch(':id/assign')
+  async assignDriverPatch(
+    @Param('id') id: string,
+    @Body() dto: { driverId: string; businessId: string },
+  ) {
+    return this.deliveryService.assignDriver(id, dto.driverId, dto.businessId);
+  }
+
+  // DELETE /delivery/:id — cancel delivery order
+  @Delete(':id')
+  async cancelDelivery(@Param('id') id: string) {
+    return this.deliveryService.cancelDeliveryOrder(id);
   }
 
   @Get('orders/:orderNumber/track')

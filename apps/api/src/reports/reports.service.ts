@@ -80,10 +80,11 @@ export class ReportsService {
     }));
   }
 
-  async vatReport(businessId: string, startDate: Date, endDate: Date) {
+  async vatReport(businessId: string, startDate: Date, endDate: Date, storeId?: string) {
     const rawSales = await this.prisma.sale.findMany({
       where: {
         businessId,
+        ...(storeId && { storeId }),
         status: { in: ['PAID', 'AMENDED'] },
         createdAt: { gte: startDate, lte: endDate },
       },
@@ -111,10 +112,11 @@ export class ReportsService {
     return { sales, totalVatCents: totalVat, totalSalesCents: totalSales, totalNetCents: totalNet };
   }
 
-  async totReport(businessId: string, startDate: Date, endDate: Date) {
+  async totReport(businessId: string, startDate: Date, endDate: Date, storeId?: string) {
     const rawSales = await this.prisma.sale.findMany({
       where: {
         businessId,
+        ...(storeId && { storeId }),
         status: { in: ['PAID', 'AMENDED'] },
         createdAt: { gte: startDate, lte: endDate },
       },
@@ -140,11 +142,12 @@ export class ReportsService {
     return { sales, totalTotCents: totalTot, totalSalesCents: totalSales };
   }
 
-  async vatReturn(businessId: string, startDate: Date, endDate: Date) {
+  async vatReturn(businessId: string, startDate: Date, endDate: Date, storeId?: string) {
     const [rawSales, reclaimableExpenses] = await Promise.all([
       this.prisma.sale.findMany({
         where: {
           businessId,
+          ...(storeId && { storeId }),
           status: { in: ['PAID', 'AMENDED'] },
           createdAt: { gte: startDate, lte: endDate },
         },
@@ -209,38 +212,116 @@ export class ReportsService {
   }
 
   async stockValuation(businessId: string, storeId?: string) {
+    // Fetch all tracked items for the business, filtering movements by store
+    // (NOT items by storeId — items belong to their creation store but stock
+    //  can be in any store via transfers)
     const items = await this.prisma.item.findMany({
-      where: {
-        businessId,
-        ...(storeId && { storeId }),
-        trackStock: true,
-        deletedAt: null,
+      where: { businessId, trackStock: true, deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        costPriceCents: true,
+        movements: {
+          where: storeId ? { storeId } : undefined,
+          select: { quantity: true },
+        },
       },
-      include: { movements: true },
     });
 
-    const valuation = items.map(item => {
-      const quantity = item.movements.reduce((sum, m) => sum + m.quantity, 0);
-      const valueCents = quantity * (item.costPriceCents || 0);
-      return {
-        itemId: item.id,
-        name: item.name,
-        quantity,
-        costPriceCents: item.costPriceCents || 0,
-        valueCents,
-      };
-    });
+    const valuation = items
+      .map(item => {
+        const quantity = item.movements.reduce((sum, m) => sum + m.quantity, 0);
+        const valueCents = quantity * (item.costPriceCents || 0);
+        return {
+          itemId: item.id,
+          name: item.name,
+          quantity,
+          costPriceCents: item.costPriceCents || 0,
+          valueCents,
+        };
+      })
+      // When scoped to a specific store, hide items with no stock there
+      .filter(v => !storeId || v.quantity !== 0);
 
     const totalValueCents = valuation.reduce((sum, v) => sum + v.valueCents, 0);
 
     return { items: valuation, totalValueCents };
   }
 
-  async profitAndLoss(businessId: string, startDate: Date, endDate: Date) {
+  async stockTransfers(businessId: string, storeId?: string, status?: string, startDate?: Date, endDate?: Date) {
+    const transfers = await this.prisma.storeTransfer.findMany({
+      where: {
+        businessId,
+        ...(storeId && { OR: [{ fromStoreId: storeId }, { toStoreId: storeId }] }),
+        ...(status && { status }),
+        ...(startDate && endDate && { createdAt: { gte: startDate, lte: endDate } }),
+      },
+      include: {
+        items: {
+          include: {
+            transfer: false,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+
+    // Enrich with store + item names
+    const storeIds = [...new Set([...transfers.map(t => t.fromStoreId), ...transfers.map(t => t.toStoreId)])];
+    const itemIds  = [...new Set(transfers.flatMap(t => t.items.map(i => i.itemId)))];
+    const userIds  = [...new Set([...transfers.map(t => t.initiatedBy), ...transfers.map(t => t.receivedBy).filter(Boolean) as string[]])];
+
+    const [stores, itemsList, users] = await Promise.all([
+      this.prisma.store.findMany({ where: { id: { in: storeIds } }, select: { id: true, name: true } }),
+      this.prisma.item.findMany({ where: { id: { in: itemIds } }, select: { id: true, name: true } }),
+      this.prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } }),
+    ]);
+
+    const storeMap = new Map(stores.map(s => [s.id, s.name]));
+    const itemMap  = new Map(itemsList.map(i => [i.id, i.name]));
+    const userMap  = new Map(users.map(u => [u.id, u.name]));
+
+    const enriched = transfers.map(t => ({
+      id: t.id,
+      status: t.status,
+      fromStoreId: t.fromStoreId,
+      fromStoreName: storeMap.get(t.fromStoreId) ?? t.fromStoreId,
+      toStoreId: t.toStoreId,
+      toStoreName: storeMap.get(t.toStoreId) ?? t.toStoreId,
+      initiatedBy: t.initiatedBy,
+      initiatedByName: userMap.get(t.initiatedBy) ?? t.initiatedBy,
+      receivedBy: t.receivedBy ?? null,
+      receivedByName: t.receivedBy ? (userMap.get(t.receivedBy) ?? t.receivedBy) : null,
+      notes: t.notes ?? null,
+      createdAt: t.createdAt,
+      completedAt: null,
+      items: t.items.map(i => ({
+        itemId: i.itemId,
+        itemName: itemMap.get(i.itemId) ?? i.itemId,
+        quantity: i.quantity,
+      })),
+    }));
+
+    const pending = enriched.filter(t => t.status === 'PENDING').length;
+    const completed = enriched.filter(t => t.status === 'COMPLETED').length;
+    const cancelled = enriched.filter(t => t.status === 'CANCELLED').length;
+    const inTransitToStore = storeId
+      ? enriched.filter(t => t.toStoreId === storeId && t.status === 'PENDING').length
+      : 0;
+
+    return {
+      transfers: enriched,
+      summary: { total: enriched.length, pending, completed, cancelled, inTransitToStore },
+    };
+  }
+
+  async profitAndLoss(businessId: string, startDate: Date, endDate: Date, storeId?: string) {
     const [sales, expenses] = await Promise.all([
       this.prisma.sale.aggregate({
         where: {
           businessId,
+          ...(storeId && { storeId }),
           status: { in: ['PAID', 'AMENDED'] },
           createdAt: { gte: startDate, lte: endDate },
         },
@@ -249,6 +330,7 @@ export class ReportsService {
       this.prisma.expense.aggregate({
         where: {
           businessId,
+          ...(storeId && { storeId }),
           approvalStatus: 'APPROVED',
           createdAt: { gte: startDate, lte: endDate },
         },
@@ -367,8 +449,9 @@ export class ReportsService {
     });
   }
 
-  async expenseReport(businessId: string, startDate?: Date, endDate?: Date, category?: string) {
+  async expenseReport(businessId: string, storeId?: string, startDate?: Date, endDate?: Date, category?: string) {
     const where: any = { businessId, approvalStatus: 'APPROVED' };
+    if (storeId) where.storeId = storeId;
     if (category) where.category = category;
     if (startDate || endDate) {
       where.createdAt = {
@@ -401,8 +484,9 @@ export class ReportsService {
     };
   }
 
-  async commissionReport(businessId: string, employeeId?: string, startDate?: Date, endDate?: Date) {
+  async commissionReport(businessId: string, storeId?: string, employeeId?: string, startDate?: Date, endDate?: Date) {
     const where: any = { businessId, status: { in: ['PAID', 'AMENDED'] } };
+    if (storeId) where.storeId = storeId;
     if (employeeId) where.cashierId = employeeId;
     if (startDate || endDate) {
       where.createdAt = {
@@ -453,8 +537,11 @@ export class ReportsService {
     return Object.values(byEmployee);
   }
 
-  async attendanceReport(businessId: string, employeeId?: string, startDate?: Date, endDate?: Date) {
-    const where: any = {};
+  async attendanceReport(businessId: string, storeId?: string, employeeId?: string, startDate?: Date, endDate?: Date) {
+    const where: any = {
+      employee: { businessId },
+    };
+    if (storeId) where.storeId = storeId;
     if (employeeId) where.employeeId = employeeId;
     if (startDate || endDate) {
       where.shiftDate = {
@@ -647,10 +734,10 @@ export class ReportsService {
         paymentTerms: supplier.paymentTerms,
         outstandingBalanceCents: supplier.outstandingBalanceCents,
         creditLimitCents: supplier.creditLimitCents,
-        totalOrderedCents,
-        totalOrders: pos.length,
-        receivedOrders: receivedPOs.length,
-        pendingOrders: pendingPOs.length,
+        totalValueCents: totalOrderedCents,
+        poCount: pos.length,
+        receivedCount: receivedPOs.length,
+        pendingCount: pendingPOs.length,
         pendingValueCents,
         orders: pos.map((po) => ({
           id: po.id,
@@ -789,8 +876,10 @@ export class ReportsService {
   // ─── Historical Stock Report ───────────────────────────────────────────────
 
   async historicalStockReport(businessId: string, asOfDate: Date, storeId?: string) {
+    // Fetch all items for the business — stock location is tracked by movement.storeId,
+    // not item.storeId (which is just the creation store).
     const items = await this.prisma.item.findMany({
-      where: { businessId, ...(storeId && { storeId }), trackStock: true, deletedAt: null },
+      where: { businessId, trackStock: true, deletedAt: null },
       select: { id: true, name: true, category: true, costPriceCents: true, barcode: true },
     });
 
@@ -820,7 +909,8 @@ export class ReportsService {
         costPriceCents: item.costPriceCents ?? 0,
         valueCents: qty > 0 ? qty * (item.costPriceCents ?? 0) : 0,
       };
-    }).filter((r) => r.quantity >= 0);
+    // When store-scoped, hide items with no movements at that store
+    }).filter((r) => storeId ? r.quantity !== 0 : r.quantity >= 0);
 
     return {
       asOfDate,
@@ -944,7 +1034,9 @@ export class ReportsService {
       where: {
         ...(status && { status }),
         ...(itemId && { itemId }),
-        item: { businessId, ...(storeId && { storeId }), deletedAt: null },
+        // Filter by businessId on the item; if storeId provided, show serials sold at that store OR still available
+        item: { businessId, deletedAt: null },
+        ...(storeId && { OR: [{ AND: [{ saleId: { not: null } }, { sale: { storeId } }] }, { saleId: null }] }),
       },
       include: {
         item: { select: { name: true, category: true, barcode: true } },
@@ -1637,17 +1729,21 @@ export class ReportsService {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - daysThreshold);
 
+    // Fetch items by businessId — stock location is in movement.storeId, NOT item.storeId
     const items = await this.prisma.item.findMany({
       where: {
         businessId,
-        ...(storeId ? { storeId } : {}),
         deletedAt: null,
         isActive: true,
         trackStock: true,
       },
       include: {
+        // Recent movements (any type) at this store in the threshold window
         movements: {
-          where: { createdAt: { gte: cutoff } },
+          where: {
+            ...(storeId ? { storeId } : {}),
+            createdAt: { gte: cutoff },
+          },
           take: 1,
           orderBy: { createdAt: 'desc' },
         },
@@ -1656,15 +1752,15 @@ export class ReportsService {
 
     const deadItems = [];
     for (const item of items) {
-      // Check current stock level
+      // Check current stock level at this store (movement-based)
       const stockAgg = await this.prisma.inventoryMovement.aggregate({
         where: { itemId: item.id, ...(storeId ? { storeId } : {}) },
         _sum: { quantity: true },
       });
       const stock = stockAgg._sum.quantity ?? 0;
-      if (stock <= 0) continue; // no stock, nothing to report
+      if (stock <= 0) continue; // no stock at this store, nothing to report
 
-      // Last movement date
+      // Last movement date at this store
       const lastMovement = await this.prisma.inventoryMovement.findFirst({
         where: { itemId: item.id, ...(storeId ? { storeId } : {}) },
         orderBy: { createdAt: 'desc' },
@@ -2279,18 +2375,20 @@ export class ReportsService {
       };
     });
 
-    return {
-      forecastPeriodDays: days,
-      generatedAt: new Date().toISOString(),
-      totalItemsAnalyzed: forecasts.length,
-      recommendations: recommendations.slice(0, 50), // Top 50 items
-      summary: {
-        highDemandItems: recommendations.filter(r => r.forecastDemand > r.avgDailySales * days * 1.5).length,
-        reorderRequired: recommendations.filter(r => r.needsReorder).length,
-        stockoutRisk: recommendations.filter(r => r.stockoutRisk === 'high').length,
-        avgConfidence: Math.round(recommendations.reduce((sum, r) => sum + r.confidence, 0) / recommendations.length) || 0,
-      },
-    };
+    // Map to the shape the frontend expects
+    const items = recommendations.slice(0, 50).map(r => ({
+      itemId: r.itemId,
+      itemName: r.name,
+      currentStock: r.currentStock,
+      forecastedDemand: r.forecastDemand,
+      confidence: (r.confidence >= 70 ? 'HIGH' : r.confidence >= 40 ? 'MEDIUM' : 'LOW') as 'HIGH' | 'MEDIUM' | 'LOW',
+      trend: r.trend === 'increasing' ? 0.15 : r.trend === 'decreasing' ? -0.15 : 0,
+      seasonality: r.seasonality ?? 1,
+      reorderPoint: Math.round(r.avgDailySales * 14), // 2-week reorder point
+      suggestedOrderQty: r.suggestedOrderQty,
+    }));
+
+    return { items, demandPatterns: [] };
   }
 
   // ── VAT Return (iTax-ready) ────────────────────────────────────────────────────
@@ -2357,5 +2455,133 @@ export class ReportsService {
       box3_net_payable: netVATPayable,
       expenses: expenses.length,
     };
+  }
+
+  async menuEngineering(businessId: string, storeId: string | undefined, days: number) {
+    const since = new Date(Date.now() - days * 86400000);
+    const sales = await this.prisma.saleItem.findMany({
+      where: { sale: { businessId, createdAt: { gte: since }, ...(storeId && { storeId }) } },
+      include: { item: { select: { name: true, costPriceCents: true, category: true } } },
+    });
+    const map = new Map<string, { name: string; category: string; qty: number; revenueCents: number; costCents: number }>();
+    for (const si of sales) {
+      const entry = map.get(si.itemId) ?? { name: si.item?.name ?? si.itemId, category: si.item?.category ?? '', qty: 0, revenueCents: 0, costCents: 0 };
+      entry.qty += si.quantity;
+      entry.revenueCents += si.totalCents;
+      entry.costCents += (si.item?.costPriceCents ?? 0) * si.quantity;
+      map.set(si.itemId, entry);
+    }
+    const items = [...map.entries()].map(([id, d]) => ({
+      id,
+      name: d.name,
+      category: d.category,
+      qty: d.qty,
+      revenueCents: d.revenueCents,
+      marginCents: d.revenueCents - d.costCents,
+      marginPct: d.revenueCents > 0 ? Math.round(((d.revenueCents - d.costCents) / d.revenueCents) * 100) : 0,
+    }));
+    if (!items.length) return { items: [] };
+    const avgQty = items.reduce((s, i) => s + i.qty, 0) / items.length;
+    const avgMarginPct = items.reduce((s, i) => s + i.marginPct, 0) / items.length;
+    return {
+      items: items.map(i => ({
+        ...i,
+        quadrant: i.qty >= avgQty && i.marginPct >= avgMarginPct ? 'STAR'
+          : i.qty >= avgQty && i.marginPct < avgMarginPct ? 'PLOWHORSE'
+          : i.qty < avgQty && i.marginPct >= avgMarginPct ? 'PUZZLE'
+          : 'DOG',
+      })),
+      avgQty,
+      avgMarginPct: Math.round(avgMarginPct),
+    };
+  }
+
+  async basketAnalysis(businessId: string, days: number) {
+    const since = new Date(Date.now() - days * 86400000);
+    const sales = await this.prisma.sale.findMany({
+      where: { businessId, createdAt: { gte: since } },
+      include: { items: { select: { itemId: true, name: true } } },
+    });
+    const pairs = new Map<string, { item1: string; item2: string; count: number; name1: string; name2: string }>();
+    for (const sale of sales) {
+      const saleItems = sale.items;
+      for (let i = 0; i < saleItems.length; i++) {
+        for (let j = i + 1; j < saleItems.length; j++) {
+          const [a, b] = [saleItems[i], saleItems[j]].sort((x, y) => x.itemId.localeCompare(y.itemId));
+          const key = `${a.itemId}|${b.itemId}`;
+          const existing = pairs.get(key) ?? { item1: a.itemId, item2: b.itemId, count: 0, name1: a.name, name2: b.name };
+          existing.count++;
+          pairs.set(key, existing);
+        }
+      }
+    }
+    const result = [...pairs.values()].sort((a, b) => b.count - a.count).slice(0, 50);
+    return { pairs: result, totalSales: sales.length };
+  }
+
+  async customerLifetimeValue(businessId: string) {
+    const customers = await this.prisma.customer.findMany({
+      where: { businessId },
+      include: {
+        sales: {
+          select: { totalCents: true, createdAt: true },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+    return customers
+      .filter(c => c.sales.length > 0)
+      .map(c => {
+        const totalSpend = c.sales.reduce((s, sale) => s + sale.totalCents, 0);
+        const firstVisit = c.sales[0].createdAt;
+        const lastVisit = c.sales[c.sales.length - 1].createdAt;
+        const daysSinceFirst = Math.max(1, (Date.now() - firstVisit.getTime()) / 86400000);
+        const visitFrequencyDays = c.sales.length > 1 ? daysSinceFirst / (c.sales.length - 1) : null;
+        const daysSinceLast = (Date.now() - lastVisit.getTime()) / 86400000;
+        const churnRisk = daysSinceLast > 90 ? 'HIGH' : daysSinceLast > 30 ? 'MEDIUM' : 'LOW';
+        return {
+          id: c.id,
+          name: c.name,
+          phone: c.phone,
+          visitCount: c.sales.length,
+          totalSpendCents: totalSpend,
+          avgOrderCents: Math.round(totalSpend / c.sales.length),
+          firstVisit,
+          lastVisit,
+          daysSinceLast: Math.round(daysSinceLast),
+          visitFrequencyDays: visitFrequencyDays ? Math.round(visitFrequencyDays) : null,
+          churnRisk,
+        };
+      })
+      .sort((a, b) => b.totalSpendCents - a.totalSpendCents);
+  }
+
+  async npsSummary(businessId: string, startDate?: string, endDate?: string) {
+    const responses = await this.prisma.npsResponse.findMany({
+      where: {
+        businessId,
+        ...(startDate && { createdAt: { gte: new Date(startDate) } }),
+        ...(endDate && { createdAt: { lte: new Date(endDate) } }),
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const total = responses.length;
+    const avg = total ? responses.reduce((s, r) => s + r.score, 0) / total : null;
+    const promoters = responses.filter(r => r.score >= 9).length;
+    const passives = responses.filter(r => r.score >= 7 && r.score <= 8).length;
+    const detractors = responses.filter(r => r.score <= 6).length;
+    const npsScore = total ? Math.round(((promoters - detractors) / total) * 100) : null;
+    const byDay = new Map<string, number[]>();
+    for (const r of responses) {
+      const day = r.createdAt.toISOString().slice(0, 10);
+      if (!byDay.has(day)) byDay.set(day, []);
+      byDay.get(day)!.push(r.score);
+    }
+    const trend = [...byDay.entries()].map(([date, scores]) => ({
+      date,
+      avg: scores.reduce((s, v) => s + v, 0) / scores.length,
+      count: scores.length,
+    })).sort((a, b) => a.date.localeCompare(b.date));
+    return { total, avg, npsScore, promoters, passives, detractors, trend, recent: responses.slice(0, 20) };
   }
 }

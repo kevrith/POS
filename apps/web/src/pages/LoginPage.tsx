@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/auth';
 import type { AuthUser } from '../stores/auth';
-import { Eye, EyeOff, Delete, ChevronLeft, Building2, Sparkles } from 'lucide-react';
+import { Eye, EyeOff, Delete, ChevronLeft, Building2, Sparkles, Fingerprint } from 'lucide-react';
+import { isBiometricAvailable, authenticateBiometric } from '../lib/biometric';
 
 const PLAN_LABELS: Record<string, { label: string; color: string; price: string }> = {
   STARTER:    { label: 'Starter',    color: 'bg-emerald-500', price: 'KES 1,499/mo' },
@@ -67,6 +68,8 @@ export default function LoginPage() {
   const [selectedUser, setSelectedUser] = useState<StaffMember | null>(null);
   const [pin, setPin] = useState('');
   const [pinError, setPinError] = useState('');
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricLoading, setBiometricLoading] = useState(false);
 
   // ── Register mode ────────────────────────────────────────────────────────────
   const [regName, setRegName] = useState('');
@@ -132,6 +135,11 @@ export default function LoginPage() {
     }
   }, [loginWithOAuth]);
 
+  // Check biometric availability on mount
+  useEffect(() => {
+    void isBiometricAvailable().then(setBiometricAvailable);
+  }, []);
+
   // On mount: check if businessId is already saved → skip directly to staff grid
   useEffect(() => {
     const stored = localStorage.getItem('pos-business-id') ?? '';
@@ -177,6 +185,23 @@ export default function LoginPage() {
     setPinStep('pad');
   }
 
+  // Keyboard support for PIN pad
+  useEffect(() => {
+    if (mode !== 'pin' || pinStep !== 'pad') return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key >= '0' && e.key <= '9') {
+        handlePinPad(Number(e.key) as typeof PIN_DIGITS[number]);
+      } else if (e.key === 'Backspace') {
+        handlePinPad('del');
+      } else if (e.key === 'Escape' || e.key === 'Delete') {
+        handlePinPad('clear');
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, pinStep, pin]);
+
   async function handlePinLogin(pinValue?: string) {
     const p = pinValue ?? pin;
     if (p.length < 4 || !selectedUser) return;
@@ -184,7 +209,7 @@ export default function LoginPage() {
     setPinError('');
     setLoading(true);
     try {
-      await loginWithPin(p, savedBusinessId);
+      await loginWithPin(p, savedBusinessId, undefined, selectedUser?.id);
     } catch (err) {
       setPinError(err instanceof Error ? err.message : 'Invalid PIN');
       setPin('');
@@ -716,6 +741,42 @@ export default function LoginPage() {
                     <div className="text-center text-sm text-red-600 bg-red-50 py-2 rounded-lg">
                       {pinError}
                     </div>
+                  )}
+
+                  {/* Biometric login button */}
+                  {biometricAvailable && (
+                    <button
+                      type="button"
+                      disabled={biometricLoading || loading}
+                      onClick={async () => {
+                        if (!selectedUser) return;
+                        setBiometricLoading(true);
+                        setPinError('');
+                        try {
+                          // Retrieve stored credential IDs for this user from localStorage
+                          const stored = localStorage.getItem(`biometric-creds-${selectedUser.id}`);
+                          const credentialIds: string[] = stored ? JSON.parse(stored) : [];
+                          if (credentialIds.length === 0) {
+                            setPinError('No biometric registered for this account. Use PIN instead.');
+                            return;
+                          }
+                          const assertion = await authenticateBiometric({ credentialIds });
+                          // Send assertion to backend for verification — use a special biometric PIN token
+                          // The assertion is passed as the pin value encoded as JSON
+                          const assertionPin = `__biometric__:${JSON.stringify(assertion)}`;
+                          await loginWithPin(assertionPin, savedBusinessId, undefined, selectedUser.id);
+                        } catch (err) {
+                          setPinError(err instanceof Error ? err.message : 'Biometric failed');
+                        } finally {
+                          setBiometricLoading(false);
+                        }
+                      }}
+                      className="w-full flex items-center justify-center gap-2 py-3 border-2 border-blue-200 rounded-xl text-blue-600 font-semibold text-sm hover:bg-blue-50 disabled:opacity-50 transition-colors"
+                    >
+                      {biometricLoading
+                        ? <><div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" /> Verifying…</>
+                        : <><Fingerprint className="w-5 h-5" /> Use Fingerprint / Face ID</>}
+                    </button>
                   )}
 
                   {/* Numpad */}

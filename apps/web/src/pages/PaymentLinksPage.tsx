@@ -88,8 +88,10 @@ export default function PaymentLinksPage() {
   });
 
   function copyLink(code: string) {
-    const url = `https://pay.kastrapos.com/${code}`;
-    navigator.clipboard.writeText(url);
+    const base = window.location.hostname === 'localhost'
+      ? `${window.location.origin}/pay/${code}`
+      : `https://pay.kastrapos.com/${code}`;
+    navigator.clipboard.writeText(base);
     setCopiedCode(code);
     setTimeout(() => setCopiedCode(null), 2000);
   }
@@ -315,7 +317,9 @@ export default function PaymentLinksPage() {
         </thead>
         <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
           {rows.map((link) => {
-            const url = `https://pay.kastrapos.com/${link.code}`;
+            const url = window.location.hostname === 'localhost'
+                    ? `${window.location.origin}/pay/${link.code}`
+                    : `https://pay.kastrapos.com/${link.code}`;
             const copied = copiedCode === link.code;
             return (
               <tr key={link.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">

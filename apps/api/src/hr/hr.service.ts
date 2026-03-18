@@ -641,4 +641,51 @@ export class HrService {
       include: { user: { select: { name: true, email: true } } },
     });
   }
+
+  // ─── Time Entries (user-level clock in/out) ──────────────────────────────────
+
+  async timeClockIn(userId: string, businessId: string, storeId?: string, notes?: string) {
+    const open = await this.prisma.timeEntry.findFirst({
+      where: { userId, businessId, clockOut: null },
+      orderBy: { clockIn: 'desc' },
+    });
+    if (open) throw new BadRequestException('Already clocked in since ' + open.clockIn.toISOString());
+    return this.prisma.timeEntry.create({
+      data: { id: require('crypto').randomUUID(), userId, businessId, storeId, notes },
+    });
+  }
+
+  async timeClockOut(userId: string, businessId: string) {
+    const open = await this.prisma.timeEntry.findFirst({
+      where: { userId, businessId, clockOut: null },
+      orderBy: { clockIn: 'desc' },
+    });
+    if (!open) throw new BadRequestException('Not clocked in');
+    return this.prisma.timeEntry.update({
+      where: { id: open.id },
+      data: { clockOut: new Date() },
+    });
+  }
+
+  async getTimeEntries(businessId: string, userId?: string, startDate?: string, endDate?: string) {
+    return this.prisma.timeEntry.findMany({
+      where: {
+        businessId,
+        ...(userId && { userId }),
+        ...(startDate && { clockIn: { gte: new Date(startDate) } }),
+        ...(endDate && { clockIn: { lte: new Date(endDate) } }),
+      },
+      include: { user: { select: { name: true, role: true } } },
+      orderBy: { clockIn: 'desc' },
+      take: 200,
+    });
+  }
+
+  async getClockStatus(userId: string, businessId: string) {
+    const open = await this.prisma.timeEntry.findFirst({
+      where: { userId, businessId, clockOut: null },
+      orderBy: { clockIn: 'desc' },
+    });
+    return { isClockedIn: !!open, clockedInSince: open?.clockIn ?? null, entryId: open?.id ?? null };
+  }
 }

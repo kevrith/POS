@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, DollarSign, Smartphone, CreditCard, Scissors, AlertCircle, Loader2, CheckCircle, Gift, BedDouble, Building2, Camera } from 'lucide-react';
+import { X, DollarSign, Smartphone, CreditCard, Scissors, AlertCircle, Loader2, CheckCircle, Gift, BedDouble, Building2, Camera, Nfc, Terminal } from 'lucide-react';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { api } from '../lib/api';
+import IncomingPaymentsPanel from './pos/IncomingPaymentsPanel';
+import { NFCPaymentReader } from '../lib/nfc';
+import { cardTerminalSale, connectCardTerminal, isCardTerminalConnected, isSerialAvailable, type CardTerminalConfig } from '../lib/cardTerminal';
 
 function formatKES(cents: number): string {
   return `KES ${(cents / 100).toLocaleString('en-KE', {
@@ -10,7 +13,7 @@ function formatKES(cents: number): string {
   })}`;
 }
 
-type PaymentMethod = 'CASH' | 'MPESA_STK' | 'MPESA_QR' | 'SPLIT' | 'GIFT_CARD' | 'ROOM_CHARGE' | 'CARD' | 'BANK_TRANSFER';
+type PaymentMethod = 'CASH' | 'MPESA_STK' | 'MPESA_QR' | 'MPESA_C2B' | 'SPLIT' | 'GIFT_CARD' | 'ROOM_CHARGE' | 'CARD' | 'BANK_TRANSFER' | 'NFC' | 'CARD_TERMINAL';
 
 interface GiftCard {
   code: string;
@@ -85,6 +88,17 @@ export default function PaymentModal({
   const gcVideoRef = useRef<HTMLVideoElement>(null);
   const [showGcCamera, setShowGcCamera] = useState(false);
   const [gcCameraError, setGcCameraError] = useState('');
+  const [c2bSelected, setC2bSelected] = useState<{ id: string; transactionId: string; amountCents: number; customerName: string } | null>(null);
+  // NFC
+  const [nfcStatus, setNfcStatus] = useState<'idle' | 'scanning' | 'read' | 'error'>('idle');
+  const [nfcError, setNfcError] = useState('');
+  const [nfcUid, setNfcUid] = useState('');
+  const nfcReaderRef = useRef<NFCPaymentReader | null>(null);
+  // Card terminal (Web Serial)
+  const [ctStatus, setCtStatus] = useState<'idle' | 'connecting' | 'waiting' | 'approved' | 'declined' | 'error'>('idle');
+  const [ctError, setCtError] = useState('');
+  const [ctBrand, setCtBrand] = useState<CardTerminalConfig['brand']>('PAX');
+  const [ctRef, setCtRef] = useState('');
 
   const cashCents = Math.round(parseFloat(cashInput || '0') * 100);
   const changeCents = cashCents - totalCents;
@@ -263,8 +277,11 @@ export default function PaymentModal({
   const tabs: Array<{ id: PaymentMethod; label: string; Icon: typeof DollarSign }> = [
     { id: 'CASH', label: 'Cash', Icon: DollarSign },
     { id: 'MPESA_STK', label: 'M-Pesa', Icon: Smartphone },
+    { id: 'MPESA_C2B', label: 'Paybill', Icon: Smartphone },
     { id: 'MPESA_QR', label: 'QR', Icon: CreditCard },
     { id: 'CARD', label: 'Card', Icon: CreditCard },
+    { id: 'CARD_TERMINAL', label: 'Terminal', Icon: Terminal },
+    { id: 'NFC', label: 'NFC', Icon: Nfc },
     { id: 'BANK_TRANSFER', label: 'Bank', Icon: Building2 },
     { id: 'GIFT_CARD', label: 'Gift Card', Icon: Gift },
     { id: 'ROOM_CHARGE', label: 'Room', Icon: BedDouble },
@@ -793,6 +810,162 @@ export default function PaymentModal({
             </div>
           )}
 
+          {/* ── NFC Tap-to-Pay ── */}
+          {method === 'NFC' && (
+            <div className="space-y-4 text-center">
+              {!NFCPaymentReader.isAvailable() && (
+                <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  Web NFC requires Chrome on Android or ChromeOS.
+                </div>
+              )}
+              <div className={`p-8 rounded-xl border-2 border-dashed flex flex-col items-center gap-3 ${
+                nfcStatus === 'scanning' ? 'border-blue-400 bg-blue-50 animate-pulse'
+                : nfcStatus === 'read' ? 'border-green-400 bg-green-50'
+                : nfcStatus === 'error' ? 'border-red-300 bg-red-50'
+                : 'border-gray-300'
+              }`}>
+                <Nfc className={`w-14 h-14 ${
+                  nfcStatus === 'scanning' ? 'text-blue-500'
+                  : nfcStatus === 'read' ? 'text-green-500'
+                  : nfcStatus === 'error' ? 'text-red-400'
+                  : 'text-gray-400'
+                }`} />
+                <p className="font-semibold text-gray-700">
+                  {nfcStatus === 'idle' && 'Tap card or device to pay'}
+                  {nfcStatus === 'scanning' && 'Hold card near reader…'}
+                  {nfcStatus === 'read' && `Card read: ${nfcUid}`}
+                  {nfcStatus === 'error' && nfcError}
+                </p>
+                <p className="text-sm font-bold text-blue-600">{formatKES(totalCents)}</p>
+              </div>
+              {nfcStatus === 'idle' && NFCPaymentReader.isAvailable() && (
+                <button
+                  onClick={() => {
+                    setNfcStatus('scanning');
+                    setNfcError('');
+                    const reader = new NFCPaymentReader();
+                    nfcReaderRef.current = reader;
+                    reader.read(30000)
+                      .then((result) => {
+                        setNfcUid(result.uid);
+                        setNfcStatus('read');
+                      })
+                      .catch((err: Error) => {
+                        setNfcError(err.message);
+                        setNfcStatus('error');
+                      });
+                  }}
+                  className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors"
+                >
+                  Start NFC Scan
+                </button>
+              )}
+              {nfcStatus === 'scanning' && (
+                <button
+                  onClick={() => { nfcReaderRef.current?.stop(); setNfcStatus('idle'); }}
+                  className="w-full py-3 border border-gray-300 rounded-xl text-gray-600 text-sm"
+                >
+                  Cancel
+                </button>
+              )}
+              {nfcStatus === 'read' && (
+                <button
+                  onClick={() => onComplete([{ method: 'NFC', amountCents: totalCents, reference: nfcUid }])}
+                  disabled={isProcessing}
+                  className="w-full py-3.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl disabled:opacity-40 transition-colors"
+                >
+                  {isProcessing ? 'Processing…' : 'Confirm NFC Payment'}
+                </button>
+              )}
+              {nfcStatus === 'error' && (
+                <button onClick={() => setNfcStatus('idle')} className="w-full py-3 border border-gray-300 rounded-xl text-gray-600 text-sm">
+                  Try Again
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* ── Card Terminal (Web Serial — PAX / Ingenico / Verifone) ── */}
+          {method === 'CARD_TERMINAL' && (
+            <div className="space-y-4">
+              {!isSerialAvailable() && (
+                <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  Web Serial requires Chrome 89+ or Edge 89+. Enable at chrome://flags/#enable-experimental-web-platform-features if needed.
+                </div>
+              )}
+              <div className="flex gap-2">
+                {(['PAX', 'INGENICO', 'VERIFONE'] as const).map((b) => (
+                  <button
+                    key={b}
+                    onClick={() => setCtBrand(b)}
+                    disabled={ctStatus !== 'idle'}
+                    className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-50 ${
+                      ctBrand === b ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300'
+                    }`}
+                  >
+                    {b}
+                  </button>
+                ))}
+              </div>
+              <div className={`p-6 rounded-xl border-2 flex flex-col items-center gap-3 ${
+                ctStatus === 'waiting' ? 'border-blue-400 bg-blue-50 animate-pulse'
+                : ctStatus === 'approved' ? 'border-green-400 bg-green-50'
+                : ctStatus === 'declined' || ctStatus === 'error' ? 'border-red-300 bg-red-50'
+                : 'border-gray-200'
+              }`}>
+                <Terminal className={`w-12 h-12 ${
+                  ctStatus === 'waiting' ? 'text-blue-500'
+                  : ctStatus === 'approved' ? 'text-green-500'
+                  : ctStatus === 'declined' || ctStatus === 'error' ? 'text-red-400'
+                  : 'text-gray-400'
+                }`} />
+                <p className="font-semibold text-gray-700 text-center">
+                  {ctStatus === 'idle' && `${ctBrand} terminal — ${isCardTerminalConnected() ? 'Connected' : 'Not connected'}`}
+                  {ctStatus === 'connecting' && 'Connecting to terminal…'}
+                  {ctStatus === 'waiting' && 'Waiting for customer — tap, insert or swipe card'}
+                  {ctStatus === 'approved' && `Approved · Auth: ${ctRef}`}
+                  {ctStatus === 'declined' && 'Declined — please try another payment method'}
+                  {ctStatus === 'error' && ctError}
+                </p>
+                <p className="text-sm font-bold text-blue-600">{formatKES(totalCents)}</p>
+              </div>
+              {ctStatus === 'idle' && isSerialAvailable() && (
+                <button
+                  onClick={async () => {
+                    setCtStatus('connecting');
+                    setCtError('');
+                    try {
+                      const config: CardTerminalConfig = { brand: ctBrand };
+                      if (!isCardTerminalConnected()) await connectCardTerminal(config);
+                      setCtStatus('waiting');
+                      const result = await cardTerminalSale(totalCents, config);
+                      if (result.approved) {
+                        setCtRef(result.authCode ?? result.reference);
+                        setCtStatus('approved');
+                        setTimeout(() => onComplete([{ method: 'CARD_TERMINAL', amountCents: totalCents, reference: result.reference }]), 800);
+                      } else {
+                        setCtStatus('declined');
+                      }
+                    } catch (err: any) {
+                      setCtError(err.message ?? 'Terminal error');
+                      setCtStatus('error');
+                    }
+                  }}
+                  className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors"
+                >
+                  {isCardTerminalConnected() ? 'Charge Terminal' : 'Connect & Charge'}
+                </button>
+              )}
+              {(ctStatus === 'declined' || ctStatus === 'error') && (
+                <button onClick={() => setCtStatus('idle')} className="w-full py-3 border border-gray-300 rounded-xl text-gray-600 text-sm">
+                  Try Again
+                </button>
+              )}
+            </div>
+          )}
+
           {/* ── CARD (Paystack Inline) ── */}
           {method === 'CARD' && (
             <div className="space-y-4 text-center">
@@ -827,6 +1000,85 @@ export default function PaymentModal({
                 )}
               </button>
               <p className="text-xs text-gray-400">Powered by Paystack. Requires Paystack key in Settings.</p>
+            </div>
+          )}
+
+          {/* ── MPESA C2B (Paybill/Till incoming payments) ── */}
+          {method === 'MPESA_C2B' && (
+            <div className="space-y-4">
+              <div className="bg-green-50 border border-green-200 rounded-xl p-3">
+                <p className="text-sm font-semibold text-green-800 mb-0.5">Paybill / Till Payments</p>
+                <p className="text-xs text-green-700">
+                  Select a payment below that matches this sale ({formatKES(totalCents)}).
+                  Payments appear in real-time as customers pay to your Paybill/Till number.
+                </p>
+              </div>
+
+              {c2bSelected ? (
+                <div className="space-y-3">
+                  <div className="bg-green-50 border border-green-300 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CheckCircle className="w-5 h-5 text-green-600" />
+                      <span className="font-semibold text-green-800">Payment Selected</span>
+                    </div>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">From</span>
+                        <span className="font-medium">{c2bSelected.customerName}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Amount</span>
+                        <span className="font-bold text-green-700">{formatKES(c2bSelected.amountCents)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Ref</span>
+                        <span className="font-mono text-xs">{c2bSelected.transactionId}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {c2bSelected.amountCents !== totalCents && (
+                    <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+                      <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                      {c2bSelected.amountCents < totalCents
+                        ? `Short by ${formatKES(totalCents - c2bSelected.amountCents)} — partial payment`
+                        : `Overpayment by ${formatKES(c2bSelected.amountCents - totalCents)}`}
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setC2bSelected(null)}
+                      className="flex-1 py-2.5 border border-gray-300 rounded-xl text-gray-700 text-sm font-medium hover:bg-gray-50"
+                    >
+                      Change
+                    </button>
+                    <button
+                      onClick={() =>
+                        onComplete([{
+                          method: 'MPESA_C2B',
+                          amountCents: c2bSelected.amountCents,
+                          reference: c2bSelected.transactionId,
+                        }])
+                      }
+                      disabled={isProcessing}
+                      className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl disabled:opacity-40 transition-colors text-sm"
+                    >
+                      {isProcessing ? 'Processing…' : 'Confirm Payment'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <IncomingPaymentsPanel
+                  businessId={businessId}
+                  onApply={(payment) => setC2bSelected({
+                    id: payment.id,
+                    transactionId: payment.transactionId,
+                    amountCents: payment.amountCents,
+                    customerName: payment.customerName,
+                  })}
+                />
+              )}
             </div>
           )}
 

@@ -119,7 +119,7 @@ export default function SecuritySettingsPage() {
   }, {} as Record<string, Permission[]>);
 
   const auditLogs = (auditData?.logs ?? []).filter(l =>
-    !auditSearch || l.actor.includes(auditSearch) || l.action.includes(auditSearch) || l.entity.includes(auditSearch)
+    !auditSearch || l.actor.toLowerCase().includes(auditSearch.toLowerCase()) || l.action.toLowerCase().includes(auditSearch.toLowerCase()) || l.entity.toLowerCase().includes(auditSearch.toLowerCase())
   );
 
   const exportAuditCSV = () => {

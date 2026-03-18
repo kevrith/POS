@@ -28,7 +28,14 @@ interface CreateItemDto {
   reorderQty?: number;
 }
 
-interface UpdateItemDto extends Partial<Omit<CreateItemDto, 'businessId' | 'storeId'>> {}
+interface UpdateItemDto extends Partial<Omit<CreateItemDto, 'businessId' | 'storeId'>> {
+  soldOut?: boolean;
+  isFractional?: boolean;
+  unitLabel?: string;
+  availableFrom?: string;
+  availableTo?: string;
+  availableDays?: string;
+}
 
 interface CreateVariantDto {
   name: string;
@@ -57,8 +64,8 @@ export class ItemsService {
         ...(activeOnly && { isActive: true }),
         ...(search && {
           OR: [
-            { name: { contains: search } },
-            { barcode: { contains: search } },
+            { name: { contains: search, mode: 'insensitive' } },
+            { barcode: { contains: search, mode: 'insensitive' } },
           ],
         }),
       },
@@ -145,6 +152,12 @@ export class ItemsService {
         ...(dto.imageUrl !== undefined && { imageUrl: dto.imageUrl }),
         ...(dto.allergens !== undefined && { allergens: JSON.stringify(dto.allergens) }),
         ...(dto.reorderQty !== undefined && { reorderQty: dto.reorderQty }),
+        ...(dto.soldOut !== undefined && { soldOut: dto.soldOut }),
+        ...(dto.isFractional !== undefined && { isFractional: dto.isFractional }),
+        ...(dto.unitLabel !== undefined && { unitLabel: dto.unitLabel }),
+        ...(dto.availableFrom !== undefined && { availableFrom: dto.availableFrom }),
+        ...(dto.availableTo !== undefined && { availableTo: dto.availableTo }),
+        ...(dto.availableDays !== undefined && { availableDays: dto.availableDays }),
       },
     });
   }
@@ -153,6 +166,12 @@ export class ItemsService {
     const item = await this.prisma.item.findFirst({ where: { id, businessId, deletedAt: null } });
     if (!item) throw new NotFoundException('Item not found');
     return this.prisma.item.update({ where: { id }, data: { isActive: !item.isActive } });
+  }
+
+  async toggle86(id: string, businessId: string) {
+    const item = await this.prisma.item.findFirst({ where: { id, businessId } });
+    if (!item) throw new NotFoundException('Item not found');
+    return this.prisma.item.update({ where: { id }, data: { soldOut: !item.soldOut } });
   }
 
   async softDelete(id: string, businessId: string) {

@@ -144,7 +144,7 @@ export class BusinessController {
   @Patch(':businessId/etims-credentials')
   async saveEtimsCredentials(
     @Param('businessId') businessId: string,
-    @Body() dto: { bhfId: string; tin: string; cmcKey: string },
+    @Body() dto: { bhfId: string; tin: string; dvcSrno: string },
   ) {
     return this.businessService.saveEtimsCredentials(businessId, dto);
   }

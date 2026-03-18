@@ -4,6 +4,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   CheckCircle, ChevronRight, ChevronLeft, Store, Shield,
   ShoppingCart, ArrowRight, Zap, Package, Users, BarChart3, Sparkles,
+  UtensilsCrossed, Pill, Scissors, Fuel, ShoppingBag, Coffee,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
@@ -17,7 +18,7 @@ const PLAN_INFO: Record<string, { label: string; color: string; desc: string }> 
 
 // ─── Types ────────────────────────────────────────────────────
 
-type PosMode = 'RETAIL' | 'RESTAURANT' | 'SALON' | 'CLINIC' | 'SUPERMARKET';
+type PosMode = 'RETAIL' | 'HOSPITALITY' | 'FAST_FOOD' | 'SALON' | 'CLINIC' | 'SUPERMARKET' | 'FUEL_PUMP';
 type TaxType = 'VAT' | 'TOT';
 type TaxChoice = TaxType | 'NONE';
 
@@ -66,12 +67,15 @@ function StepDot({ index, current, label }: { index: number; current: number; la
 // ─── Main ─────────────────────────────────────────────────────
 
 const STEP_LABELS = ['Welcome', 'Business', 'Store', 'KRA eTIMS', 'Done'];
-const POS_MODES: Array<{ value: PosMode; label: string; desc: string }> = [
-  { value: 'RETAIL', label: 'Retail', desc: 'General merchandise store' },
-  { value: 'RESTAURANT', label: 'Restaurant', desc: 'Table service & KOT' },
-  { value: 'SUPERMARKET', label: 'Supermarket', desc: 'High-volume grocery' },
-  { value: 'SALON', label: 'Salon / Spa', desc: 'Service-based business' },
-  { value: 'CLINIC', label: 'Clinic', desc: 'Healthcare & pharmacy' },
+
+const POS_MODES: Array<{ value: PosMode; label: string; desc: string; icon: React.ElementType; modules: string[] }> = [
+  { value: 'RETAIL',      label: 'Retail Shop',      desc: 'General merchandise, boutique, hardware',       icon: ShoppingBag,      modules: ['Point of Sale', 'Inventory', 'Customers', 'Layaway', 'Reports'] },
+  { value: 'SUPERMARKET', label: 'Supermarket',      desc: 'High-volume grocery & self-checkout',           icon: ShoppingCart,     modules: ['Supermarket POS', 'Barcode scanning', 'Scale integration', 'Batch & expiry'] },
+  { value: 'HOSPITALITY', label: 'Restaurant / Hotel', desc: 'Table service, KOT, bar tabs, rooms',         icon: UtensilsCrossed,  modules: ['Table management', 'Kitchen Display', 'Bar tabs', 'Hotel rooms', 'Reservations'] },
+  { value: 'FAST_FOOD',   label: 'Fast Food / Counter', desc: 'Counter service, pay-first, quick KOT',      icon: Coffee,           modules: ['Counter POS', 'Kitchen Display', 'Kiosk mode', 'Quick KOT'] },
+  { value: 'SALON',       label: 'Salon / Spa',      desc: 'Appointments, services, staff commissions',     icon: Scissors,         modules: ['Appointments', 'Service items', 'Staff commissions', 'Loyalty'] },
+  { value: 'CLINIC',      label: 'Clinic / Pharmacy', desc: 'Prescriptions, insurance, controlled drugs',   icon: Pill,             modules: ['Prescriptions queue', 'Drug catalogue', 'Insurance claims', 'Controlled substances log'] },
+  { value: 'FUEL_PUMP',   label: 'Fuel Station',     desc: 'Pump control, tanks, fleet accounts',           icon: Fuel,             modules: ['Pump control', 'Tank dip management', 'Fleet accounts', 'Shift meter readings'] },
 ];
 
 export default function SetupWizardPage() {
@@ -259,24 +263,38 @@ export default function SetupWizardPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Business Type</label>
-                  <div className="grid grid-cols-1 gap-2">
-                    {POS_MODES.map((m) => (
-                      <button
-                        key={m.value}
-                        onClick={() => setBizForm((f) => ({ ...f, posMode: m.value }))}
-                        className={`flex items-center justify-between px-4 py-2.5 rounded-lg border-2 text-left transition-colors ${
-                          bizForm.posMode === m.value
-                            ? 'border-blue-600 bg-blue-50'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        <div>
-                          <p className={`text-sm font-medium ${bizForm.posMode === m.value ? 'text-blue-700' : 'text-gray-800'}`}>{m.label}</p>
-                          <p className="text-xs text-gray-500">{m.desc}</p>
-                        </div>
-                        {bizForm.posMode === m.value && <CheckCircle className="w-5 h-5 text-blue-600 flex-shrink-0" />}
-                      </button>
-                    ))}
+                  <div className="grid grid-cols-1 gap-2 max-h-72 overflow-y-auto pr-1">
+                    {POS_MODES.map((m) => {
+                      const Icon = m.icon;
+                      const selected = bizForm.posMode === m.value;
+                      return (
+                        <button
+                          key={m.value}
+                          onClick={() => setBizForm((f) => ({ ...f, posMode: m.value }))}
+                          className={`flex items-start gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all ${
+                            selected ? 'border-blue-600 bg-blue-50' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          <div className={`p-2 rounded-lg flex-shrink-0 ${selected ? 'bg-blue-100' : 'bg-gray-100'}`}>
+                            <Icon className={`w-5 h-5 ${selected ? 'text-blue-600' : 'text-gray-500'}`} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <p className={`text-sm font-semibold ${selected ? 'text-blue-700' : 'text-gray-800'}`}>{m.label}</p>
+                              {selected && <CheckCircle className="w-4 h-4 text-blue-600 flex-shrink-0" />}
+                            </div>
+                            <p className="text-xs text-gray-500 mt-0.5">{m.desc}</p>
+                            {selected && (
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                {m.modules.map((mod) => (
+                                  <span key={mod} className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{mod}</span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -427,55 +445,79 @@ export default function SetupWizardPage() {
           )}
 
           {/* ── Step 4: Done ── */}
-          {step === 4 && (
-            <div className="text-center space-y-6">
-              <div className="inline-flex items-center justify-center w-20 h-20 bg-green-100 rounded-2xl">
-                <CheckCircle className="w-12 h-12 text-green-600" />
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">You're all set!</h2>
-                <p className="text-gray-500 mt-2">
-                  {bizForm.name || 'Your business'} is ready to start selling.
+          {step === 4 && (() => {
+            const modeInfo = POS_MODES.find((m) => m.value === bizForm.posMode);
+            const ModeIcon = modeInfo?.icon ?? Store;
+
+            const NEXT_STEPS: Record<string, Array<{ icon: React.ElementType; label: string; desc: string; to: string }>> = {
+              RETAIL:      [{ icon: Package, label: 'Add Products', desc: 'Build your item catalogue', to: '/inventory' }, { icon: Users, label: 'Add Staff', desc: 'Invite your team', to: '/settings' }, { icon: BarChart3, label: 'View Reports', desc: 'Track performance', to: '/reports' }],
+              SUPERMARKET: [{ icon: Package, label: 'Import Items', desc: 'Bulk CSV import your catalogue', to: '/inventory' }, { icon: Users, label: 'Add Staff', desc: 'Invite your team', to: '/settings' }, { icon: BarChart3, label: 'View Reports', desc: 'Track performance', to: '/reports' }],
+              HOSPITALITY: [{ icon: UtensilsCrossed, label: 'Set Up Tables', desc: 'Configure your floor plan', to: '/hospitality' }, { icon: Package, label: 'Add Menu Items', desc: 'Build your menu', to: '/inventory' }, { icon: Users, label: 'Add Staff', desc: 'Invite your team', to: '/settings' }],
+              FAST_FOOD:   [{ icon: Coffee, label: 'Open Counter POS', desc: 'Start taking orders', to: '/hospitality' }, { icon: Package, label: 'Add Menu Items', desc: 'Build your menu', to: '/inventory' }, { icon: Users, label: 'Add Staff', desc: 'Invite your team', to: '/settings' }],
+              SALON:       [{ icon: Scissors, label: 'Add Services', desc: 'List your services & prices', to: '/inventory' }, { icon: Users, label: 'Add Therapists', desc: 'Add your staff members', to: '/settings' }, { icon: BarChart3, label: 'Set Up Appointments', desc: 'Ready for bookings', to: '/appointments' }],
+              CLINIC:      [{ icon: Pill, label: 'Set Up Drug Catalogue', desc: 'Load your formulary', to: '/pharmacy' }, { icon: Package, label: 'Add Medicines', desc: 'Inventory for dispensing', to: '/inventory' }, { icon: Users, label: 'Add Staff', desc: 'Invite your team', to: '/settings' }],
+              FUEL_PUMP:   [{ icon: Fuel, label: 'Add Fuel Grades', desc: 'Petrol, Diesel, Premium…', to: '/fuel-pump' }, { icon: Fuel, label: 'Set Up Pumps & Tanks', desc: 'Configure your forecourt', to: '/fuel-pump' }, { icon: Users, label: 'Add Staff', desc: 'Invite your team', to: '/settings' }],
+            };
+
+            const nextSteps = NEXT_STEPS[bizForm.posMode] ?? NEXT_STEPS.RETAIL;
+            const primaryRoute = bizForm.posMode === 'HOSPITALITY' || bizForm.posMode === 'FAST_FOOD' ? '/hospitality'
+              : bizForm.posMode === 'FUEL_PUMP' ? '/fuel-pump'
+              : bizForm.posMode === 'CLINIC' ? '/prescriptions'
+              : bizForm.posMode === 'SALON' ? '/appointments'
+              : '/pos';
+
+            return (
+              <div className="text-center space-y-6">
+                <div className="inline-flex items-center justify-center w-20 h-20 bg-green-100 rounded-2xl">
+                  <CheckCircle className="w-12 h-12 text-green-600" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">You're all set!</h2>
+                  <div className="flex items-center justify-center gap-2 mt-2">
+                    <div className="p-1.5 bg-blue-100 rounded-lg">
+                      <ModeIcon className="w-4 h-4 text-blue-600" />
+                    </div>
+                    <p className="text-gray-600 font-medium">{bizForm.name || 'Your business'} · {modeInfo?.label}</p>
+                  </div>
                   {(etimsSkipped || bizForm.taxChoice === 'NONE') && (
-                    <span className="block text-sm text-amber-600 mt-1">
+                    <p className="text-sm text-amber-600 mt-2">
                       {etimsSkipped && 'Remember to configure KRA eTIMS in Settings. '}
                       {bizForm.taxChoice === 'NONE' && 'Set your tax type in Settings → General.'}
-                    </span>
+                    </p>
                   )}
-                </p>
-              </div>
+                </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-left">
-                {[
-                  { icon: Package, label: 'Add Products', desc: 'Catalog your inventory', to: '/inventory' },
-                  { icon: Users, label: 'Add Staff', desc: 'Invite your team members', to: '/settings' },
-                  { icon: BarChart3, label: 'View Reports', desc: 'Track your performance', to: '/reports' },
-                ].map(({ icon: Icon, label, desc, to }) => (
-                  <button
-                    key={label}
-                    onClick={() => navigate(to)}
-                    className="flex items-start gap-3 p-3 rounded-xl border-2 border-gray-100 hover:border-blue-200 hover:bg-blue-50 transition-colors text-left group"
-                  >
-                    <div className="p-2 bg-blue-100 rounded-lg group-hover:bg-blue-200 transition-colors">
-                      <Icon className="w-4 h-4 text-blue-600" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm text-gray-800">{label}</p>
-                      <p className="text-xs text-gray-500">{desc}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-3">Recommended next steps for your {modeInfo?.label}:</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-left">
+                    {nextSteps.map(({ icon: Icon, label, desc, to }) => (
+                      <button
+                        key={label}
+                        onClick={() => navigate(to)}
+                        className="flex items-start gap-3 p-3 rounded-xl border-2 border-gray-100 hover:border-blue-200 hover:bg-blue-50 transition-colors text-left group"
+                      >
+                        <div className="p-2 bg-blue-100 rounded-lg group-hover:bg-blue-200 transition-colors">
+                          <Icon className="w-4 h-4 text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm text-gray-800">{label}</p>
+                          <p className="text-xs text-gray-500">{desc}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-              <button
-                onClick={() => navigate('/pos')}
-                className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold text-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
-              >
-                Start Selling
-                <ArrowRight className="w-5 h-5" />
-              </button>
-            </div>
-          )}
+                <button
+                  onClick={() => navigate(primaryRoute)}
+                  className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold text-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  {bizForm.posMode === 'FUEL_PUMP' ? 'Go to Fuel Station' : bizForm.posMode === 'CLINIC' ? 'Go to Prescriptions' : bizForm.posMode === 'SALON' ? 'Go to Appointments' : bizForm.posMode === 'HOSPITALITY' || bizForm.posMode === 'FAST_FOOD' ? 'Go to Hospitality' : 'Start Selling'}
+                  <ArrowRight className="w-5 h-5" />
+                </button>
+              </div>
+            );
+          })()}
         </div>
       </div>
     </div>

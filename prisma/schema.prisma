@@ -8,210 +8,223 @@ datasource db {
 }
 
 model Business {
-  id                              String   @id @default(uuid())
-  name                            String
-  taxType                         String   @default("VAT")   // 'VAT' | 'TOT' | 'NONE'
-  serviceChargeRate               Float    @default(10)
-  serviceChargeDefault            Boolean  @default(false)   // auto-apply service charge on every sale
-  negativePolicyDefault           String   @default("BLOCK")
-  posMode                         String   @default("RETAIL")
-  expiredItemPolicy               String   @default("BLOCK")
-  expenseApprovalThresholdCents   Int?     @default(500000)
-  expiryAlertDays                 Int      @default(30)
-  etimsCredentialsEncrypted       String?
-  mpesaCredentialsEncrypted       String?
-  atCredentialsEncrypted          String?
-  etimsMode                       String   @default("SANDBOX") // SANDBOX | PRODUCTION
-  etimsProductionOnboarded        Boolean  @default(false)
-  kraItaxIntegrationEnabled       Boolean  @default(false)
-  kraItaxCredentials              String?  // Encrypted iTax credentials
-  subscriptionTier                String   @default("TRIAL")
-  subscriptionStatus              String   @default("TRIAL")
-  trialEndsAt                     DateTime?
-  planName                        String   @default("STARTER")  // STARTER | PRO | ENTERPRISE
-  paystackCustomerId              String?
-  paystackSubscriptionId          String?
-  paystackPublicKey               String?  // POS card payment public key
-  referralCode                    String?  @unique
-  cancelledAt                     DateTime?
-  cancelReason                    String?  // PRICE | COMPETITOR | MISSING_FEATURE | POOR_SUPPORT | OTHER
-  createdAt                       DateTime @default(now())
-  updatedAt                       DateTime @updatedAt
-
-  stores                          Store[]
-  users                           User[]
-  apiKeys                         ApiKey[]
-  auditLogs                       AuditLog[]
-  reportSchedules                 ReportSchedule[]
-  webhooks                        Webhook[]
-  referrals                       Referral[]       @relation("ReferrerBusiness")
-  prescriptions                   Prescription[]
-  appointments                    Appointment[]
-  deliveries                      DeliveryOrder[]
-  exchangeRates                   String?          // JSON: { USD: 130.5, EUR: 141.2 }
-  displayCurrencies               String?          // JSON: ["USD","EUR"]
-  bankName                        String?
-  bankAccountNumber               String?
-  bankAccountName                 String?
-  bankBranch                      String?
-  idleMessage                     String?  @default("Welcome!")
-  idleLogoUrl                     String?
-  tablePrefix                     String?  @default("T")
-  receiptHeader                   String?
-  receiptFooter                   String?
-  enableCashDrawer                Boolean  @default(false)
-  enableBarcodeScanner            Boolean  @default(true)
-  enablePoleDisplay               Boolean  @default(false)
-  parentBusinessId                String?
-  parentBusiness                  Business?  @relation("FranchiseHierarchy", fields: [parentBusinessId], references: [id])
-  franchisees                     Business[] @relation("FranchiseHierarchy")
-  franchiseFee                    Float?     @default(0)
-  royaltyRate                     Float?     @default(0)
+  id                            String                @id @default(uuid())
+  name                          String
+  taxType                       String                @default("VAT")
+  serviceChargeRate             Float                 @default(10)
+  negativePolicyDefault         String                @default("BLOCK")
+  posMode                       String                @default("RETAIL")
+  expiredItemPolicy             String                @default("BLOCK")
+  expenseApprovalThresholdCents Int?                  @default(500000)
+  expiryAlertDays               Int                   @default(30)
+  etimsCredentialsEncrypted     String?
+  mpesaCredentialsEncrypted     String?
+  atCredentialsEncrypted        String?
+  etimsMode                     String                @default("SANDBOX")
+  etimsProductionOnboarded      Boolean               @default(false)
+  kraItaxIntegrationEnabled     Boolean               @default(false)
+  kraItaxCredentials            String?
+  subscriptionTier              String                @default("TRIAL")
+  subscriptionStatus            String                @default("TRIAL")
+  trialEndsAt                   DateTime?
+  planName                      String                @default("STARTER")
+  paystackCustomerId            String?
+  paystackSubscriptionId        String?
+  paystackPublicKey             String?
+  referralCode                  String?               @unique
+  createdAt                     DateTime              @default(now())
+  updatedAt                     DateTime              @updatedAt
+  exchangeRates                 String?
+  displayCurrencies             String?
+  bankName                      String?
+  bankAccountNumber             String?
+  bankAccountName               String?
+  bankBranch                    String?
+  idleMessage                   String?               @default("Welcome!")
+  idleLogoUrl                   String?
+  tablePrefix                   String?               @default("T")
+  receiptHeader                 String?
+  receiptFooter                 String?
+  parentBusinessId              String?
+  franchiseFee                  Float?                @default(0)
+  royaltyRate                   Float?                @default(0)
+  cancelledAt                   DateTime?
+  cancelReason                  String?
+  serviceChargeDefault          Boolean               @default(false)
+  enableCashDrawer              Boolean               @default(false)
+  enableBarcodeScanner          Boolean               @default(true)
+  enablePoleDisplay             Boolean               @default(false)
+  totRate                       Float                 @default(3.0)
+  apiKeys                       ApiKey[]
+  appointments                  Appointment[]
+  auditLogs                     AuditLog[]
+  parentBusiness                Business?             @relation("FranchiseHierarchy", fields: [parentBusinessId], references: [id])
+  franchisees                   Business[]            @relation("FranchiseHierarchy")
+  deliveries                    DeliveryOrder[]
+  mpesaC2BTransactions          MpesaC2BTransaction[]
+  prescriptions                 Prescription[]
+  referrals                     Referral[]            @relation("ReferrerBusiness")
+  reportSchedules               ReportSchedule[]
+  stores                        Store[]
+  users                         User[]
+  webhooks                      Webhook[]
 
   @@index([subscriptionStatus])
   @@index([referralCode])
 }
 
 model FranchiseReport {
-  id                   String   @id @default(cuid())
-  franchiseeBusinessId String
+  id                     String   @id @default(cuid())
+  franchiseeBusinessId   String
   franchiseeBusinessName String
-  parentBusinessId     String
-  month                Int
-  year                 Int
-  gmvCents             Int      @default(0)
-  feeCents             Int      @default(0)
-  royaltyCents         Int      @default(0)
-  salesCount           Int      @default(0)
-  createdAt            DateTime @default(now())
+  parentBusinessId       String
+  month                  Int
+  year                   Int
+  gmvCents               Int      @default(0)
+  feeCents               Int      @default(0)
+  royaltyCents           Int      @default(0)
+  salesCount             Int      @default(0)
+  createdAt              DateTime @default(now())
+
   @@unique([franchiseeBusinessId, month, year])
 }
 
 model User {
-  id                String   @id @default(uuid())
-  businessId        String
-  email             String?  @unique
-  name              String
-  role              String
-  passwordHash      String?
-  pin               String?
-  pinHash           String?
-  totpSecret        String?
-  googleId          String?  @unique
-  avatarUrl         String?
-  deviceToken       String?
-  phone             String?
-  passwordChangedAt DateTime?
-  passwordExpiresAt DateTime?
-  mustChangePassword Boolean  @default(false)
-  loginAttempts     Int      @default(0)
-  lockedUntil       DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  business          Business @relation(fields: [businessId], references: [id])
-  employee          Employee?
-  sales             Sale[]
-  orders            Order[]
-  assignedKOTs      KOT[]     @relation("ChefKOTs")
-  assignedStores    UserStore[]
-  sessions          UserSession[]
+  id                 String        @id @default(uuid())
+  businessId         String
+  email              String?       @unique
+  name               String
+  role               String
+  passwordHash       String?
+  pin                String?
+  pinHash            String?
+  totpSecret         String?
+  googleId           String?       @unique
+  avatarUrl          String?
+  deviceToken        String?
+  phone              String?
+  passwordChangedAt  DateTime?
+  passwordExpiresAt  DateTime?
+  mustChangePassword Boolean       @default(false)
+  loginAttempts      Int           @default(0)
+  lockedUntil        DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  employee           Employee?
+  assignedKOTs       KOT[]         @relation("ChefKOTs")
+  orders             Order[]
+  sales              Sale[]
+  business           Business      @relation(fields: [businessId], references: [id])
+  sessions           UserSession[]
+  assignedStores     UserStore[]
+  timeEntries        TimeEntry[]
 
   @@index([businessId, role])
 }
 
 model UserSession {
-  id           String   @id @default(uuid())
-  userId       String
-  tokenHash    String   @unique
-  ipAddress    String?
-  userAgent    String?
-  createdAt    DateTime @default(now())
-  lastSeenAt   DateTime @default(now())
-  expiresAt    DateTime
-  isRevoked    Boolean  @default(false)
-
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         String   @id @default(uuid())
+  userId     String
+  tokenHash  String   @unique
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  expiresAt  DateTime
+  isRevoked  Boolean  @default(false)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
 model Store {
-  id                String   @id @default(uuid())
-  businessId        String
-  name              String
-  storeCode         String   @unique
-  receiptSequence   Int      @default(0)
-  proformaSequence  Int      @default(0)
-  zReportSequence   Int      @default(0)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  business          Business @relation(fields: [businessId], references: [id])
-  items             Item[]
-  sales             Sale[]
-  orders            Order[]
-  tables            Table[]
-  printers          Printer[]
-  assignedUsers     UserStore[]
-  prescriptions     Prescription[]
-  appointments      Appointment[]
-  deliveries        DeliveryOrder[]
+  id               String          @id @default(uuid())
+  businessId       String
+  name             String
+  storeCode        String          @unique
+  receiptSequence  Int             @default(0)
+  proformaSequence Int             @default(0)
+  zReportSequence  Int             @default(0)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  appointments     Appointment[]
+  deliveries       DeliveryOrder[]
+  items            Item[]
+  orders           Order[]
+  prescriptions    Prescription[]
+  printers         Printer[]
+  sales            Sale[]
+  business         Business        @relation(fields: [businessId], references: [id])
+  tables           Table[]
+  assignedUsers    UserStore[]
 
   @@index([businessId])
 }
 
 model Item {
-  id                      String    @id @default(uuid())
-  offlineId               String?   @unique
-  businessId              String
-  storeId                 String
-  name                    String
-  type                    String    @default("PRODUCT")
-  retailPriceCents        Int
-  wholesalePriceCents     Int?
-  vipPriceCents           Int?
-  costPriceCents          Int?
-  trackStock              Boolean   @default(true)
-  trackSerials            Boolean   @default(false)
-  trackBatches            Boolean   @default(false)
-  trackExpiry             Boolean   @default(false)
-  defaultExpiryDays       Int?
-  negativeStockPolicy     String?
-  weightUnit              String?
-  reorderLevel            Int?      @default(0)
-  vatApplicable           Boolean   @default(true)
-  totApplicable           Boolean   @default(false)
-  barcode                 String?
-  category                String?
-  ageRestricted           Boolean   @default(false)
-  minAgeYears             Int       @default(18)
-  prepTimeMinutes         Int       @default(5)
-  unitWeightGrams         Int?
-  isActive                Boolean   @default(true)
-  imageUrl                String?
-  allergens               String    @default("[]")
-  reorderQty              Int       @default(1)
-  tareWeightGrams         Int?
-  binLocation             String?
-  isWeighed               Boolean   @default(false)
-  createdAt               DateTime  @default(now())
-  updatedAt               DateTime  @updatedAt
-  deletedAt               DateTime?
-
-  store                   Store     @relation(fields: [storeId], references: [id])
-  batches                 Batch[]
-  movements               InventoryMovement[]
-  bundleComponents        BundleComponent[] @relation("BundleItem")
-  componentOf             BundleComponent[] @relation("ComponentItem")
-  recipeIngredients       RecipeIngredient[] @relation("RecipeItem")
-  ingredientOf            RecipeIngredient[] @relation("IngredientItem")
-  saleItems               SaleItem[]
-  orderItems              OrderItem[]
-  serialRecords           SerialRecord[]
-  variants                ItemVariant[]
-  supplierReturnItems     SupplierReturnItem[]
-  damagedGoodsRecords     DamagedGoodsRecord[]
+  id                  String               @id @default(uuid())
+  offlineId           String?              @unique
+  businessId          String
+  storeId             String
+  name                String
+  type                String               @default("PRODUCT")
+  retailPriceCents    Int
+  wholesalePriceCents Int?
+  vipPriceCents       Int?
+  costPriceCents      Int?
+  trackStock          Boolean              @default(true)
+  trackSerials        Boolean              @default(false)
+  trackBatches        Boolean              @default(false)
+  trackExpiry         Boolean              @default(false)
+  defaultExpiryDays   Int?
+  negativeStockPolicy String?
+  weightUnit          String?
+  reorderLevel        Int?                 @default(0)
+  vatApplicable       Boolean              @default(true)
+  totApplicable       Boolean              @default(false)
+  barcode             String?
+  category            String?
+  ageRestricted       Boolean              @default(false)
+  minAgeYears         Int                  @default(18)
+  prepTimeMinutes     Int                  @default(5)
+  unitWeightGrams     Int?
+  isActive            Boolean              @default(true)
+  imageUrl            String?
+  allergens           String               @default("[]")
+  reorderQty          Int                  @default(1)
+  tareWeightGrams     Int?
+  binLocation         String?
+  isWeighed           Boolean              @default(false)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  deletedAt           DateTime?
+  kraItemCode         String?
+  soldOut             Boolean   @default(false)
+  isFractional        Boolean   @default(false)
+  unitLabel           String?
+  availableFrom        String?
+  availableTo          String?
+  availableDays        String    @default("[0,1,2,3,4,5,6]")
+  requiresPrescription Boolean   @default(false)
+  genericName          String?
+  drugClass            String?
+  scheduleClass        String?
+  dosageForm           String?
+  strength             String?
+  interactionWarnings  String    @default("[]")
+  batches              Batch[]
+  bundleComponents    BundleComponent[]    @relation("BundleItem")
+  componentOf         BundleComponent[]    @relation("ComponentItem")
+  damagedGoodsRecords DamagedGoodsRecord[]
+  movements           InventoryMovement[]
+  store               Store                @relation(fields: [storeId], references: [id])
+  variants            ItemVariant[]
+  orderItems          OrderItem[]
+  ingredientOf        RecipeIngredient[]   @relation("IngredientItem")
+  recipeIngredients   RecipeIngredient[]   @relation("RecipeItem")
+  saleItems           SaleItem[]
+  serialRecords       SerialRecord[]
+  supplierReturnItems SupplierReturnItem[]
 
   @@index([businessId, storeId])
   @@index([type])
@@ -233,7 +246,6 @@ model ItemVariant {
   trackStock          Boolean  @default(false)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
-
   item                Item     @relation(fields: [itemId], references: [id])
 
   @@index([itemId])
@@ -242,8 +254,8 @@ model ItemVariant {
 }
 
 model Batch {
-  id                String    @id @default(uuid())
-  offlineId         String    @unique
+  id                String              @id @default(uuid())
+  offlineId         String              @unique
   itemId            String
   storeId           String
   lotNumber         String
@@ -252,11 +264,10 @@ model Batch {
   supplierId        String?
   quantityReceived  Int
   quantityRemaining Int
-  status            String    @default("ACTIVE")
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
-  item              Item      @relation(fields: [itemId], references: [id])
+  status            String              @default("ACTIVE")
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  item              Item                @relation(fields: [itemId], references: [id])
   movements         InventoryMovement[]
 
   @@index([itemId, expiryDate])
@@ -264,48 +275,47 @@ model Batch {
 }
 
 model Sale {
-  id                    String    @id @default(uuid())
-  offlineId             String    @unique
-  businessId            String
-  storeId               String?
-  receiptNumber         String?   @unique
-  amendmentNumber       String?
-  orderId               String?   @unique
-  cashierId             String?
-  customerId            String?
-  customerName          String?
-  customerPhone         String?
-  notes                 String?
-  proformaValidUntil    DateTime?
-  type                  String    @default("NORMAL")
-  status                String    @default("DRAFT")
-  priceLevel            String    @default("RETAIL")
-  subtotalCents         Int       @default(0)
-  serviceChargeCents    Int       @default(0)
-  discountCents         Int       @default(0)
-  tipCents              Int       @default(0)
-  promotionId           String?
-  vatCents              Int       @default(0)
-  totCents              Int       @default(0)
-  totalCents            Int       @default(0)
-  etimsSubmitted        Boolean   @default(false)
-  etimsControlNumber    String?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-  deletedAt             DateTime?
-
-  store               Store?    @relation(fields: [storeId], references: [id])
-  cashier             User?     @relation(fields: [cashierId], references: [id])
-  customer            Customer? @relation(fields: [customerId], references: [id])
-  order               Order?    @relation(fields: [orderId], references: [id])
-  layaway             Layaway?
-  items               SaleItem[]
-  payments            Payment[]
-  movements           InventoryMovement[]
-  voidRecords         VoidRecord[]
-  serialRecords       SerialRecord[]
-  returns             Return[]
-  deliveries          DeliveryOrder[]
+  id                 String              @id @default(uuid())
+  offlineId          String              @unique
+  businessId         String
+  storeId            String?
+  receiptNumber      String?             @unique
+  amendmentNumber    String?
+  orderId            String?             @unique
+  cashierId          String?
+  customerId         String?
+  customerName       String?
+  customerPhone      String?
+  notes              String?
+  proformaValidUntil DateTime?
+  type               String              @default("NORMAL")
+  status             String              @default("DRAFT")
+  priceLevel         String              @default("RETAIL")
+  subtotalCents      Int                 @default(0)
+  serviceChargeCents Int                 @default(0)
+  discountCents      Int                 @default(0)
+  tipCents           Int                 @default(0)
+  promotionId        String?
+  vatCents           Int                 @default(0)
+  totCents           Int                 @default(0)
+  totalCents         Int                 @default(0)
+  etimsSubmitted     Boolean             @default(false)
+  etimsControlNumber String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  deletedAt          DateTime?
+  deliveries         DeliveryOrder[]
+  movements          InventoryMovement[]
+  layaway            Layaway?
+  payments           Payment[]
+  returns            Return[]
+  cashier            User?               @relation(fields: [cashierId], references: [id])
+  customer           Customer?           @relation(fields: [customerId], references: [id])
+  order              Order?              @relation(fields: [orderId], references: [id])
+  store              Store?              @relation(fields: [storeId], references: [id])
+  items              SaleItem[]
+  serialRecords      SerialRecord[]
+  voidRecords        VoidRecord[]
 
   @@index([businessId, storeId, status])
   @@index([receiptNumber])
@@ -313,68 +323,64 @@ model Sale {
 }
 
 model Order {
-  id          String    @id @default(uuid())
-  offlineId   String    @unique
-  businessId  String
-  storeId     String
-  tableId     String?
-  roomNumber  String?
-  waiterId    String
-  status      String    @default("OPEN")
-  mode        String    @default("HOSPITALITY")
-  priority    Int       @default(0)
-  isVIP       Boolean   @default(false)
-  coverCount  Int       @default(1)
-  tableNotes  String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  store       Store     @relation(fields: [storeId], references: [id])
-  waiter      User      @relation(fields: [waiterId], references: [id])
-  table       Table?    @relation(fields: [tableId], references: [id])
-  items       OrderItem[]
-  kots        KOT[]
-  sale        Sale?
+  id         String      @id @default(uuid())
+  offlineId  String      @unique
+  businessId String
+  storeId    String
+  tableId    String?
+  roomNumber String?
+  waiterId   String
+  status     String      @default("OPEN")
+  mode       String      @default("HOSPITALITY")
+  priority   Int         @default(0)
+  isVIP      Boolean     @default(false)
+  coverCount Int         @default(1)
+  tableNotes String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  kots       KOT[]
+  store      Store       @relation(fields: [storeId], references: [id])
+  table      Table?      @relation(fields: [tableId], references: [id])
+  waiter     User        @relation(fields: [waiterId], references: [id])
+  items      OrderItem[]
+  sale       Sale?
 
   @@index([businessId, storeId, status])
   @@index([offlineId])
 }
 
 model Employee {
-  id               String    @id @default(uuid())
-  userId           String    @unique
-  businessId       String
-  idNumber         String?
-  emergencyContact String?
-  employmentType   String    @default("PERMANENT")
-  commissionRate               Float     @default(0)
-  commissionBasis              String    @default("SALES_VALUE")  // SALES_VALUE | TRANSACTION_COUNT | GROSS_MARGIN
-  salesTargetCents             Int?
-  commissionMilestonePercent   Float?   @default(0)
-  // Payroll fields
-  salaryBaseCents              Int      @default(0)
-  housingAllowanceCents        Int      @default(0)
-  transportAllowanceCents      Int      @default(0)
-  otherAllowancesCents         Int      @default(0)
-  // Deductions
-  saccoDeductionCents          Int      @default(0)   // SACCO/welfare deduction
-  loanDeductionCents           Int      @default(0)   // salary advance/loan repayment
-  otherDeductionsCents         Int      @default(0)   // any other recurring deduction
-  bankAccountNumber            String?
-  bankName                     String?
-  startDate                    DateTime?
-  createdAt                    DateTime  @default(now())
-  updatedAt                    DateTime  @updatedAt
-
-  user             User      @relation(fields: [userId], references: [id])
-  attendance       AttendanceRecord[]
-  leaves           Leave[]
-  leaveBalances    LeaveBalance[]
-  expenseClaims    ExpenseClaim[]
-  disciplinaryRecords     DisciplinaryRecord[]
-  housekeepingAssignments HousekeepingAssignment[]
-  contractEndDate  DateTime?
-  contractType     String?   @default("PERMANENT")  // PERMANENT | CONTRACT | CASUAL
+  id                         String                   @id @default(uuid())
+  userId                     String                   @unique
+  businessId                 String
+  idNumber                   String?
+  emergencyContact           String?
+  employmentType             String                   @default("PERMANENT")
+  commissionRate             Float                    @default(0)
+  commissionBasis            String                   @default("SALES_VALUE")
+  salesTargetCents           Int?
+  commissionMilestonePercent Float?                   @default(0)
+  salaryBaseCents            Int                      @default(0)
+  housingAllowanceCents      Int                      @default(0)
+  transportAllowanceCents    Int                      @default(0)
+  otherAllowancesCents       Int                      @default(0)
+  saccoDeductionCents        Int                      @default(0)
+  loanDeductionCents         Int                      @default(0)
+  otherDeductionsCents       Int                      @default(0)
+  bankAccountNumber          String?
+  bankName                   String?
+  startDate                  DateTime?
+  createdAt                  DateTime                 @default(now())
+  updatedAt                  DateTime                 @updatedAt
+  contractEndDate            DateTime?
+  contractType               String?                  @default("PERMANENT")
+  attendance                 AttendanceRecord[]
+  disciplinaryRecords        DisciplinaryRecord[]
+  user                       User                     @relation(fields: [userId], references: [id])
+  expenseClaims              ExpenseClaim[]
+  housekeepingAssignments    HousekeepingAssignment[]
+  leaves                     Leave[]
+  leaveBalances              LeaveBalance[]
 
   @@index([businessId])
 }
@@ -393,7 +399,6 @@ model ExpenseClaim {
   rejectionReason String?
   submittedAt     DateTime @default(now())
   updatedAt       DateTime @updatedAt
-
   employee        Employee @relation(fields: [employeeId], references: [id])
 
   @@index([businessId])
@@ -401,61 +406,58 @@ model ExpenseClaim {
 }
 
 model AuditLog {
-  id            String   @id @default(uuid())
-  businessId    String
-  previousHash  String
-  hash          String
-  actor         String
-  actorType     String
-  action        String
-  entity        String
-  entityId      String
-  before        String?
-  after         String?
-  source        String
-  createdAt     DateTime @default(now())
-
-  business      Business @relation(fields: [businessId], references: [id])
+  id           String   @id @default(uuid())
+  businessId   String
+  previousHash String
+  hash         String
+  actor        String
+  actorType    String
+  action       String
+  entity       String
+  entityId     String
+  before       String?
+  after        String?
+  source       String
+  createdAt    DateTime @default(now())
+  business     Business @relation(fields: [businessId], references: [id])
 
   @@index([businessId, createdAt])
   @@index([entity, entityId])
 }
 
 model ApiKey {
-  id              String   @id @default(uuid())
-  businessId      String
-  name            String
-  keyHash         String   @unique
-  scopes          String
-  ipWhitelist     String
-  isActive        Boolean  @default(true)
-  lastUsedAt      DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  business        Business @relation(fields: [businessId], references: [id])
+  id          String    @id @default(uuid())
+  businessId  String
+  name        String
+  keyHash     String    @unique
+  scopes      String
+  ipWhitelist String
+  isActive    Boolean   @default(true)
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  business    Business  @relation(fields: [businessId], references: [id])
 
   @@index([businessId])
 }
 
 model SaleItem {
-  id              String   @id @default(uuid())
-  saleId          String
-  itemId          String?
-  name            String
-  quantity        Int
-  unitPriceCents  Int
-  totalCents      Int
-  createdAt       DateTime @default(now())
-
-  sale            Sale     @relation(fields: [saleId], references: [id])
-  item            Item?    @relation(fields: [itemId], references: [id])
+  id             String   @id @default(uuid())
+  saleId         String
+  itemId         String?
+  name           String
+  quantity       Int
+  unitPriceCents Int
+  totalCents     Int
+  createdAt      DateTime @default(now())
+  item           Item?    @relation(fields: [itemId], references: [id])
+  sale           Sale     @relation(fields: [saleId], references: [id])
 
   @@index([saleId])
 }
 
 model OrderItem {
-  id                  String   @id @default(uuid())
+  id                  String    @id @default(uuid())
   orderId             String
   itemId              String
   name                String
@@ -464,27 +466,48 @@ model OrderItem {
   totalCents          Int
   specialInstructions String?
   modifiers           String?
-  course              String?   // STARTER | MAIN | DESSERT
+  course              String?
   firedAt             DateTime?
-  seatNumber          Int?      @default(0)  // 0 = shared/whole-table, 1..N = individual guest seat
-  createdAt           DateTime @default(now())
-
-  order               Order    @relation(fields: [orderId], references: [id])
-  item                Item     @relation(fields: [itemId], references: [id])
+  seatNumber          Int?      @default(0)
+  createdAt           DateTime  @default(now())
+  item                Item      @relation(fields: [itemId], references: [id])
+  order               Order     @relation(fields: [orderId], references: [id])
 
   @@index([orderId])
 }
 
-model Payment {
-  id              String   @id @default(uuid())
-  offlineId       String   @unique
-  saleId          String
-  method          String
-  amountCents     Int
-  reference       String?
-  createdAt       DateTime @default(now())
+model MpesaC2BTransaction {
+  id                String    @id @default(cuid())
+  businessId        String
+  transactionId     String    @unique
+  transactionType   String
+  phoneNumber       String
+  customerName      String
+  amountCents       Int
+  billRefNumber     String    @default("")
+  orgAccountBalance Int?
+  shortCode         String?
+  status            String    @default("PENDING")
+  saleId            String?
+  matchedBy         String?
+  matchedAt         DateTime?
+  rawPayload        Json?
+  createdAt         DateTime  @default(now())
+  business          Business  @relation(fields: [businessId], references: [id])
 
-  sale            Sale     @relation(fields: [saleId], references: [id])
+  @@index([businessId, status])
+  @@index([createdAt])
+}
+
+model Payment {
+  id          String   @id @default(uuid())
+  offlineId   String   @unique
+  saleId      String
+  method      String
+  amountCents Int
+  reference   String?
+  createdAt   DateTime @default(now())
+  sale        Sale     @relation(fields: [saleId], references: [id])
 
   @@index([saleId])
 }
@@ -499,32 +522,30 @@ model VoidRecord {
   refundAmountCents Int
   etimsVoidRef      String?
   createdAt         DateTime @default(now())
-
   sale              Sale     @relation(fields: [saleId], references: [id])
 
   @@index([saleId])
 }
 
 model InventoryMovement {
-  id              String    @id @default(uuid())
-  offlineId       String    @unique
-  businessId      String
-  itemId          String
-  storeId         String
-  type            String
-  quantity        Int
-  batchId         String?
-  saleId          String?
-  recipeItemId    String?
-  bundleItemId    String?
-  grnId           String?
-  variantId       String?
-  source          String
-  createdAt       DateTime  @default(now())
-
-  item            Item      @relation(fields: [itemId], references: [id])
-  batch           Batch?    @relation(fields: [batchId], references: [id])
-  sale            Sale?     @relation(fields: [saleId], references: [id])
+  id           String   @id @default(uuid())
+  offlineId    String   @unique
+  businessId   String
+  itemId       String
+  storeId      String
+  type         String
+  quantity     Int
+  batchId      String?
+  saleId       String?
+  recipeItemId String?
+  bundleItemId String?
+  grnId        String?
+  variantId    String?
+  source       String
+  createdAt    DateTime @default(now())
+  batch        Batch?   @relation(fields: [batchId], references: [id])
+  item         Item     @relation(fields: [itemId], references: [id])
+  sale         Sale?    @relation(fields: [saleId], references: [id])
 
   @@index([businessId, itemId, createdAt])
   @@index([type])
@@ -540,9 +561,8 @@ model Table {
   status       String             @default("AVAILABLE")
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
-
-  store        Store              @relation(fields: [storeId], references: [id])
   orders       Order[]
+  store        Store              @relation(fields: [storeId], references: [id])
   reservations TableReservation[]
 
   @@index([storeId, status])
@@ -558,224 +578,212 @@ model Printer {
   handles           String
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
-
   store             Store    @relation(fields: [storeId], references: [id])
 
   @@index([storeId])
 }
 
 model BundleComponent {
-  id                String   @id @default(uuid())
-  bundleItemId      String
-  componentItemId   String
-  quantity          Int
-  createdAt         DateTime @default(now())
-
-  bundleItem        Item     @relation("BundleItem", fields: [bundleItemId], references: [id])
-  componentItem     Item     @relation("ComponentItem", fields: [componentItemId], references: [id])
+  id              String   @id @default(uuid())
+  bundleItemId    String
+  componentItemId String
+  quantity        Int
+  createdAt       DateTime @default(now())
+  bundleItem      Item     @relation("BundleItem", fields: [bundleItemId], references: [id])
+  componentItem   Item     @relation("ComponentItem", fields: [componentItemId], references: [id])
 
   @@index([bundleItemId])
 }
 
 model RecipeIngredient {
-  id                String   @id @default(uuid())
-  recipeItemId      String
-  ingredientItemId  String
-  quantityGrams     Float
-  createdAt         DateTime @default(now())
-
-  recipeItem        Item     @relation("RecipeItem", fields: [recipeItemId], references: [id])
-  ingredientItem    Item     @relation("IngredientItem", fields: [ingredientItemId], references: [id])
+  id               String   @id @default(uuid())
+  recipeItemId     String
+  ingredientItemId String
+  quantityGrams    Float
+  createdAt        DateTime @default(now())
+  ingredientItem   Item     @relation("IngredientItem", fields: [ingredientItemId], references: [id])
+  recipeItem       Item     @relation("RecipeItem", fields: [recipeItemId], references: [id])
 
   @@index([recipeItemId])
 }
 
 model Supplier {
-  id                      String   @id @default(uuid())
+  id                      String                   @id @default(uuid())
   businessId              String
   name                    String
   contact                 String?
   address                 String?
   paymentTerms            String?
   creditLimitCents        Int?
-  outstandingBalanceCents Int      @default(0)
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
-
+  outstandingBalanceCents Int                      @default(0)
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
   purchaseOrders          PurchaseOrder[]
+  rfqResponses            RFQResponse[]
   creditNotes             SupplierCreditNote[]
-  returns                 SupplierReturn[]
   invoices                SupplierInvoice[]
   priceAgreements         SupplierPriceAgreement[]
-  rfqResponses            RFQResponse[]
+  returns                 SupplierReturn[]
+  catalogueItems          SupplierCatalogueItem[]
 
   @@index([businessId])
 }
 
 model PurchaseOrder {
-  id                String    @id @default(uuid())
-  poNumber          String    @unique
-  businessId        String
-  supplierId        String
-  status            String    @default("DRAFT")
-  expectedDelivery  DateTime?
-  notes             String?
-  invoiceNumber     String?
-  invoicedAt        DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
-  supplier          Supplier  @relation(fields: [supplierId], references: [id])
-  items             POItem[]
-  grns              GRN[]
+  id               String    @id @default(uuid())
+  poNumber         String    @unique
+  businessId       String
+  supplierId       String
+  status           String    @default("DRAFT")
+  expectedDelivery DateTime?
+  notes            String?
+  invoiceNumber    String?
+  invoicedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  grns             GRN[]
+  items            POItem[]
+  supplier         Supplier  @relation(fields: [supplierId], references: [id])
 
   @@index([businessId, supplierId, status])
 }
 
 model POItem {
-  id                String   @id @default(uuid())
-  poId              String
-  itemId            String
-  quantityOrdered   Int
-  agreedPriceCents  Int
-  createdAt         DateTime @default(now())
-
-  po                PurchaseOrder @relation(fields: [poId], references: [id])
+  id               String        @id @default(uuid())
+  poId             String
+  itemId           String
+  quantityOrdered  Int
+  agreedPriceCents Int
+  createdAt        DateTime      @default(now())
+  po               PurchaseOrder @relation(fields: [poId], references: [id])
 
   @@index([poId])
 }
 
 model GRN {
-  id                    String   @id @default(uuid())
-  poId                  String
-  receivedAt            DateTime @default(now())
-  freightCents          Int      @default(0)
-  dutyPaidCents         Int      @default(0)
-  landedCostAllocated   Boolean  @default(false)
-  createdAt             DateTime @default(now())
-
-  po          PurchaseOrder @relation(fields: [poId], references: [id])
-  items       GRNItem[]
+  id                  String        @id @default(uuid())
+  poId                String
+  receivedAt          DateTime      @default(now())
+  freightCents        Int           @default(0)
+  dutyPaidCents       Int           @default(0)
+  landedCostAllocated Boolean       @default(false)
+  createdAt           DateTime      @default(now())
+  po                  PurchaseOrder @relation(fields: [poId], references: [id])
+  items               GRNItem[]
 
   @@index([poId])
 }
 
 model GRNItem {
-  id                String    @id @default(uuid())
-  grnId             String
-  poItemId          String
-  quantityReceived  Int
-  batchLotNumber    String?
-  expiryDate        DateTime?
-  landedCostCents   Int       @default(0)
-  createdAt         DateTime  @default(now())
-
-  grn               GRN       @relation(fields: [grnId], references: [id])
+  id               String    @id @default(uuid())
+  grnId            String
+  poItemId         String
+  quantityReceived Int
+  batchLotNumber   String?
+  expiryDate       DateTime?
+  landedCostCents  Int       @default(0)
+  createdAt        DateTime  @default(now())
+  grn              GRN       @relation(fields: [grnId], references: [id])
 
   @@index([grnId])
 }
 
 model Expense {
-  id                    String    @id @default(uuid())
-  offlineId             String    @unique
-  businessId            String
-  storeId               String
-  amountCents           Int
-  category              String
-  description           String
-  paidBy                String
-  receiptPhotoUrl       String?
-  isRecurring           Boolean   @default(false)
-  recurringDay          Int?
-  approvalStatus        String    @default("APPROVED")
-  approvedBy            String?
-  submittedBy           String
-  cashDrawerSessionId   String?
-  vatReclaimable        Boolean   @default(false)
-  vatAmountCents        Int       @default(0)
-  currentApprovalLevel  Int       @default(1)
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-  deletedAt             DateTime?
-
-  approvalSteps         ExpenseApprovalStep[]
+  id                   String                @id @default(uuid())
+  offlineId            String                @unique
+  businessId           String
+  storeId              String
+  amountCents          Int
+  category             String
+  description          String
+  paidBy               String
+  receiptPhotoUrl      String?
+  isRecurring          Boolean               @default(false)
+  recurringDay         Int?
+  approvalStatus       String                @default("APPROVED")
+  approvedBy           String?
+  submittedBy          String
+  cashDrawerSessionId  String?
+  vatReclaimable       Boolean               @default(false)
+  vatAmountCents       Int                   @default(0)
+  currentApprovalLevel Int                   @default(1)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  deletedAt            DateTime?
+  approvalSteps        ExpenseApprovalStep[]
 
   @@index([businessId, category, createdAt])
   @@index([approvalStatus])
 }
 
 model AttendanceRecord {
-  id          String    @id @default(uuid())
-  offlineId   String    @unique
-  employeeId  String
-  storeId     String
-  clockIn     DateTime
-  clockOut    DateTime?
-  isLate      Boolean   @default(false)
-  shiftDate   DateTime
-  createdAt   DateTime  @default(now())
-
-  employee    Employee  @relation(fields: [employeeId], references: [id])
+  id         String    @id @default(uuid())
+  offlineId  String    @unique
+  employeeId String
+  storeId    String
+  clockIn    DateTime
+  clockOut   DateTime?
+  isLate     Boolean   @default(false)
+  shiftDate  DateTime
+  createdAt  DateTime  @default(now())
+  employee   Employee  @relation(fields: [employeeId], references: [id])
 
   @@index([employeeId, shiftDate])
 }
 
 model Leave {
-  id          String   @id @default(uuid())
-  employeeId  String
-  type        String
-  startDate   DateTime
-  endDate     DateTime
-  reason      String?
-  status      String   @default("PENDING")
-  approvedBy  String?
-  createdAt   DateTime @default(now())
-
-  employee    Employee @relation(fields: [employeeId], references: [id])
+  id         String   @id @default(uuid())
+  employeeId String
+  type       String
+  startDate  DateTime
+  endDate    DateTime
+  reason     String?
+  status     String   @default("PENDING")
+  approvedBy String?
+  createdAt  DateTime @default(now())
+  employee   Employee @relation(fields: [employeeId], references: [id])
 
   @@index([employeeId])
 }
 
 model Customer {
-  id                        String   @id @default(uuid())
-  businessId                String
-  name                      String
-  phone                     String?
-  email                     String?
-  creditLimitCents          Int      @default(0)
-  creditLimitPendingCents   Int      @default(0)
-  creditApprovalStatus      String   @default("NONE")  // NONE | PENDING | APPROVED | REJECTED
-  balanceCents              Int      @default(0)
-  loyaltyPoints             Int      @default(0)
-  createdAt                 DateTime @default(now())
-  updatedAt                 DateTime @updatedAt
-
-  sales             Sale[]
-  layaways          Layaway[]
-  appointments      Appointment[]
-  deliveries        DeliveryOrder[]
+  id                      String          @id @default(uuid())
+  businessId              String
+  name                    String
+  phone                   String?
+  email                   String?
+  creditLimitCents        Int             @default(0)
+  creditLimitPendingCents Int             @default(0)
+  creditApprovalStatus    String          @default("NONE")
+  balanceCents            Int             @default(0)
+  loyaltyPoints           Int             @default(0)
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+  appointments            Appointment[]
+  deliveries              DeliveryOrder[]
+  layaways                Layaway[]
+  sales                   Sale[]
 
   @@index([businessId])
   @@index([phone])
 }
 
 model Layaway {
-  id                String   @id @default(uuid())
-  offlineId         String   @unique
-  businessId        String
-  storeId           String
-  customerId        String
-  saleId            String?  @unique
-  status            String   @default("ACTIVE")
-  totalCents        Int
-  paidCents         Int      @default(0)
-  remainingCents    Int
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  customer          Customer @relation(fields: [customerId], references: [id])
-  sale              Sale?    @relation(fields: [saleId], references: [id])
-  payments          LayawayPayment[]
+  id             String           @id @default(uuid())
+  offlineId      String           @unique
+  businessId     String
+  storeId        String
+  customerId     String
+  saleId         String?          @unique
+  status         String           @default("ACTIVE")
+  totalCents     Int
+  paidCents      Int              @default(0)
+  remainingCents Int
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  customer       Customer         @relation(fields: [customerId], references: [id])
+  sale           Sale?            @relation(fields: [saleId], references: [id])
+  payments       LayawayPayment[]
 
   @@index([businessId, customerId, status])
 }
@@ -787,45 +795,43 @@ model LayawayPayment {
   method      String
   reference   String?
   createdAt   DateTime @default(now())
-
   layaway     Layaway  @relation(fields: [layawayId], references: [id])
 
   @@index([layawayId])
 }
 
 model SerialRecord {
-  id            String   @id @default(uuid())
-  itemId        String
-  saleId        String?
-  serialNumber  String   @unique
-  status        String   @default("AVAILABLE")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  item          Item     @relation(fields: [itemId], references: [id])
-  sale          Sale?    @relation(fields: [saleId], references: [id])
+  id           String   @id @default(uuid())
+  itemId       String
+  saleId       String?
+  serialNumber String   @unique
+  status       String   @default("AVAILABLE")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  item         Item     @relation(fields: [itemId], references: [id])
+  sale         Sale?    @relation(fields: [saleId], references: [id])
 
   @@index([itemId, status])
   @@index([serialNumber])
 }
 
 model CashDrawerSession {
-  id                      String    @id @default(uuid())
-  businessId              String
-  storeId                 String
-  cashierId               String
-  status                  String    @default("OPEN")
-  openingBalanceCents     Int
-  closingBalanceCents     Int?
-  expectedBalanceCents    Int?
-  varianceCents           Int?
-  notes                   String?
-  tillNumber              Int       @default(1)
-  tillLabel               String?
-  openedAt                DateTime  @default(now())
-  closedAt                DateTime?
-  createdAt               DateTime  @default(now())
-  updatedAt               DateTime  @updatedAt
+  id                   String    @id @default(uuid())
+  businessId           String
+  storeId              String
+  cashierId            String
+  status               String    @default("OPEN")
+  openingBalanceCents  Int
+  closingBalanceCents  Int?
+  expectedBalanceCents Int?
+  varianceCents        Int?
+  notes                String?
+  tillNumber           Int       @default(1)
+  tillLabel            String?
+  openedAt             DateTime  @default(now())
+  closedAt             DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   @@index([businessId, storeId, cashierId])
   @@index([status])
@@ -833,95 +839,91 @@ model CashDrawerSession {
 }
 
 model UserStore {
-  id          String   @id @default(uuid())
-  userId      String
-  storeId     String
-  businessId  String
-  createdAt   DateTime @default(now())
-
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  id         String   @id @default(uuid())
+  userId     String
+  storeId    String
+  businessId String
+  createdAt  DateTime @default(now())
+  store      Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, storeId])
   @@index([businessId])
 }
 
 model StoreTransfer {
-  id                String    @id @default(uuid())
-  offlineId         String    @unique
-  businessId        String
-  fromStoreId       String
-  toStoreId         String
-  status            String    @default("PENDING")
-  initiatedBy       String
-  receivedBy        String?
-  approvedBy        String?
-  notes             String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
-  items             TransferItem[]
+  id          String         @id @default(uuid())
+  offlineId   String         @unique
+  businessId  String
+  fromStoreId String
+  toStoreId   String
+  status      String         @default("PENDING")
+  initiatedBy String
+  receivedBy  String?
+  approvedBy  String?
+  notes       String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  items       TransferItem[]
 
   @@index([businessId, fromStoreId, toStoreId])
   @@index([status])
 }
 
 model TransferItem {
-  id                String    @id @default(uuid())
-  transferId        String
-  itemId            String
-  quantity          Int
-  createdAt         DateTime  @default(now())
-
-  transfer          StoreTransfer @relation(fields: [transferId], references: [id])
+  id         String        @id @default(uuid())
+  transferId String
+  itemId     String
+  quantity   Int
+  createdAt  DateTime      @default(now())
+  transfer   StoreTransfer @relation(fields: [transferId], references: [id])
 
   @@index([transferId])
 }
 
 model Integration {
-  id                String    @id @default(uuid())
-  businessId        String
-  type              String
-  name              String
-  config            String
-  isActive          Boolean   @default(true)
-  lastSyncAt        DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id         String    @id @default(uuid())
+  businessId String
+  type       String
+  name       String
+  config     String
+  isActive   Boolean   @default(true)
+  lastSyncAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@index([businessId, type])
 }
 
 model Promotion {
-  id                String    @id @default(uuid())
-  businessId        String
-  name              String
-  type              String
-  discountType      String
-  discountValue     Int
-  minPurchaseCents  Int?
-  maxDiscountCents  Int?
-  startDate         DateTime
-  endDate           DateTime
-  isActive          Boolean   @default(true)
-  applicableItems   String
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id               String   @id @default(uuid())
+  businessId       String
+  name             String
+  type             String
+  discountType     String
+  discountValue    Int
+  minPurchaseCents Int?
+  maxDiscountCents Int?
+  startDate        DateTime
+  endDate          DateTime
+  isActive         Boolean  @default(true)
+  applicableItems  String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@index([businessId, isActive])
 }
 
 model GiftCard {
-  id                String    @id @default(uuid())
+  id                String                @id @default(uuid())
   businessId        String
-  code              String    @unique
+  code              String                @unique
   initialValueCents Int
   balanceCents      Int
-  status            String    @default("ACTIVE")
+  status            String                @default("ACTIVE")
   purchasedBy       String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
   transactions      GiftCardTransaction[]
 
   @@index([businessId, status])
@@ -929,85 +931,84 @@ model GiftCard {
 }
 
 model GiftCardTransaction {
-  id                String    @id @default(uuid())
+  id                String   @id @default(uuid())
   giftCardId        String
   saleId            String?
   type              String
   amountCents       Int
   balanceAfterCents Int
-  createdAt         DateTime  @default(now())
-
-  giftCard          GiftCard  @relation(fields: [giftCardId], references: [id])
+  createdAt         DateTime @default(now())
+  giftCard          GiftCard @relation(fields: [giftCardId], references: [id])
 
   @@index([giftCardId])
 }
 
 model Notification {
-  id          String   @id @default(uuid())
-  businessId  String
-  type        String
-  priority    String   @default("NORMAL")
-  title       String
-  body        String
-  entityId    String?
-  entityType  String?
-  isRead      Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  id         String   @id @default(uuid())
+  businessId String
+  type       String
+  priority   String   @default("NORMAL")
+  title      String
+  body       String
+  entityId   String?
+  entityType String?
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
 
   @@index([businessId, isRead, createdAt])
 }
 
 model Budget {
-  id            String   @id @default(uuid())
-  businessId    String
-  category      String
-  amountCents   Int
-  month         Int
-  year          Int
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id          String   @id @default(uuid())
+  businessId  String
+  category    String
+  amountCents Int
+  month       Int
+  year        Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@unique([businessId, category, month, year])
   @@index([businessId, year, month])
 }
 
 model Shift {
-  id          String   @id @default(uuid())
-  businessId  String
-  storeId     String
-  employeeId  String
-  startTime   String
-  endTime     String
-  dayOfWeek   Int
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(uuid())
+  businessId String
+  storeId    String
+  employeeId String
+  startTime  String
+  endTime    String
+  dayOfWeek  Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([businessId, storeId])
   @@index([employeeId])
 }
 
 model LoyaltyProgram {
-  id                String    @id @default(uuid())
-  businessId        String
-  name              String
-  pointsPerCent     Float
-  redemptionRate    Float
-  minRedemption     Int
-  isActive          Boolean   @default(true)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id             String   @id @default(uuid())
+  businessId     String
+  name           String
+  pointsPerCent  Float
+  redemptionRate Float
+  minRedemption  Int
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@index([businessId])
 }
 
 model LoyaltyTransaction {
-  id                String    @id @default(uuid())
-  customerId        String
-  saleId            String?
-  type              String
-  points            Int
-  balanceAfter      Int
-  createdAt         DateTime  @default(now())
+  id           String   @id @default(uuid())
+  customerId   String
+  saleId       String?
+  type         String
+  points       Int
+  balanceAfter Int
+  createdAt    DateTime @default(now())
 
   @@index([customerId])
 }
@@ -1023,104 +1024,98 @@ model Return {
   returnedItemIds   String
   processedBy       String
   createdAt         DateTime @default(now())
-
   sale              Sale     @relation(fields: [saleId], references: [id])
 
   @@index([businessId, saleId])
 }
 
 model KOT {
-  id          String    @id @default(uuid())
-  orderId     String
-  kotNumber   Int
-  type        String
-  status      String    @default("PENDING")
-  itemIds     String    @default("[]") // JSON array of OrderItem IDs in this KOT
+  id                   String    @id @default(uuid())
+  orderId              String
+  kotNumber            Int
+  type                 String
+  status               String    @default("PENDING")
+  itemIds              String    @default("[]")
   printedAt            DateTime?
   preparedAt           DateTime?
   assignedChefId       String?
-  assignedChef         User?     @relation("ChefKOTs", fields: [assignedChefId], references: [id])
   estimatedReadyAt     DateTime?
   estimatedPrepMinutes Int?
   priority             Int       @default(0)
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
-
-  order       Order     @relation(fields: [orderId], references: [id])
+  assignedChef         User?     @relation("ChefKOTs", fields: [assignedChefId], references: [id])
+  order                Order     @relation(fields: [orderId], references: [id])
 
   @@index([orderId])
   @@index([status])
 }
 
 model ReportSchedule {
-  id          String    @id @default(uuid())
-  businessId  String
-  reportType  String    // SALES | PL | TAX | STOCK | ALL | LOW_STOCK | EXPIRY
-  frequency   String    // DAILY | WEEKLY | MONTHLY
-  hour        Int       @default(8)
-  dayOfWeek   Int?      // 0-6 (0=Sun) for WEEKLY
-  dayOfMonth  Int?      // 1-31 for MONTHLY
-  recipients  String    // JSON array of email addresses
-  isActive    Boolean   @default(true)
-  lastSentAt  DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  business    Business  @relation(fields: [businessId], references: [id])
+  id         String    @id @default(uuid())
+  businessId String
+  reportType String
+  frequency  String
+  hour       Int       @default(8)
+  dayOfWeek  Int?
+  dayOfMonth Int?
+  recipients String
+  isActive   Boolean   @default(true)
+  lastSentAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  business   Business  @relation(fields: [businessId], references: [id])
 
   @@index([businessId, isActive])
 }
 
 model TableReservation {
-  id              String   @id @default(uuid())
-  tableId         String
-  customerName    String
-  customerPhone   String?
-  partySize       Int
-  reservationTime DateTime
-  duration        Int      @default(120)
-  status          String   @default("CONFIRMED")
-  notes           String?
-  depositCents    Int      @default(0)
-  depositMethod   String?
+  id               String   @id @default(uuid())
+  tableId          String
+  customerName     String
+  customerPhone    String?
+  partySize        Int
+  reservationTime  DateTime
+  duration         Int      @default(120)
+  status           String   @default("CONFIRMED")
+  notes            String?
+  depositCents     Int      @default(0)
+  depositMethod    String?
   depositReference String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  table           Table    @relation(fields: [tableId], references: [id])
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  table            Table    @relation(fields: [tableId], references: [id])
 
   @@index([tableId, reservationTime])
 }
 
 model Webhook {
-  id             String   @id @default(uuid())
-  businessId     String
-  url            String
-  secret         String?   // HMAC-SHA256 signing secret
-  events         String    // JSON array: ["sale.completed","inventory.low_stock"]
-  isActive       Boolean   @default(true)
-  description    String?
-  lastFiredAt    DateTime?
-  failureCount   Int       @default(0)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  business       Business  @relation(fields: [businessId], references: [id])
+  id           String    @id @default(uuid())
+  businessId   String
+  url          String
+  secret       String?
+  events       String
+  isActive     Boolean   @default(true)
+  description  String?
+  lastFiredAt  DateTime?
+  failureCount Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  business     Business  @relation(fields: [businessId], references: [id])
 
   @@index([businessId, isActive])
 }
 
 model Referral {
-  id                  String   @id @default(uuid())
-  referrerBusinessId  String
-  referredBusinessId  String?
-  code                String   @unique
-  status              String   @default("PENDING")  // PENDING | CONVERTED | REWARDED
-  rewardCents         Int      @default(0)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  referrer            Business @relation("ReferrerBusiness", fields: [referrerBusinessId], references: [id])
+  id                 String   @id @default(uuid())
+  referrerBusinessId String
+  referredBusinessId String?
+  code               String   @unique
+  status             String   @default("PENDING")
+  rewardCents        Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  referrer           Business @relation("ReferrerBusiness", fields: [referrerBusinessId], references: [id])
 
   @@index([referrerBusinessId])
   @@index([code])
@@ -1130,7 +1125,7 @@ model LicenseKey {
   id          String    @id @default(uuid())
   key         String    @unique
   businessId  String?
-  tier        String    @default("STARTER")  // STARTER | PRO | ENTERPRISE | LIFETIME
+  tier        String    @default("STARTER")
   expiresAt   DateTime?
   isActive    Boolean   @default(true)
   activatedAt DateTime?
@@ -1151,15 +1146,15 @@ model SuperAdmin {
 }
 
 model LoyaltyTier {
-  id          String   @id @default(uuid())
-  businessId  String
-  name        String
-  minPoints   Int
-  multiplier  Float    @default(1.0)
-  color       String   @default("gray")
-  perksJson   String?  // JSON array of perk strings
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(uuid())
+  businessId String
+  name       String
+  minPoints  Int
+  multiplier Float    @default(1.0)
+  color      String   @default("gray")
+  perksJson  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([businessId, minPoints])
 }
@@ -1167,10 +1162,10 @@ model LoyaltyTier {
 model DataDeletionRequest {
   id          String    @id @default(uuid())
   businessId  String
-  requestedBy String    // name/email/phone of requester
-  customerId  String?   // linked Customer record if exists
+  requestedBy String
+  customerId  String?
   reason      String?
-  status      String    @default("PENDING")  // PENDING | APPROVED | REJECTED | COMPLETED
+  status      String    @default("PENDING")
   reviewedBy  String?
   reviewNotes String?
   completedAt DateTime?
@@ -1187,50 +1182,45 @@ model SupplierCreditNote {
   creditNumber  String   @unique
   amountCents   Int
   reason        String
-  status        String   @default("OPEN")  // OPEN | APPLIED | VOIDED
+  status        String   @default("OPEN")
   appliedToPOId String?
   issuedDate    DateTime @default(now())
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-
   supplier      Supplier @relation(fields: [supplierId], references: [id])
 
   @@index([businessId, supplierId])
 }
 
-// ── Supplier Returns ──────────────────────────────────────────────────────────
-
 model SupplierReturn {
-  id               String   @id @default(uuid())
-  businessId       String
-  supplierId       String
-  purchaseOrderId  String?
-  returnNumber     String
-  status           String   @default("DRAFT")
-  reason           String
-  totalCents       Int      @default(0)
-  notes            String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  items            SupplierReturnItem[]
-  supplier         Supplier @relation(fields: [supplierId], references: [id])
+  id              String               @id @default(uuid())
+  businessId      String
+  supplierId      String
+  purchaseOrderId String?
+  returnNumber    String
+  status          String               @default("DRAFT")
+  reason          String
+  totalCents      Int                  @default(0)
+  notes           String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  supplier        Supplier             @relation(fields: [supplierId], references: [id])
+  items           SupplierReturnItem[]
 
   @@index([businessId])
   @@index([supplierId])
 }
 
 model SupplierReturnItem {
-  id            String   @id @default(uuid())
+  id            String         @id @default(uuid())
   returnId      String
   itemId        String
   quantity      Int
   unitCostCents Int
   totalCents    Int
   reason        String?
-
-  return        SupplierReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
   item          Item           @relation(fields: [itemId], references: [id])
+  return        SupplierReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
 }
 
 model SupplierInvoice {
@@ -1244,14 +1234,11 @@ model SupplierInvoice {
   status          String   @default("UNMATCHED")
   notes           String?
   createdAt       DateTime @default(now())
-
   supplier        Supplier @relation(fields: [supplierId], references: [id])
 
   @@index([businessId])
   @@index([supplierId])
 }
-
-// ── Pharmacy / Clinic ────────────────────────────────────────────────────────
 
 model Prescription {
   id                 String    @id @default(uuid())
@@ -1264,21 +1251,23 @@ model Prescription {
   doctorName         String
   doctorLicense      String?
   diagnosis          String?
-  items              String    // JSON: [{itemId,name,qty,instructions}]
+  items              String
   status             String    @default("PENDING")
   notes              String?
   dispensedAt        DateTime?
   dispensedBy        String?
+  refillsAllowed     Int       @default(0)
+  refillsUsed        Int       @default(0)
+  lastFillDate       DateTime?
+  nextFillDate       DateTime?
+  patientIdNumber    String?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
-
   business           Business  @relation(fields: [businessId], references: [id])
   store              Store     @relation(fields: [storeId], references: [id])
 
   @@index([businessId, storeId, status])
 }
-
-// ── Service / Appointments ───────────────────────────────────────────────────
 
 model Appointment {
   id            String    @id @default(uuid())
@@ -1296,52 +1285,48 @@ model Appointment {
   depositCents  Int       @default(0)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-
   business      Business  @relation(fields: [businessId], references: [id])
-  store         Store     @relation(fields: [storeId], references: [id])
   customer      Customer? @relation(fields: [customerId], references: [id])
+  store         Store     @relation(fields: [storeId], references: [id])
 
   @@index([businessId, storeId, status])
   @@index([scheduledAt])
 }
 
-// ── Delivery Management ───────────────────────────────────────────────────────
-
 model DeliveryOrder {
-  id               String    @id @default(uuid())
-  businessId       String
-  storeId          String
-  orderNumber      String    @unique
-  saleId           String?
-  customerId       String?
-  customerName     String
-  customerPhone    String?
-  deliveryAddress  String
-  zoneId           String?
-  courierProvider  String?
-  courierOrderId   String?
-  trackingUrl      String?
+  id                  String    @id @default(uuid())
+  businessId          String
+  storeId             String
+  orderNumber         String    @unique
+  saleId              String?
+  customerId          String?
+  customerName        String
+  customerPhone       String?
+  deliveryAddress     String
+  zoneId              String?
+  courierProvider     String?
+  courierOrderId      String?
+  trackingUrl         String?
   estimatedDeliveryAt DateTime?
-  failedAttempts   Int       @default(0)
-  rescheduleReason String?
-  rescheduledAt    DateTime?
-  driverId         String?
-  scheduledAt      DateTime?
-  pickedUpAt       DateTime?
-  deliveredAt      DateTime?
-  status           String    @default("PENDING")
-  deliveryFeeCents Int       @default(0)
-  lat              Float?
-  lng              Float?
-  proofPhotoUrl    String?
-  notes            String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-
-  business         Business  @relation(fields: [businessId], references: [id])
-  store            Store     @relation(fields: [storeId], references: [id])
-  customer         Customer? @relation(fields: [customerId], references: [id])
-  sale             Sale?     @relation(fields: [saleId], references: [id])
+  failedAttempts      Int       @default(0)
+  rescheduleReason    String?
+  rescheduledAt       DateTime?
+  driverId            String?
+  scheduledAt         DateTime?
+  pickedUpAt          DateTime?
+  deliveredAt         DateTime?
+  status              String    @default("PENDING")
+  deliveryFeeCents    Int       @default(0)
+  lat                 Float?
+  lng                 Float?
+  proofPhotoUrl       String?
+  notes               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  business            Business  @relation(fields: [businessId], references: [id])
+  customer            Customer? @relation(fields: [customerId], references: [id])
+  sale                Sale?     @relation(fields: [saleId], references: [id])
+  store               Store     @relation(fields: [storeId], references: [id])
 
   @@index([businessId, storeId, status])
 }
@@ -1350,10 +1335,9 @@ model LeaveBalance {
   id            String   @id @default(uuid())
   employeeId    String
   year          Int
-  leaveType     String   // ANNUAL | SICK | MATERNITY | PATERNITY | UNPAID
+  leaveType     String
   allocatedDays Int      @default(0)
   usedDays      Float    @default(0)
-
   employee      Employee @relation(fields: [employeeId], references: [id])
 
   @@unique([employeeId, year, leaveType])
@@ -1361,17 +1345,17 @@ model LeaveBalance {
 }
 
 model Terminal {
-  id         String   @id @default(uuid())
+  id         String    @id @default(uuid())
   businessId String
   storeId    String
   name       String
-  mode       String   @default("STANDALONE") // SERVER | CLIENT | STANDALONE
+  mode       String    @default("STANDALONE")
   serverUrl  String?
   lanIp      String?
-  isActive   Boolean  @default(true)
+  isActive   Boolean   @default(true)
   lastSeenAt DateTime?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@index([businessId, storeId])
 }
@@ -1382,7 +1366,7 @@ model PayrollRun {
   storeId              String?
   month                Int
   year                 Int
-  status               String    @default("DRAFT") // DRAFT | APPROVED | PAID
+  status               String    @default("DRAFT")
   totalGrossCents      Int       @default(0)
   totalNetCents        Int       @default(0)
   totalDeductionsCents Int       @default(0)
@@ -1391,7 +1375,6 @@ model PayrollRun {
   paidAt               DateTime?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
-
   payslips             Payslip[]
 
   @@unique([businessId, month, year])
@@ -1401,7 +1384,6 @@ model PayrollRun {
 model Payslip {
   id                 String     @id @default(uuid())
   payrollRunId       String
-  payrollRun         PayrollRun @relation(fields: [payrollRunId], references: [id])
   employeeId         String
   employeeName       String
   basicSalary        Int
@@ -1417,59 +1399,60 @@ model Payslip {
   otherDeductions    Int        @default(0)
   netPay             Int
   commissionCents    Int        @default(0)
-  status             String     @default("PENDING") // PENDING | PAID
+  status             String     @default("PENDING")
   createdAt          DateTime   @default(now())
+  payrollRun         PayrollRun @relation(fields: [payrollRunId], references: [id])
 
   @@index([payrollRunId])
   @@index([employeeId])
 }
 
 model HotelRoom {
-  id                   String        @id @default(cuid())
-  businessId           String
-  storeId              String
-  number               String        // room number, e.g. "101", "Suite A"
-  type                 String        @default("STANDARD") // STANDARD | DELUXE | SUITE | EXECUTIVE
-  floor                String?
-  capacity             Int           @default(2)
-  pricePerNightCents   Int           @default(0)
-  status               String        @default("AVAILABLE") // AVAILABLE | OCCUPIED | MAINTENANCE | RESERVED
-  housekeepingStatus   String        @default("CLEAN") // CLEAN | DIRTY | INSPECTED | OUT_OF_ORDER
-  amenities            String?       // JSON string: ["WiFi","AC","TV"]
-  notes                String?
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
-  bookings             RoomBooking[]
+  id                      String                   @id @default(cuid())
+  businessId              String
+  storeId                 String
+  number                  String
+  type                    String                   @default("STANDARD")
+  floor                   String?
+  capacity                Int                      @default(2)
+  pricePerNightCents      Int                      @default(0)
+  status                  String                   @default("AVAILABLE")
+  housekeepingStatus      String                   @default("CLEAN")
+  amenities               String?
+  notes                   String?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
   housekeepingAssignments HousekeepingAssignment[]
+  bookings                RoomBooking[]
 
   @@unique([businessId, storeId, number])
   @@index([businessId, storeId, status])
 }
 
 model RoomBooking {
-  id                String             @id @default(cuid())
-  businessId        String
-  storeId           String
-  roomId            String
-  room              HotelRoom          @relation(fields: [roomId], references: [id])
-  guestName         String
-  guestPhone        String?
-  guestIdNumber     String?            // passport / national ID
-  checkInDate       DateTime
-  checkOutDate      DateTime?
-  actualCheckIn     DateTime?
-  actualCheckOut    DateTime?
-  nightCount        Int                @default(1)
-  pricePerNightCents Int               @default(0)
-  totalAmountCents  Int                @default(0)
-  depositCents      Int                @default(0)
-  status            String             @default("RESERVED") // RESERVED | CHECKED_IN | CHECKED_OUT | CANCELLED | NO_SHOW
-  notes             String?
-  orderId           String?            // room service order linked
-  saleId            String?            // checkout sale id
-  folioCharges      GuestFolioCharge[]
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  id                 String             @id @default(cuid())
+  businessId         String
+  storeId            String
+  roomId             String
+  guestName          String
+  guestPhone         String?
+  guestIdNumber      String?
+  checkInDate        DateTime
+  checkOutDate       DateTime?
+  actualCheckIn      DateTime?
+  actualCheckOut     DateTime?
+  nightCount         Int                @default(1)
+  pricePerNightCents Int                @default(0)
+  totalAmountCents   Int                @default(0)
+  depositCents       Int                @default(0)
+  status             String             @default("RESERVED")
+  notes              String?
+  orderId            String?
+  saleId             String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  folioCharges       GuestFolioCharge[]
+  room               HotelRoom          @relation(fields: [roomId], references: [id])
 
   @@index([businessId, storeId, status])
   @@index([roomId])
@@ -1478,9 +1461,8 @@ model RoomBooking {
 model GuestFolioCharge {
   id          String      @id @default(cuid())
   bookingId   String
-  booking     RoomBooking @relation(fields: [bookingId], references: [id])
   businessId  String
-  type        String      // ROOM_RATE | FOOD_BEVERAGE | MINIBAR | LAUNDRY | TRANSPORT | OTHER
+  type        String
   description String
   amountCents Int
   quantity    Int         @default(1)
@@ -1489,6 +1471,7 @@ model GuestFolioCharge {
   saleId      String?
   date        DateTime    @default(now())
   createdAt   DateTime    @default(now())
+  booking     RoomBooking @relation(fields: [bookingId], references: [id])
 
   @@index([bookingId])
   @@index([businessId])
@@ -1512,7 +1495,6 @@ model BankStatement {
 model BankStatementEntry {
   id            String        @id @default(cuid())
   statementId   String
-  statement     BankStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
   date          DateTime
   description   String
   creditCents   Int           @default(0)
@@ -1521,70 +1503,66 @@ model BankStatementEntry {
   reference     String?
   matchedSaleId String?
   matchStatus   String        @default("UNMATCHED")
+  statement     BankStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
 
   @@index([statementId])
   @@index([matchStatus])
 }
 
-// ─── Stocktake ─────────────────────────────────────────────────────────────────
-
 model StocktakeSession {
-  id           String           @id @default(cuid())
-  businessId   String
-  storeId      String
-  name         String
-  status       String           @default("DRAFT") // DRAFT | IN_PROGRESS | FINALIZED
-  startedAt    DateTime?
-  finalizedAt  DateTime?
-  createdBy    String
-  notes        String?
-  counts       StocktakeCount[]
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
+  id          String           @id @default(cuid())
+  businessId  String
+  storeId     String
+  name        String
+  status      String           @default("DRAFT")
+  startedAt   DateTime?
+  finalizedAt DateTime?
+  createdBy   String
+  notes       String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  counts      StocktakeCount[]
 
   @@index([businessId])
   @@index([storeId])
 }
 
 model StocktakeCount {
-  id           String           @id @default(cuid())
-  sessionId    String
-  session      StocktakeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  itemId       String
-  itemName     String
-  systemQty    Float
-  countedQty   Float?
-  varianceQty  Float?
-  note         String?
-  countedAt    DateTime?
-  countedBy    String?
-  createdAt    DateTime         @default(now())
+  id          String           @id @default(cuid())
+  sessionId   String
+  itemId      String
+  itemName    String
+  systemQty   Float
+  countedQty  Float?
+  varianceQty Float?
+  note        String?
+  countedAt   DateTime?
+  countedBy   String?
+  createdAt   DateTime         @default(now())
+  session     StocktakeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
   @@index([itemId])
 }
 
 model HappyHour {
-  id           String   @id @default(uuid())
-  businessId   String
-  storeId      String?
-  name         String
-  discountPct  Float
-  startHour    Int
-  startMinute  Int      @default(0)
-  endHour      Int
-  endMinute    Int      @default(0)
-  daysOfWeek   String   @default("[0,1,2,3,4,5,6]")
-  appliesTo    String   @default("ALL")
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
+  id          String   @id @default(uuid())
+  businessId  String
+  storeId     String?
+  name        String
+  discountPct Float
+  startHour   Int
+  startMinute Int      @default(0)
+  endHour     Int
+  endMinute   Int      @default(0)
+  daysOfWeek  String   @default("[0,1,2,3,4,5,6]")
+  appliesTo   String   @default("ALL")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
 
   @@index([businessId])
 }
 
-// ─── New Feature Models ────────────────────────────────────────────────────────
-
-// Damaged Goods Write-off
 model DamagedGoodsRecord {
   id           String   @id @default(uuid())
   businessId   String
@@ -1596,19 +1574,17 @@ model DamagedGoodsRecord {
   reason       String
   authorizedBy String?
   submittedBy  String
-  status       String   @default("PENDING")  // PENDING | APPROVED | REJECTED
+  status       String   @default("PENDING")
   notes        String?
   imageUrl     String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-
   item         Item     @relation(fields: [itemId], references: [id])
 
   @@index([businessId, storeId, createdAt])
   @@index([status])
 }
 
-// Waitlist
 model Waitlist {
   id                   String    @id @default(uuid())
   businessId           String
@@ -1618,7 +1594,7 @@ model Waitlist {
   partySize            Int
   notes                String?
   estimatedWaitMinutes Int       @default(30)
-  status               String    @default("WAITING")  // WAITING | SEATED | CANCELLED | NO_SHOW
+  status               String    @default("WAITING")
   notifiedAt           DateTime?
   seatedAt             DateTime?
   tableId              String?
@@ -1629,12 +1605,11 @@ model Waitlist {
   @@index([createdAt])
 }
 
-// Channel Manager (Booking.com, Airbnb etc.)
 model ChannelBooking {
-  id               String    @id @default(uuid())
+  id               String   @id @default(uuid())
   businessId       String
   storeId          String
-  channel          String    // BOOKING_COM | AIRBNB | DIRECT | EXPEDIA
+  channel          String
   externalId       String
   guestName        String
   guestEmail       String?
@@ -1644,48 +1619,45 @@ model ChannelBooking {
   checkOutDate     DateTime
   nightCount       Int
   totalAmountCents Int
-  commissionCents  Int       @default(0)
-  status           String    @default("CONFIRMED")  // CONFIRMED | CANCELLED | MODIFIED | CHECKED_IN | CHECKED_OUT
+  commissionCents  Int      @default(0)
+  status           String   @default("CONFIRMED")
   rawPayload       String?
-  roomBookingId    String?   @unique
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  roomBookingId    String?  @unique
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@unique([businessId, channel, externalId])
   @@index([businessId, status])
   @@index([checkInDate])
 }
 
-// Housekeeping Staff Assignment
 model HousekeepingAssignment {
   id          String    @id @default(uuid())
   businessId  String
   roomId      String
   employeeId  String
   assignedBy  String
-  task        String    @default("CLEAN")    // CLEAN | INSPECT | TURNDOWN | MAINTENANCE
-  priority    String    @default("NORMAL")   // NORMAL | HIGH | URGENT
-  status      String    @default("PENDING")  // PENDING | IN_PROGRESS | DONE
+  task        String    @default("CLEAN")
+  priority    String    @default("NORMAL")
+  status      String    @default("PENDING")
   notes       String?
   startedAt   DateTime?
   completedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-
-  room        HotelRoom @relation(fields: [roomId], references: [id])
   employee    Employee  @relation(fields: [employeeId], references: [id])
+  room        HotelRoom @relation(fields: [roomId], references: [id])
 
   @@index([businessId, status])
   @@index([roomId])
   @@index([employeeId])
 }
 
-// Disciplinary Records
 model DisciplinaryRecord {
   id           String    @id @default(uuid())
   businessId   String
   employeeId   String
-  type         String    // WARNING | SUSPENSION | DISMISSAL | WRITTEN_NOTICE | PIP
+  type         String
   incidentDate DateTime
   description  String
   actionTaken  String
@@ -1694,14 +1666,12 @@ model DisciplinaryRecord {
   ackDate      DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
-
   employee     Employee  @relation(fields: [employeeId], references: [id])
 
   @@index([businessId, employeeId])
   @@index([createdAt])
 }
 
-// Supplier Pricing Agreements
 model SupplierPriceAgreement {
   id               String    @id @default(uuid())
   businessId       String
@@ -1715,28 +1685,25 @@ model SupplierPriceAgreement {
   notes            String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
-
   supplier         Supplier  @relation(fields: [supplierId], references: [id])
 
   @@index([businessId, supplierId])
   @@index([itemId, isActive])
 }
 
-// Request for Quotation
 model RFQ {
-  id        String      @id @default(uuid())
-  rfqNumber String      @unique
+  id         String        @id @default(uuid())
+  rfqNumber  String        @unique
   businessId String
-  storeId   String
-  status    String      @default("DRAFT")  // DRAFT | SENT | RECEIVED | AWARDED | CANCELLED
-  notes     String?
-  deadline  DateTime?
-  createdBy String
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-
-  items     RFQItem[]
-  responses RFQResponse[]
+  storeId    String
+  status     String        @default("DRAFT")
+  notes      String?
+  deadline   DateTime?
+  createdBy  String
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  items      RFQItem[]
+  responses  RFQResponse[]
 
   @@index([businessId, status])
 }
@@ -1748,7 +1715,6 @@ model RFQItem {
   quantityNeeded Int
   unitPriceCents Int      @default(0)
   createdAt      DateTime @default(now())
-
   rfq            RFQ      @relation(fields: [rfqId], references: [id], onDelete: Cascade)
 
   @@index([rfqId])
@@ -1762,57 +1728,52 @@ model RFQResponse {
   deliveryDays     Int?
   validUntil       DateTime?
   notes            String?
-  status           String    @default("PENDING")  // PENDING | AWARDED | REJECTED
+  status           String    @default("PENDING")
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
-
-  rfq              RFQ      @relation(fields: [rfqId], references: [id], onDelete: Cascade)
-  supplier         Supplier @relation(fields: [supplierId], references: [id])
+  rfq              RFQ       @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  supplier         Supplier  @relation(fields: [supplierId], references: [id])
 
   @@index([rfqId])
   @@index([supplierId])
 }
 
-// Multi-level Expense Approval
 model ExpenseApprovalStep {
-  id         String   @id @default(uuid())
+  id         String    @id @default(uuid())
   expenseId  String
   level      Int
   approverId String
-  status     String   @default("PENDING")  // PENDING | APPROVED | REJECTED
+  status     String    @default("PENDING")
   comment    String?
   actionAt   DateTime?
-  createdAt  DateTime @default(now())
-
-  expense    Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+  expense    Expense   @relation(fields: [expenseId], references: [id], onDelete: Cascade)
 
   @@index([expenseId, level])
 }
 
-// Cheque Payments
 model ChequePayment {
-  id              String    @id @default(uuid())
-  businessId      String
-  storeId         String
-  saleId          String?
-  supplierId      String?
-  type            String    @default("RECEIVED")  // RECEIVED | ISSUED
-  chequeNumber    String
-  bankName        String
-  drawerName      String
-  amountCents     Int
-  issueDate       DateTime
-  clearanceDate   DateTime?
-  status          String    @default("PENDING")  // PENDING | CLEARED | BOUNCED | CANCELLED
-  notes           String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id            String    @id @default(uuid())
+  businessId    String
+  storeId       String
+  saleId        String?
+  supplierId    String?
+  type          String    @default("RECEIVED")
+  chequeNumber  String
+  bankName      String
+  drawerName    String
+  amountCents   Int
+  issueDate     DateTime
+  clearanceDate DateTime?
+  status        String    @default("PENDING")
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([businessId, status])
   @@index([chequeNumber])
 }
 
-// General Ledger
 model JournalEntry {
   id          String        @id @default(uuid())
   businessId  String
@@ -1821,14 +1782,13 @@ model JournalEntry {
   date        DateTime
   description String
   reference   String?
-  sourceType  String?       // SALE | EXPENSE | PAYROLL | MANUAL | GRN
-  status      String        @default("DRAFT")  // DRAFT | POSTED | REVERSED
+  sourceType  String?
+  status      String        @default("DRAFT")
   postedBy    String?
   postedAt    DateTime?
   reversalOf  String?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
-
   lines       JournalLine[]
 
   @@index([businessId, date])
@@ -1844,14 +1804,12 @@ model JournalLine {
   creditCents Int          @default(0)
   description String?
   createdAt   DateTime     @default(now())
-
   entry       JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
 
   @@index([entryId])
   @@index([accountCode])
 }
 
-// Payment Links
 model PaymentLink {
   id          String    @id @default(uuid())
   businessId  String
@@ -1863,7 +1821,7 @@ model PaymentLink {
   expiresAt   DateTime?
   maxUses     Int?
   usesCount   Int       @default(0)
-  status      String    @default("ACTIVE")  // ACTIVE | EXPIRED | DISABLED
+  status      String    @default("ACTIVE")
   createdBy   String
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -1872,17 +1830,14 @@ model PaymentLink {
   @@index([code])
 }
 
-// ─── Petty Cash ────────────────────────────────────────────────────────────────
-
 model PettyCashFloat {
-  id           String   @id @default(uuid())
+  id           String                 @id @default(uuid())
   businessId   String
   storeId      String?
-  balanceCents Int      @default(0)
+  balanceCents Int                    @default(0)
   lastTopUpAt  DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
   transactions PettyCashTransaction[]
 
   @@unique([businessId, storeId])
@@ -1890,40 +1845,37 @@ model PettyCashFloat {
 }
 
 model PettyCashTransaction {
-  id          String   @id @default(uuid())
+  id          String         @id @default(uuid())
   floatId     String
-  type        String   // TOP_UP | DISBURSEMENT
+  type        String
   amountCents Int
   description String
   reference   String?
   userId      String
-  createdAt   DateTime @default(now())
-
+  createdAt   DateTime       @default(now())
   float       PettyCashFloat @relation(fields: [floatId], references: [id])
 
   @@index([floatId])
 }
 
-// ─── Delivery Enhancement Models ──────────────────────────────────────────────
-
 model DeliveryZone {
-  id               String    @id @default(uuid())
+  id               String   @id @default(uuid())
   businessId       String
   name             String
-  coordinates      String    // JSON array of lat/lng points defining the zone
-  basePriceCents   Int       @default(0)
-  pricePerKm       Int       @default(0)
-  maxDistanceKm    Float     @default(10)
-  estimatedMinutes Int       @default(30)
-  isActive         Boolean   @default(true)
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  coordinates      String
+  basePriceCents   Int      @default(0)
+  pricePerKm       Int      @default(0)
+  maxDistanceKm    Float    @default(10)
+  estimatedMinutes Int      @default(30)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@index([businessId])
 }
 
 model DriverLocation {
-  id              String    @id @default(uuid())
+  id              String   @id @default(uuid())
   driverId        String
   deliveryOrderId String?
   lat             Float
@@ -1931,67 +1883,63 @@ model DriverLocation {
   heading         Float?
   speed           Float?
   accuracy        Float?
-  timestamp       DateTime  @default(now())
-  createdAt       DateTime  @default(now())
+  timestamp       DateTime @default(now())
+  createdAt       DateTime @default(now())
 
   @@index([driverId, timestamp])
   @@index([deliveryOrderId])
 }
 
 model DeliverySLA {
-  id                 String    @id @default(uuid())
-  businessId         String
-  deliveryOrderId    String
-  promisedAt         DateTime
-  actualDeliveredAt  DateTime?
-  isOnTime           Boolean?
-  delayMinutes       Int       @default(0)
-  createdAt          DateTime  @default(now())
+  id                String    @id @default(uuid())
+  businessId        String
+  deliveryOrderId   String
+  promisedAt        DateTime
+  actualDeliveredAt DateTime?
+  isOnTime          Boolean?
+  delayMinutes      Int       @default(0)
+  createdAt         DateTime  @default(now())
 
   @@index([businessId])
   @@index([deliveryOrderId])
 }
 
 model CourierIntegration {
-  id          String    @id @default(uuid())
-  businessId  String
-  provider    String    // GLOVO | SENDY | UBER | BOLT
-  apiKey      String?
-  webhookUrl  String?
-  isActive    Boolean   @default(true)
-  config      String?   // JSON config for provider-specific settings
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id         String   @id @default(uuid())
+  businessId String
+  provider   String
+  apiKey     String?
+  webhookUrl String?
+  isActive   Boolean  @default(true)
+  config     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([businessId, provider])
 }
 
-// ─── Security & Settings Models ───────────────────────────────────────────────
-
 model CustomRole {
-  id          String    @id @default(uuid())
-  businessId  String
-  name        String
-  description String?
-  permissions String    // JSON array of permission strings
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
+  id              String           @id @default(uuid())
+  businessId      String
+  name            String
+  description     String?
+  permissions     String
+  isActive        Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
   rolePermissions RolePermission[]
 
   @@index([businessId])
 }
 
 model Permission {
-  id          String    @id @default(uuid())
-  name        String
-  category    String
-  description String?
-  endpoint    String?
-  method      String?
-  isActive    Boolean   @default(true)
-
+  id              String           @id @default(uuid())
+  name            String
+  category        String
+  description     String?
+  endpoint        String?
+  method          String?
+  isActive        Boolean          @default(true)
   rolePermissions RolePermission[]
 
   @@index([category])
@@ -2003,42 +1951,41 @@ model RolePermission {
   permissionId String
   granted      Boolean    @default(true)
   createdAt    DateTime   @default(now())
-
-  role         CustomRole @relation(fields: [roleId], references: [id])
   permission   Permission @relation(fields: [permissionId], references: [id])
+  role         CustomRole @relation(fields: [roleId], references: [id])
 
   @@index([roleId])
 }
 
 model TaxConfiguration {
-  id              String    @id @default(uuid())
+  id              String   @id @default(uuid())
   businessId      String
   itemId          String?
   category        String?
-  vatRate         Float     @default(16.0)
-  totRate         Float     @default(3.0)
-  isZeroRated     Boolean   @default(false)
+  vatRate         Float    @default(16.0)
+  totRate         Float    @default(3.0)
+  isZeroRated     Boolean  @default(false)
   exemptionReason String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([businessId])
   @@index([itemId])
 }
 
 model PasswordPolicy {
-  id                  String    @id @default(uuid())
+  id                  String   @id @default(uuid())
   businessId          String
-  minLength           Int       @default(8)
-  requireUppercase    Boolean   @default(true)
-  requireLowercase    Boolean   @default(true)
-  requireNumbers      Boolean   @default(true)
-  requireSpecialChars Boolean   @default(false)
-  rotationDays        Int       @default(90)
-  preventReuse        Int       @default(5)
-  isActive            Boolean   @default(true)
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  minLength           Int      @default(8)
+  requireUppercase    Boolean  @default(true)
+  requireLowercase    Boolean  @default(true)
+  requireNumbers      Boolean  @default(true)
+  requireSpecialChars Boolean  @default(false)
+  rotationDays        Int      @default(90)
+  preventReuse        Int      @default(5)
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   @@index([businessId])
 }
@@ -2072,4 +2019,339 @@ model SuperAdminAuditLog {
 
   @@index([adminEmail])
   @@index([createdAt])
+}
+
+model TimeEntry {
+  id          String    @id @default(uuid())
+  businessId  String
+  storeId     String?
+  userId      String
+  clockIn     DateTime  @default(now())
+  clockOut    DateTime?
+  notes       String?
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id])
+
+  @@index([businessId, userId])
+  @@index([clockIn])
+}
+
+model NpsResponse {
+  id         String   @id @default(uuid())
+  businessId String
+  saleId     String?
+  score      Int
+  comment    String?
+  createdAt  DateTime @default(now())
+
+  @@index([businessId])
+}
+
+model FormularyEntry {
+  id                   String   @id @default(uuid())
+  businessId           String
+  genericName          String
+  brandName            String?
+  strength             String?
+  dosageForm           String   @default("TABLET")
+  category             String   @default("OTHER")
+  scheduleClass        String   @default("OTC")
+  maxDailyDose         Float?
+  unit                 String   @default("mg")
+  contraindicationsText String?
+  notes                String?
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([businessId])
+  @@index([genericName])
+}
+
+model DrugInteraction {
+  id          String   @id @default(uuid())
+  businessId  String
+  drug1Name   String
+  drug2Name   String
+  severity    String   @default("MODERATE")
+  description String
+  createdAt   DateTime @default(now())
+
+  @@index([businessId])
+}
+
+model InsuranceProvider {
+  id           String   @id @default(uuid())
+  businessId   String
+  name         String
+  code         String
+  contactPhone String?
+  contactEmail String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  claims InsuranceClaim[]
+
+  @@index([businessId])
+}
+
+model InsuranceClaim {
+  id                 String            @id @default(uuid())
+  businessId         String
+  prescriptionId     String
+  providerId         String
+  patientInsuranceId String?
+  claimNumber        String?
+  status             String            @default("SUBMITTED")
+  billedCents        Int               @default(0)
+  approvedCents      Int               @default(0)
+  paidCents          Int               @default(0)
+  copayPct           Int               @default(0)
+  rejectionReason    String?
+  submittedAt        DateTime          @default(now())
+  paidAt             DateTime?
+  createdAt          DateTime          @default(now())
+
+  provider InsuranceProvider @relation(fields: [providerId], references: [id])
+
+  @@index([businessId])
+  @@index([prescriptionId])
+}
+
+model ControlledSubstanceLog {
+  id                String   @id @default(uuid())
+  businessId        String
+  prescriptionId    String?
+  itemName          String
+  scheduleClass     String
+  quantityDispensed Float
+  unit              String   @default("units")
+  patientName       String
+  patientIdNumber   String?
+  prescriberName    String
+  prescriberLicense String?
+  dispensedBy       String
+  dispensedAt       DateTime @default(now())
+  notes             String?
+  createdAt         DateTime @default(now())
+
+  @@index([businessId])
+  @@index([dispensedAt])
+}
+
+// ─── Vendor Catalogue ────────────────────────────────────────────────────────
+
+model SupplierCatalogueItem {
+  id               String   @id @default(uuid())
+  businessId       String
+  supplierId       String
+  name             String
+  sku              String?
+  barcode          String?
+  unitCostCents    Int      @default(0)
+  unitLabel        String   @default("unit")
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  supplier         Supplier @relation(fields: [supplierId], references: [id])
+
+  @@index([businessId, supplierId])
+  @@index([barcode])
+}
+
+// ─── Fuel Pump Integration ────────────────────────────────────────────────────
+
+model FuelGrade {
+  id           String     @id @default(uuid())
+  businessId   String
+  storeId      String
+  name         String     // e.g. "Petrol 91", "Diesel", "Premium 95"
+  code         String     // short code e.g. "P91"
+  pricePerLitreCents Int
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  pumps        FuelPump[]
+  fuelSales    FuelSale[]
+  tanks        FuelTank[]
+
+  @@index([businessId, storeId])
+}
+
+model FuelPump {
+  id          String     @id @default(uuid())
+  businessId  String
+  storeId     String
+  pumpNumber  Int
+  label       String?    // e.g. "Pump 1 - Forecourt A"
+  gradeId     String
+  status      String     @default("IDLE")  // IDLE | AUTHORIZED | DISPENSING | SUSPENDED
+  nozzleCount Int        @default(1)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  grade       FuelGrade  @relation(fields: [gradeId], references: [id])
+  fuelSales   FuelSale[]
+
+  @@unique([businessId, storeId, pumpNumber])
+  @@index([businessId, storeId, status])
+}
+
+model FuelSale {
+  id              String    @id @default(uuid())
+  businessId      String
+  storeId         String
+  pumpId          String
+  gradeId         String
+  cashierId       String?
+  customerId      String?
+  vehiclePlate    String?
+  litresDispensed Float
+  pricePerLitreCents Int
+  totalCents      Int
+  paymentMethod   String    @default("CASH")
+  paymentRef      String?
+  saleId          String?   @unique
+  status          String    @default("COMPLETED")  // AUTHORIZED | COMPLETED | VOIDED
+  authorizedAt    DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  pump            FuelPump  @relation(fields: [pumpId], references: [id])
+  grade           FuelGrade @relation(fields: [gradeId], references: [id])
+
+  @@index([businessId, storeId, createdAt])
+  @@index([pumpId])
+  @@index([status])
+}
+
+// ─── Fuel Pump Enterprise Extensions ─────────────────────────────────────────
+
+model FuelTank {
+  id             String   @id @default(uuid())
+  businessId     String
+  storeId        String
+  tankNumber     Int
+  label          String?
+  gradeId        String
+  capacityLitres Float
+  currentLitres  Float    @default(0)
+  minLevelLitres Float    @default(500)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  grade          FuelGrade @relation(fields: [gradeId], references: [id])
+  dippings       FuelTankDipping[]
+  deliveries     FuelDelivery[]
+
+  @@unique([businessId, storeId, tankNumber])
+  @@index([businessId, storeId])
+}
+
+model FuelTankDipping {
+  id          String   @id @default(uuid())
+  businessId  String
+  tankId      String
+  litres      Float
+  recordedBy  String
+  notes       String?
+  recordedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  tank        FuelTank @relation(fields: [tankId], references: [id])
+
+  @@index([tankId, recordedAt])
+}
+
+model FuelDelivery {
+  id             String   @id @default(uuid())
+  businessId     String
+  tankId         String
+  litresDelivered Float
+  supplierName   String?
+  docketNumber   String?
+  deliveredBy    String?
+  notes          String?
+  deliveredAt    DateTime @default(now())
+  createdAt      DateTime @default(now())
+  tank           FuelTank @relation(fields: [tankId], references: [id])
+
+  @@index([businessId, deliveredAt])
+}
+
+model FuelShift {
+  id          String    @id @default(uuid())
+  businessId  String
+  storeId     String
+  cashierId   String?
+  cashierName String
+  openedAt    DateTime  @default(now())
+  closedAt    DateTime?
+  status      String    @default("OPEN")
+  notes       String?
+  readings    FuelShiftReading[]
+
+  @@index([businessId, storeId, status])
+}
+
+model FuelShiftReading {
+  id            String    @id @default(uuid())
+  shiftId       String
+  pumpId        String
+  openingLitres Float
+  closingLitres Float?
+  createdAt     DateTime  @default(now())
+  shift         FuelShift @relation(fields: [shiftId], references: [id])
+
+  @@index([shiftId])
+}
+
+model FleetAccount {
+  id               String   @id @default(uuid())
+  businessId       String
+  companyName      String
+  contactName      String?
+  contactPhone     String?
+  contactEmail     String?
+  creditLimitCents Int      @default(0)
+  balanceCents     Int      @default(0)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  transactions     FleetTransaction[]
+
+  @@index([businessId])
+}
+
+model FleetTransaction {
+  id             String       @id @default(uuid())
+  businessId     String
+  fleetAccountId String
+  fuelSaleId     String?
+  type           String
+  amountCents    Int
+  description    String?
+  reference      String?
+  createdAt      DateTime     @default(now())
+  account        FleetAccount @relation(fields: [fleetAccountId], references: [id])
+
+  @@index([fleetAccountId, createdAt])
+}
+
+// ─── Pharmacy Enterprise Extensions ──────────────────────────────────────────
+
+model DrugCatalogue {
+  id           String   @id @default(uuid())
+  businessId   String
+  genericName  String
+  brandName    String?
+  strength     String?
+  dosageForm   String?
+  category     String?
+  scheduleClass String?
+  defaultInstructions String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([businessId])
+  @@index([genericName])
 }

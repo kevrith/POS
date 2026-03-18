@@ -846,9 +846,358 @@ function PODetail({ po, storeId, onBack, onRefresh }: PODetailProps) {
   );
 }
 
+// ─── Vendor Catalogue Tab ────────────────────────────────────────────────────
+
+interface VendorCatalogueTabProps {
+  businessId: string;
+  storeId: string;
+  suppliers: Supplier[];
+  catalogueSupplierId: string;
+  setCatalogueSupplierId: (id: string) => void;
+  catalogueItems: Array<{ name: string; sku: string; unitCostKES: string; barcode: string }>;
+  setCatalogueItems: (items: Array<{ name: string; sku: string; unitCostKES: string; barcode: string }>) => void;
+  catalogueSearch: string;
+  setCatalogueSearch: (s: string) => void;
+  onPOCreated: () => void;
+}
+
+function VendorCatalogueTab({
+  businessId, suppliers, catalogueSupplierId, setCatalogueSupplierId,
+  catalogueItems, setCatalogueItems, catalogueSearch, setCatalogueSearch, onPOCreated,
+}: VendorCatalogueTabProps) {
+  const qc = useQueryClient();
+
+  const { data: existingItems = [], isLoading } = useQuery<any[]>({
+    queryKey: ['supplier-catalogue', businessId, catalogueSupplierId],
+    queryFn: () => api.get(`/suppliers/catalogue?businessId=${businessId}&supplierId=${catalogueSupplierId}${catalogueSearch ? `&search=${catalogueSearch}` : ''}`),
+    enabled: !!businessId && !!catalogueSupplierId,
+  });
+
+  const [quantities, setQuantities] = useState<Record<string, string>>({});
+
+  const bulkSave = useMutation({
+    mutationFn: () => api.post('/suppliers/catalogue', {
+      businessId,
+      supplierId: catalogueSupplierId,
+      items: catalogueItems
+        .filter(i => i.name.trim())
+        .map(i => ({
+          name: i.name,
+          sku: i.sku || undefined,
+          barcode: i.barcode || undefined,
+          unitCostCents: Math.round(parseFloat(i.unitCostKES || '0') * 100),
+        })),
+    }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['supplier-catalogue'] });
+      setCatalogueItems([{ name: '', sku: '', unitCostKES: '', barcode: '' }]);
+      toast.success('Catalogue items saved');
+    },
+  });
+
+  const deleteItem = useMutation({
+    mutationFn: (id: string) => api.delete(`/suppliers/catalogue/${id}`),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['supplier-catalogue'] }),
+  });
+
+  const createPO = useMutation({
+    mutationFn: () => api.post('/suppliers/catalogue/create-po', {
+      businessId,
+      supplierId: catalogueSupplierId,
+      lines: Object.entries(quantities)
+        .filter(([, qty]) => parseFloat(qty) > 0)
+        .map(([catalogueItemId, qty]) => ({ catalogueItemId, quantity: parseFloat(qty) })),
+    }),
+    onSuccess: () => { toast.success('PO created from catalogue'); onPOCreated(); },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const updateRow = (idx: number, field: string, value: string) =>
+    setCatalogueItems(catalogueItems.map((r, i) => i === idx ? { ...r, [field]: value } : r));
+
+  return (
+    <div className="space-y-6">
+      {/* Supplier selector */}
+      <div className="flex items-center gap-4">
+        <select
+          value={catalogueSupplierId}
+          onChange={e => setCatalogueSupplierId(e.target.value)}
+          className="border rounded-lg px-3 py-2 text-sm min-w-48"
+        >
+          <option value="">— Select supplier —</option>
+          {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        {catalogueSupplierId && (
+          <input
+            type="text" placeholder="Search catalogue..."
+            value={catalogueSearch}
+            onChange={e => setCatalogueSearch(e.target.value)}
+            className="border rounded-lg px-3 py-2 text-sm flex-1 max-w-xs"
+          />
+        )}
+      </div>
+
+      {/* Existing catalogue items */}
+      {catalogueSupplierId && (
+        <div className="bg-white rounded-xl border overflow-hidden">
+          <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
+            <h3 className="font-semibold text-gray-700 text-sm">Catalogue Items ({existingItems.length})</h3>
+            {Object.values(quantities).some(q => parseFloat(q) > 0) && (
+              <button
+                onClick={() => createPO.mutate()}
+                disabled={createPO.isPending}
+                className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50"
+              >
+                {createPO.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileText className="w-3 h-3" />}
+                Create PO from Selection
+              </button>
+            )}
+          </div>
+          {isLoading ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
+          ) : existingItems.length === 0 ? (
+            <p className="text-center py-8 text-gray-400 text-sm">No catalogue items yet</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase">
+                <tr>
+                  <th className="px-4 py-2 text-left">Name</th>
+                  <th className="px-4 py-2 text-left hidden sm:table-cell">SKU</th>
+                  <th className="px-4 py-2 text-left hidden sm:table-cell">Barcode</th>
+                  <th className="px-4 py-2 text-right">Unit Cost</th>
+                  <th className="px-4 py-2 text-center w-24">Order Qty</th>
+                  <th className="w-10" />
+                </tr>
+              </thead>
+              <tbody>
+                {existingItems.map((item: any) => (
+                  <tr key={item.id} className="border-t hover:bg-gray-50">
+                    <td className="px-4 py-2.5 font-medium text-gray-800">{item.name}</td>
+                    <td className="px-4 py-2.5 text-gray-500 hidden sm:table-cell">{item.sku ?? '—'}</td>
+                    <td className="px-4 py-2.5 text-gray-500 font-mono text-xs hidden sm:table-cell">{item.barcode ?? '—'}</td>
+                    <td className="px-4 py-2.5 text-right text-green-700 font-medium">
+                      KES {(item.unitCostCents / 100).toFixed(2)}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <input
+                        type="number" min={0} step={1}
+                        value={quantities[item.id] ?? ''}
+                        onChange={e => setQuantities(q => ({ ...q, [item.id]: e.target.value }))}
+                        placeholder="0"
+                        className="w-full border rounded-lg px-2 py-1 text-center text-sm"
+                      />
+                    </td>
+                    <td className="px-2 py-2.5">
+                      <button
+                        onClick={() => { if (confirm('Remove from catalogue?')) deleteItem.mutate(item.id); }}
+                        className="text-red-400 hover:text-red-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* Add new items form */}
+      {catalogueSupplierId && (
+        <div className="bg-white rounded-xl border p-5 space-y-4">
+          <h3 className="font-semibold text-gray-700 text-sm">Add Items to Catalogue</h3>
+          <div className="space-y-2">
+            {catalogueItems.map((row, idx) => (
+              <div key={idx} className="grid grid-cols-4 gap-2 items-center">
+                <input
+                  placeholder="Item name *"
+                  value={row.name}
+                  onChange={e => updateRow(idx, 'name', e.target.value)}
+                  className="border rounded-lg px-3 py-2 text-sm col-span-2 sm:col-span-1"
+                />
+                <input
+                  placeholder="SKU"
+                  value={row.sku}
+                  onChange={e => updateRow(idx, 'sku', e.target.value)}
+                  className="border rounded-lg px-3 py-2 text-sm hidden sm:block"
+                />
+                <input
+                  placeholder="Barcode"
+                  value={row.barcode}
+                  onChange={e => updateRow(idx, 'barcode', e.target.value)}
+                  className="border rounded-lg px-3 py-2 text-sm hidden sm:block"
+                />
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number" min={0} step={0.01}
+                    placeholder="Cost (KES)"
+                    value={row.unitCostKES}
+                    onChange={e => updateRow(idx, 'unitCostKES', e.target.value)}
+                    className="border rounded-lg px-3 py-2 text-sm flex-1"
+                  />
+                  <button
+                    onClick={() => setCatalogueItems(catalogueItems.filter((_, i) => i !== idx))}
+                    disabled={catalogueItems.length === 1}
+                    className="text-red-400 hover:text-red-600 disabled:opacity-30"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setCatalogueItems([...catalogueItems, { name: '', sku: '', unitCostKES: '', barcode: '' }])}
+              className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
+            >
+              <Plus className="w-4 h-4" /> Add Row
+            </button>
+            <button
+              onClick={() => bulkSave.mutate()}
+              disabled={!catalogueItems.some(i => i.name.trim()) || bulkSave.isPending}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-40 flex items-center gap-2"
+            >
+              {bulkSave.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              Save to Catalogue
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Auto-Reorder Tab ─────────────────────────────────────────────────────────
+
+interface AutoReorderTabProps {
+  businessId: string;
+  storeId: string;
+  suppliers: Supplier[];
+  reorderSupplierId: string;
+  setReorderSupplierId: (id: string) => void;
+  reorderResult: any;
+  setReorderResult: (r: any) => void;
+  reorderLoading: boolean;
+  setReorderLoading: (l: boolean) => void;
+  onPOCreated: () => void;
+}
+
+function AutoReorderTab({
+  businessId, storeId, suppliers,
+  reorderSupplierId, setReorderSupplierId,
+  reorderResult, setReorderResult,
+  reorderLoading, setReorderLoading,
+  onPOCreated,
+}: AutoReorderTabProps) {
+  const runCheck = async () => {
+    setReorderLoading(true);
+    setReorderResult(null);
+    try {
+      const result = await api.post('/suppliers/auto-reorder', {
+        businessId,
+        storeId,
+        supplierId: reorderSupplierId || undefined,
+      });
+      setReorderResult(result);
+      if ((result as any)?.posCreated) {
+        toast.success(`Auto-reorder PO created: ${(result as any).posCreated.poNumber}`);
+      }
+    } catch (e: any) {
+      toast.error(e.message ?? 'Auto-reorder check failed');
+    } finally {
+      setReorderLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <div className="bg-white rounded-xl border p-6 space-y-4">
+        <div>
+          <h3 className="font-semibold text-gray-800">Auto-Reorder Check</h3>
+          <p className="text-sm text-gray-500 mt-1">
+            Scans all items with a reorder level set. If current stock ≤ reorder level, a DRAFT PO is automatically created.
+          </p>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Assign to Supplier (optional)</label>
+          <select
+            value={reorderSupplierId}
+            onChange={e => setReorderSupplierId(e.target.value)}
+            className="border rounded-lg px-3 py-2 text-sm w-full max-w-xs"
+          >
+            <option value="">— Use default supplier —</option>
+            {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
+        <button
+          onClick={runCheck}
+          disabled={reorderLoading}
+          className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50"
+        >
+          {reorderLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
+          {reorderLoading ? 'Checking...' : 'Run Auto-Reorder Check'}
+        </button>
+      </div>
+
+      {reorderResult && (
+        <div className={`rounded-xl border p-5 ${
+          reorderResult.posCreated ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'
+        }`}>
+          <p className={`font-semibold mb-3 ${
+            reorderResult.posCreated ? 'text-green-800' : 'text-gray-700'
+          }`}>
+            {reorderResult.message}
+          </p>
+
+          {reorderResult.posCreated && (
+            <div className="mb-3 flex items-center gap-3">
+              <span className="text-sm text-green-700">
+                PO: <strong className="font-mono">{reorderResult.posCreated.poNumber}</strong>
+              </span>
+              <button
+                onClick={onPOCreated}
+                className="text-xs text-blue-600 underline hover:text-blue-800"
+              >
+                View in Purchase Orders →
+              </button>
+            </div>
+          )}
+
+          {reorderResult.triggered?.length > 0 && (
+            <div className="overflow-x-auto rounded-lg border border-gray-200">
+              <table className="w-full text-sm">
+                <thead className="bg-white text-xs font-semibold text-gray-500 uppercase">
+                  <tr>
+                    <th className="px-4 py-2 text-left">Item</th>
+                    <th className="px-4 py-2 text-center">Current Stock</th>
+                    <th className="px-4 py-2 text-center">Reorder Level</th>
+                    <th className="px-4 py-2 text-center">Reorder Qty</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reorderResult.triggered.map((t: any) => (
+                    <tr key={t.itemId} className="border-t">
+                      <td className="px-4 py-2 font-medium text-gray-800">{t.name}</td>
+                      <td className="px-4 py-2 text-center text-red-600 font-semibold">{t.currentStock}</td>
+                      <td className="px-4 py-2 text-center text-gray-600">{t.reorderLevel}</td>
+                      <td className="px-4 py-2 text-center text-blue-600 font-semibold">{t.reorderQty}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type Tab = 'suppliers' | 'purchase-orders' | 'credit-notes' | 'returns' | 'invoices' | 'price-agreements' | 'landed-cost';
+type Tab = 'suppliers' | 'purchase-orders' | 'credit-notes' | 'returns' | 'invoices' | 'price-agreements' | 'landed-cost' | 'catalogue' | 'auto-reorder';
 
 export default function SuppliersPage() {
   const qc = useQueryClient();
@@ -863,6 +1212,16 @@ export default function SuppliersPage() {
     name: '', contact: '', address: '', paymentTerms: '', creditLimit: '',
   });
   const [formError, setFormError] = useState('');
+
+  // Vendor catalogue state
+  const [catalogueSupplierId, setCatalogueSupplierId] = useState('');
+  const [catalogueItems, setCatalogueItems] = useState<Array<{ name: string; sku: string; unitCostKES: string; barcode: string }>>([{ name: '', sku: '', unitCostKES: '', barcode: '' }]);
+  const [catalogueSearch, setCatalogueSearch] = useState('');
+
+  // Auto-reorder state
+  const [reorderResult, setReorderResult] = useState<any>(null);
+  const [reorderLoading, setReorderLoading] = useState(false);
+  const [reorderSupplierId, setReorderSupplierId] = useState('');
 
   const businessId = user?.businessId ?? '';
   const storeId = user?.storeId ?? '';
@@ -1164,6 +1523,8 @@ export default function SuppliersPage() {
             { id: 'invoices' as const, label: 'Invoices', Icon: AlertCircle },
             { id: 'price-agreements' as const, label: 'Price Agreements', Icon: FileText },
             { id: 'landed-cost' as const, label: 'Landed Cost', Icon: Package },
+            { id: 'catalogue' as const, label: 'Vendor Catalogue', Icon: Package },
+            { id: 'auto-reorder' as const, label: 'Auto-Reorder', Icon: RefreshCw },
           ]).map(({ id, label, Icon }) => (
             <button
               key={id}
@@ -2112,6 +2473,38 @@ export default function SuppliersPage() {
               </button>
             </div>
           </div>
+        )}
+
+        {/* ── Vendor Catalogue Tab ── */}
+        {tab === 'catalogue' && (
+          <VendorCatalogueTab
+            businessId={businessId}
+            storeId={storeId}
+            suppliers={suppliers}
+            catalogueSupplierId={catalogueSupplierId}
+            setCatalogueSupplierId={setCatalogueSupplierId}
+            catalogueItems={catalogueItems}
+            setCatalogueItems={setCatalogueItems}
+            catalogueSearch={catalogueSearch}
+            setCatalogueSearch={setCatalogueSearch}
+            onPOCreated={() => setTab('purchase-orders')}
+          />
+        )}
+
+        {/* ── Auto-Reorder Tab ── */}
+        {tab === 'auto-reorder' && (
+          <AutoReorderTab
+            businessId={businessId}
+            storeId={storeId}
+            suppliers={suppliers}
+            reorderSupplierId={reorderSupplierId}
+            setReorderSupplierId={setReorderSupplierId}
+            reorderResult={reorderResult}
+            setReorderResult={setReorderResult}
+            reorderLoading={reorderLoading}
+            setReorderLoading={setReorderLoading}
+            onPOCreated={() => setTab('purchase-orders')}
+          />
         )}
 
       </div>

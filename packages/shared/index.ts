@@ -220,9 +220,9 @@ export function calculateVAT(inclusiveAmountCents: number): number {
   return Math.round(inclusiveAmountCents * 16 / 116);
 }
 
-/** Extract the TOT component from a TOT-inclusive amount (3% rate). */
-export function calculateTOT(inclusiveAmountCents: number): number {
-  return Math.round(inclusiveAmountCents * 3 / 103);
+/** Extract the TOT component from a TOT-inclusive amount. Rate defaults to KRA Finance Act 2023 rate of 3%. */
+export function calculateTOT(inclusiveAmountCents: number, ratePct = 3): number {
+  return Math.round(inclusiveAmountCents * ratePct / (100 + ratePct));
 }
 
 export function calculateServiceCharge(

@@ -254,7 +254,7 @@ export default function SupermarketPOSPage() {
     }
 
     // Barcode exact match first
-    const byBarcode = items.find((i) => i.barcode === scan.trim());
+    const byBarcode = items.find((i) => i.barcode?.toLowerCase() === scan.trim().toLowerCase());
     if (byBarcode) {
       const qty = qtyMultiplier ? parseInt(qtyMultiplier, 10) : 1;
       addItemById(byBarcode, qty);
@@ -262,7 +262,7 @@ export default function SupermarketPOSPage() {
     }
 
     // SKU exact match (ApiItem may not have sku, use barcode fallback)
-    const bySku = items.find((i) => (i as any).sku === scan.trim());
+    const bySku = items.find((i) => (i as any).sku?.toLowerCase() === scan.trim().toLowerCase());
     if (bySku) {
       const qty = qtyMultiplier ? parseInt(qtyMultiplier, 10) : 1;
       addItemById(bySku, qty);

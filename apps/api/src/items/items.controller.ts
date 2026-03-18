@@ -192,6 +192,12 @@ export class ItemsController {
     return this.items.toggleActive(id, businessId);
   }
 
+  @Patch(':id/86')
+  @UseGuards(JwtAuthGuard)
+  async toggle86(@Param('id') id: string, @Query('businessId') businessId: string) {
+    return this.items.toggle86(id, businessId);
+  }
+
   @Delete(':id')
   remove(@Param('id') id: string, @Query('businessId') businessId: string) {
     return this.items.softDelete(id, businessId);

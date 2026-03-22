@@ -14,7 +14,7 @@ echo "=== prisma generate OK ==="
 
 echo "=== STEP 3: NestJS build ==="
 cd "$ROOT/apps/api"
-"$ROOT/node_modules/.bin/nest" build
+NODE_OPTIONS="--max-old-space-size=4096" "$ROOT/node_modules/.bin/nest" build
 echo "=== nest build OK ==="
 
 echo "=== BUILD COMPLETE ==="

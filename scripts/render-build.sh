@@ -1,27 +1,21 @@
 #!/usr/bin/env bash
 set -e  # exit on any error
 
+ROOT="$(pwd)"
+echo "=== Working directory: $ROOT ==="
+
 echo "=== STEP 1: Build @pos/shared ==="
-cd packages/shared
-npm install
-npm run build
+npm run build --workspace=packages/shared
 echo "=== shared build OK ==="
-cd ../..
 
-echo "=== STEP 2: Install apps/api dependencies ==="
-cd apps/api
-npm install
-echo "=== api install OK ==="
-cd ../..
-
-echo "=== STEP 3: Prisma generate ==="
-node_modules/.bin/prisma generate --schema prisma/schema.prisma
+echo "=== STEP 2: Prisma generate ==="
+cd "$ROOT/apps/api"
+npx prisma generate --schema "$ROOT/prisma/schema.prisma"
 echo "=== prisma generate OK ==="
 
-echo "=== STEP 4: NestJS build ==="
-cd apps/api
-../../node_modules/.bin/nest build
+echo "=== STEP 3: NestJS build ==="
+cd "$ROOT/apps/api"
+npx nest build
 echo "=== nest build OK ==="
-cd ../..
 
 echo "=== BUILD COMPLETE ==="

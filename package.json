@@ -20,9 +20,11 @@
   "engines": {
     "node": "20.x"
   },
-  "devDependencies": {
+  "dependencies": {
     "@nestjs/cli": "^10.3.0",
-    "concurrently": "^8.2.2",
     "prisma": "^5.9.0"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
   }
 }

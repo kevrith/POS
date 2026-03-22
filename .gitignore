@@ -68,5 +68,5 @@ backups/*.sqlite
 *.key
 !**/*.example.*
 
-# Claude Code agent worktrees
-.claude/worktrees/
+# Claude Code
+.claude/

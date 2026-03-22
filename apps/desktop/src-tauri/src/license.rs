@@ -92,8 +92,9 @@ pub async fn validate_license_key(key: String, machine_id: String) -> Result<boo
     if !key.starts_with("KPS-") {
         return Ok(false);
     }
-    // Expected: KPS-XXXXXXXX-XXXXXXXX-XXXXXXXX  (31 chars)
-    if key.len() != 31 {
+    // Expected: KPS-XXXXXXXX-XXXXXXXX-XXXXXXXX  (30 chars)
+    // K(1)P(2)S(3)-(4) + 8 + -(1) + 8 + -(1) + 8 = 4+8+1+8+1+8 = 30
+    if key.len() != 30 {
         return Ok(false);
     }
 

@@ -60,6 +60,8 @@ const DeliveryManagementPage = lazy(() => import('./pages/DeliveryManagementPage
 const QRMenuPage = lazy(() => import('./pages/QRMenuPage'));
 const OnlineOrderPage = lazy(() => import('./pages/OnlineOrderPage'));
 const FuelPumpPage = lazy(() => import('./pages/FuelPumpPage'));
+const CybercafePage = lazy(() => import('./pages/CybercafePage'));
+const CyberKioskPage = lazy(() => import('./pages/CyberKioskPage'));
 
 function PageLoader() {
   return (
@@ -117,6 +119,15 @@ export default function App() {
     return (
       <Suspense fallback={<div style={{ background: '#0d1b2a', height: '100vh' }} />}>
         <PoleDisplayPage />
+      </Suspense>
+    );
+  }
+
+  // Cyber kiosk — public, no auth, shown on customer's screen
+  if (window.location.pathname === '/cyber-kiosk') {
+    return (
+      <Suspense fallback={<div style={{ background: '#030712', height: '100vh' }} />}>
+        <CyberKioskPage />
       </Suspense>
     );
   }
@@ -236,6 +247,8 @@ export default function App() {
           <Route path="/delivery-management" element={<DeliveryManagementPage />} />
           {/* Fuel Pump */}
           <Route path="/fuel-pump" element={<FuelPumpPage />} />
+          {/* Cybercafe */}
+          <Route path="/cybercafe" element={<CybercafePage />} />
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/pos" replace />} />
         </Routes>

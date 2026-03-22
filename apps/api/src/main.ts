@@ -80,6 +80,21 @@ async function bootstrap() {
     logger.log('📋 Health check: http://localhost:3010/api/auth/me');
     logger.log('📖 Swagger docs: http://localhost:3010/api/docs');
     logger.log('🔑 Super Admin: POST /api/v1/super-admin/login');
+
+    // ── Keep-alive ping (free Render tier) ─────────────────────────────────
+    // Render free services sleep after 15 min of inactivity.
+    // Pinging own /health every 14 min keeps the service warm during business hours.
+    if (process.env.KEEP_ALIVE === 'true' && process.env.RENDER_EXTERNAL_URL) {
+      const pingUrl = `${process.env.RENDER_EXTERNAL_URL}/api/v1/health`;
+      logger.log(`🏓 Keep-alive ping enabled → ${pingUrl}`);
+      setInterval(async () => {
+        try {
+          await fetch(pingUrl);
+        } catch {
+          // ignore — if the server is down a restart will handle it
+        }
+      }, 14 * 60 * 1000); // every 14 minutes
+    }
   } catch (error) {
     logger.error('Failed to start application:', error);
     if (process.env.SENTRY_DSN) Sentry.captureException(error);

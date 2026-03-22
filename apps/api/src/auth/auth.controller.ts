@@ -27,24 +27,26 @@ interface RegisterDto {
   businessName: string;
 }
 
-@Public()
 @SkipSubscriptionCheck()
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
 
+  @Public()
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('login')
   async login(@Body() dto: LoginDto) {
     return this.authService.loginWithPassword(dto.email, dto.password, dto.totpCode);
   }
 
+  @Public()
   @Throttle({ default: { limit: 20, ttl: 60000 } })
   @Post('login/pin')
   async loginPin(@Body() dto: PinLoginDto) {
     return this.authService.loginWithPin(dto.pin, dto.businessId, dto.storeId, dto.userId);
   }
 
+  @Public()
   @Post('register')
   async register(@Body() dto: RegisterDto) {
     return this.authService.registerOwner(dto);
@@ -126,12 +128,14 @@ export class AuthController {
 
   // ─── Forgot / Reset password (public — no JWT needed) ─────────────────────
 
+  @Public()
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('forgot-password')
   async forgotPassword(@Body() body: { email: string }) {
     return this.authService.forgotPassword(body.email);
   }
 
+  @Public()
   @Post('reset-password')
   async resetPassword(@Body() body: { token: string; newPassword: string }) {
     return this.authService.resetPasswordWithToken(body.token, body.newPassword);

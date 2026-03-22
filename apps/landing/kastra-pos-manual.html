@@ -234,6 +234,8 @@ hr{border:none;border-top:1px solid var(--border2);margin:48px 0}
     <div class="nav-section">Modules</div>
     <a class="nav-item" href="#ch13">13. Hospitality &amp; Restaurant</a>
     <a class="nav-item" href="#ch14">14. Hotel Management</a>
+    <a class="nav-item" href="#ch14b">14B. Fuel Station</a>
+    <a class="nav-item" href="#ch14c">14C. Cybercafé</a>
     <a class="nav-item" href="#ch15">15. HR &amp; Payroll</a>
     <a class="nav-item" href="#ch16">16. Reports &amp; Analytics</a>
     <a class="nav-item" href="#ch17">17. KRA eTIMS</a>
@@ -316,11 +318,14 @@ hr{border:none;border-top:1px solid var(--border2);margin:48px 0}
 <tr><td><strong>Retail Shop</strong></td><td>POS, Inventory, Suppliers, Reports</td><td>Barcode labels, stock transfers, layaway</td></tr>
 <tr><td><strong>Restaurant / Café</strong></td><td>POS, Tables, KOT, KDS, Recipes</td><td>Kitchen display, table reservations, bill splitting</td></tr>
 <tr><td><strong>Supermarket</strong></td><td>POS, Inventory, Batches, Suppliers</td><td>Weight scale, FEFO, bulk imports, promotions</td></tr>
-<tr><td><strong>Pharmacy / Clinic</strong></td><td>POS, Batches, Serials, Prescriptions</td><td>Expiry tracking, batch recall, prescriptions</td></tr>
+<tr><td><strong>Pharmacy / Clinic</strong></td><td>POS, Batches, Serials, Prescriptions</td><td>Expiry tracking, batch recall, prescriptions, refer out to external pharmacy</td></tr>
 <tr><td><strong>Hotel / Lodge</strong></td><td>POS, Hotel Rooms, Folio, Restaurant</td><td>Room bookings, housekeeping, guest folio, room charge</td></tr>
 <tr><td><strong>Bar / Nightclub</strong></td><td>POS, Bar Tabs, Tables, KOT</td><td>Bar tab management, tab settlement, KOT routing to bar</td></tr>
 <tr><td><strong>Salon / Spa</strong></td><td>POS, Appointments, Employees, HR</td><td>Service items, commission tracking, appointment booking</td></tr>
-<tr><td><strong>Franchise Chain</strong></td><td>All modules + Franchise Dashboard</td><td>Royalty tracking, franchise reports, multi-business hierarchy</td></tr>
+<tr><td><strong>Fuel Station</strong></td><td>POS, Fuel Pump, Inventory, Shifts</td><td>Per-pump &amp; per-nozzle tracking, nozzle calibration, dip readings, attendant shift reports, fleet credit accounts</td></tr>
+<tr><td><strong>Cybercafé / Business Centre</strong></td><td>POS, Cybercafé Sessions, Reports</td><td>Computer session timer, per-minute/hourly billing, printing &amp; scanning charges, daily usage reports, M-Pesa per session</td></tr>
+<tr><td><strong>Hardware / General Trade</strong></td><td>POS, Inventory, Suppliers, POs, Serials</td><td>Purchase orders &amp; GRN, supplier ageing, serial registry, proforma invoices, credit book</td></tr>
+<tr><td><strong>Franchise Chain</strong></td><td>All modules + Franchise Dashboard</td><td>Royalty tracking, franchise reports, multi-business hierarchy, per-franchisee performance dashboards</td></tr>
 </tbody>
 </table>
 </div>
@@ -1080,6 +1085,61 @@ Club Sandwich,Food,PRODUCT,850,200,,true,true</code></pre>
 
 <h2>9.7 Barcode Label Printing</h2>
 <p>Inventory → Items → select items → click <strong>Print Labels</strong>. Choose label format (58mm or 80mm roll). Labels include: item name, barcode, price. Requires a label printer with routing handle <code>LABELS</code> configured in Settings → Printers.</p>
+
+<h2>9.8 Prescription Management (Pharmacy)</h2>
+<p>The Prescriptions module is available when your Business Type is set to <strong>Pharmacy</strong> or <strong>Clinic</strong>. Navigate to <strong>Inventory → Prescriptions</strong> to access the prescription queue.</p>
+
+<h3>9.8.1 Prescription Statuses</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Status</th><th>Badge Colour</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><strong>PENDING</strong></td><td>Yellow</td><td>Prescription received, awaiting dispensing or action.</td></tr>
+<tr><td><strong>DISPENSED</strong></td><td>Green</td><td>All items dispensed; stock deducted; prescription complete.</td></tr>
+<tr><td><strong>PARTIALLY_DISPENSED</strong></td><td>Blue</td><td>Some items dispensed; remaining items still outstanding.</td></tr>
+<tr><td><strong>REFERRED_EXTERNAL</strong></td><td>Purple</td><td>Patient has been referred to an external pharmacy. No stock has been deducted. Referral notes are stored on the prescription record.</td></tr>
+<tr><td><strong>CANCELLED</strong></td><td>Red</td><td>Prescription voided; no stock deducted.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>9.8.2 Prescription Queue Filters</h3>
+<p>The prescription queue provides filter tabs at the top of the screen so staff can quickly locate prescriptions by status:</p>
+<ul>
+  <li><strong>All</strong> — shows every prescription regardless of status.</li>
+  <li><strong>PENDING</strong> — prescriptions awaiting action (the default working view).</li>
+  <li><strong>DISPENSED</strong> — completed prescriptions for record-keeping.</li>
+  <li><strong>PARTIALLY_DISPENSED</strong> — prescriptions where dispensing is still in progress.</li>
+  <li><strong>REFERRED_EXTERNAL</strong> — prescriptions referred to an outside pharmacy.</li>
+  <li><strong>CANCELLED</strong> — voided prescriptions.</li>
+</ul>
+
+<h3>9.8.3 Dispensing a Prescription</h3>
+<div class="steps">
+  <div class="step"><div class="step-num">1</div><div class="step-body"><h5>Open Prescription</h5><p>In the prescription queue, click on a <strong>PENDING</strong> prescription to open the detail view.</p></div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-body"><h5>Review Items</h5><p>Confirm each drug on the prescription, verify available batch stock and expiry dates. The system applies FEFO — the batch nearest to expiry is selected first.</p></div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-body"><h5>Dispense</h5><p>Click <strong>Dispense</strong>. Stock is deducted from inventory and the prescription status changes to <strong>DISPENSED</strong> (or <strong>PARTIALLY_DISPENSED</strong> if any items could not be fulfilled).</p></div></div>
+  <div class="step"><div class="step-num">4</div><div class="step-body"><h5>Attach to Sale</h5><p>If payment is required at the counter, the dispensed items can be added directly to a POS cart for checkout, creating a linked sale.</p></div></div>
+</div>
+
+<h3>9.8.4 Referring a Prescription Externally (Refer Out)</h3>
+<p>Use the <strong>Refer Out</strong> action when one or more required drugs are not in stock and the patient needs to obtain them from a different pharmacy. No stock is deducted when a prescription is referred out.</p>
+<div class="steps">
+  <div class="step"><div class="step-num">1</div><div class="step-body"><h5>Open the Prescription</h5><p>In the prescription queue, click on a <strong>PENDING</strong> prescription to open its detail view.</p></div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-body"><h5>Click "Refer Out"</h5><p>Click the <strong>Refer Out</strong> button. A modal dialog will appear prompting for referral details.</p></div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-body"><h5>Enter Referral Notes</h5><p>In the notes field, record the reason for the referral and the name of the external pharmacy or facility the patient is being directed to (e.g. <em>"Haltons Pharmacy, Westlands — Amoxicillin 500mg out of stock"</em>). This field is mandatory.</p></div></div>
+  <div class="step"><div class="step-num">4</div><div class="step-body"><h5>Confirm</h5><p>Click <strong>Confirm Referral</strong>. The prescription status immediately changes to <strong>REFERRED_EXTERNAL</strong> and no inventory adjustment is made.</p></div></div>
+</div>
+<div class="callout callout-tip"><div class="callout-icon">💡</div><div class="callout-body"><h5>Tip</h5><p>Referred prescriptions are visible in the <strong>REFERRED_EXTERNAL</strong> filter tab. The referral notes you entered are displayed in a purple "Referred Out" card inside the prescription detail view, providing a permanent audit trail.</p></div></div>
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><div class="callout-body"><h5>Important</h5><p>A prescription can only be referred out when its status is <strong>PENDING</strong>. Partially dispensed or already dispensed prescriptions cannot be referred out. If partial dispensing occurred before the referral decision, cancel the prescription and raise a new one.</p></div></div>
+
+<h3>9.8.5 Viewing Referral Notes</h3>
+<p>To review the referral record for any referred prescription:</p>
+<ol>
+  <li>Go to <strong>Inventory → Prescriptions</strong> and click the <strong>REFERRED_EXTERNAL</strong> filter tab.</li>
+  <li>Click the prescription to open its detail view.</li>
+  <li>A purple <strong>"Referred Out"</strong> card is displayed at the top of the detail panel, showing the referral notes, the staff member who actioned the referral, and the timestamp.</li>
+</ol>
 </section>
 
 <hr/>
@@ -1319,6 +1379,103 @@ Club Sandwich,Food,PRODUCT,850,200,,true,true</code></pre>
 <h2>14.6 Housekeeping</h2>
 <p>Hospitality → Housekeeping Queue — lists all rooms by status: CLEAN / DIRTY / INSPECTED / OUT_OF_ORDER.</p>
 <p>Housekeeper updates room status after cleaning. Room moves to CLEAN → INSPECTED → AVAILABLE for new booking. Manager can mark rooms OUT_OF_ORDER for maintenance.</p>
+</section>
+
+<hr/>
+
+<!-- ── Chapter 14B: Fuel Station ── -->
+<section id="ch14b">
+<div class="chapter-header">
+  <div class="chapter-number">Chapter 14B</div>
+  <h1>Fuel Station Module</h1>
+  <p>Manage petrol station operations — pump tracking, nozzle calibration, attendant shifts, and fleet credit accounts — all integrated with the POS and eTIMS.</p>
+</div>
+
+<h2>14B.1 Overview</h2>
+<p>Enable the Fuel Station module by setting your <strong>Business Type</strong> to <em>Fuel Station</em> in Settings → General. The <strong>Fuel Pump</strong> page appears in the navigation, and a real-time pump status panel is added to the POS sidebar.</p>
+
+<h2>14B.2 Pump &amp; Nozzle Setup</h2>
+<ol>
+  <li>Go to <strong>Fuel Pump → Manage Pumps</strong>.</li>
+  <li>Click <strong>+ Add Pump</strong> — enter pump name (e.g. "Pump 1"), and add nozzles (Petrol, Diesel, Super).</li>
+  <li>Set the unit price per litre for each product. Prices sync to the POS automatically.</li>
+  <li>Record opening dip readings at the start of each day for fuel stock reconciliation.</li>
+</ol>
+
+<h2>14B.3 Recording a Fuel Sale</h2>
+<p>Attendants can record sales directly on the Fuel Pump page or via the main POS:</p>
+<ol>
+  <li>Select the pump and nozzle.</li>
+  <li>Enter the amount dispensed (litres) or the monetary value.</li>
+  <li>Choose payment method (Cash / M-Pesa / Credit Account).</li>
+  <li>KRA eTIMS invoice is submitted automatically after confirmation.</li>
+</ol>
+
+<h2>14B.4 Nozzle Calibration</h2>
+<p>Navigate to <strong>Fuel Pump → Calibration</strong>. Enter the calibration litres for each nozzle. The system adjusts volume calculations going forward and logs the calibration event in the audit trail.</p>
+
+<h2>14B.5 Fuel Stock Reconciliation</h2>
+<p>At shift end, record closing dip readings. The system calculates:</p>
+<ul>
+  <li><strong>Expected closing</strong> = Opening stock − Litres sold</li>
+  <li><strong>Variance</strong> = Expected − Actual dip reading</li>
+  <li>Variances above the configured threshold trigger an alert notification to the manager.</li>
+</ul>
+
+<h2>14B.6 Attendant Shift Reports</h2>
+<p>Go to <strong>Fuel Pump → Shift Reports</strong>. Filter by attendant, date range, or pump. The report shows litres dispensed, revenue collected, payment breakdown (Cash / M-Pesa / Credit), and any cash discrepancies.</p>
+
+<h2>14B.7 Fleet &amp; Credit Accounts</h2>
+<p>Set up fleet credit accounts for regular commercial customers:</p>
+<ol>
+  <li><strong>Customers → + Add Customer</strong> — enable <em>Credit Account</em> and set a credit limit.</li>
+  <li>At the pump, select the customer and post the sale to their credit account.</li>
+  <li>Issue a monthly credit statement from <strong>Reports → Credit Book</strong> and collect payment.</li>
+</ol>
+</section>
+
+<hr/>
+
+<!-- ── Chapter 14C: Cybercafé ── -->
+<section id="ch14c">
+<div class="chapter-header">
+  <div class="chapter-number">Chapter 14C</div>
+  <h1>Cybercafé Module</h1>
+  <p>Manage internet sessions, printing charges, and business centre services with per-minute or flat-rate billing and M-Pesa integration.</p>
+</div>
+
+<h2>14C.1 Overview</h2>
+<p>Enable the Cybercafé module by setting your <strong>Business Type</strong> to <em>Cybercafé</em> in Settings → General. The <strong>Cybercafé</strong> page appears in the navigation with a live session grid showing all computers.</p>
+
+<h2>14C.2 Computer Setup</h2>
+<ol>
+  <li>Go to <strong>Cybercafé → Manage Computers</strong>.</li>
+  <li>Click <strong>+ Add Computer</strong> — enter a name or station number (e.g. "PC-01").</li>
+  <li>Set the default billing rate: per-minute price or flat hourly rate.</li>
+  <li>Computers appear on the session grid with status: Available / In Use / Reserved.</li>
+</ol>
+
+<h2>14C.3 Starting a Session</h2>
+<ol>
+  <li>Click a free computer on the session grid.</li>
+  <li>Optionally enter the customer's name or phone number.</li>
+  <li>Select billing type: <strong>Per Minute</strong>, <strong>Hourly</strong>, or <strong>Fixed Package</strong> (e.g. 1-hour bundle).</li>
+  <li>Click <strong>Start Session</strong> — the timer begins and the computer status changes to <em>In Use</em>.</li>
+</ol>
+
+<h2>14C.4 Ending a Session &amp; Billing</h2>
+<ol>
+  <li>Click the active computer on the grid and select <strong>End Session</strong>.</li>
+  <li>The system calculates the charge based on elapsed time and rate.</li>
+  <li>A POS checkout screen opens pre-filled with the session charge.</li>
+  <li>Accept payment (Cash, M-Pesa, or credit) and issue a KRA-compliant receipt.</li>
+</ol>
+
+<h2>14C.5 Additional Services</h2>
+<p>Add other chargeable services as standard inventory items (e.g. "A4 Print — KES 10", "Scanning — KES 20"). These appear in the POS item grid and can be combined with a session checkout or sold separately.</p>
+
+<h2>14C.6 Daily Usage Report</h2>
+<p>Go to <strong>Reports → Cybercafé Summary</strong>. The report shows total sessions, total hours used, revenue per station, and payment method breakdown for any date range. Export as CSV for reconciliation.</p>
 </section>
 
 <hr/>

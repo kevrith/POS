@@ -33,12 +33,16 @@ export class BusinessController {
     @Body()
     dto: {
       name?: string;
-      taxType?: 'VAT' | 'TOT';
+      taxType?: 'VAT' | 'TOT' | 'NONE';
+      totRate?: number;
       serviceChargeRate?: number;
+      serviceChargeDefault?: boolean;
       negativePolicyDefault?: 'BLOCK' | 'WARN' | 'ALLOW';
       posMode?: string;
       expiredItemPolicy?: string;
       expenseApprovalThresholdCents?: number;
+      expiryAlertDays?: number;
+      [key: string]: unknown;
     },
   ) {
     return this.businessService.updateSettings(businessId, dto);
@@ -206,6 +210,23 @@ export class BusinessController {
     return this.businessService.getPoleConfig(id);
   }
 
+  /** Resolve a short business code (e.g. PREMIE01) → { id, name, shortCode }
+   * Used by the PIN login screen so staff type a short code, not a UUID.
+   * Also accepts seed-style IDs like "biz-001" for dev convenience.
+   */
+  @Public()
+  @SkipSubscriptionCheck()
+  @UseGuards(JwtAuthGuard)
+  @Get('resolve/:code')
+  async resolveByCode(@Param('code') code: string) {
+    const biz = await this.businessService.resolveByCode(code);
+    if (!biz) {
+      const { NotFoundException: NotFound } = await import('@nestjs/common');
+      throw new NotFound('Business code not found');
+    }
+    return biz;
+  }
+
   /** Public staff picker — no auth required (only returns id/name/role, no PINs)
    * Method-level @UseGuards() overrides the class-level JwtAuthGuard+TenantGuard.
    */
@@ -214,6 +235,8 @@ export class BusinessController {
   @UseGuards(JwtAuthGuard)
   @Get(':id/staff')
   async getStaffList(@Param('id') id: string) {
-    return this.businessService.getStaffList(id);
+    // :id may be a real UUID or a shortCode — resolve transparently
+    const biz = await this.businessService.resolveByCode(id);
+    return this.businessService.getStaffList(biz ? biz.id : id);
   }
 }

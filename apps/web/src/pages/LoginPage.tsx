@@ -62,7 +62,8 @@ export default function LoginPage() {
   // ── PIN mode ─────────────────────────────────────────────────────────────────
   const [pinStep, setPinStep] = useState<PinStep>('business');
   const [businessIdInput, setBusinessIdInput] = useState('');
-  const [savedBusinessId, setSavedBusinessId] = useState('');
+  const [savedBusinessId, setSavedBusinessId] = useState(''); // real UUID stored here
+  const [resolvedBusinessName, setResolvedBusinessName] = useState('');
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [staffLoading, setStaffLoading] = useState(false);
   const [selectedUser, setSelectedUser] = useState<StaffMember | null>(null);
@@ -143,8 +144,10 @@ export default function LoginPage() {
   // On mount: check if businessId is already saved → skip directly to staff grid
   useEffect(() => {
     const stored = localStorage.getItem('pos-business-id') ?? '';
+    const storedName = localStorage.getItem('pos-business-name') ?? '';
     if (stored) {
       setSavedBusinessId(stored);
+      setResolvedBusinessName(storedName);
       setPinStep('staff');
       void loadStaff(stored);
     }
@@ -161,21 +164,35 @@ export default function LoginPage() {
     } catch {
       // Invalid business ID — go back to business step
       setSavedBusinessId('');
+      setResolvedBusinessName('');
       localStorage.removeItem('pos-business-id');
+      localStorage.removeItem('pos-business-name');
       setPinStep('business');
     } finally {
       setStaffLoading(false);
     }
   }
 
-  function handleBusinessSubmit(e: React.FormEvent) {
+  async function handleBusinessSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const id = businessIdInput.trim();
-    if (!id) return;
-    localStorage.setItem('pos-business-id', id);
-    setSavedBusinessId(id);
-    setPinStep('staff');
-    void loadStaff(id);
+    const code = businessIdInput.trim().toUpperCase();
+    if (!code) return;
+    setStaffLoading(true);
+    try {
+      // Resolve short code → real UUID
+      const res = await fetch(`/api/v1/business/resolve/${encodeURIComponent(code)}`);
+      if (!res.ok) throw new Error('Not found');
+      const biz = (await res.json()) as { id: string; name: string; shortCode: string | null };
+      localStorage.setItem('pos-business-id', biz.id);
+      localStorage.setItem('pos-business-name', biz.name);
+      setSavedBusinessId(biz.id);
+      setResolvedBusinessName(biz.name);
+      setPinStep('staff');
+      void loadStaff(biz.id);
+    } catch {
+      setError('Business code not found. Check with your owner.');
+      setStaffLoading(false);
+    }
   }
 
   function selectStaff(member: StaffMember) {
@@ -604,30 +621,32 @@ export default function LoginPage() {
           {mode === 'pin' && (
             <div>
 
-              {/* Step 1: Enter Business ID */}
+              {/* Step 1: Enter Business Code */}
               {pinStep === 'business' && (
                 <form onSubmit={handleBusinessSubmit} className="space-y-5">
                   <div className="text-center">
                     <div className="w-14 h-14 rounded-2xl bg-blue-100 flex items-center justify-center mx-auto mb-3">
                       <Building2 className="w-7 h-7 text-blue-600" />
                     </div>
-                    <h3 className="font-bold text-gray-800">Enter Business ID</h3>
-                    <p className="text-sm text-gray-500 mt-1">Your owner can find this in Settings</p>
+                    <h3 className="font-bold text-gray-800">Enter Business Code</h3>
+                    <p className="text-sm text-gray-500 mt-1">Owner can copy this from Settings → General</p>
                   </div>
                   <input
                     type="text"
                     value={businessIdInput}
-                    onChange={(e) => setBusinessIdInput(e.target.value)}
-                    className="w-full px-4 py-3 border-2 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center font-mono tracking-wider"
-                    placeholder="e.g. biz-001"
+                    onChange={(e) => { setBusinessIdInput(e.target.value.toUpperCase()); setError(''); }}
+                    className="w-full px-4 py-3 border-2 rounded-xl text-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center font-mono tracking-widest uppercase"
+                    placeholder="e.g. PREMIE01"
                     autoFocus
+                    maxLength={12}
                   />
+                  {error && <p className="text-red-500 text-sm text-center">{error}</p>}
                   <button
                     type="submit"
-                    disabled={!businessIdInput.trim()}
+                    disabled={!businessIdInput.trim() || staffLoading}
                     className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl disabled:opacity-40 transition-colors"
                   >
-                    Continue
+                    {staffLoading ? 'Searching…' : 'Continue'}
                   </button>
                 </form>
               )}
@@ -636,11 +655,18 @@ export default function LoginPage() {
               {pinStep === 'staff' && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-bold text-gray-800">Who are you?</h3>
+                    <div>
+                      <h3 className="font-bold text-gray-800">Who are you?</h3>
+                      {resolvedBusinessName && (
+                        <p className="text-xs text-blue-600 font-medium">{resolvedBusinessName}</p>
+                      )}
+                    </div>
                     <button
                       onClick={() => {
                         localStorage.removeItem('pos-business-id');
+                        localStorage.removeItem('pos-business-name');
                         setSavedBusinessId('');
+                        setResolvedBusinessName('');
                         setBusinessIdInput('');
                         setPinStep('business');
                       }}

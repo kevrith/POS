@@ -40,13 +40,22 @@ function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (cmd === 'get_setup_mode') return Promise.resolve({ mode: 'UNSET', server_url: null, store_id: null } as T);
   if (cmd === 'set_setup_mode') return Promise.resolve(true as T);
   if (cmd === 'test_server_connection') return Promise.resolve(true as T);
+  if (cmd === 'discover_servers') return Promise.resolve([] as T);
+  if (cmd === 'get_cloud_url') return Promise.resolve('https://api.kastra.co.ke' as T);
   return Promise.resolve(null as T);
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Mode = 'SERVER' | 'CLIENT' | 'STANDALONE';
+type Mode = 'SERVER' | 'CLIENT' | 'STANDALONE' | 'CLOUD';
 type Step = 0 | 1 | 2 | 3 | 4;
+
+interface DiscoveredServer {
+  ip: string;
+  port: number;
+  hostname: string;
+  url: string;
+}
 
 interface SetupConfig {
   mode: string;
@@ -65,37 +74,50 @@ const MODES: Array<{
   color: string;
 }> = [
   {
+    value: 'CLOUD',
+    label: 'Cloud',
+    icon: ArrowRight,
+    desc: 'Connect to KASTRA Cloud — owner can monitor from anywhere.',
+    details: [
+      'Data stored securely in the cloud',
+      'Owner dashboard accessible from any device',
+      'Multi-branch owners see all stores in one place',
+      'Requires internet connection',
+    ],
+    color: 'sky',
+  },
+  {
     value: 'STANDALONE',
     label: 'Standalone',
     icon: Monitor,
     desc: 'Single computer — everything on this machine.',
     details: [
       'API + database run locally on this PC',
-      'No network required after setup',
+      'Works fully offline — no internet needed',
       'Best for single-cashier businesses',
     ],
     color: 'blue',
   },
   {
     value: 'SERVER',
-    label: 'Server',
+    label: 'Server (LAN)',
     icon: Server,
-    desc: 'This PC is the server. Other terminals connect to it.',
+    desc: 'This PC is the server. Other terminals connect via local network.',
     details: [
       'Runs the API + database on this machine',
-      'Other PCs connect via local network',
-      'Best for multi-cashier or multi-terminal setup',
+      'Other PCs in same building connect via LAN',
+      'Works offline — no internet needed',
     ],
     color: 'purple',
   },
   {
     value: 'CLIENT',
-    label: 'Client',
+    label: 'Client (LAN)',
     icon: Wifi,
-    desc: 'Connect to a KASTRA server on your network.',
+    desc: 'Connect to a KASTRA Server PC on your local network.',
     details: [
       'This PC is a cashier terminal only',
-      'Data lives on the server machine',
+      'Data lives on the Server PC in your building',
       'Requires a running KASTRA Server on the network',
     ],
     color: 'emerald',
@@ -103,11 +125,13 @@ const MODES: Array<{
 ];
 
 const COLOR_MAP: Record<string, string> = {
+  sky:     'border-sky-500 bg-sky-50',
   blue:    'border-blue-500 bg-blue-50',
   purple:  'border-purple-500 bg-purple-50',
   emerald: 'border-emerald-500 bg-emerald-50',
 };
 const ICON_COLOR: Record<string, string> = {
+  sky:     'text-sky-600 bg-sky-100',
   blue:    'text-blue-600 bg-blue-100',
   purple:  'text-purple-600 bg-purple-100',
   emerald: 'text-emerald-600 bg-emerald-100',
@@ -151,9 +175,12 @@ export default function DesktopSetupPage() {
   const [machineId, setMachineId] = useState('');
   const [serverUrl, setServerUrl] = useState('http://192.168.1.');
   const [connectStatus, setConnectStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
+  const [scanning, setScanning] = useState(false);
+  const [discovered, setDiscovered] = useState<DiscoveredServer[]>([]);
+  const [cloudUrl, setCloudUrl] = useState('https://api.kastra.co.ke');
   const [saving, setSaving] = useState(false);
 
-  // On mount: load machine ID and check if already configured
+  // On mount: load machine ID, cloud URL, and check if already configured
   useEffect(() => {
     void (async () => {
       try {
@@ -162,9 +189,13 @@ export default function DesktopSetupPage() {
       } catch { /* ok */ }
 
       try {
+        const url = await invoke<string>('get_cloud_url');
+        if (url) setCloudUrl(url);
+      } catch { /* ok */ }
+
+      try {
         const cfg = await invoke<SetupConfig>('get_setup_mode');
         if (cfg.mode && cfg.mode !== 'UNSET' && cfg.mode !== 'STANDALONE') {
-          // Already configured — go straight to login
           navigate('/');
         }
       } catch { /* first run */ }
@@ -203,15 +234,39 @@ export default function DesktopSetupPage() {
     }
   }
 
+  async function scanForServers() {
+    setScanning(true);
+    setDiscovered([]);
+    try {
+      const found = await invoke<DiscoveredServer[]>('discover_servers');
+      setDiscovered(found);
+      if (found.length === 0) toast.info('No servers found. Try entering the IP manually.');
+    } catch (e) {
+      toast.error('Scan failed: ' + String(e));
+    } finally {
+      setScanning(false);
+    }
+  }
+
   async function finish() {
     setSaving(true);
     try {
+      const finalMode = mode ?? 'STANDALONE';
+      const finalUrl = (finalMode === 'CLIENT' || finalMode === 'CLOUD') ? serverUrl : null;
+
       await invoke('set_setup_mode', {
-        mode: mode ?? 'STANDALONE',
-        serverUrl: mode === 'CLIENT' ? serverUrl : null,
+        mode: finalMode,
+        serverUrl: finalUrl,
         storeId: null,
       });
-      // Mark setup as complete so App.tsx doesn't redirect back here
+
+      // Store the server URL so api.ts routes calls correctly
+      if (finalUrl) {
+        localStorage.setItem('kastra-server-url', finalUrl);
+      } else {
+        localStorage.removeItem('kastra-server-url');
+      }
+
       localStorage.setItem('desktop-setup-done', '1');
       navigate('/');
     } catch (e) {
@@ -224,9 +279,12 @@ export default function DesktopSetupPage() {
   const handleModeNext = () => {
     if (!mode) return;
     if (mode === 'CLIENT') {
-      setStep(3);
+      setStep(3);       // LAN — show server scan/IP entry
+    } else if (mode === 'CLOUD') {
+      setServerUrl(cloudUrl);
+      setStep(3);       // Cloud — show connection test (URL pre-filled)
     } else {
-      setStep(4);
+      setStep(4);       // Standalone / Server — no network config needed
     }
   };
 
@@ -404,21 +462,92 @@ export default function DesktopSetupPage() {
             </div>
           )}
 
-          {/* ── Step 3: Client — Server URL ── */}
-          {step === 3 && mode === 'CLIENT' && (
+          {/* ── Step 3: Cloud / Client — Server connection ── */}
+          {step === 3 && (mode === 'CLIENT' || mode === 'CLOUD') && (
             <div className="space-y-5">
               <div>
-                <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center mb-3">
-                  <Wifi className="w-6 h-6 text-emerald-600" />
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 ${mode === 'CLOUD' ? 'bg-sky-100' : 'bg-emerald-100'}`}>
+                  {mode === 'CLOUD'
+                    ? <ArrowRight className="w-6 h-6 text-sky-600" />
+                    : <Wifi className="w-6 h-6 text-emerald-600" />
+                  }
                 </div>
-                <h2 className="text-xl font-bold text-gray-900">Connect to Server</h2>
+                <h2 className="text-xl font-bold text-gray-900">
+                  {mode === 'CLOUD' ? 'Connect to KASTRA Cloud' : 'Connect to LAN Server'}
+                </h2>
                 <p className="text-gray-500 text-sm mt-1">
-                  Enter the IP address of the KASTRA Server on your local network.
+                  {mode === 'CLOUD'
+                    ? 'Your data will be stored in the cloud. The owner can monitor all branches from anywhere.'
+                    : 'Scan your network to find a KASTRA Server automatically, or enter the IP manually.'
+                  }
                 </p>
               </div>
 
+              {/* Cloud mode: show pre-filled URL with info box */}
+              {mode === 'CLOUD' && (
+                <div className="bg-sky-50 border border-sky-200 rounded-xl p-4 space-y-2">
+                  <div className="flex items-center gap-2 text-sky-700 font-semibold text-sm">
+                    <Shield className="w-4 h-4" /> KASTRA Cloud Server
+                  </div>
+                  <div className="font-mono text-sm text-sky-800 bg-white border border-sky-200 rounded-lg px-3 py-2">
+                    {cloudUrl}
+                  </div>
+                  <p className="text-xs text-sky-600">
+                    This is the official KASTRA cloud server. Your business data is isolated and encrypted — other businesses cannot see your data.
+                  </p>
+                </div>
+              )}
+
+              {/* LAN mode: auto-scan */}
+              {mode === 'CLIENT' && (
+              <button
+                onClick={() => void scanForServers()}
+                disabled={scanning}
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {scanning
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Scanning network… (2s)</>
+                  : <><RefreshCw className="w-4 h-4" /> Scan for KASTRA Servers</>
+                }
+              </button>
+              )}
+
+              {/* Discovered servers list — LAN only */}
+              {mode === 'CLIENT' && discovered.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    {discovered.length} server{discovered.length > 1 ? 's' : ''} found
+                  </p>
+                  {discovered.map((s) => (
+                    <button
+                      key={s.url}
+                      onClick={() => { setServerUrl(s.url); setConnectStatus('idle'); }}
+                      className={`w-full text-left p-3 rounded-xl border-2 transition-all ${
+                        serverUrl === s.url
+                          ? 'border-emerald-500 bg-emerald-50'
+                          : 'border-gray-200 hover:border-emerald-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-semibold text-sm text-gray-800">{s.hostname}</div>
+                          <div className="font-mono text-xs text-gray-500">{s.url}</div>
+                        </div>
+                        {serverUrl === s.url && <CheckCircle className="w-4 h-4 text-emerald-500" />}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {mode === 'CLIENT' && discovered.length > 0 && <div className="border-t border-dashed border-gray-200 pt-1" />}
+
+              {/* Manual entry — LAN only (Cloud URL is fixed) */}
+              {mode === 'CLIENT' && (
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Server URL</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Or enter server URL manually
+                </label>
                 <input
                   value={serverUrl}
                   onChange={(e) => { setServerUrl(e.target.value); setConnectStatus('idle'); }}
@@ -426,10 +555,12 @@ export default function DesktopSetupPage() {
                   className="w-full border-2 rounded-xl px-4 py-3 font-mono text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                 />
                 <p className="text-xs text-gray-400 mt-1">
-                  The server PC's local IP — found in Settings on the Server machine.
+                  Find the IP in Settings → General on the Server PC.
                 </p>
               </div>
+              )}
 
+              {/* Test connection */}
               <button
                 onClick={() => void testConnection()}
                 disabled={connectStatus === 'testing' || !serverUrl.trim()}
@@ -437,20 +568,20 @@ export default function DesktopSetupPage() {
               >
                 {connectStatus === 'testing'
                   ? <><Loader2 className="w-4 h-4 animate-spin" /> Testing…</>
-                  : <><RefreshCw className="w-4 h-4" /> Test Connection</>
+                  : <><CheckCircle className="w-4 h-4" /> Test Connection</>
                 }
               </button>
 
               {connectStatus === 'ok' && (
                 <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-xl text-sm text-green-700">
                   <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                  Connected successfully! Server is reachable.
+                  Connected successfully to <span className="font-mono font-semibold ml-1">{serverUrl}</span>
                 </div>
               )}
               {connectStatus === 'fail' && (
                 <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  Cannot reach server. Check the IP address and ensure the server is running.
+                  Cannot reach server. Check the IP and ensure the Server is running.
                 </div>
               )}
 
@@ -480,19 +611,31 @@ export default function DesktopSetupPage() {
                 <p className="text-gray-500 text-sm mt-2">
                   KASTRA POS is configured as a{' '}
                   <span className="font-semibold text-gray-700">
-                    {mode === 'SERVER' ? 'Server' : mode === 'CLIENT' ? 'Client terminal' : 'Standalone'}
+                    {mode === 'CLOUD' ? 'Cloud' : mode === 'SERVER' ? 'LAN Server' : mode === 'CLIENT' ? 'LAN Client' : 'Standalone'}
                   </span>{' '}
                   installation.
                 </p>
+                {mode === 'CLOUD' && (
+                  <div className="mt-2 bg-sky-50 border border-sky-200 rounded-xl p-3 text-left space-y-1">
+                    <p className="text-xs text-sky-700 font-semibold">✓ Connected to KASTRA Cloud</p>
+                    <p className="text-xs text-sky-600">
+                      Your data is stored securely online. The business owner can monitor all branches by logging in at:
+                    </p>
+                    <p className="font-mono text-xs text-sky-800 bg-white border border-sky-200 rounded px-2 py-1">
+                      {serverUrl.replace('/api/v1', '').replace(':3010', '')}
+                    </p>
+                    <p className="text-xs text-sky-500">from any browser, anywhere.</p>
+                  </div>
+                )}
                 {mode === 'SERVER' && (
-                  <p className="text-xs text-blue-600 mt-2 bg-blue-50 rounded-lg p-2">
-                    Other cashier PCs can connect to this machine using your local IP address.
-                    Find it in Settings → General after logging in.
+                  <p className="text-xs text-purple-600 mt-2 bg-purple-50 rounded-lg p-2">
+                    Other cashier PCs on your network can connect to this machine.
+                    Find your IP in Settings → General after logging in.
                   </p>
                 )}
                 {mode === 'CLIENT' && (
                   <p className="text-xs text-emerald-700 mt-2 bg-emerald-50 rounded-lg p-2">
-                    Connected to: <span className="font-mono font-bold">{serverUrl}</span>
+                    Connected to LAN server: <span className="font-mono font-bold">{serverUrl}</span>
                   </p>
                 )}
               </div>

@@ -125,6 +125,17 @@ export class PrescriptionsService {
     return updated;
   }
 
+  async refer(id: string, referralNotes: string) {
+    const rx = await this.prisma.prescription.findUniqueOrThrow({ where: { id } });
+    if (rx.status !== 'PENDING') {
+      throw new BadRequestException(`Cannot refer a prescription with status ${rx.status}`);
+    }
+    return this.prisma.prescription.update({
+      where: { id },
+      data: { status: 'REFERRED_EXTERNAL', referralNotes },
+    });
+  }
+
   async cancel(id: string) {
     return this.prisma.prescription.update({
       where: { id },

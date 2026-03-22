@@ -72,6 +72,7 @@ interface BusinessSettings {
   bankAccountNumber?: string;
   bankAccountName?: string;
   bankBranch?: string;
+  shortCode?: string;
 }
 
 interface StaffUser {
@@ -397,7 +398,7 @@ export default function SettingsPage() {
   });
 
   // ─── Multi-currency ────────────────────────────────────────────────────────
-  const SUPPORTED_CURRENCIES = ['USD', 'EUR', 'GBP', 'TZS', 'UGX', 'ETB', 'RWF', 'ZAR', 'AED', 'CNY', 'INR'];
+  const SUPPORTED_CURRENCIES = ['KES', 'USD', 'EUR', 'GBP', 'TZS', 'UGX', 'ETB', 'RWF', 'ZAR', 'AED', 'CNY', 'INR'];
   const [selectedCurrencies, setSelectedCurrencies] = useState<string[]>([]);
   const [currencySaved, setCurrencySaved] = useState(false);
 
@@ -1025,6 +1026,43 @@ export default function SettingsPage() {
       {/* ── General Settings ──────────────────────────────────────────────── */}
       {activeTab === 'general' && (
         <div className="space-y-6">
+
+        {/* ── Business Code card ── */}
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-sm font-bold text-blue-800">Business Code</span>
+                <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-medium">Share with branch staff</span>
+              </div>
+              {/* Short code — big and easy to read */}
+              <div className="font-mono text-2xl font-bold tracking-widest text-blue-900 bg-white border-2 border-blue-300 rounded-xl px-4 py-3 text-center select-all mb-2">
+                {settings?.shortCode ?? '—'}
+              </div>
+              {/* UUID for reference */}
+              <div className="text-xs text-blue-500 font-mono truncate select-all px-1">
+                ID: {businessId}
+              </div>
+              <p className="text-xs text-blue-600 mt-2">
+                Staff type this short code on their first PIN login to connect to your business.
+                One-time setup per device.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                const code = settings?.shortCode ?? businessId;
+                void navigator.clipboard.writeText(code);
+                const btn = document.getElementById('copy-biz-id-btn');
+                if (btn) { btn.textContent = '✓ Copied!'; setTimeout(() => { if (btn) btn.textContent = 'Copy'; }, 2000); }
+              }}
+              id="copy-biz-id-btn"
+              className="flex-shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors"
+            >
+              Copy
+            </button>
+          </div>
+        </div>
+
         <div className="bg-white rounded-xl shadow p-6 space-y-5">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Business Name</label>
@@ -1050,6 +1088,7 @@ export default function SettingsPage() {
               <option value="CLINIC">Clinic / Pharmacy — Prescriptions & appointments</option>
               <option value="SALON">Salon / Spa — Appointments & services</option>
               <option value="FUEL_PUMP">Fuel Station — Pump management & fuel sales</option>
+              <option value="CYBERCAFE">Cybercafe — PC sessions, time billing & service rates</option>
             </select>
           </div>
 
@@ -1410,8 +1449,7 @@ export default function SettingsPage() {
           <div>
             <h3 className="font-semibold text-gray-800">Multi-Currency Display</h3>
             <p className="text-sm text-gray-500 mt-0.5">
-              Select currencies to show alongside KES at checkout. Click "Refresh Live Rates" to
-              fetch current rates from Open Exchange Rates and store them server-side.
+              KES (Kenya Shilling) is the primary currency. Select additional currencies to show alongside KES at checkout. Click "Refresh Live Rates" to fetch current rates from Open Exchange Rates and store them server-side.
             </p>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -1426,7 +1464,9 @@ export default function SettingsPage() {
                   }}
                   className="w-4 h-4 rounded accent-blue-600"
                 />
-                <span className="text-sm font-semibold text-gray-700">{code}</span>
+                <span className="text-sm font-semibold text-gray-700">
+                  {code}{code === 'KES' ? ' 🇰🇪 (Kenya Shilling)' : ''}
+                </span>
               </label>
             ))}
           </div>

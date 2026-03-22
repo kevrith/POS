@@ -113,8 +113,8 @@ export default function DeliveryPage() {
     <hr/><p style="margin-top:24px">Received by: _____________________ Date: _________</p>
     </body></html>`);
     win.document.close();
+    win.onafterprint = () => win.close();
     win.print();
-    win.close();
   };
 
   const canManage = user?.role === 'OWNER' || user?.role === 'MANAGER';

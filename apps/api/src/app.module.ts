@@ -66,6 +66,7 @@ import { PaymentLinksModule } from './payment-links/payment-links.module';
 import { SecurityModule } from './security/security.module';
 import { NpsModule } from './nps/nps.module';
 import { FuelPumpModule } from './fuel-pump/fuel-pump.module';
+import { CybercafeModule } from './cybercafe/cybercafe.module';
 
 @Module({
   imports: [
@@ -138,6 +139,7 @@ import { FuelPumpModule } from './fuel-pump/fuel-pump.module';
     SecurityModule,
     NpsModule,
     FuelPumpModule,
+    CybercafeModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AppThrottlerGuard },

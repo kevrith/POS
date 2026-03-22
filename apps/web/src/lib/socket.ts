@@ -83,4 +83,5 @@ export const SocketEvents = {
   DELIVERY_UPDATED: 'delivery_updated',
   NOTIFICATION_CREATED: 'notification_created',
   MPESA_C2B_PAYMENT: 'mpesa_c2b_payment',
+  CYBER_CALL_ATTENDANT: 'cyber_call_attendant',
 } as const;

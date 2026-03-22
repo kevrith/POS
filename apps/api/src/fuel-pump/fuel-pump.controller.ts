@@ -1,11 +1,18 @@
 import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FuelPumpService } from './fuel-pump.service';
+import { FuelPumpGateway } from './fuel-pump.gateway';
 
 @UseGuards(JwtAuthGuard)
 @Controller('fuel-pump')
 export class FuelPumpController {
-  constructor(private svc: FuelPumpService) {}
+  constructor(private svc: FuelPumpService, private gateway: FuelPumpGateway) {}
+
+  // ── TCP status ─────────────────────────────────────────────────────────────
+  @Get('tcp-status')
+  getTcpStatus(@Query('businessId') businessId: string, @Query('storeId') storeId: string) {
+    return this.gateway.getTcpStatus(businessId, storeId) ?? { connected: false };
+  }
 
   // ── Grades ────────────────────────────────────────────────────────────────
   @Get('grades')
@@ -116,6 +123,17 @@ export class FuelPumpController {
     return this.svc.getDeliveries(businessId, startDate, endDate);
   }
 
+  // ── Variance Report ───────────────────────────────────────────────────────
+  @Get('variance')
+  getVarianceReport(
+    @Query('businessId') businessId: string,
+    @Query('storeId') storeId: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.svc.getVarianceReport(businessId, storeId, startDate, endDate);
+  }
+
   // ── Shifts ────────────────────────────────────────────────────────────────
   @Get('shifts')
   getShifts(@Query('businessId') businessId: string, @Query('storeId') storeId: string) {
@@ -135,6 +153,11 @@ export class FuelPumpController {
   @Post('shifts/:id/close')
   closeShift(@Param('id') id: string, @Body('readings') readings: any[]) {
     return this.svc.closeShift(id, readings ?? []);
+  }
+
+  @Get('shifts/:id/summary')
+  getShiftSummary(@Param('id') id: string) {
+    return this.svc.getShiftSummary(id);
   }
 
   // ── Fleet ─────────────────────────────────────────────────────────────────
@@ -161,5 +184,24 @@ export class FuelPumpController {
   @Post('fleet/:id/payment')
   recordFleetPayment(@Param('id') id: string, @Body() dto: any) {
     return this.svc.recordFleetPayment({ ...dto, fleetAccountId: id });
+  }
+
+  // ── Maintenance Log ────────────────────────────────────────────────────────
+  @Get('maintenance')
+  getMaintenanceLogs(
+    @Query('businessId') businessId: string,
+    @Query('pumpId') pumpId?: string,
+  ) {
+    return this.svc.getMaintenanceLogs(businessId, pumpId);
+  }
+
+  @Post('maintenance')
+  createMaintenanceLog(@Body() dto: any) {
+    return this.svc.createMaintenanceLog(dto);
+  }
+
+  @Patch('maintenance/:id')
+  updateMaintenanceLog(@Param('id') id: string, @Body() dto: any) {
+    return this.svc.updateMaintenanceLog(id, dto);
   }
 }

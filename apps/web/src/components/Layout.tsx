@@ -73,6 +73,7 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
       { to: '/hotel', icon: BedDouble, label: 'Hotel Integration', roles: ['OWNER', 'MANAGER'], businessTypes: ['HOSPITALITY'] },
       { to: '/channel-manager', icon: Radio, label: 'Channel Manager', roles: ['OWNER', 'MANAGER'], businessTypes: ['HOSPITALITY'] },
       { to: '/fuel-pump', icon: Fuel, label: 'Fuel Pumps', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['FUEL_PUMP'] },
+      { to: '/cybercafe', icon: Monitor, label: 'Cybercafe', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['CYBERCAFE'] },
     ],
   },
   {

@@ -64,6 +64,11 @@ export enum POSMode {
   RETAIL = 'RETAIL',
   HOSPITALITY = 'HOSPITALITY',
   FAST_FOOD = 'FAST_FOOD',
+  SUPERMARKET = 'SUPERMARKET',
+  SALON = 'SALON',
+  CLINIC = 'CLINIC',
+  FUEL_PUMP = 'FUEL_PUMP',
+  CYBERCAFE = 'CYBERCAFE',
 }
 
 export enum TableStatus {

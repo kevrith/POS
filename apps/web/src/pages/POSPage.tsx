@@ -167,6 +167,7 @@ export default function POSPage() {
     serviceChargeRate?: number;
     serviceChargeDefault?: boolean;
     taxType?: 'VAT' | 'TOT' | 'NONE';
+    totRate?: number;
     name?: string;
     enableCashDrawer?: boolean;
     enableBarcodeScanner?: boolean;
@@ -181,6 +182,7 @@ export default function POSPage() {
       serviceChargeRate: typeof d.serviceChargeRate === 'number' ? d.serviceChargeRate : 10,
       serviceChargeDefault: d.serviceChargeDefault ?? false,
       taxType: d.taxType ?? 'VAT',
+      totRate: typeof d.totRate === 'number' ? d.totRate : 3,
       name: d.name,
       enableCashDrawer: d.enableCashDrawer ?? false,
       enableBarcodeScanner: d.enableBarcodeScanner ?? true,
@@ -189,6 +191,7 @@ export default function POSPage() {
   });
   const serviceChargeRate = businessSettings?.serviceChargeRate ?? 10;
   const taxType = businessSettings?.taxType ?? 'VAT';
+  const totRate = businessSettings?.totRate ?? 3;
   const enableCashDrawer = businessSettings?.enableCashDrawer ?? false;
   const enableBarcodeScanner = businessSettings?.enableBarcodeScanner ?? true;
   const enablePoleDisplay = businessSettings?.enablePoleDisplay ?? false;
@@ -319,7 +322,7 @@ export default function POSPage() {
   const vatApplicableAfterDiscount = vatApplicableTotal * (Math.max(taxBase, 0) / Math.max(subtotalCents, 1));
   // Only extract tax if the business has that tax type enabled
   const vatCents  = taxType === 'VAT'  ? Math.round(vatApplicableAfterDiscount * 16 / 116) : 0;
-  const totCentsDisplay = taxType === 'TOT' ? Math.round(Math.max(taxBase, 0) * 3 / 103) : 0;
+  const totCentsDisplay = taxType === 'TOT' ? Math.round(Math.max(taxBase, 0) * totRate / (100 + totRate)) : 0;
   const tipCents = Math.round(parseFloat(tipInput || '0') * 100);
   const totalCents = Math.max(0, taxBase) + serviceChargeCents + tipCents;
 

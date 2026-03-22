@@ -169,10 +169,27 @@ export class AuthService {
   // ─── PIN login (Cashier / Waiter / Kitchen) ──────────────────
   async loginWithPin(
     pin: string,
-    businessId: string,
+    businessIdOrCode: string,
     storeId?: string,
     userId?: string,
   ): Promise<{ accessToken: string; user: AuthUser }> {
+    // Resolve shortCode → real businessId if the input doesn't look like a UUID
+    let businessId = businessIdOrCode;
+    const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(businessIdOrCode);
+    if (!looksLikeUuid) {
+      const biz = await this.prisma.business.findFirst({
+        where: {
+          OR: [
+            { shortCode: businessIdOrCode.toUpperCase() },
+            { id: businessIdOrCode }, // e.g. "biz-001" seed ID
+          ],
+        },
+        select: { id: true },
+      });
+      if (!biz) throw new UnauthorizedException('Business code not found');
+      businessId = biz.id;
+    }
+
     // If userId provided, only check that specific user's PIN
     const users = userId
       ? await this.prisma.user.findMany({ where: { id: userId, businessId, pinHash: { not: null } } })
@@ -248,6 +265,23 @@ export class AuthService {
   }
 
   // ─── Register owner ──────────────────────────────────────────
+  // ─── Short code generation ───────────────────────────────────
+  private async generateUniqueShortCode(businessName: string): Promise<string> {
+    const alpha = businessName
+      .replace(/[^a-zA-Z]/g, '')
+      .toUpperCase()
+      .slice(0, 6)
+      .padEnd(6, 'X');
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const digits = String(Math.floor(Math.random() * 90) + 10); // 10-99
+      const code = `${alpha}${digits}`;
+      const existing = await this.prisma.business.findUnique({ where: { shortCode: code } });
+      if (!existing) return code;
+    }
+    // Fallback: append 4 random digits
+    return `${alpha}${String(Math.floor(Math.random() * 9000) + 1000)}`;
+  }
+
   async registerOwner(data: {
     name: string;
     email: string;
@@ -260,11 +294,13 @@ export class AuthService {
     this.validatePasswordComplexity(data.password);
 
     const passwordHash = await bcrypt.hash(data.password, 12);
+    const shortCode = await this.generateUniqueShortCode(data.businessName);
 
     const result = await this.prisma.$transaction(async (tx) => {
       const business = await tx.business.create({
         data: {
           name: data.businessName,
+          shortCode,
           trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14-day trial
         },
       });

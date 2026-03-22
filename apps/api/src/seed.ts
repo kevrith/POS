@@ -17,6 +17,7 @@ async function main() {
       taxType: 'VAT',
       serviceChargeRate: 10,
       posMode: 'HOSPITALITY',
+      shortCode: 'PREMIE01',
       trialEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     },
   });

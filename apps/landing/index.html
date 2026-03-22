@@ -381,6 +381,47 @@
     .gap-3 { gap: 12px; }
     .bg-dark { background: var(--bg); }
     .divider { height: 1px; background: var(--border); }
+
+    /* ── Industry cards ── */
+    .industry-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+    @media(max-width: 1024px) { .industry-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media(max-width: 600px)  { .industry-grid { grid-template-columns: 1fr; } }
+    .industry-card {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-lg);
+      padding: 28px 24px; transition: border-color .2s, transform .2s, box-shadow .2s; display: flex; flex-direction: column; gap: 16px;
+    }
+    .industry-card:hover { transform: translateY(-3px); border-color: var(--border2); box-shadow: 0 16px 40px rgba(0,0,0,.35); }
+    .industry-icon { width: 52px; height: 52px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 1.625rem; flex-shrink: 0; }
+    .industry-name { font-size: 1.0625rem; font-weight: 700; color: var(--text); }
+    .industry-tag { display: inline-block; font-size: .6875rem; font-weight: 700; padding: 2px 8px; border-radius: 100px; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
+    .industry-features { list-style: none; display: flex; flex-direction: column; gap: 7px; }
+    .industry-features li { font-size: .8125rem; color: var(--text2); display: flex; align-items: flex-start; gap: 8px; line-height: 1.45; }
+    .industry-features li::before { content: '✓'; font-size: .6875rem; font-weight: 800; flex-shrink: 0; margin-top: 1px; }
+    /* accent colours per industry */
+    .ind-retail   .industry-icon { background: rgba(59,130,246,.12); }
+    .ind-retail   .industry-tag  { background: rgba(59,130,246,.12); color: var(--blue2); border: 1px solid rgba(59,130,246,.25); }
+    .ind-retail   .industry-features li::before { color: var(--blue2); }
+    .ind-resto    .industry-icon { background: rgba(245,158,11,.12); }
+    .ind-resto    .industry-tag  { background: rgba(245,158,11,.12); color: var(--amber); border: 1px solid rgba(245,158,11,.25); }
+    .ind-resto    .industry-features li::before { color: var(--amber); }
+    .ind-hotel    .industry-icon { background: rgba(139,92,246,.12); }
+    .ind-hotel    .industry-tag  { background: rgba(139,92,246,.12); color: var(--purple); border: 1px solid rgba(139,92,246,.25); }
+    .ind-hotel    .industry-features li::before { color: var(--purple); }
+    .ind-pharma   .industry-icon { background: rgba(16,185,129,.12); }
+    .ind-pharma   .industry-tag  { background: rgba(16,185,129,.12); color: var(--green); border: 1px solid rgba(16,185,129,.25); }
+    .ind-pharma   .industry-features li::before { color: var(--green); }
+    .ind-fuel     .industry-icon { background: rgba(239,68,68,.12); }
+    .ind-fuel     .industry-tag  { background: rgba(239,68,68,.12); color: #f87171; border: 1px solid rgba(239,68,68,.25); }
+    .ind-fuel     .industry-features li::before { color: #f87171; }
+    .ind-cyber    .industry-icon { background: rgba(6,182,212,.12); }
+    .ind-cyber    .industry-tag  { background: rgba(6,182,212,.12); color: var(--cyan); border: 1px solid rgba(6,182,212,.25); }
+    .ind-cyber    .industry-features li::before { color: var(--cyan); }
+    .ind-hardware .industry-icon { background: rgba(234,179,8,.12); }
+    .ind-hardware .industry-tag  { background: rgba(234,179,8,.12); color: #fde047; border: 1px solid rgba(234,179,8,.25); }
+    .ind-hardware .industry-features li::before { color: #fde047; }
+    .ind-franchise .industry-icon { background: rgba(168,85,247,.12); }
+    .ind-franchise .industry-tag  { background: rgba(168,85,247,.12); color: #c084fc; border: 1px solid rgba(168,85,247,.25); }
+    .ind-franchise .industry-features li::before { color: #c084fc; }
   </style>
 </head>
 <body>
@@ -394,6 +435,7 @@
     </div>
     <ul class="nav-links hide-mobile">
       <li><a href="#features">Features</a></li>
+      <li><a href="#industries">Industries</a></li>
       <li><a href="#compliance">Compliance</a></li>
       <li><a href="#pricing">Pricing</a></li>
       <li><a href="#compare">Compare</a></li>
@@ -413,6 +455,7 @@
 <!-- ── Mobile Menu ── -->
 <div class="mobile-menu" id="mobile-menu">
   <a href="#features" onclick="closeMobileMenu()">Features</a>
+  <a href="#industries" onclick="closeMobileMenu()">Industries</a>
   <a href="#compliance" onclick="closeMobileMenu()">Compliance</a>
   <a href="#pricing" onclick="closeMobileMenu()">Pricing</a>
   <a href="#compare" onclick="closeMobileMenu()">Compare</a>
@@ -644,7 +687,7 @@
       <div class="feature-card reveal" style="transition-delay:.6s">
         <div class="feature-icon fi-cyan">💊</div>
         <h3>Pharmacy &amp; Prescriptions</h3>
-        <p>Drug formulary, prescription management, dispensing workflow, expiry tracking, controlled substance logs, and NHIF claim support.</p>
+        <p>Drug formulary, prescription management, dispensing workflow, expiry tracking, controlled substance logs, NHIF claim support, and <strong>Refer Out</strong> — instantly refer patients to an external pharmacy when a drug is out of stock, with referral notes recorded and no stock deducted.</p>
       </div>
       <div class="feature-card reveal" style="transition-delay:.65s">
         <div class="feature-icon fi-amber">⛽</div>
@@ -681,6 +724,156 @@
         <h3>Stocktake &amp; Damaged Goods</h3>
         <p>Guided stocktake sessions with variance reports, damaged goods write-off workflow, serial number registry, and recall management.</p>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Industries ── -->
+<section id="industries" class="bg-dark">
+  <div class="container">
+    <div class="section-header center reveal">
+      <div class="section-label">Business Verticals</div>
+      <h2 class="section-title">Built for Every Kenyan Business</h2>
+      <p class="section-sub">One platform, eight industry modes — switch between them in Settings or run multiple verticals from a single branch.</p>
+    </div>
+    <div class="industry-grid">
+
+      <!-- Retail -->
+      <div class="industry-card ind-retail reveal">
+        <div class="industry-icon">🛒</div>
+        <div>
+          <span class="industry-tag">Retail &amp; Supermarket</span>
+          <p class="industry-name" style="margin-top:6px;">General Retail</p>
+        </div>
+        <ul class="industry-features">
+          <li>Barcode scanning &amp; label printing (ZPL/ESC-POS)</li>
+          <li>FEFO batch tracking with expiry alerts</li>
+          <li>Price levels: Retail / Wholesale / VIP</li>
+          <li>Promotions, gift cards &amp; loyalty points</li>
+          <li>CSV stock import &amp; inter-store transfers</li>
+          <li>KRA eTIMS auto-submit after every sale</li>
+        </ul>
+      </div>
+
+      <!-- Restaurant / Café -->
+      <div class="industry-card ind-resto reveal" style="transition-delay:.05s">
+        <div class="industry-icon">🍽️</div>
+        <div>
+          <span class="industry-tag">Restaurant &amp; Café</span>
+          <p class="industry-name" style="margin-top:6px;">Food &amp; Beverage</p>
+        </div>
+        <ul class="industry-features">
+          <li>Floor layout with table status grid</li>
+          <li>KOT auto-print — kitchen &amp; bar routing</li>
+          <li>Table merge, transfer &amp; reservations</li>
+          <li>Bar tabs &amp; fast-food counter mode</li>
+          <li>Priced modifiers &amp; special instructions</li>
+          <li>KDS (Kitchen Display Screen) full-screen view</li>
+        </ul>
+      </div>
+
+      <!-- Hotel -->
+      <div class="industry-card ind-hotel reveal" style="transition-delay:.1s">
+        <div class="industry-icon">🏨</div>
+        <div>
+          <span class="industry-tag">Hotel &amp; Lodging</span>
+          <p class="industry-name" style="margin-top:6px;">Hotel Management</p>
+        </div>
+        <ul class="industry-features">
+          <li>Room grid by floor with live status</li>
+          <li>Check-in / check-out &amp; booking management</li>
+          <li>Guest folio with itemised charges</li>
+          <li>Room charge to POS from restaurant</li>
+          <li>Housekeeping queue &amp; status updates</li>
+          <li>Checkout invoice with deposit offset &amp; print</li>
+        </ul>
+      </div>
+
+      <!-- Pharmacy -->
+      <div class="industry-card ind-pharma reveal" style="transition-delay:.15s">
+        <div class="industry-icon">💊</div>
+        <div>
+          <span class="industry-tag">Pharmacy &amp; Clinic</span>
+          <p class="industry-name" style="margin-top:6px;">Healthcare Retail</p>
+        </div>
+        <ul class="industry-features">
+          <li>Prescription queue with RX number generation</li>
+          <li>Dispense workflow &amp; auto stock deduction</li>
+          <li>Drug interaction checker</li>
+          <li>Controlled substance log (Schedule I–V)</li>
+          <li>Refer Out — send patient to external pharmacy</li>
+          <li>Patient history &amp; refill management</li>
+        </ul>
+      </div>
+
+      <!-- Fuel Station -->
+      <div class="industry-card ind-fuel reveal" style="transition-delay:.2s">
+        <div class="industry-icon">⛽</div>
+        <div>
+          <span class="industry-tag">Fuel Station</span>
+          <p class="industry-name" style="margin-top:6px;">Petrol &amp; Service Station</p>
+        </div>
+        <ul class="industry-features">
+          <li>Per-pump &amp; per-nozzle sales tracking</li>
+          <li>Real-time pump status (idle / dispensing)</li>
+          <li>Nozzle calibration &amp; dip readings</li>
+          <li>Fuel stock reconciliation &amp; variance</li>
+          <li>Attendant shift reports &amp; cash-up</li>
+          <li>Fleet &amp; credit account management</li>
+        </ul>
+      </div>
+
+      <!-- Cybercafé -->
+      <div class="industry-card ind-cyber reveal" style="transition-delay:.25s">
+        <div class="industry-icon">🖥️</div>
+        <div>
+          <span class="industry-tag">Cybercafé</span>
+          <p class="industry-name" style="margin-top:6px;">Internet &amp; Business Centre</p>
+        </div>
+        <ul class="industry-features">
+          <li>Computer session timer with auto-billing</li>
+          <li>Per-minute, per-hour or flat-rate pricing</li>
+          <li>Session start / pause / end management</li>
+          <li>Printing &amp; scanning service charges</li>
+          <li>Daily usage &amp; revenue reports</li>
+          <li>M-Pesa payment per session</li>
+        </ul>
+      </div>
+
+      <!-- Hardware / General Trade -->
+      <div class="industry-card ind-hardware reveal" style="transition-delay:.3s">
+        <div class="industry-icon">🔧</div>
+        <div>
+          <span class="industry-tag">Hardware &amp; Trade</span>
+          <p class="industry-name" style="margin-top:6px;">General Trade &amp; Wholesale</p>
+        </div>
+        <ul class="industry-features">
+          <li>Full purchase order &amp; GRN workflow</li>
+          <li>Supplier ledger, ageing &amp; performance</li>
+          <li>Serial number registry &amp; tracking</li>
+          <li>Bundle &amp; recipe costing (BOMs)</li>
+          <li>Proforma invoices with pipeline view</li>
+          <li>Credit sales &amp; credit book report</li>
+        </ul>
+      </div>
+
+      <!-- Franchise / Multi-branch -->
+      <div class="industry-card ind-franchise reveal" style="transition-delay:.35s">
+        <div class="industry-icon">🏢</div>
+        <div>
+          <span class="industry-tag">Franchise &amp; Multi-branch</span>
+          <p class="industry-name" style="margin-top:6px;">Chain &amp; Franchise Operations</p>
+        </div>
+        <ul class="industry-features">
+          <li>Multi-business hierarchy (parent → franchisees)</li>
+          <li>Royalty &amp; franchise fee tracking</li>
+          <li>Consolidated cross-store P&amp;L &amp; GMV</li>
+          <li>Per-store manager scoping &amp; access</li>
+          <li>Franchise performance dashboards</li>
+          <li>Centralised product &amp; pricing control</li>
+        </ul>
+      </div>
+
     </div>
   </div>
 </section>

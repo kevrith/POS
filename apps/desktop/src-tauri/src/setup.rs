@@ -49,6 +49,18 @@ pub async fn set_setup_mode(
     Ok(true)
 }
 
+/// Return the vendor's cloud server URL baked in at build time.
+/// Set VITE_KASTRA_CLOUD_URL in the web .env before building the installer.
+#[tauri::command]
+pub fn get_cloud_url() -> String {
+    // The env var is embedded at compile-time via the build script or
+    // via the web Vite build that Tauri bundles.
+    // We expose it as a Tauri command so the setup wizard can read it.
+    option_env!("KASTRA_CLOUD_URL")
+        .unwrap_or("https://api.kastra.co.ke")
+        .to_string()
+}
+
 #[tauri::command]
 pub async fn test_server_connection(server_url: String) -> Result<bool, String> {
     use tokio::net::TcpStream;

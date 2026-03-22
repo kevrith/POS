@@ -397,6 +397,21 @@ export class BusinessService {
     return business ?? { name: 'KASTRA POS', idleMessage: 'Welcome!', idleLogoUrl: null };
   }
 
+  /** Resolve a shortCode (e.g. PREMIE01) or seed-style id (e.g. biz-001) to the real UUID + name */
+  async resolveByCode(code: string) {
+    const business = await this.prisma.business.findFirst({
+      where: {
+        OR: [
+          { shortCode: code.toUpperCase() },
+          { id: code }, // allow seed-style IDs like "biz-001"
+        ],
+      },
+      select: { id: true, name: true, shortCode: true },
+    });
+    if (!business) return null;
+    return business;
+  }
+
   /** Public staff picker — returns only id/name/role for users who have a PIN set */
   async getStaffList(businessId: string) {
     return this.prisma.user.findMany({

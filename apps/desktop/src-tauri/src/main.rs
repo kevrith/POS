@@ -7,6 +7,7 @@ mod cash_drawer;
 mod backup;
 mod setup;
 mod license;
+mod discovery;
 
 use tauri::Manager;
 
@@ -45,6 +46,17 @@ fn main() {
         .setup(|app| {
             let version = app.package_info().version.to_string();
             println!("KASTRA POS Desktop v{} starting...", version);
+
+            // Start LAN discovery responder if this machine is a server/standalone
+            let rt = tokio::runtime::Handle::current();
+            rt.spawn(async {
+                if let Ok(cfg) = setup::get_setup_mode().await {
+                    if cfg.mode == "SERVER" || cfg.mode == "STANDALONE" {
+                        discovery::start_discovery_responder(3010);
+                    }
+                }
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -71,11 +83,14 @@ fn main() {
             setup::get_setup_mode,
             setup::set_setup_mode,
             setup::test_server_connection,
+            setup::get_cloud_url,
             // License
             license::get_machine_id,
             license::validate_license_key,
             // Auto-update
             check_for_app_update,
+            // LAN discovery
+            discovery::discover_servers,
         ])
         .run(tauri::generate_context!())
         .expect("error while running KASTRA POS desktop");

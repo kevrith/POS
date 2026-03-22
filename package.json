@@ -14,7 +14,11 @@
     "dev:admin": "cd apps/admin && npm run dev",
     "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
     "dev:all": "concurrently \"npm run dev:api\" \"npm run dev:web\" \"npm run dev:admin\"",
-    "build": "cd apps/api && npm run build && cd ../web && npm run build && cd ../admin && npm run build"
+    "build": "cd apps/api && npm run build && cd ../web && npm run build && cd ../admin && npm run build",
+    "build:api": "cd packages/shared && npm run build && cd ../.. && npx prisma generate --schema prisma/schema.prisma && cd apps/api && npm run build"
+  },
+  "engines": {
+    "node": "20.x"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

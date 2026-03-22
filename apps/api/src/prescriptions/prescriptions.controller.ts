@@ -60,6 +60,11 @@ export class PrescriptionsController {
     return this.svc.refill(id, body.dispensedBy);
   }
 
+  @Patch(':id/refer')
+  refer(@Param('id') id: string, @Body() body: { referralNotes: string }) {
+    return this.svc.refer(id, body.referralNotes);
+  }
+
   @Patch(':id/cancel')
   cancel(@Param('id') id: string) {
     return this.svc.cancel(id);

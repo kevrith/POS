@@ -2,13 +2,39 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
-import { Plus, Pill, CheckCircle, XCircle, Clock, Search, Printer, History, AlertTriangle } from 'lucide-react';
+import { Plus, Pill, CheckCircle, XCircle, Clock, Search, Printer, History, AlertTriangle, ExternalLink } from 'lucide-react';
 
 interface RxItem {
   itemId?: string;
   name: string;
   qty: number;
+  dose?: number;         // units per intake e.g. 1
+  doseUnit?: string;     // tablet / capsule / ml / mg
+  frequency?: string;    // OD / BD / TDS / QID / PRN / ON / OM
+  duration?: number;     // days
   instructions?: string;
+}
+
+const FREQ_OPTIONS = [
+  { value: 'OD',   label: 'OD — Once daily' },
+  { value: 'BD',   label: 'BD — Twice daily' },
+  { value: 'TDS',  label: 'TDS — Three times daily' },
+  { value: 'QID',  label: 'QID — Four times daily' },
+  { value: 'ON',   label: 'ON — At night' },
+  { value: 'OM',   label: 'OM — Morning only' },
+  { value: 'PRN',  label: 'PRN — As needed' },
+  { value: 'STAT', label: 'STAT — Immediately (once)' },
+];
+
+const UNIT_OPTIONS = ['tablet', 'capsule', 'ml', 'mg', 'sachet', 'drop', 'puff', 'patch', 'injection'];
+
+function formatDosage(item: RxItem): string {
+  if (!item.dose && !item.frequency) return '';
+  const parts: string[] = [];
+  if (item.dose) parts.push(`${item.dose} ${item.doseUnit ?? 'tablet'}${item.dose > 1 ? 's' : ''}`);
+  if (item.frequency) parts.push(`× ${item.frequency}`);
+  if (item.duration) parts.push(`× ${item.duration} day${item.duration > 1 ? 's' : ''}`);
+  return parts.join(' ');
 }
 
 interface Prescription {
@@ -25,6 +51,7 @@ interface Prescription {
   notes?: string;
   dispensedAt?: string;
   dispensedBy?: string;
+  referralNotes?: string;
   createdAt: string;
 }
 
@@ -33,12 +60,14 @@ const STATUS_COLORS: Record<string, string> = {
   DISPENSED: 'bg-green-100 text-green-700',
   PARTIAL: 'bg-blue-100 text-blue-700',
   CANCELLED: 'bg-gray-100 text-gray-500',
+  REFERRED_EXTERNAL: 'bg-purple-100 text-purple-700',
 };
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
   PENDING: <Clock className="w-3.5 h-3.5" />,
   DISPENSED: <CheckCircle className="w-3.5 h-3.5" />,
   CANCELLED: <XCircle className="w-3.5 h-3.5" />,
+  REFERRED_EXTERNAL: <ExternalLink className="w-3.5 h-3.5" />,
 };
 
 export default function PrescriptionsPage() {
@@ -50,6 +79,8 @@ export default function PrescriptionsPage() {
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [selected, setSelected] = useState<Prescription | null>(null);
+  const [showReferModal, setShowReferModal] = useState(false);
+  const [referNotes, setReferNotes] = useState('');
 
   const [form, setForm] = useState({
     patientName: '',
@@ -59,14 +90,22 @@ export default function PrescriptionsPage() {
     doctorLicense: '',
     diagnosis: '',
     notes: '',
-    items: [{ name: '', qty: 1, instructions: '' }] as RxItem[],
+    items: [{ name: '', qty: 1, dose: 1, doseUnit: 'tablet', frequency: 'BD', duration: 7, instructions: '' }] as RxItem[],
   });
+  const [itemSearches, setItemSearches] = useState<string[]>(['']);
+  const [openSearchIdx, setOpenSearchIdx] = useState<number | null>(null);
 
   const { data: prescriptions = [] } = useQuery<Prescription[]>({
     queryKey: ['prescriptions', businessId, storeId, statusFilter],
     queryFn: () => api.get(`/prescriptions?businessId=${businessId}&storeId=${storeId}&status=${statusFilter}`),
     enabled: !!businessId && !!storeId,
     refetchInterval: 30000,
+  });
+
+  const { data: inventoryItems = [] } = useQuery<any[]>({
+    queryKey: ['items-for-rx', businessId, storeId],
+    queryFn: () => api.get(`/items?businessId=${businessId}&storeId=${storeId}&activeOnly=true`),
+    enabled: showCreate && !!businessId,
   });
 
   const createMutation = useMutation({
@@ -89,11 +128,26 @@ export default function PrescriptionsPage() {
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['prescriptions'] }); setSelected(null); },
   });
 
-  const resetForm = () => setForm({
-    patientName: '', patientPhone: '', patientDOB: '', doctorName: '',
-    doctorLicense: '', diagnosis: '', notes: '',
-    items: [{ name: '', qty: 1, instructions: '' }],
+  const referMutation = useMutation({
+    mutationFn: ({ id, referralNotes }: { id: string; referralNotes: string }) =>
+      api.patch(`/prescriptions/${id}/refer`, { referralNotes }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['prescriptions'] });
+      setShowReferModal(false);
+      setReferNotes('');
+      setSelected(null);
+    },
   });
+
+  const resetForm = () => {
+    setForm({
+      patientName: '', patientPhone: '', patientDOB: '', doctorName: '',
+      doctorLicense: '', diagnosis: '', notes: '',
+      items: [{ name: '', qty: 1, dose: 1, doseUnit: 'tablet', frequency: 'BD', duration: 7, instructions: '' }],
+    });
+    setItemSearches(['']);
+    setOpenSearchIdx(null);
+  };
 
   const filtered = prescriptions.filter((rx) =>
     search
@@ -103,10 +157,11 @@ export default function PrescriptionsPage() {
       : true
   );
 
-  const counts = {
+  const counts: Record<string, number> = {
     ALL: prescriptions.length,
     PENDING: prescriptions.filter((r) => r.status === 'PENDING').length,
     DISPENSED: prescriptions.filter((r) => r.status === 'DISPENSED').length,
+    REFERRED_EXTERNAL: prescriptions.filter((r) => r.status === 'REFERRED_EXTERNAL').length,
     CANCELLED: prescriptions.filter((r) => r.status === 'CANCELLED').length,
   };
 
@@ -115,23 +170,49 @@ export default function PrescriptionsPage() {
   };
 
   const handlePrintDispense = (rx: Prescription) => {
-    const items: RxItem[] = JSON.parse(rx.items || '[]');
-    const win = window.open('', '_blank', 'width=400,height=600');
+    const items: RxItem[] = (() => { try { return JSON.parse(rx.items || '[]'); } catch { return []; } })();
+    const win = window.open('', '_blank', 'width=420,height=640');
     if (!win) return;
     win.document.write(`<html><head><title>Prescription ${rx.prescriptionNumber}</title>
-    <style>body{font-family:monospace;font-size:12px;padding:8px}h2{text-align:center}table{width:100%}td{padding:2px 4px}</style>
+    <style>
+      body{font-family:monospace;font-size:13px;padding:16px;max-width:380px;margin:0 auto}
+      h2{text-align:center;margin-bottom:4px;font-size:15px}
+      .sub{text-align:center;font-size:11px;color:#555;margin-bottom:12px}
+      hr{border:none;border-top:1px dashed #aaa;margin:10px 0}
+      table{width:100%;border-collapse:collapse}
+      td{padding:3px 4px;vertical-align:top}
+      td:nth-child(2){text-align:center;white-space:nowrap}
+      td:nth-child(3){font-size:11px;color:#555}
+      .label{color:#555;font-size:11px}
+      .ref-box{border:1px dashed #6d28d9;padding:8px;margin-top:10px;border-radius:4px;color:#5b21b6}
+    </style>
     </head><body>
     <h2>PRESCRIPTION</h2>
-    <p><b>${rx.prescriptionNumber}</b> &mdash; ${new Date(rx.createdAt).toLocaleDateString()}</p>
-    <hr/><p><b>Patient:</b> ${rx.patientName}${rx.patientPhone ? ` | ${rx.patientPhone}` : ''}</p>
-    <p><b>Doctor:</b> ${rx.doctorName}${rx.doctorLicense ? ` (${rx.doctorLicense})` : ''}</p>
-    ${rx.diagnosis ? `<p><b>Diagnosis:</b> ${rx.diagnosis}</p>` : ''}
-    <hr/><b>Items:</b><table>${items.map((i) => `<tr><td>${i.name}</td><td>x${i.qty}</td><td>${i.instructions ?? ''}</td></tr>`).join('')}</table>
-    ${rx.notes ? `<hr/><p><i>${rx.notes}</i></p>` : ''}
+    <div class="sub">${rx.prescriptionNumber} &mdash; ${new Date(rx.createdAt).toLocaleDateString()}</div>
+    <hr/>
+    <p><span class="label">Patient:</span> <b>${rx.patientName}</b>${rx.patientPhone ? ` &nbsp;|&nbsp; ${rx.patientPhone}` : ''}${rx.patientDOB ? `<br/><span class="label">DOB:</span> ${rx.patientDOB}` : ''}</p>
+    <p><span class="label">Doctor:</span> <b>Dr. ${rx.doctorName}</b>${rx.doctorLicense ? ` (${rx.doctorLicense})` : ''}</p>
+    ${rx.diagnosis ? `<p><span class="label">Diagnosis:</span> ${rx.diagnosis}</p>` : ''}
+    <hr/>
+    <b>Prescribed Items:</b>
+    <table style="margin-top:6px;width:100%">
+      ${items.map((item) => `
+        <tr>
+          <td style="padding:4px 4px 0;font-weight:600">${item.name}</td>
+          <td style="padding:4px 4px 0;text-align:right;white-space:nowrap">${item.qty} ${item.doseUnit ?? 'unit'}${item.qty !== 1 ? 's' : ''}</td>
+        </tr>
+        ${(item.dose || item.frequency) ? `<tr><td colspan="2" style="padding:0 4px 3px;font-size:11px;color:#2563eb">${formatDosage(item)}</td></tr>` : ''}
+        ${item.instructions ? `<tr><td colspan="2" style="padding:0 4px 6px;font-size:11px;color:#666;font-style:italic">${item.instructions}</td></tr>` : ''}
+      `).join('')}
+    </table>
+    ${rx.notes ? `<hr/><p><span class="label">Notes:</span> <i>${rx.notes}</i></p>` : ''}
+    ${rx.status === 'REFERRED_EXTERNAL' && rx.referralNotes ? `<div class="ref-box"><b>Referred Out:</b> ${rx.referralNotes}</div>` : ''}
+    <hr/>
+    <p class="sub">Status: <b>${rx.status}</b>${rx.dispensedBy ? ` &mdash; Dispensed by ${rx.dispensedBy}` : ''}</p>
     </body></html>`);
     win.document.close();
+    win.onafterprint = () => win.close();
     win.print();
-    win.close();
   };
 
   const [checkingInteractions, setCheckingInteractions] = useState(false);
@@ -179,7 +260,7 @@ export default function PrescriptionsPage() {
             className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white" />
         </div>
         <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
-          {(['ALL', 'PENDING', 'DISPENSED', 'CANCELLED'] as const).map((s) => (
+          {(['ALL', 'PENDING', 'DISPENSED', 'REFERRED_EXTERNAL', 'CANCELLED'] as string[]).map((s) => (
             <button key={s} onClick={() => setStatusFilter(s)}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${statusFilter === s ? 'bg-white dark:bg-gray-700 shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>
               {s} <span className="ml-1 opacity-60">({counts[s] ?? 0})</span>
@@ -217,7 +298,8 @@ export default function PrescriptionsPage() {
                 </div>
               </div>
               <div className="text-right flex-shrink-0">
-                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{items.length} item{items.length !== 1 ? 's' : ''}</p>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{items.length} drug{items.length !== 1 ? 's' : ''}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{items.filter((it) => it.itemId).length}/{items.length} linked</p>
                 <p className="text-xs text-gray-400 mt-0.5">{new Date(rx.createdAt).toLocaleDateString()}</p>
               </div>
             </div>
@@ -253,8 +335,19 @@ export default function PrescriptionsPage() {
                       <div key={i} className="flex items-start gap-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2.5">
                         <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center flex-shrink-0">{i + 1}</div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm text-gray-900 dark:text-white">{item.name} × {item.qty}</p>
-                          {item.instructions && <p className="text-xs text-gray-500 italic mt-0.5">{item.instructions}</p>}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-medium text-sm text-gray-900 dark:text-white">{item.name}</p>
+                            {item.itemId && <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">Stock linked</span>}
+                          </div>
+                          {(item.dose || item.frequency) && (
+                            <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 mt-0.5">
+                              {formatDosage(item)} — {item.qty} {item.doseUnit ?? 'tablet'}{item.qty !== 1 ? 's' : ''} total
+                            </p>
+                          )}
+                          {!item.dose && !item.frequency && (
+                            <p className="text-xs text-gray-500 mt-0.5">× {item.qty}</p>
+                          )}
+                          {item.instructions && <p className="text-xs text-gray-400 italic mt-0.5">{item.instructions}</p>}
                         </div>
                       </div>
                     ))}
@@ -268,6 +361,12 @@ export default function PrescriptionsPage() {
                 )}
                 {selected.dispensedAt && (
                   <p className="text-xs text-gray-400">Dispensed {new Date(selected.dispensedAt).toLocaleString()} by {selected.dispensedBy}</p>
+                )}
+                {selected.status === 'REFERRED_EXTERNAL' && selected.referralNotes && (
+                  <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3 text-sm text-purple-700 dark:text-purple-300">
+                    <p className="font-medium mb-0.5 flex items-center gap-1.5"><ExternalLink className="w-3.5 h-3.5" /> Referred Out</p>
+                    <p>{selected.referralNotes}</p>
+                  </div>
                 )}
               </div>
               {/* Drug interaction results */}
@@ -323,6 +422,10 @@ export default function PrescriptionsPage() {
                         className="px-4 py-2 text-sm border border-red-300 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-50">
                         Cancel
                       </button>
+                      <button onClick={() => { setReferNotes(''); setShowReferModal(true); }}
+                        className="flex items-center gap-1.5 px-4 py-2 text-sm border border-purple-300 text-purple-600 rounded-lg hover:bg-purple-50">
+                        <ExternalLink className="w-4 h-4" /> Refer Out
+                      </button>
                       <button onClick={() => handleDispense(selected)} disabled={dispenseMutation.isPending}
                         className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium disabled:opacity-50">
                         {dispenseMutation.isPending ? 'Dispensing…' : (() => {
@@ -332,7 +435,7 @@ export default function PrescriptionsPage() {
                       </button>
                     </>
                   )}
-                  <button onClick={() => { setSelected(null); setInteractionResults(null); setShowHistory(false); }} className="px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">
+                  <button onClick={() => { setSelected(null); setInteractionResults(null); setShowHistory(false); setShowReferModal(false); setReferNotes(''); }} className="px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">
                     Close
                   </button>
                 </div>
@@ -393,6 +496,52 @@ export default function PrescriptionsPage() {
         </div>
       )}
 
+      {/* Refer Out Modal */}
+      {showReferModal && selected && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="p-6 border-b dark:border-gray-700">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <ExternalLink className="w-5 h-5 text-purple-600" /> Refer Out
+              </h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Referring <span className="font-medium text-gray-700 dark:text-gray-300">{selected.patientName}</span> to an external pharmacy
+              </p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                  Referral Notes <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={referNotes}
+                  onChange={(e) => setReferNotes(e.target.value)}
+                  rows={4}
+                  placeholder="e.g. Drug not in stock. Patient referred to Nairobi Hospital Pharmacy for Metformin 500mg × 60. Please carry prescription."
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white resize-none"
+                />
+              </div>
+              <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3 text-xs text-purple-700 dark:text-purple-300">
+                This prescription will be marked <span className="font-semibold">REFERRED EXTERNAL</span>. No stock will be deducted.
+              </div>
+            </div>
+            <div className="p-4 border-t dark:border-gray-700 flex gap-2 justify-end">
+              <button onClick={() => setShowReferModal(false)} className="px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">
+                Back
+              </button>
+              <button
+                onClick={() => referMutation.mutate({ id: selected.id, referralNotes: referNotes })}
+                disabled={!referNotes.trim() || referMutation.isPending}
+                className="flex items-center gap-2 px-5 py-2 text-sm bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50"
+              >
+                <ExternalLink className="w-4 h-4" />
+                {referMutation.isPending ? 'Referring…' : 'Confirm Refer Out'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Create Modal */}
       {showCreate && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -447,22 +596,124 @@ export default function PrescriptionsPage() {
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Prescription Items</p>
-                  <button onClick={() => setForm((f) => ({ ...f, items: [...f.items, { name: '', qty: 1, instructions: '' }] }))}
-                    className="text-xs text-blue-600 hover:underline">+ Add Item</button>
+                  <button onClick={() => {
+                    setForm((f) => ({ ...f, items: [...f.items, { name: '', qty: 1, dose: 1, doseUnit: 'tablet', frequency: 'BD', duration: 7, instructions: '' }] }));
+                    setItemSearches((s) => [...s, '']);
+                  }} className="text-xs text-blue-600 hover:underline">+ Add Drug</button>
                 </div>
-                <div className="space-y-2">
-                  {form.items.map((item, i) => (
-                    <div key={i} className="grid grid-cols-12 gap-2 items-start">
-                      <input value={item.name} onChange={(e) => setForm((f) => { const items = [...f.items]; items[i] = { ...items[i], name: e.target.value }; return { ...f, items }; })}
-                        className="col-span-5 px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="Drug name" />
-                      <input type="number" min="1" value={item.qty} onChange={(e) => setForm((f) => { const items = [...f.items]; items[i] = { ...items[i], qty: Number(e.target.value) }; return { ...f, items }; })}
-                        className="col-span-2 px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white text-center" placeholder="Qty" />
-                      <input value={item.instructions ?? ''} onChange={(e) => setForm((f) => { const items = [...f.items]; items[i] = { ...items[i], instructions: e.target.value }; return { ...f, items }; })}
-                        className="col-span-4 px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="Instructions" />
-                      <button onClick={() => setForm((f) => ({ ...f, items: f.items.filter((_, idx) => idx !== i) }))}
-                        className="col-span-1 p-2 text-red-400 hover:text-red-600 text-lg leading-none">×</button>
-                    </div>
-                  ))}
+                <div className="space-y-3">
+                  {form.items.map((item, i) => {
+                    const searchVal = itemSearches[i] ?? '';
+                    const suggestions = searchVal.length >= 2
+                      ? inventoryItems.filter((it: any) =>
+                          it.name.toLowerCase().includes(searchVal.toLowerCase()) ||
+                          (it.barcode ?? '').toLowerCase().includes(searchVal.toLowerCase())
+                        ).slice(0, 8)
+                      : [];
+                    const updateItem = (patch: Partial<RxItem>) =>
+                      setForm((f) => { const items = [...f.items]; items[i] = { ...items[i], ...patch }; return { ...f, items }; });
+
+                    return (
+                      <div key={i} className="border dark:border-gray-700 rounded-xl p-3 space-y-2 bg-gray-50 dark:bg-gray-700/40">
+                        {/* Row 1: Drug search + remove */}
+                        <div className="flex gap-2">
+                          <div className="relative flex-1">
+                            <input
+                              value={searchVal || item.name}
+                              onChange={(e) => {
+                                setItemSearches((s) => { const n = [...s]; n[i] = e.target.value; return n; });
+                                updateItem({ name: e.target.value, itemId: undefined });
+                                setOpenSearchIdx(i);
+                              }}
+                              onFocus={() => setOpenSearchIdx(i)}
+                              onBlur={() => setTimeout(() => setOpenSearchIdx(null), 150)}
+                              placeholder="Search drug / type name…"
+                              className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500"
+                            />
+                            {item.itemId && (
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">✓ Linked</span>
+                            )}
+                            {openSearchIdx === i && suggestions.length > 0 && (
+                              <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border dark:border-gray-600 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                                {suggestions.map((it: any) => (
+                                  <button key={it.id} type="button"
+                                    onMouseDown={() => {
+                                      updateItem({ itemId: it.id, name: it.name, doseUnit: it.unit ?? 'tablet' });
+                                      setItemSearches((s) => { const n = [...s]; n[i] = ''; return n; });
+                                      setOpenSearchIdx(null);
+                                    }}
+                                    className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-900/30 flex items-center justify-between gap-2">
+                                    <span className="font-medium text-gray-900 dark:text-white">{it.name}</span>
+                                    <span className="text-xs text-gray-400 flex-shrink-0">{it.category}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <button onClick={() => {
+                            setForm((f) => ({ ...f, items: f.items.filter((_, idx) => idx !== i) }));
+                            setItemSearches((s) => s.filter((_, idx) => idx !== i));
+                          }} className="p-2 text-red-400 hover:text-red-600 text-lg leading-none flex-shrink-0">×</button>
+                        </div>
+
+                        {/* Row 2: Dosage */}
+                        <div className="grid grid-cols-12 gap-2 items-center">
+                          <div className="col-span-2">
+                            <label className="block text-xs text-gray-500 mb-0.5">Dose</label>
+                            <input type="number" min="0.5" step="0.5" value={item.dose ?? 1}
+                              onChange={(e) => updateItem({ dose: Number(e.target.value) })}
+                              className="w-full px-2 py-1.5 border rounded-lg text-sm text-center dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                          </div>
+                          <div className="col-span-3">
+                            <label className="block text-xs text-gray-500 mb-0.5">Unit</label>
+                            <select value={item.doseUnit ?? 'tablet'}
+                              onChange={(e) => updateItem({ doseUnit: e.target.value })}
+                              className="w-full px-2 py-1.5 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                              {UNIT_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}
+                            </select>
+                          </div>
+                          <div className="col-span-4">
+                            <label className="block text-xs text-gray-500 mb-0.5">Frequency</label>
+                            <select value={item.frequency ?? 'BD'}
+                              onChange={(e) => updateItem({ frequency: e.target.value })}
+                              className="w-full px-2 py-1.5 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                              {FREQ_OPTIONS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                            </select>
+                          </div>
+                          <div className="col-span-3">
+                            <label className="block text-xs text-gray-500 mb-0.5">Days</label>
+                            <input type="number" min="1" value={item.duration ?? 7}
+                              onChange={(e) => updateItem({ duration: Number(e.target.value) })}
+                              className="w-full px-2 py-1.5 border rounded-lg text-sm text-center dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                          </div>
+                        </div>
+
+                        {/* Row 3: Total qty + instructions */}
+                        <div className="grid grid-cols-12 gap-2 items-center">
+                          <div className="col-span-3">
+                            <label className="block text-xs text-gray-500 mb-0.5">Total Qty</label>
+                            <input type="number" min="1" value={item.qty}
+                              onChange={(e) => updateItem({ qty: Number(e.target.value) })}
+                              className="w-full px-2 py-1.5 border rounded-lg text-sm text-center dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                          </div>
+                          <div className="col-span-9">
+                            <label className="block text-xs text-gray-500 mb-0.5">Special Instructions</label>
+                            <input value={item.instructions ?? ''}
+                              onChange={(e) => updateItem({ instructions: e.target.value })}
+                              placeholder="e.g. Take with food, avoid alcohol…"
+                              className="w-full px-2 py-1.5 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                          </div>
+                        </div>
+
+                        {/* Dosage summary */}
+                        {(item.dose || item.frequency) && (
+                          <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                            {formatDosage(item)} — dispense {item.qty} {item.doseUnit ?? 'tablet'}{item.qty !== 1 ? 's' : ''}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
               {/* Notes */}

@@ -1,4 +1,18 @@
-const API_URL = import.meta.env.VITE_API_URL ?? '/api/v1';
+/**
+ * API base URL resolution order:
+ *  1. localStorage 'kastra-server-url'  — set by desktop setup wizard (cloud or LAN server)
+ *  2. VITE_API_URL env var              — set at build time for web deployment
+ *  3. /api/v1                           — relative path (works via Vite proxy in dev)
+ */
+function resolveApiUrl(): string {
+  try {
+    const stored = localStorage.getItem('kastra-server-url');
+    if (stored) return stored.replace(/\/$/, '') + '/api/v1';
+  } catch { /* localStorage unavailable (kiosk/standalone context) */ }
+  return import.meta.env.VITE_API_URL ?? '/api/v1';
+}
+
+const API_URL = resolveApiUrl();
 
 // Token stored in memory (module-level) — NOT localStorage per security rules.
 // sessionStorage is acceptable for tab-scoped persistence.

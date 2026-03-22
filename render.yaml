@@ -2,10 +2,11 @@ services:
   - type: web
     name: kastra-api
     runtime: node
-    region: frankfurt  # closest to Kenya; or use oregon
-    plan: starter      # $7/month — upgrade to standard for production
+    region: frankfurt        # Frankfurt is closest to Kenya (low latency)
+    plan: free               # Free tier — sleeps after 15 min inactivity; upgrade to starter ($7/mo) for always-on
     buildCommand: |
-      cd packages/shared && npm install && npm run build && cd ../.. &&
+      npm install &&
+      cd packages/shared && npm run build && cd ../.. &&
       cd apps/api && npm ci &&
       npx prisma generate --schema ../../prisma/schema.prisma &&
       npm run build
@@ -14,18 +15,21 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: 10000          # Render assigns a port via $PORT; NestJS already reads process.env.PORT
       - key: DATABASE_URL
-        fromDatabase:
-          name: kastra-db
-          property: connectionString
+        sync: false           # Paste your Supabase / Neon / external PostgreSQL connection string here
+                              # Format: postgresql://user:password@host:5432/dbname?sslmode=require
       - key: JWT_SECRET
-        generateValue: true
+        generateValue: true   # Render auto-generates a random secret
       - key: ENCRYPTION_KEY
-        sync: false   # set manually in Render dashboard (64 hex chars)
+        sync: false           # 64 hex chars — generate with: openssl rand -hex 32
       - key: FRONTEND_URL
-        sync: false   # e.g. https://kastra-pos.vercel.app
+        sync: false           # e.g. https://kastra-pos.vercel.app
       - key: ADMIN_URL
-        sync: false   # e.g. https://kastra-admin.vercel.app
+        sync: false           # e.g. https://kastra-admin.vercel.app
+      - key: EXTRA_ORIGINS
+        sync: false           # Comma-separated extra allowed origins (optional)
       - key: SUPER_ADMIN_EMAIL
         sync: false
       - key: SUPER_ADMIN_PASSWORD
@@ -33,13 +37,24 @@ services:
       - key: SUPER_ADMIN_SECRET
         generateValue: true
       - key: ETIMS_ENV
-        value: test   # change to production when KRA approves
+        value: test           # Change to "production" once KRA approves your eTIMS credentials
       - key: MPESA_ENV
-        value: sandbox
+        value: sandbox        # Change to "production" with live credentials
+      - key: KEEP_ALIVE
+        value: true           # Enables self-ping every 14 min to reduce cold starts on free tier
 
-databases:
-  - name: kastra-db
-    databaseName: kastra_pos
-    user: kastra
-    plan: starter   # $7/month — free tier available but limited
-    region: frankfurt
+# ─── DATABASE ────────────────────────────────────────────────────────────────
+# Render's free PostgreSQL expires after 90 days — data gets DELETED.
+# Use Supabase (free, permanent) instead:
+#   1. Go to supabase.com → New project → Settings → Database → Connection string
+#   2. Copy the URI (use "Transaction" mode pooler for serverless, or direct for persistent)
+#   3. Paste it as DATABASE_URL in the Render dashboard
+#
+# Uncomment the section below ONLY if you want Render's built-in DB (dev/testing only):
+#
+# databases:
+#   - name: kastra-db
+#     databaseName: kastra_pos
+#     user: kastra
+#     plan: free             # WARNING: deleted after 90 days — use Supabase for production
+#     region: frankfurt

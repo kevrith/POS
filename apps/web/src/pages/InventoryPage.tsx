@@ -1180,7 +1180,7 @@ function BarcodeLabelModal({ items, onClose }: { items: Array<{ id: string; name
       <script>
         window.onload = function() {
           ${selectedItems.filter(i=>i.barcode).map(i => `try { JsBarcode("#bc-${i.id}", "${i.barcode}", {width:1.5,height:40,displayValue:false,margin:2}); } catch(e){}`).join('\n')}
-          setTimeout(()=>window.print(), 500);
+          setTimeout(()=>{ window.onafterprint = () => window.close(); window.print(); }, 500);
         };
       <\/script>
       </body></html>

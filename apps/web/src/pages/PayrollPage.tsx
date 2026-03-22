@@ -165,6 +165,7 @@ function printPayslips(run: PayrollRun) {
     win.document.write(html);
     win.document.close();
     win.focus();
+    win.onafterprint = () => win.close();
     win.print();
   }
 }

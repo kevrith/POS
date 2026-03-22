@@ -517,6 +517,7 @@ function PODetail({ po, storeId, onBack, onRefresh }: PODetailProps) {
       if (printWindow) {
         printWindow.document.write(`<pre style="font-family:monospace;font-size:12px;padding:20px">${data.text}</pre>`);
         printWindow.document.close();
+        printWindow.onafterprint = () => printWindow.close();
         printWindow.print();
       }
     },

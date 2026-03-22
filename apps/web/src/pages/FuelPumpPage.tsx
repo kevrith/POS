@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { formatKES } from '@pos/shared';
 import {
   Fuel, Plus, Zap, ZapOff, BarChart3, List, Settings,
-  Droplets, Truck, Clock, Building2, ArrowDownCircle, ArrowUpCircle, Usb,
+  Droplets, Truck, Clock, Building2, ArrowDownCircle, ArrowUpCircle, Usb, Wifi, WifiOff,
+  Wrench, AlertTriangle, CheckCircle, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import {
   connectPumpController, disconnectPumpController, isPumpControllerConnected,
@@ -13,8 +14,11 @@ import {
   getPumpTransaction, isSerialAvailable,
   type PumpControllerConfig, type PumpProtocol,
 } from '../lib/fuelPumpController';
+import { io, type Socket } from 'socket.io-client';
 
-type Tab = 'pumps' | 'grades' | 'tanks' | 'shifts' | 'fleet' | 'sales' | 'stats';
+type ConnectionMode = 'serial' | 'tcp';
+
+type Tab = 'pumps' | 'grades' | 'tanks' | 'shifts' | 'fleet' | 'sales' | 'stats' | 'variance' | 'maintenance';
 
 const STATUS_COLOR: Record<string, string> = {
   IDLE: 'bg-gray-100 text-gray-600',
@@ -32,58 +36,117 @@ export default function FuelPumpPage() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>('pumps');
 
-  // ── Hardware pump controller (Web Serial) ─────────────────────────────────
+  // ── Connection mode: RS-232 Serial or TCP/IP ──────────────────────────────
+  const [connMode, setConnMode] = useState<ConnectionMode>('serial');
+
+  // ── Web Serial (RS-232 via USB adapter) ───────────────────────────────────
   const [hwConnected, setHwConnected] = useState(isPumpControllerConnected());
   const [hwProtocol, setHwProtocol] = useState<PumpProtocol>('GILBARCO');
   const [hwConnecting, setHwConnecting] = useState(false);
   const [hwError, setHwError] = useState('');
-
   const hwConfig: PumpControllerConfig = { protocol: hwProtocol };
 
   const handleHwConnect = async () => {
-    setHwConnecting(true);
-    setHwError('');
-    try {
-      await connectPumpController(hwConfig);
-      setHwConnected(true);
-    } catch (err: any) {
-      setHwError(err.message ?? 'Connection failed');
-    } finally {
-      setHwConnecting(false);
-    }
+    setHwConnecting(true); setHwError('');
+    try { await connectPumpController(hwConfig); setHwConnected(true); }
+    catch (err: any) { setHwError(err.message ?? 'Connection failed'); }
+    finally { setHwConnecting(false); }
   };
+  const handleHwDisconnect = async () => { await disconnectPumpController(); setHwConnected(false); };
 
-  const handleHwDisconnect = async () => {
-    await disconnectPumpController();
-    setHwConnected(false);
-  };
+  // ── TCP/IP (pump controller on LAN, bridged via NestJS WebSocket) ─────────
+  const [tcpHost, setTcpHost] = useState('192.168.1.100');
+  const [tcpPort, setTcpPort] = useState('10001');
+  const [tcpProtocol, setTcpProtocol] = useState<PumpProtocol>('GILBARCO');
+  const [tcpConnected, setTcpConnected] = useState(false);
+  const [tcpConnecting, setTcpConnecting] = useState(false);
+  const [tcpError, setTcpError] = useState('');
+  // Live pump statuses received from WebSocket (pumpNumber → status)
+  const [livePumpStatus, setLivePumpStatus] = useState<Record<number, { status: string; litresDispensed: number; totalCents: number }>>({});
+  const socketRef = useRef<Socket | null>(null);
+  // Polling interval ref for DISPENSING pumps
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // After a pump is authorized via hardware, poll for transaction completion
+  // Connect WebSocket to the NestJS fuel-pump namespace
+  const handleTcpConnect = useCallback(async () => {
+    if (socketRef.current?.connected) return;
+    setTcpConnecting(true); setTcpError('');
+    const sock = io('/fuel-pump', { path: '/socket.io', transports: ['websocket'] });
+    socketRef.current = sock;
+
+    sock.on('connected', () => {
+      setTcpConnected(true); setTcpConnecting(false);
+    });
+    sock.on('disconnected', () => { setTcpConnected(false); });
+    sock.on('error', (e: { message: string }) => {
+      setTcpError(e.message); setTcpConnecting(false);
+    });
+    sock.on('pump_status', (data: { pumpNumber: number; status: string; litresDispensed: number; totalCents: number }) => {
+      setLivePumpStatus((prev) => ({ ...prev, [data.pumpNumber]: data }));
+    });
+    sock.on('transaction', (data: { pumpNumber: number; litresDispensed: number; pricePerLitreCents: number; totalCents: number; pumpId?: string; gradeId?: string }) => {
+      // Auto-fill sale form when pump finishes dispensing
+      setSaleForm((prev) => ({
+        ...prev,
+        litresDispensed: data.litresDispensed.toFixed(3),
+        paymentMethod: prev.paymentMethod || 'CASH',
+      }));
+      setLivePumpStatus((prev) => ({ ...prev, [data.pumpNumber]: { status: 'IDLE', litresDispensed: data.litresDispensed, totalCents: data.totalCents } }));
+      void qc.invalidateQueries({ queryKey: ['fuel-pumps'] });
+    });
+
+    // Tell backend to open TCP connection to pump controller
+    sock.emit('tcp_connect', { host: tcpHost, port: parseInt(tcpPort), protocol: tcpProtocol, businessId, storeId });
+  }, [tcpHost, tcpPort, tcpProtocol, businessId, storeId, qc]);
+
+  const handleTcpDisconnect = useCallback(() => {
+    socketRef.current?.emit('tcp_disconnect', { businessId, storeId });
+    socketRef.current?.disconnect();
+    socketRef.current = null;
+    setTcpConnected(false);
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  }, [businessId, storeId]);
+
+  // Poll status every 3 s for pumps that are AUTHORIZED or DISPENSING
+  useEffect(() => {
+    if (!tcpConnected || !socketRef.current) { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } return; }
+    pollRef.current = setInterval(() => {
+      const sock = socketRef.current;
+      if (!sock) return;
+      (pumps as any[]).forEach((pump: any) => {
+        if (['AUTHORIZED', 'DISPENSING'].includes(pump.status)) {
+          sock.emit('status', { businessId, storeId, pumpNumber: pump.pumpNumber });
+        }
+      });
+    }, 3000);
+    return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tcpConnected, businessId, storeId]);
+
+  // Cleanup on unmount
+  useEffect(() => () => { handleTcpDisconnect(); }, [handleTcpDisconnect]);
+
+  // ── Unified authorize/stop handlers ───────────────────────────────────────
   const handleHwAuthorize = async (pump: any) => {
-    if (hwConnected) {
-      try {
-        await hwAuthorizePump(pump.pumpNumber, hwConfig);
-      } catch { /* fall through to API */ }
+    if (connMode === 'tcp' && tcpConnected && socketRef.current) {
+      socketRef.current.emit('authorize', { businessId, storeId, pumpNumber: pump.pumpNumber });
+    } else if (connMode === 'serial' && hwConnected) {
+      try { await hwAuthorizePump(pump.pumpNumber, hwConfig); } catch { /* fall through */ }
     }
     authorizePump.mutate(pump.id);
   };
 
   const handleHwStop = async (pump: any) => {
-    if (hwConnected) {
+    if (connMode === 'tcp' && tcpConnected && socketRef.current) {
+      socketRef.current.emit('stop', { businessId, storeId, pumpNumber: pump.pumpNumber });
+      // Request transaction data from controller
+      socketRef.current.emit('transaction', { businessId, storeId, pumpNumber: pump.pumpNumber });
+    } else if (connMode === 'serial' && hwConnected) {
       try {
         await hwStopPump(pump.pumpNumber, hwConfig);
-        // Read transaction data from controller and pre-fill the sale form
         const txn = await getPumpTransaction(pump.pumpNumber, hwConfig);
-        setSaleForm({
-          pumpId: pump.id,
-          gradeId: pump.gradeId,
-          litresDispensed: txn.litresDispensed.toFixed(3),
-          vehiclePlate: '',
-          paymentMethod: 'CASH',
-          paymentRef: '',
-          fleetAccountId: '',
-        });
-      } catch { /* fall through to API */ }
+        setSaleForm({ pumpId: pump.id, gradeId: pump.gradeId, litresDispensed: txn.litresDispensed.toFixed(3), vehiclePlate: '', paymentMethod: 'CASH', paymentRef: '', fleetAccountId: '' });
+      } catch { /* fall through */ }
     }
     stopPump.mutate(pump.id);
   };
@@ -240,6 +303,44 @@ export default function FuelPumpPage() {
     enabled: tab === 'stats',
   });
 
+  // ── Variance Report ────────────────────────────────────────────────────────
+  const { data: varianceData, isLoading: varianceLoading } = useQuery({
+    queryKey: ['fuel-variance', businessId, storeId, startDate, endDate],
+    queryFn: () => {
+      let url = `/fuel-pump/variance?businessId=${businessId}&storeId=${storeId}`;
+      if (startDate) url += `&startDate=${startDate}`;
+      if (endDate) url += `&endDate=${endDate}`;
+      return api.get<any[]>(url);
+    },
+    enabled: tab === 'variance',
+  });
+
+  // ── Maintenance ────────────────────────────────────────────────────────────
+  const [maintForm, setMaintForm] = useState({ pumpId: '', type: 'SERVICE', description: '', technicianName: '', costCents: 0, status: 'COMPLETED', notes: '' });
+  const [maintFilter, setMaintFilter] = useState('');
+  const { data: maintenanceLogs, refetch: refetchMaint } = useQuery({
+    queryKey: ['fuel-maintenance', businessId, maintFilter],
+    queryFn: () => {
+      let url = `/fuel-pump/maintenance?businessId=${businessId}`;
+      if (maintFilter) url += `&pumpId=${maintFilter}`;
+      return api.get<any[]>(url);
+    },
+    enabled: tab === 'maintenance',
+  });
+
+  const createMaintMutation = useMutation({
+    mutationFn: (dto: any) => api.post('/fuel-pump/maintenance', dto),
+    onSuccess: () => { void refetchMaint(); setMaintForm({ pumpId: '', type: 'SERVICE', description: '', technicianName: '', costCents: 0, status: 'COMPLETED', notes: '' }); },
+  });
+
+  // ── Shift Summary ──────────────────────────────────────────────────────────
+  const [expandedShift, setExpandedShift] = useState<string | null>(null);
+  const { data: shiftSummary } = useQuery({
+    queryKey: ['shift-summary', expandedShift],
+    queryFn: () => api.get<any>(`/fuel-pump/shifts/${expandedShift}/summary`),
+    enabled: !!expandedShift,
+  });
+
   const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'pumps', label: 'Pump Control', icon: <Fuel className="w-4 h-4" /> },
     { id: 'grades', label: 'Fuel Grades', icon: <Settings className="w-4 h-4" /> },
@@ -248,6 +349,8 @@ export default function FuelPumpPage() {
     { id: 'fleet', label: 'Fleet Accounts', icon: <Building2 className="w-4 h-4" /> },
     { id: 'sales', label: 'Sales Log', icon: <List className="w-4 h-4" /> },
     { id: 'stats', label: 'Statistics', icon: <BarChart3 className="w-4 h-4" /> },
+    { id: 'variance', label: 'Variance Report', icon: <AlertTriangle className="w-4 h-4" /> },
+    { id: 'maintenance', label: 'Maintenance', icon: <Wrench className="w-4 h-4" /> },
   ];
 
   return (
@@ -276,57 +379,101 @@ export default function FuelPumpPage() {
       {/* ── PUMP CONTROL ── */}
       {tab === 'pumps' && (
         <div className="space-y-4">
-          {/* Hardware controller connection panel */}
-          {isSerialAvailable() && (
-            <div className="bg-white border rounded-lg p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Usb className="w-4 h-4 text-gray-500" />
-                  <h3 className="font-semibold text-sm">Pump Controller (Serial)</h3>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    hwConnected ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                  }`}>
-                    {hwConnected ? 'Connected' : 'Not connected'}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={hwProtocol}
-                    onChange={(e) => setHwProtocol(e.target.value as PumpProtocol)}
-                    disabled={hwConnected}
-                    className="border rounded px-2 py-1 text-xs disabled:opacity-50"
-                  >
-                    <option value="GILBARCO">Gilbarco GVR</option>
-                    <option value="WAYNE">Wayne Dresser</option>
-                    <option value="TOKHEIM">Tokheim</option>
-                    <option value="IFSF">IFSF Generic</option>
-                  </select>
-                  {hwConnected ? (
-                    <button
-                      onClick={() => void handleHwDisconnect()}
-                      className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded border border-red-200 hover:bg-red-200"
-                    >
-                      Disconnect
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => void handleHwConnect()}
-                      disabled={hwConnecting}
-                      className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                    >
-                      {hwConnecting ? 'Connecting…' : 'Connect'}
-                    </button>
-                  )}
-                </div>
+          {/* Pump Controller Connection Panel */}
+          <div className="bg-white border rounded-lg p-4 space-y-3">
+            <div className="flex items-center gap-3">
+              <h3 className="font-semibold text-sm">Pump Controller</h3>
+              {/* Mode toggle */}
+              <div className="flex rounded border overflow-hidden text-xs">
+                <button
+                  onClick={() => setConnMode('serial')}
+                  className={`flex items-center gap-1 px-3 py-1 ${connMode === 'serial' ? 'bg-blue-600 text-white' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+                >
+                  <Usb className="w-3 h-3" /> RS-232 / USB
+                </button>
+                <button
+                  onClick={() => setConnMode('tcp')}
+                  className={`flex items-center gap-1 px-3 py-1 ${connMode === 'tcp' ? 'bg-blue-600 text-white' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+                >
+                  <Wifi className="w-3 h-3" /> TCP / LAN
+                </button>
               </div>
-              {hwError && <p className="text-xs text-red-600">{hwError}</p>}
-              {hwConnected && (
-                <p className="text-xs text-green-700 bg-green-50 rounded px-2 py-1">
-                  ✓ Hardware connected — Authorize/Stop buttons now send commands directly to the {hwProtocol} controller. Litres are read automatically after dispensing.
-                </p>
-              )}
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                (connMode === 'serial' ? hwConnected : tcpConnected)
+                  ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+              }`}>
+                {(connMode === 'serial' ? hwConnected : tcpConnected) ? 'Connected' : 'Not connected'}
+              </span>
             </div>
-          )}
+
+            {connMode === 'serial' && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <select value={hwProtocol} onChange={(e) => setHwProtocol(e.target.value as PumpProtocol)}
+                  disabled={hwConnected} className="border rounded px-2 py-1 text-xs disabled:opacity-50">
+                  <option value="GILBARCO">Gilbarco GVR</option>
+                  <option value="WAYNE">Wayne Dresser</option>
+                  <option value="TOKHEIM">Tokheim</option>
+                  <option value="IFSF">IFSF Generic</option>
+                </select>
+                {!isSerialAvailable() && <span className="text-xs text-amber-600">Web Serial requires Chrome/Edge 89+</span>}
+                {hwConnected
+                  ? <button onClick={() => void handleHwDisconnect()} className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded border border-red-200 hover:bg-red-200">Disconnect</button>
+                  : <button onClick={() => void handleHwConnect()} disabled={hwConnecting || !isSerialAvailable()}
+                      className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
+                      {hwConnecting ? 'Connecting…' : 'Connect Serial'}
+                    </button>
+                }
+                {hwError && <span className="text-xs text-red-600">{hwError}</span>}
+              </div>
+            )}
+
+            {connMode === 'tcp' && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <input value={tcpHost} onChange={(e) => setTcpHost(e.target.value)} disabled={tcpConnected}
+                    placeholder="Controller IP (e.g. 192.168.1.100)"
+                    className="border rounded px-2 py-1 text-xs w-52 disabled:opacity-50" />
+                  <input value={tcpPort} onChange={(e) => setTcpPort(e.target.value)} disabled={tcpConnected}
+                    placeholder="Port" className="border rounded px-2 py-1 text-xs w-20 disabled:opacity-50" />
+                  <select value={tcpProtocol} onChange={(e) => setTcpProtocol(e.target.value as PumpProtocol)}
+                    disabled={tcpConnected} className="border rounded px-2 py-1 text-xs disabled:opacity-50">
+                    <option value="GILBARCO">Gilbarco GVR (10001)</option>
+                    <option value="WAYNE">Wayne Dresser (10002)</option>
+                    <option value="IFSF">IFSF/Tokheim (5555)</option>
+                  </select>
+                  {tcpConnected
+                    ? <button onClick={handleTcpDisconnect} className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded border border-red-200 hover:bg-red-200 flex items-center gap-1"><WifiOff className="w-3 h-3" />Disconnect</button>
+                    : <button onClick={() => void handleTcpConnect()} disabled={tcpConnecting}
+                        className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1">
+                        <Wifi className="w-3 h-3" />{tcpConnecting ? 'Connecting…' : 'Connect TCP'}
+                      </button>
+                  }
+                  {tcpError && <span className="text-xs text-red-600">{tcpError}</span>}
+                </div>
+                {tcpConnected && (
+                  <p className="text-xs text-green-700 bg-green-50 rounded px-2 py-1">
+                    ✓ TCP connected to {tcpHost}:{tcpPort} ({tcpProtocol}) — pump status polls every 3 s; litres auto-filled when dispensing completes.
+                  </p>
+                )}
+                {/* Live pump status badges */}
+                {tcpConnected && Object.keys(livePumpStatus).length > 0 && (
+                  <div className="flex gap-2 flex-wrap">
+                    {Object.entries(livePumpStatus).map(([pn, s]) => (
+                      <span key={pn} className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[s.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                        Pump {pn}: {s.status}{s.litresDispensed > 0 ? ` ${s.litresDispensed.toFixed(2)}L` : ''}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {(hwConnected || tcpConnected) && (
+              <p className="text-xs text-green-700 bg-green-50 rounded px-2 py-1">
+                ✓ Controller active — Authorize/Stop send hardware commands; litres are read automatically after dispensing.
+              </p>
+            )}
+          </div>
           <div className="bg-white border rounded-lg p-4 space-y-3">
             <h3 className="font-semibold text-sm">Add Pump</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -719,35 +866,105 @@ export default function FuelPumpPage() {
                   <th className="text-left px-4 py-2">Closed</th>
                   <th className="text-left px-4 py-2">Status</th>
                   <th className="text-left px-4 py-2">Pump Readings</th>
+                  <th className="text-left px-4 py-2">Summary</th>
                 </tr>
               </thead>
               <tbody>
                 {shifts.map((s: any) => (
-                  <tr key={s.id} className="border-t hover:bg-gray-50">
-                    <td className="px-4 py-2 font-medium">{s.cashierName}</td>
-                    <td className="px-4 py-2 text-gray-600 text-xs">{new Date(s.openedAt).toLocaleString()}</td>
-                    <td className="px-4 py-2 text-gray-600 text-xs">{s.closedAt ? new Date(s.closedAt).toLocaleString() : '—'}</td>
-                    <td className="px-4 py-2">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${s.status === 'OPEN' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                        {s.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2">
-                      <div className="flex gap-2 flex-wrap">
-                        {s.readings.map((r: any) => {
-                          const pump = pumps.find((p: any) => p.id === r.pumpId);
-                          const dispensed = r.closingLitres != null ? (r.closingLitres - r.openingLitres).toFixed(2) : '—';
-                          return (
-                            <span key={r.id} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
-                              P{pump?.pumpNumber ?? '?'}: {r.openingLitres}→{r.closingLitres ?? '?'}L ({dispensed}L)
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </td>
-                  </tr>
+                  <>
+                    <tr key={s.id} className="border-t hover:bg-gray-50">
+                      <td className="px-4 py-2 font-medium">{s.cashierName}</td>
+                      <td className="px-4 py-2 text-gray-600 text-xs">{new Date(s.openedAt).toLocaleString()}</td>
+                      <td className="px-4 py-2 text-gray-600 text-xs">{s.closedAt ? new Date(s.closedAt).toLocaleString() : '—'}</td>
+                      <td className="px-4 py-2">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${s.status === 'OPEN' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                          {s.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2">
+                        <div className="flex gap-2 flex-wrap">
+                          {s.readings.map((r: any) => {
+                            const pump = pumps.find((p: any) => p.id === r.pumpId);
+                            const dispensed = r.closingLitres != null ? (r.closingLitres - r.openingLitres).toFixed(2) : '—';
+                            return (
+                              <span key={r.id} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
+                                P{pump?.pumpNumber ?? '?'}: {r.openingLitres}→{r.closingLitres ?? '?'}L ({dispensed}L)
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2">
+                        {s.status === 'CLOSED' && (
+                          <button
+                            onClick={() => setExpandedShift(expandedShift === s.id ? null : s.id)}
+                            className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                          >
+                            {expandedShift === s.id ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                            X-Report
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                    {expandedShift === s.id && shiftSummary && (
+                      <tr key={`${s.id}-summary`} className="bg-orange-50">
+                        <td colSpan={6} className="px-6 py-4">
+                          <div className="grid grid-cols-3 gap-4 mb-3">
+                            <div className="bg-white rounded p-3 text-center border">
+                              <p className="text-xs text-gray-500">Total Revenue</p>
+                              <p className="font-bold text-orange-600">{formatKES(shiftSummary.totalRevenueCents)}</p>
+                            </div>
+                            <div className="bg-white rounded p-3 text-center border">
+                              <p className="text-xs text-gray-500">Total Litres</p>
+                              <p className="font-bold">{(shiftSummary.totalLitres ?? 0).toFixed(2)} L</p>
+                            </div>
+                            <div className="bg-white rounded p-3 text-center border">
+                              <p className="text-xs text-gray-500">Transactions</p>
+                              <p className="font-bold">{shiftSummary.totalTransactions}</p>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-xs font-semibold text-gray-600 mb-1">By Pump</p>
+                              <table className="w-full text-xs border rounded overflow-hidden">
+                                <thead className="bg-gray-100">
+                                  <tr><th className="px-2 py-1 text-left">Pump</th><th className="px-2 py-1 text-right">Litres</th><th className="px-2 py-1 text-right">Revenue</th></tr>
+                                </thead>
+                                <tbody>
+                                  {shiftSummary.byPump.map((p: any) => (
+                                    <tr key={p.pumpId} className="border-t">
+                                      <td className="px-2 py-1">{p.pumpLabel || `P${p.pumpNumber}`}</td>
+                                      <td className="px-2 py-1 text-right">{p.litres.toFixed(2)} L</td>
+                                      <td className="px-2 py-1 text-right font-medium">{formatKES(p.revenueCents)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold text-gray-600 mb-1">By Payment</p>
+                              <table className="w-full text-xs border rounded overflow-hidden">
+                                <thead className="bg-gray-100">
+                                  <tr><th className="px-2 py-1 text-left">Method</th><th className="px-2 py-1 text-right">Txns</th><th className="px-2 py-1 text-right">Amount</th></tr>
+                                </thead>
+                                <tbody>
+                                  {shiftSummary.byPayment.map((p: any) => (
+                                    <tr key={p.method} className="border-t">
+                                      <td className="px-2 py-1 font-medium">{p.method}</td>
+                                      <td className="px-2 py-1 text-right">{p.count}</td>
+                                      <td className="px-2 py-1 text-right">{formatKES(p.totalCents)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 ))}
-                {shifts.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">No shifts recorded</td></tr>}
+                {shifts.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No shifts recorded</td></tr>}
               </tbody>
             </table>
           </div>
@@ -969,6 +1186,217 @@ export default function FuelPumpPage() {
             </>
           )}
           {!stats && <p className="text-gray-400 text-center py-8">Loading statistics...</p>}
+        </div>
+      )}
+
+      {/* ── VARIANCE REPORT ── */}
+      {tab === 'variance' && (
+        <div className="space-y-4">
+          <div className="flex gap-2 items-center flex-wrap">
+            <span className="text-sm text-gray-600 font-medium">Date Range:</span>
+            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          </div>
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+            <strong>Variance Report</strong> — Compares fuel dispensed (from sales) vs dipping readings to detect shrinkage, leaks, or meter errors. Variance &gt;1% triggers an ALERT.
+          </div>
+          {varianceLoading && <p className="text-gray-400 text-center py-8">Calculating variance...</p>}
+          {varianceData && (
+            <div className="bg-white border rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-gray-600">
+                  <tr>
+                    <th className="text-left px-4 py-2">Tank</th>
+                    <th className="text-left px-4 py-2">Grade</th>
+                    <th className="text-right px-4 py-2">Opening (L)</th>
+                    <th className="text-right px-4 py-2">Delivered (L)</th>
+                    <th className="text-right px-4 py-2">Dispensed (L)</th>
+                    <th className="text-right px-4 py-2">Expected Closing (L)</th>
+                    <th className="text-right px-4 py-2">Actual Closing (L)</th>
+                    <th className="text-right px-4 py-2">Variance (L)</th>
+                    <th className="text-right px-4 py-2">Variance %</th>
+                    <th className="text-center px-4 py-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {varianceData.map((row: any) => (
+                    <tr key={row.tankId} className={`border-t ${row.status === 'ALERT' ? 'bg-red-50' : ''}`}>
+                      <td className="px-4 py-3 font-medium">{row.label}</td>
+                      <td className="px-4 py-3">{row.gradeName}</td>
+                      <td className="px-4 py-3 text-right">{row.openingLitres.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right text-green-700">{row.deliveredLitres.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right text-blue-700">{row.dispensedLitres.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right">{row.expectedClosingLitres.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right">{row.actualClosingLitres.toFixed(2)}</td>
+                      <td className={`px-4 py-3 text-right font-semibold ${row.varianceLitres < 0 ? 'text-red-600' : row.varianceLitres > 0 ? 'text-green-600' : ''}`}>
+                        {row.varianceLitres > 0 ? '+' : ''}{row.varianceLitres.toFixed(2)}
+                      </td>
+                      <td className={`px-4 py-3 text-right font-semibold ${row.variancePct < 0 ? 'text-red-600' : ''}`}>
+                        {row.variancePct > 0 ? '+' : ''}{row.variancePct.toFixed(2)}%
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {row.status === 'ALERT' ? (
+                          <span className="flex items-center justify-center gap-1 text-red-600 text-xs font-semibold">
+                            <AlertTriangle className="w-3.5 h-3.5" /> ALERT
+                          </span>
+                        ) : (
+                          <span className="flex items-center justify-center gap-1 text-green-600 text-xs font-semibold">
+                            <CheckCircle className="w-3.5 h-3.5" /> OK
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {varianceData.length === 0 && (
+                    <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400">No tank data found. Add tanks and record dippings to generate variance report.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── MAINTENANCE LOG ── */}
+      {tab === 'maintenance' && (
+        <div className="space-y-4">
+          {/* Add maintenance record */}
+          <div className="bg-white border rounded-lg p-4 space-y-3">
+            <h3 className="font-semibold text-sm">Log Maintenance Activity</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <select
+                className="border rounded px-3 py-1.5 text-sm"
+                value={maintForm.pumpId}
+                onChange={(e) => setMaintForm({ ...maintForm, pumpId: e.target.value })}
+              >
+                <option value="">Select Pump</option>
+                {(pumps ?? []).map((p: any) => (
+                  <option key={p.id} value={p.id}>Pump {p.pumpNumber}{p.label ? ` — ${p.label}` : ''}</option>
+                ))}
+              </select>
+              <select
+                className="border rounded px-3 py-1.5 text-sm"
+                value={maintForm.type}
+                onChange={(e) => setMaintForm({ ...maintForm, type: e.target.value })}
+              >
+                {['SERVICE', 'REPAIR', 'CALIBRATION', 'INSPECTION', 'EMERGENCY'].map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+              <input
+                className="border rounded px-3 py-1.5 text-sm"
+                placeholder="Technician name"
+                value={maintForm.technicianName}
+                onChange={(e) => setMaintForm({ ...maintForm, technicianName: e.target.value })}
+              />
+              <input
+                className="border rounded px-3 py-1.5 text-sm"
+                placeholder="Cost (KES)"
+                type="number"
+                value={maintForm.costCents / 100 || ''}
+                onChange={(e) => setMaintForm({ ...maintForm, costCents: Math.round(parseFloat(e.target.value) * 100) || 0 })}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                className="border rounded px-3 py-1.5 text-sm col-span-2 md:col-span-1"
+                placeholder="Description (required)"
+                value={maintForm.description}
+                onChange={(e) => setMaintForm({ ...maintForm, description: e.target.value })}
+              />
+              <select
+                className="border rounded px-3 py-1.5 text-sm"
+                value={maintForm.status}
+                onChange={(e) => setMaintForm({ ...maintForm, status: e.target.value })}
+              >
+                {['COMPLETED', 'SCHEDULED', 'IN_PROGRESS', 'CANCELLED'].map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+            <textarea
+              className="border rounded px-3 py-1.5 text-sm w-full"
+              placeholder="Notes (optional)"
+              rows={2}
+              value={maintForm.notes}
+              onChange={(e) => setMaintForm({ ...maintForm, notes: e.target.value })}
+            />
+            <button
+              onClick={() => {
+                if (!maintForm.pumpId || !maintForm.description) return;
+                createMaintMutation.mutate({ ...maintForm, businessId });
+              }}
+              disabled={!maintForm.pumpId || !maintForm.description || createMaintMutation.isPending}
+              className="px-4 py-1.5 bg-orange-600 text-white rounded text-sm hover:bg-orange-700 disabled:opacity-50"
+            >
+              {createMaintMutation.isPending ? 'Saving...' : 'Log Maintenance'}
+            </button>
+          </div>
+
+          {/* Filter by pump */}
+          <div className="flex gap-2 items-center">
+            <span className="text-sm text-gray-600">Filter by pump:</span>
+            <select
+              className="border rounded px-3 py-1.5 text-sm"
+              value={maintFilter}
+              onChange={(e) => setMaintFilter(e.target.value)}
+            >
+              <option value="">All Pumps</option>
+              {(pumps ?? []).map((p: any) => (
+                <option key={p.id} value={p.id}>Pump {p.pumpNumber}{p.label ? ` — ${p.label}` : ''}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Maintenance log table */}
+          <div className="bg-white border rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-gray-600">
+                <tr>
+                  <th className="text-left px-4 py-2">Pump</th>
+                  <th className="text-left px-4 py-2">Type</th>
+                  <th className="text-left px-4 py-2">Description</th>
+                  <th className="text-left px-4 py-2">Technician</th>
+                  <th className="text-right px-4 py-2">Cost</th>
+                  <th className="text-left px-4 py-2">Status</th>
+                  <th className="text-left px-4 py-2">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(maintenanceLogs ?? []).map((log: any) => (
+                  <tr key={log.id} className="border-t hover:bg-gray-50">
+                    <td className="px-4 py-2 font-medium">
+                      P{log.pump?.pumpNumber ?? '?'}{log.pump?.label ? ` — ${log.pump.label}` : ''}
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                        log.type === 'EMERGENCY' ? 'bg-red-100 text-red-700'
+                        : log.type === 'REPAIR' ? 'bg-orange-100 text-orange-700'
+                        : log.type === 'CALIBRATION' ? 'bg-purple-100 text-purple-700'
+                        : log.type === 'INSPECTION' ? 'bg-blue-100 text-blue-700'
+                        : 'bg-green-100 text-green-700'
+                      }`}>{log.type}</span>
+                    </td>
+                    <td className="px-4 py-2 max-w-xs truncate">{log.description}</td>
+                    <td className="px-4 py-2 text-gray-600">{log.technicianName ?? '—'}</td>
+                    <td className="px-4 py-2 text-right font-medium">{log.costCents > 0 ? formatKES(log.costCents) : '—'}</td>
+                    <td className="px-4 py-2">
+                      <span className={`px-2 py-0.5 rounded-full text-xs ${
+                        log.status === 'COMPLETED' ? 'bg-green-100 text-green-700'
+                        : log.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700'
+                        : log.status === 'SCHEDULED' ? 'bg-yellow-100 text-yellow-700'
+                        : 'bg-gray-100 text-gray-500'
+                      }`}>{log.status}</span>
+                    </td>
+                    <td className="px-4 py-2 text-gray-500 text-xs">{new Date(log.startedAt).toLocaleString()}</td>
+                  </tr>
+                ))}
+                {(maintenanceLogs ?? []).length === 0 && (
+                  <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No maintenance records yet.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

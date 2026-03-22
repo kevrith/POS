@@ -121,7 +121,7 @@ export class SalesService {
     const taxBase = subtotalCents - discountCents;
     // VAT/TOT are inclusive in item prices — extract for reporting only, do NOT add to total
     const vatCents = store.business.taxType === 'VAT' ? calculateVAT(taxBase) : 0;
-    const totCents = store.business.taxType === 'TOT' ? calculateTOT(taxBase) : 0;
+    const totCents = store.business.taxType === 'TOT' ? calculateTOT(taxBase, store.business.totRate ?? 3) : 0;
     const totalCents = taxBase + serviceChargeCents + tipCents;
 
     // ── Write transaction (kept minimal: sale + sequence + stock movements) ──

@@ -32,6 +32,7 @@ model Business {
   paystackSubscriptionId        String?
   paystackPublicKey             String?
   referralCode                  String?               @unique
+  shortCode                     String?               @unique
   createdAt                     DateTime              @default(now())
   updatedAt                     DateTime              @updatedAt
   exchangeRates                 String?
@@ -1261,6 +1262,7 @@ model Prescription {
   lastFillDate       DateTime?
   nextFillDate       DateTime?
   patientIdNumber    String?
+  referralNotes      String?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   business           Business  @relation(fields: [businessId], references: [id])
@@ -2192,6 +2194,7 @@ model FuelPump {
   updatedAt   DateTime   @updatedAt
   grade       FuelGrade  @relation(fields: [gradeId], references: [id])
   fuelSales   FuelSale[]
+  maintenance FuelPumpMaintenance[]
 
   @@unique([businessId, storeId, pumpNumber])
   @@index([businessId, storeId, status])
@@ -2336,6 +2339,25 @@ model FleetTransaction {
   @@index([fleetAccountId, createdAt])
 }
 
+model FuelPumpMaintenance {
+  id             String    @id @default(uuid())
+  businessId     String
+  pumpId         String
+  type           String    // REPAIR | SERVICE | CALIBRATION | INSPECTION | EMERGENCY
+  description    String
+  technicianName String?
+  costCents      Int       @default(0)
+  status         String    @default("COMPLETED")  // SCHEDULED | IN_PROGRESS | COMPLETED | CANCELLED
+  startedAt      DateTime  @default(now())
+  completedAt    DateTime?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  pump           FuelPump  @relation(fields: [pumpId], references: [id])
+
+  @@index([businessId, pumpId])
+  @@index([pumpId, startedAt])
+}
+
 // ─── Pharmacy Enterprise Extensions ──────────────────────────────────────────
 
 model DrugCatalogue {
@@ -2354,4 +2376,90 @@ model DrugCatalogue {
 
   @@index([businessId])
   @@index([genericName])
+}
+
+// ─── Cybercafe Enterprise Extensions ─────────────────────────────────────────
+
+model CyberStation {
+  id               String   @id @default(uuid())
+  businessId       String
+  storeId          String
+  number           Int
+  label            String?  // e.g. "PC 1", "Gaming Rig A"
+  specs            String?  // e.g. "Intel i5, 16GB RAM, GTX 1650"
+  ratePerHourCents Int      @default(0)
+  stationType      String   @default("BROWSING")  // BROWSING | GAMING | WORKSTATION | PRINTING
+  status           String   @default("AVAILABLE")  // AVAILABLE | IN_USE | PAUSED | OFFLINE
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  sessions         CyberSession[]
+
+  @@unique([businessId, storeId, number])
+  @@index([businessId, storeId, status])
+}
+
+model CyberSession {
+  id               String    @id @default(uuid())
+  businessId       String
+  storeId          String
+  stationId        String
+  customerId       String?
+  customerName     String?
+  customerPhone    String?
+  packageId        String?
+  timeLimitMinutes Int?
+  startedAt        DateTime  @default(now())
+  pausedAt         DateTime?
+  pausedMinutes    Float     @default(0)
+  extendedMinutes  Float     @default(0)
+  endedAt          DateTime?
+  durationMinutes  Float?
+  ratePerHourCents Int
+  printPagesCents  Int       @default(0)
+  extrasCents      Int       @default(0)
+  totalCents       Int       @default(0)
+  status           String    @default("ACTIVE")  // ACTIVE | PAUSED | COMPLETED | VOIDED
+  paymentMethod    String?
+  paymentRef       String?
+  saleId           String?
+  notes            String?
+  createdAt        DateTime  @default(now())
+  station          CyberStation  @relation(fields: [stationId], references: [id])
+  package          CyberPackage? @relation(fields: [packageId], references: [id])
+
+  @@index([businessId, storeId, status])
+  @@index([stationId, status])
+  @@index([businessId, createdAt])
+}
+
+model CyberPackage {
+  id              String   @id @default(uuid())
+  businessId      String
+  name            String
+  durationMinutes Int
+  priceCents      Int
+  description     String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  sessions        CyberSession[]
+
+  @@index([businessId])
+}
+
+model CyberRate {
+  id          String   @id @default(uuid())
+  businessId  String
+  storeId     String
+  service     String
+  unit        String   @default("per page") // per page, per hour, per item, flat
+  rateCents   Int      @default(0)
+  category    String   @default("PRINT") // PRINT | SCAN | BROWSE | GAME | OTHER
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([businessId, storeId])
 }

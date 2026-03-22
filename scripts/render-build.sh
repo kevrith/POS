@@ -15,12 +15,12 @@ echo "=== api install OK ==="
 cd ../..
 
 echo "=== STEP 3: Prisma generate ==="
-cd apps/api
-./node_modules/.bin/prisma generate --schema ../../prisma/schema.prisma
+node_modules/.bin/prisma generate --schema prisma/schema.prisma
 echo "=== prisma generate OK ==="
 
 echo "=== STEP 4: NestJS build ==="
-./node_modules/.bin/nest build
+cd apps/api
+../../node_modules/.bin/nest build
 echo "=== nest build OK ==="
 cd ../..
 

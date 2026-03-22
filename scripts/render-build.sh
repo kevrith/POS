@@ -14,13 +14,13 @@ npm install
 echo "=== api install OK ==="
 cd ../..
 
-echo "=== STEP 3: Prisma generate ==="
-cd apps/api
-npx prisma generate --schema ../../prisma/schema.prisma
+echo "=== STEP 3: Prisma generate (from root) ==="
+./node_modules/.bin/prisma generate --schema prisma/schema.prisma
 echo "=== prisma generate OK ==="
 
 echo "=== STEP 4: NestJS build ==="
-npm run build
+cd apps/api
+./node_modules/.bin/nest build
 echo "=== nest build OK ==="
 cd ../..
 

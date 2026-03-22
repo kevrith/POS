@@ -9,13 +9,12 @@ npm run build --workspace=packages/shared
 echo "=== shared build OK ==="
 
 echo "=== STEP 2: Prisma generate ==="
-cd "$ROOT/apps/api"
-npx prisma generate --schema "$ROOT/prisma/schema.prisma"
+"$ROOT/node_modules/.bin/prisma" generate --schema "$ROOT/prisma/schema.prisma"
 echo "=== prisma generate OK ==="
 
 echo "=== STEP 3: NestJS build ==="
 cd "$ROOT/apps/api"
-npx nest build
+"$ROOT/node_modules/.bin/nest" build
 echo "=== nest build OK ==="
 
 echo "=== BUILD COMPLETE ==="

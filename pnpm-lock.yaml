@@ -7,6 +7,13 @@ settings:
 importers:
 
   .:
+    dependencies:
+      '@nestjs/cli':
+        specifier: ^10.3.0
+        version: 10.4.9
+      prisma:
+        specifier: ^5.9.0
+        version: 5.22.0
     devDependencies:
       concurrently:
         specifier: ^8.2.2

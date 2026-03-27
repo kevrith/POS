@@ -63,7 +63,7 @@ export default function AppointmentsPage() {
   const { data: appointments = [] } = useQuery<Appointment[]>({
     queryKey: ['appointments', businessId, storeId, viewDate],
     queryFn: () => api.get(`/appointments?businessId=${businessId}&storeId=${storeId}&date=${viewDate}`),
-    enabled: !!businessId && !!storeId,
+    enabled: !!businessId,
     refetchInterval: 60000,
   });
 

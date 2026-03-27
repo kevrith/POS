@@ -253,17 +253,19 @@ export default function SalesListPage() {
     queryFn: () => {
       const params = new URLSearchParams({
         businessId,
-        storeId,
         limit: '500',
         startDate,
         endDate,
       });
+      // Only scope to a store if the user is assigned to one (cashiers/managers)
+      // Owners have no storeId and should see all stores
+      if (storeId) params.append('storeId', storeId);
       if (searchQuery.trim()) {
         params.append('receiptNumber', searchQuery.trim());
       }
       return api.get<{ data: Sale[] }>(`/sales?${params.toString()}`).then(r => r.data);
     },
-    enabled: !!businessId && !!storeId,
+    enabled: !!businessId,
   });
 
   const formatKES = (cents: number) =>

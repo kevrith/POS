@@ -427,7 +427,7 @@ export default function RecipeManagementPage() {
   const { data: catalog = [] } = useQuery({
     queryKey: ['catalog-items', businessId, storeId],
     queryFn: () => api.get<CatalogItem[]>(`/items?businessId=${businessId}&storeId=${storeId}`),
-    enabled: !!businessId && !!storeId,
+    enabled: !!businessId,
   });
 
   const formatKESLocal = (cents: number) => formatKES(cents);

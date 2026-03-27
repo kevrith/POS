@@ -98,7 +98,7 @@ export default function PrescriptionsPage() {
   const { data: prescriptions = [] } = useQuery<Prescription[]>({
     queryKey: ['prescriptions', businessId, storeId, statusFilter],
     queryFn: () => api.get(`/prescriptions?businessId=${businessId}&storeId=${storeId}&status=${statusFilter}`),
-    enabled: !!businessId && !!storeId,
+    enabled: !!businessId,
     refetchInterval: 30000,
   });
 

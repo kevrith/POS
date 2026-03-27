@@ -62,7 +62,7 @@ export default function DeliveryPage() {
   const { data: deliveries = [] } = useQuery<DeliveryOrder[]>({
     queryKey: ['deliveries', businessId, storeId, tab],
     queryFn: () => api.get(`/delivery?businessId=${businessId}&storeId=${storeId}&status=${tab}`),
-    enabled: !!businessId && !!storeId,
+    enabled: !!businessId,
     refetchInterval: 30000,
   });
 

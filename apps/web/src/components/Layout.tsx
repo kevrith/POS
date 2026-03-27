@@ -52,7 +52,8 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
     label: 'Sales',
     items: [
       { to: '/pos', icon: ShoppingCart, label: 'Point of Sale', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
-      { to: '/supermart', icon: ShoppingCart, label: 'Supermarket POS', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['SUPERMARKET'] },
+      // Supermarket POS is rendered automatically via POSRouterPage when posMode=SUPERMARKET
+      // No separate nav item needed — /pos already shows the right interface.
       { to: '/hospitality', icon: Coffee, label: 'Hospitality', roles: ['OWNER', 'MANAGER', 'WAITER'], businessTypes: ['HOSPITALITY', 'FAST_FOOD'] },
       { to: '/kds', icon: Monitor, label: 'Kitchen Display', roles: ['OWNER', 'MANAGER', 'WAITER', 'KITCHEN'], businessTypes: ['HOSPITALITY', 'FAST_FOOD'] },
       // Kiosk mode is launched from within the POS page (not a permanent nav item)
@@ -101,6 +102,7 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
       { to: '/expenses', icon: DollarSign, label: 'Expenses', roles: ['OWNER', 'MANAGER', 'ACCOUNTANT'] },
       { to: '/cheques', icon: FileText, label: 'Cheques', roles: ['OWNER', 'MANAGER', 'ACCOUNTANT'] },
       { to: '/ledger', icon: BookOpen, label: 'General Ledger', roles: ['OWNER', 'MANAGER', 'ACCOUNTANT'] },
+      { to: '/reconciliation', icon: Landmark, label: 'Reconciliation', roles: ['OWNER', 'MANAGER', 'ACCOUNTANT'] },
       { to: '/payment-links', icon: Link2, label: 'Payment Links', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
       { to: '/reports', icon: BarChart3, label: 'Reports', roles: ['OWNER', 'MANAGER', 'ACCOUNTANT'] },
       { to: '/sales-list', icon: ShoppingCart, label: 'Sales History', roles: ['OWNER', 'MANAGER', 'ACCOUNTANT'] },
@@ -128,20 +130,7 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
     roles: ['OWNER', 'MANAGER'],
     items: [
       { to: '/forecasting', icon: TrendingUp, label: 'AI Forecasting', roles: ['OWNER', 'MANAGER'] },
-      { to: '/reconciliation', icon: Landmark, label: 'Reconciliation', roles: ['OWNER', 'MANAGER'] },
-    ],
-  },
-  {
-    label: 'Franchise',
-    roles: ['OWNER'],
-    items: [
       { to: '/franchise', icon: GitBranch, label: 'Franchise Network', roles: ['OWNER'] },
-    ],
-  },
-  {
-    label: 'Security',
-    roles: ['OWNER', 'MANAGER'],
-    items: [
       { to: '/security-settings', icon: Shield, label: 'Security & Roles', roles: ['OWNER', 'MANAGER'] },
     ],
   },

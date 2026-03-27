@@ -183,11 +183,9 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/pos" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/stocktake" element={<StocktakePage />} />
           {/* Sales */}
           <Route path="/pos" element={<POSPage />} />
           <Route path="/supermart" element={<SupermarketPOSPage />} />
-          <Route path="/kiosk" element={<KioskPage />} />
           <Route path="/hospitality" element={<HospitalityPage />} />
           <Route path="/layaway" element={<LayawayPage />} />
           <Route path="/proforma" element={<ProformaPage />} />
@@ -198,7 +196,6 @@ export default function App() {
           <Route path="/recipe" element={<RecipeManagementPage />} />
           <Route path="/bundle" element={<BundleManagementPage />} />
           <Route path="/suppliers" element={<SuppliersPage />} />
-          <Route path="/tables" element={<HospitalityPage />} />
           {/* Finance */}
           <Route path="/cash-drawer" element={<CashDrawerPage />} />
           <Route path="/expenses" element={<ExpensesPage />} />

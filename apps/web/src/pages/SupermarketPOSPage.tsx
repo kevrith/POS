@@ -305,14 +305,24 @@ export default function SupermarketPOSPage() {
   const startCamera = useCallback(async () => {
     setShowCamera(true);
     setCameraError(null);
+    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    if (!videoRef.current) return;
     try {
       const reader = new BrowserMultiFormatReader();
-      const result = await reader.decodeOnceFromVideoDevice(undefined, videoRef.current!);
-      setScan(result.getText());
-      setShowCamera(false);
-    } catch (err) {
-      setCameraError('Camera scan failed. Please type the barcode.');
-      setShowCamera(false);
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play();
+      reader.decodeFromStream(stream, videoRef.current, (result, err) => {
+        if (result) {
+          setScan(result.getText());
+          stream.getTracks().forEach((t) => t.stop());
+          if (videoRef.current) videoRef.current.srcObject = null;
+          setShowCamera(false);
+        }
+        if (err && !(err.message?.includes('No MultiFormat'))) { /* suppress continuous scan noise */ }
+      });
+    } catch (e: unknown) {
+      setCameraError(e instanceof Error ? e.message : 'Camera access denied');
     }
   }, []);
 
@@ -1082,7 +1092,13 @@ export default function SupermarketPOSPage() {
           <div className="bg-slate-800 rounded-2xl p-4 w-full max-w-md">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-bold text-slate-200">Scan Barcode</h3>
-              <button onClick={() => setShowCamera(false)} className="text-slate-400 hover:text-slate-200">
+              <button onClick={() => {
+                if (videoRef.current?.srcObject) {
+                  (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
+                  videoRef.current.srcObject = null;
+                }
+                setShowCamera(false);
+              }} className="text-slate-400 hover:text-slate-200">
                 <X className="w-5 h-5" />
               </button>
             </div>

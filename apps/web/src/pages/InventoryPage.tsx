@@ -1011,10 +1011,12 @@ function CsvImportModal({ businessId, storeId, onClose, onSuccess }: {
       const rows = preview.map(r => ({
         name: r.name ?? r.Name ?? '',
         category: r.category ?? r.Category ?? undefined,
-        retailPrice: parseFloat(r.retailPrice ?? r.retail_price ?? r['Retail Price'] ?? '0'),
-        costPrice: r.costPrice ? parseFloat(r.costPrice) : undefined,
+        retailPrice: parseFloat(r.retailPrice ?? r.retail_price ?? r['Retail Price'] ?? r.base_price ?? r.price ?? '0'),
+        costPrice: r.costPrice ?? r.cost_price ? parseFloat(r.costPrice ?? r.cost_price) : undefined,
         barcode: r.barcode ?? r.Barcode ?? undefined,
-        currentStock: r.currentStock ? parseInt(r.currentStock) : undefined,
+        currentStock: r.currentStock ?? r.stock_quantity ?? r.quantity ?? r.qty
+          ? parseInt(r.currentStock ?? r.stock_quantity ?? r.quantity ?? r.qty)
+          : undefined,
         expiryDate: r.expiryDate ?? r.expiry_date ?? undefined,
         lotNumber: r.lotNumber ?? r.lot_number ?? undefined,
       })).filter(r => r.name);
@@ -1026,10 +1028,21 @@ function CsvImportModal({ businessId, storeId, onClose, onSuccess }: {
     },
   });
 
-  const sampleCsv = `name,category,retailPrice,costPrice,barcode,currentStock
-Bread,Food,50,30,1234567890,100
-Milk 500ml,Drinks,65,45,0987654321,50
-Sugar 1kg,Food,130,90,,200`;
+  const sampleCsv = `name,category,retailPrice,costPrice,barcode,currentStock,expiryDate,lotNumber
+Bread,Food,50,30,1234567890,100,,
+Milk 500ml,Drinks,65,45,0987654321,50,,
+Sugar 1kg,Food,130,90,,200,,
+Yoghurt 400g,Dairy,85,60,1122334455,30,2026-06-01,LOT-001`;
+
+  function downloadSampleCsv() {
+    const blob = new Blob([sampleCsv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'kastra_items_import_sample.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
@@ -1045,9 +1058,15 @@ Sugar 1kg,Food,130,90,,200`;
           {step === 'upload' && (
             <div className="space-y-4">
               <div className="bg-blue-50 rounded-lg p-4 text-sm text-blue-800">
-                <p className="font-semibold mb-2">CSV Format</p>
-                <p className="mb-2">Required: <strong>name</strong>, <strong>retailPrice</strong></p>
-                <p>Optional: category, costPrice, barcode, currentStock, expiryDate (YYYY-MM-DD), lotNumber</p>
+                <p className="font-semibold mb-2">CSV Column Names</p>
+                <p className="mb-1">Required: <strong>name</strong>, <strong>retailPrice</strong> (or <strong>base_price</strong>)</p>
+                <p className="mb-2">Optional: category, costPrice, barcode, <strong>currentStock</strong> (or <strong>stock_quantity</strong>), expiryDate (YYYY-MM-DD), lotNumber</p>
+                <button
+                  onClick={downloadSampleCsv}
+                  className="mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700"
+                >
+                  <Download className="w-3.5 h-3.5" /> Download Sample CSV
+                </button>
               </div>
               <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center">
                 <Upload className="w-10 h-10 mx-auto text-gray-400 mb-3" />
@@ -1072,12 +1091,14 @@ Sugar 1kg,Food,130,90,,200`;
                   </button>
                 )}
               </div>
-              <button
-                onClick={() => { setCsvText(sampleCsv); setPreview(parseCsv(sampleCsv)); setStep('preview'); }}
-                className="text-sm text-blue-600 underline"
-              >
-                Load sample data
-              </button>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => { setCsvText(sampleCsv); setPreview(parseCsv(sampleCsv)); setStep('preview'); }}
+                  className="text-sm text-blue-600 underline"
+                >
+                  Load sample data
+                </button>
+              </div>
             </div>
           )}
 

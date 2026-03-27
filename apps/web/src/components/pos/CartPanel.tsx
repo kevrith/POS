@@ -85,7 +85,7 @@ export default function CartPanel({
         ? 'fixed bottom-0 left-0 right-0 z-40 rounded-t-2xl max-h-[88vh] flex flex-col'
         : 'hidden'}
       md:relative md:flex md:rounded-none md:max-h-none md:w-80 lg:w-96
-      bg-slate-900 border-t md:border-t-0 md:border-l border-slate-700 flex-col
+      bg-slate-900 border-t md:border-t-0 md:border-l border-slate-700 flex-col md:overflow-hidden
     `}>
       {/* Mobile drag handle */}
       <div className="md:hidden flex justify-center pt-3 pb-1 flex-shrink-0">
@@ -164,7 +164,7 @@ export default function CartPanel({
       )}
 
       {/* Cart items */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto min-h-0">
         {cart.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-slate-600">
             <ShoppingCart className="w-10 h-10 mb-3 opacity-30" />

@@ -181,7 +181,7 @@ export default function App() {
     <Layout>
       <Suspense fallback={<PageLoader />}>
         <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/" element={<Navigate to="/pos" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/stocktake" element={<StocktakePage />} />
           {/* Sales */}

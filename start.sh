@@ -21,13 +21,11 @@ echo "🗄️  Running database migrations..."
 cd "$ROOT_DIR/apps/api" && npx prisma migrate deploy --schema "$ROOT_DIR/prisma/schema.prisma"
 echo ""
 
-# Kill any existing processes on ports 3000-3003 and 3010
+# Kill any existing processes on used ports
 echo "🧹 Cleaning up existing processes..."
-lsof -ti:3000 | xargs kill -9 2>/dev/null || true
-lsof -ti:3001 | xargs kill -9 2>/dev/null || true
-lsof -ti:3002 | xargs kill -9 2>/dev/null || true
-lsof -ti:3003 | xargs kill -9 2>/dev/null || true
+lsof -ti:3005 | xargs kill -9 2>/dev/null || true
 lsof -ti:3010 | xargs kill -9 2>/dev/null || true
+lsof -ti:3012 | xargs kill -9 2>/dev/null || true
 
 echo ""
 echo "📦 Starting servers..."
@@ -37,27 +35,27 @@ PIDS=()
 # Start API (always exists)
 if [ -d "$ROOT_DIR/apps/api" ]; then
   echo "  • API (NestJS) on port 3010"
-  (cd "$ROOT_DIR/apps/api" && npm run start:dev) > /tmp/pos-api.log 2>&1 &
+  (cd "$ROOT_DIR/apps/api" && npm run build && npm run start:dev) > /tmp/pos-api.log 2>&1 &
   PIDS+=($!)
 fi
 
 # Start Web (always exists)
 if [ -d "$ROOT_DIR/apps/web" ]; then
-  echo "  • Web (Vite) on port 3001"
+  echo "  • Web (Vite) on port 3005"
   (cd "$ROOT_DIR/apps/web" && pnpm dev) > /tmp/pos-web.log 2>&1 &
   PIDS+=($!)
 fi
 
 # Start Admin (if exists)
 if [ -d "$ROOT_DIR/apps/admin" ]; then
-  echo "  • Admin (Vite) on port 3002"
+  echo "  • Admin (Vite) on port 3012"
   (cd "$ROOT_DIR/apps/admin" && pnpm dev) > /tmp/pos-admin.log 2>&1 &
   PIDS+=($!)
 fi
 
 # Start Desktop (if exists)
 if [ -d "$ROOT_DIR/apps/desktop" ]; then
-  echo "  • Desktop (Tauri) on port 3003"
+  echo "  • Desktop (Tauri) on port 3013"
   (cd "$ROOT_DIR/apps/desktop" && pnpm dev) > /tmp/pos-desktop.log 2>&1 &
   PIDS+=($!)
 fi
@@ -70,10 +68,10 @@ sleep 8
 echo ""
 echo "✅ Servers started!"
 echo ""
-echo "📍 API:  http://localhost:3010"
-echo "📍 Web:  http://localhost:3001"
-[ -d "$ROOT_DIR/apps/admin" ] && echo "📍 Admin: http://localhost:3002"
-[ -d "$ROOT_DIR/apps/desktop" ] && echo "📍 Desktop: http://localhost:3003"
+echo "📍 API:     http://localhost:3010"
+echo "📍 Web:     http://localhost:3005"
+[ -d "$ROOT_DIR/apps/admin" ] && echo "📍 Admin:   http://localhost:3012"
+[ -d "$ROOT_DIR/apps/desktop" ] && echo "📍 Desktop: http://localhost:3013"
 echo ""
 echo "📋 Login Credentials:"
 echo "  Email: owner@premiercafe.co.ke"

@@ -313,49 +313,98 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 to-blue-900 p-3 xs:p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+    <div className="min-h-screen flex bg-slate-50 dark:bg-gray-950">
 
-        {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 xs:px-8 py-6 xs:py-8 text-white text-center">
-          <h1 className="text-2xl xs:text-3xl font-bold">KASTRA POS</h1>
-          <p className="text-blue-200 text-xs xs:text-sm mt-1">Enterprise Point of Sale</p>
+      {/* ── Left branding panel (lg+) ─────────────────────────────────── */}
+      <div className="hidden lg:flex lg:w-[440px] xl:w-[500px] flex-col relative overflow-hidden flex-shrink-0 bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-700">
+        {/* Decorative circles */}
+        <div className="absolute -top-28 -right-28 w-80 h-80 rounded-full bg-white/[0.06]" />
+        <div className="absolute top-1/2 -left-20 w-56 h-56 rounded-full bg-white/[0.04]" />
+        <div className="absolute -bottom-16 -right-16 w-64 h-64 rounded-full bg-white/[0.05]" />
+        {/* Subtle grid pattern */}
+        <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.8) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.8) 1px,transparent 1px)', backgroundSize: '40px 40px' }} />
+
+        <div className="relative z-10 flex flex-col h-full p-10 xl:p-12">
+          {/* Logo row */}
+          <div className="flex items-center gap-3 mb-auto">
+            <div className="w-10 h-10 rounded-[10px] bg-white/15 border border-white/20 flex items-center justify-center shadow">
+              <img src="/logo.png" alt="" className="w-6 h-6 object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            </div>
+            <div>
+              <div className="text-white font-extrabold text-[15px] tracking-tight leading-tight">KASTRA POS</div>
+              <div className="text-blue-200/60 text-[10px] font-bold tracking-[0.2em] uppercase mt-[1px]">Enterprise</div>
+            </div>
+          </div>
+
+          {/* Headline */}
+          <div className="my-12">
+            <h1 className="text-4xl xl:text-[42px] font-extrabold text-white leading-[1.12] mb-4 tracking-tight">
+              Run your business<br />with confidence
+            </h1>
+            <p className="text-blue-100/65 text-[15px] leading-relaxed max-w-[340px]">
+              Enterprise POS built for Kenya — KRA eTIMS compliant, offline‑first, and ready to scale.
+            </p>
+          </div>
+
+          {/* Feature list */}
+          <div className="space-y-3">
+            {[
+              'KRA eTIMS compliant & KDPA ready',
+              'Works offline, syncs automatically',
+              'M-Pesa, card & split payments',
+              'Multi-store & franchise management',
+            ].map((f) => (
+              <div key={f} className="flex items-center gap-3 text-white/72 text-sm">
+                <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                {f}
+              </div>
+            ))}
+          </div>
+
+          <p className="text-blue-200/30 text-xs mt-10">Trusted by businesses across Kenya</p>
         </div>
+      </div>
 
-        {/* Mode toggle */}
-        <div className="flex border-b">
-          <button
-            onClick={() => { setMode('email'); setError(''); }}
-            className={`flex-1 py-2.5 xs:py-3 text-xs xs:text-sm font-medium transition-colors ${
-              mode === 'email'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                : 'text-gray-500 hover:bg-gray-50'
-            }`}
-          >
-            Sign In
-          </button>
-          <button
-            onClick={() => { setMode('register'); setRegError(''); setRegSuccess(false); }}
-            className={`flex-1 py-2.5 xs:py-3 text-xs xs:text-sm font-medium transition-colors ${
-              mode === 'register'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                : 'text-gray-500 hover:bg-gray-50'
-            }`}
-          >
-            Create Account
-          </button>
-          <button
-            onClick={() => { setMode('pin'); setError(''); }}
-            className={`flex-1 py-2.5 xs:py-3 text-xs xs:text-sm font-medium transition-colors ${
-              mode === 'pin'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                : 'text-gray-500 hover:bg-gray-50'
-            }`}
-          >
-            Staff PIN
-          </button>
-        </div>
+      {/* ── Right form panel ──────────────────────────────────────────── */}
+      <div className="flex-1 flex items-center justify-center p-4 xs:p-6 overflow-y-auto">
+        <div className="w-full max-w-sm py-8">
 
+          {/* Mobile logo (hidden when left panel is visible) */}
+          <div className="lg:hidden text-center mb-8">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-blue-500/25">
+              <img src="/logo.png" alt="" className="w-8 h-8 object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            </div>
+            <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white tracking-tight">KASTRA POS</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Enterprise Point of Sale</p>
+          </div>
+
+          {/* Pill-style mode tabs */}
+          <div className="flex bg-gray-100 dark:bg-gray-800/80 rounded-xl p-1 mb-5 gap-1">
+            {([
+              { id: 'email' as LoginMode,    label: 'Sign In' },
+              { id: 'pin' as LoginMode,      label: 'Staff PIN' },
+              { id: 'register' as LoginMode, label: 'Register' },
+            ]).map(({ id, label }) => (
+              <button
+                key={id}
+                onClick={() => { setMode(id); setError(''); setRegError(''); }}
+                className={`flex-1 py-2 rounded-lg text-xs xs:text-sm font-semibold transition-all duration-150 ${
+                  mode === id
+                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Form card */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-card border border-gray-200/80 dark:border-gray-700/60">
         <div className="p-6 xs:p-8">
 
           {/* ── Register mode ──────────────────────────────────────────────── */}
@@ -837,6 +886,8 @@ export default function LoginPage() {
             </div>
           )}
 
+        </div>
+          </div>
         </div>
       </div>
     </div>

@@ -556,7 +556,7 @@ export default function SupermarketPOSPage() {
       <div className="flex flex-1 overflow-hidden">
 
         {/* ════ LEFT PANEL ════ */}
-        <div className="flex flex-col flex-1 min-w-0 border-r border-slate-800">
+        <div className="flex flex-col flex-1 min-w-0 overflow-hidden border-r border-slate-800">
 
           {/* ── Scan bar ── */}
           <div className="px-4 py-3 bg-slate-900 border-b border-slate-800">
@@ -845,7 +845,7 @@ export default function SupermarketPOSPage() {
         </div>
 
         {/* ════ RIGHT PANEL — TRANSACTION ════ */}
-        <div className="flex flex-col w-80 lg:w-96 xl:w-[420px] shrink-0 bg-slate-900">
+        <div className="flex flex-col w-80 lg:w-96 xl:w-[420px] shrink-0 bg-slate-900 overflow-hidden">
 
           {/* Transaction header */}
           <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
@@ -877,7 +877,7 @@ export default function SupermarketPOSPage() {
           </div>
 
           {/* Cart — transaction tape */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto min-h-0">
             {cart.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-slate-700 py-16">
                 <ShoppingCart className="w-16 h-16 mb-4 opacity-20" />
@@ -956,13 +956,13 @@ export default function SupermarketPOSPage() {
           </div>
 
           {/* ── Totals panel ── */}
-          <div className="border-t border-slate-800 px-4 pt-3 pb-2 bg-slate-900 space-y-1.5">
-            <div className="flex justify-between text-sm text-slate-400">
-              <span>Subtotal ({cart.length} lines)</span>
-              <span className="font-mono tabular-nums text-slate-300">KES {fmt(subtotalCents)}</span>
+          <div className="border-t border-slate-700/60 px-4 pt-4 pb-3 bg-slate-900/80 space-y-2">
+            <div className="flex justify-between text-[13px] text-slate-500">
+              <span>Subtotal ({cart.length} line{cart.length !== 1 ? 's' : ''})</span>
+              <span className="font-mono tabular-nums text-slate-400">KES {fmt(subtotalCents)}</span>
             </div>
             {totalDiscountCents > 0 && (
-              <div className="flex justify-between text-sm text-emerald-400">
+              <div className="flex justify-between text-[13px] text-emerald-400">
                 <span className="flex items-center gap-1">
                   <ChevronUp className="w-3.5 h-3.5" />
                   {appliedPromotion?.name ?? 'Discount'}
@@ -970,14 +970,14 @@ export default function SupermarketPOSPage() {
                 <span className="font-mono tabular-nums">− KES {fmt(totalDiscountCents)}</span>
               </div>
             )}
-            <div className="flex justify-between text-xs text-slate-600">
+            <div className="flex justify-between text-[12px] text-slate-600">
               <span>VAT (16% incl.)</span>
               <span className="font-mono tabular-nums">KES {fmt(vatCents)}</span>
             </div>
-            <div className="flex justify-between items-baseline pt-2 border-t border-slate-700 mt-1">
-              <span className="text-slate-400 text-sm font-semibold uppercase tracking-wide">Total</span>
+            <div className="flex justify-between items-center pt-3 border-t border-slate-700/60 mt-1">
+              <span className="text-slate-400 text-[13px] font-bold uppercase tracking-widest">Total</span>
               <div className="text-right">
-                <span className="text-2xl font-black text-white tabular-nums">
+                <span className="text-[26px] font-black text-white tabular-nums leading-none">
                   KES {fmt(totalCents)}
                 </span>
               </div>
@@ -1019,7 +1019,7 @@ export default function SupermarketPOSPage() {
           </div>
 
           {/* ── Payment buttons ── */}
-          <div className="px-3 pb-3 pt-2 space-y-2 bg-slate-900">
+          <div className="px-4 pb-4 pt-2 space-y-2.5 bg-slate-900/80">
             {/* Primary charge button */}
             <button
               onClick={() => { if (cart.length > 0) setShowPayment(true); }}

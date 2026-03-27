@@ -18,7 +18,8 @@
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false,
     "paths": {
-      "@pos/shared": ["../../packages/shared/index.ts", "../../packages/shared/dist/index.js"]
+      "@pos/shared": ["../../packages/shared/dist/index"]
     }
-  }
+  },
+  "include": ["src/**/*"]
 }

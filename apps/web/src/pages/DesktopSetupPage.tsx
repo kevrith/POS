@@ -1,12 +1,18 @@
 /**
  * Desktop Installation Wizard — only shown in Tauri context on first launch.
  *
- * Steps:
- *  0  Welcome
- *  1  License Key (purchased customers enter KPS-XXXX key)
- *  2  Installation Mode (SERVER / CLIENT / STANDALONE)
- *  3  Client — enter server URL + test connection   [CLIENT only]
- *  4  Done → redirect to login
+ * Step flow:
+ *
+ *  STANDALONE / SERVER:   Welcome → License → Mode → Done
+ *  CLOUD:                 Welcome → License → Mode → Network → Done
+ *  CLIENT:                Welcome → License → Mode → Device Role → Network → Done
+ *
+ * Device roles (CLIENT only):
+ *   FULL_POS   — standard cashier terminal, full POS + inventory
+ *   CASHIER    — sales only, no management/settings
+ *   KIOSK      — customer self-service ordering (fullscreen /kiosk route)
+ *   KDS        — kitchen display only (fullscreen /kds route)
+ *   MANAGER    — back office, reports, settings — no POS
  */
 
 import { useState, useEffect } from 'react';
@@ -15,12 +21,10 @@ import { toast } from 'sonner';
 import {
   ShoppingCart, Key, Server, Monitor, Wifi, CheckCircle,
   ChevronRight, ChevronLeft, AlertCircle, Loader2, RefreshCw,
-  ArrowRight, Shield,
+  ArrowRight, Shield, Tablet, ChefHat, BarChart3, User,
 } from 'lucide-react';
 
 // ─── Tauri invoke shim ────────────────────────────────────────────────────────
-// We call Tauri commands through the global __TAURI__ object so the web build
-// does not need to import @tauri-apps/api (avoids build errors in non-Tauri env).
 
 declare global {
   interface Window {
@@ -31,161 +35,264 @@ declare global {
 }
 
 function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  if (window.__TAURI__) {
-    return window.__TAURI__.invoke<T>(cmd, args);
-  }
-  // Fallback for browser dev — simulate responses
-  if (cmd === 'get_machine_id') return Promise.resolve({ machine_id: 'dev-machine-001', hostname: 'localhost' } as T);
-  if (cmd === 'validate_license_key') return Promise.resolve(true as T);
-  if (cmd === 'get_setup_mode') return Promise.resolve({ mode: 'UNSET', server_url: null, store_id: null } as T);
-  if (cmd === 'set_setup_mode') return Promise.resolve(true as T);
+  if (window.__TAURI__) return window.__TAURI__.invoke<T>(cmd, args);
+  // Browser dev fallback
+  if (cmd === 'get_machine_id')         return Promise.resolve({ machine_id: 'dev-machine-001', hostname: 'localhost' } as T);
+  if (cmd === 'validate_license_key')   return Promise.resolve(true as T);
+  if (cmd === 'get_setup_mode')         return Promise.resolve({ mode: 'UNCONFIGURED' } as T);
+  if (cmd === 'set_setup_mode')         return Promise.resolve(true as T);
+  if (cmd === 'reset_setup')            return Promise.resolve(true as T);
   if (cmd === 'test_server_connection') return Promise.resolve(true as T);
-  if (cmd === 'discover_servers') return Promise.resolve([] as T);
-  if (cmd === 'get_cloud_url') return Promise.resolve('https://api.kastra.co.ke' as T);
+  if (cmd === 'discover_servers')       return Promise.resolve([] as T);
+  if (cmd === 'get_cloud_url')          return Promise.resolve('https://api.kastra.co.ke' as T);
   return Promise.resolve(null as T);
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Mode = 'SERVER' | 'CLIENT' | 'STANDALONE' | 'CLOUD';
-type Step = 0 | 1 | 2 | 3 | 4;
+type Topology   = 'STANDALONE' | 'SERVER' | 'CLIENT' | 'CLOUD';
+type DeviceRole = 'FULL_POS' | 'CASHIER' | 'KIOSK' | 'KDS' | 'MANAGER';
 
-interface DiscoveredServer {
-  ip: string;
-  port: number;
-  hostname: string;
-  url: string;
-}
+interface DiscoveredServer { ip: string; port: number; hostname: string; url: string; }
 
-interface SetupConfig {
-  mode: string;
-  server_url: string | null;
-  store_id: string | null;
-}
+// ─── Topology cards ───────────────────────────────────────────────────────────
 
-// ─── Mode cards ───────────────────────────────────────────────────────────────
-
-const MODES: Array<{
-  value: Mode;
+const TOPOLOGIES: Array<{
+  value: Topology;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   desc: string;
   details: string[];
+  badge?: string;
   color: string;
 }> = [
   {
     value: 'CLOUD',
-    label: 'Cloud',
+    label: 'Cloud (SaaS)',
     icon: ArrowRight,
-    desc: 'Connect to KASTRA Cloud — owner can monitor from anywhere.',
+    desc: 'Connect to KASTRA Cloud — data online, accessible from anywhere.',
     details: [
       'Data stored securely in the cloud',
-      'Owner dashboard accessible from any device',
-      'Multi-branch owners see all stores in one place',
+      'Owner can monitor all branches remotely',
       'Requires internet connection',
     ],
+    badge: 'Recommended',
     color: 'sky',
   },
   {
     value: 'STANDALONE',
-    label: 'Standalone',
+    label: 'All-in-One / Standalone',
     icon: Monitor,
-    desc: 'Single computer — everything on this machine.',
+    desc: 'Single computer — API, database and UI all on this machine.',
     details: [
-      'API + database run locally on this PC',
       'Works fully offline — no internet needed',
       'Best for single-cashier businesses',
+      'Simplest setup',
     ],
     color: 'blue',
   },
   {
     value: 'SERVER',
-    label: 'Server (LAN)',
+    label: 'LAN Server',
     icon: Server,
-    desc: 'This PC is the server. Other terminals connect via local network.',
+    desc: 'This PC hosts the database. Other terminals connect over your local network.',
     details: [
-      'Runs the API + database on this machine',
-      'Other PCs in same building connect via LAN',
+      'Runs API + database on this machine',
+      'Other PCs in the building connect as clients',
       'Works offline — no internet needed',
     ],
     color: 'purple',
   },
   {
     value: 'CLIENT',
-    label: 'Client (LAN)',
+    label: 'LAN Client / Kiosk',
     icon: Wifi,
-    desc: 'Connect to a KASTRA Server PC on your local network.',
+    desc: 'Connect to an existing KASTRA Server or Cloud — choose what role this device plays.',
     details: [
-      'This PC is a cashier terminal only',
-      'Data lives on the Server PC in your building',
+      'Can be a cashier terminal, kiosk, or KDS',
       'Requires a running KASTRA Server on the network',
+      'Device role chosen in the next step',
     ],
     color: 'emerald',
   },
 ];
 
-const COLOR_MAP: Record<string, string> = {
+// ─── Device Role cards ────────────────────────────────────────────────────────
+
+const DEVICE_ROLES: Array<{
+  value: DeviceRole;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  desc: string;
+  details: string[];
+  warning?: string;
+  color: string;
+}> = [
+  {
+    value: 'FULL_POS',
+    label: 'Full POS Terminal',
+    icon: ShoppingCart,
+    desc: 'Complete access — cashier, inventory, management.',
+    details: [
+      'Full POS, sales history, inventory',
+      'Access to reports and settings',
+      'Suitable for main cashier or manager workstation',
+    ],
+    color: 'blue',
+  },
+  {
+    value: 'CASHIER',
+    label: 'Cashier Only',
+    icon: User,
+    desc: 'Sales and payments only — management sections locked.',
+    details: [
+      'POS, checkout and payments',
+      'No inventory or settings access',
+      'Best for dedicated cashier station',
+    ],
+    color: 'indigo',
+  },
+  {
+    value: 'KIOSK',
+    label: 'Customer Kiosk Terminal',
+    icon: Tablet,
+    desc: 'This screen is primarily used for customer self-service ordering.',
+    details: [
+      'Normal POS login after setup',
+      'Staff can launch Kiosk Mode from the POS screen',
+      'Works for any business type — optional feature',
+    ],
+    color: 'orange',
+  },
+  {
+    value: 'KDS',
+    label: 'Kitchen Display (KDS)',
+    icon: ChefHat,
+    desc: 'This screen is primarily used by kitchen staff to view orders.',
+    details: [
+      'Normal login after setup',
+      'Staff can launch KDS fullscreen from the Hospitality screen',
+      'Ideal for restaurants with a dedicated kitchen monitor',
+    ],
+    color: 'red',
+  },
+  {
+    value: 'MANAGER',
+    label: 'Manager / Back Office',
+    icon: BarChart3,
+    desc: 'Reports, inventory, HR and settings — no POS.',
+    details: [
+      'Full access to reports, analytics',
+      'Inventory, suppliers, HR management',
+      'POS / checkout tabs hidden',
+    ],
+    color: 'purple',
+  },
+];
+
+// ─── Colour helpers ───────────────────────────────────────────────────────────
+
+const BORDER_BG: Record<string, string> = {
   sky:     'border-sky-500 bg-sky-50',
   blue:    'border-blue-500 bg-blue-50',
   purple:  'border-purple-500 bg-purple-50',
   emerald: 'border-emerald-500 bg-emerald-50',
+  indigo:  'border-indigo-500 bg-indigo-50',
+  orange:  'border-orange-500 bg-orange-50',
+  red:     'border-red-500 bg-red-50',
 };
-const ICON_COLOR: Record<string, string> = {
+const ICON_CLS: Record<string, string> = {
   sky:     'text-sky-600 bg-sky-100',
   blue:    'text-blue-600 bg-blue-100',
   purple:  'text-purple-600 bg-purple-100',
   emerald: 'text-emerald-600 bg-emerald-100',
+  indigo:  'text-indigo-600 bg-indigo-100',
+  orange:  'text-orange-600 bg-orange-100',
+  red:     'text-red-600 bg-red-100',
 };
 
-// ─── Step indicator ───────────────────────────────────────────────────────────
+// ─── Step bar ─────────────────────────────────────────────────────────────────
 
-const STEPS = ['Welcome', 'License', 'Mode', 'Network', 'Done'];
-
-function StepBar({ current, mode }: { current: Step; mode: Mode | null }) {
-  const visible = mode === 'CLIENT' ? STEPS : STEPS.filter((_, i) => i !== 3);
-  const adjusted = mode === 'CLIENT' ? current : current > 3 ? current - 1 : current;
+function StepBar({ steps, current }: { steps: string[]; current: number }) {
   return (
-    <div className="flex items-center gap-1 px-6 py-3 bg-gray-50 border-b">
-      {visible.map((label, i) => (
-        <div key={label} className="flex items-center flex-1">
-          <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-semibold transition-colors ${
-            i < adjusted ? 'text-green-600' : i === adjusted ? 'text-blue-600 bg-blue-50' : 'text-gray-400'
+    <div className="flex items-center gap-1 px-6 py-3 bg-gray-50/80 border-b border-gray-100">
+      {steps.map((label, i) => (
+        <div key={label} className="flex items-center flex-1 min-w-0">
+          <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-semibold transition-colors whitespace-nowrap ${
+            i < current
+              ? 'text-green-600'
+              : i === current
+              ? 'text-blue-600 bg-blue-50'
+              : 'text-gray-400'
           }`}>
-            {i < adjusted ? <CheckCircle className="w-3.5 h-3.5" /> : <span className="w-4 h-4 rounded-full border-2 border-current flex items-center justify-center text-[10px]">{i + 1}</span>}
+            {i < current
+              ? <CheckCircle className="w-3 h-3 flex-shrink-0" />
+              : <span className="w-3.5 h-3.5 rounded-full border-[1.5px] border-current flex items-center justify-center text-[9px] flex-shrink-0">{i + 1}</span>
+            }
             {label}
           </div>
-          {i < visible.length - 1 && <div className={`flex-1 h-px mx-1 ${i < adjusted ? 'bg-green-300' : 'bg-gray-200'}`} />}
+          {i < steps.length - 1 && (
+            <div className={`flex-1 h-px mx-1 ${i < current ? 'bg-green-300' : 'bg-gray-200'}`} />
+          )}
         </div>
       ))}
     </div>
   );
 }
 
+// ─── Wizard steps enum ────────────────────────────────────────────────────────
+
+const S = { WELCOME: 0, LICENSE: 1, TOPOLOGY: 2, ROLE: 3, NETWORK: 4, DONE: 5 } as const;
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function DesktopSetupPage() {
   const navigate = useNavigate();
 
-  const [step, setStep] = useState<Step>(0);
-  const [mode, setMode] = useState<Mode | null>(null);
-  const [licenseKey, setLicenseKey] = useState('');
-  const [licenseError, setLicenseError] = useState('');
-  const [licenseValid, setLicenseValid] = useState(false);
-  const [licenseLoading, setLicenseLoading] = useState(false);
-  const [machineId, setMachineId] = useState('');
-  const [serverUrl, setServerUrl] = useState('http://192.168.1.');
+  const [step,          setStep]          = useState<number>(S.WELCOME);
+  const [topology,      setTopology]      = useState<Topology | null>(null);
+  const [deviceRole,    setDeviceRole]    = useState<DeviceRole>('FULL_POS');
+  const [licenseKey,    setLicenseKey]    = useState('');
+  const [licenseError,  setLicenseError]  = useState('');
+  const [licenseValid,  setLicenseValid]  = useState(false);
+  const [licenseLoading,setLicenseLoading]= useState(false);
+  const [machineId,     setMachineId]     = useState('');
+  const [serverUrl,     setServerUrl]     = useState('http://192.168.1.');
   const [connectStatus, setConnectStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
-  const [scanning, setScanning] = useState(false);
-  const [discovered, setDiscovered] = useState<DiscoveredServer[]>([]);
-  const [cloudUrl, setCloudUrl] = useState('https://api.kastra.co.ke');
-  const [saving, setSaving] = useState(false);
+  const [scanning,      setScanning]      = useState(false);
+  const [discovered,    setDiscovered]    = useState<DiscoveredServer[]>([]);
+  const [cloudUrl,      setCloudUrl]      = useState('https://api.kastra.co.ke');
+  const [terminalName,  setTerminalName]  = useState('');
+  const [saving,        setSaving]        = useState(false);
 
-  // On mount: load machine ID, cloud URL, and check if already configured
+  /* Derive which steps to show in the step bar */
+  const visibleSteps = (() => {
+    if (!topology || topology === 'STANDALONE' || topology === 'SERVER')
+      return ['Welcome', 'License', 'Mode', 'Done'];
+    if (topology === 'CLOUD')
+      return ['Welcome', 'License', 'Mode', 'Network', 'Done'];
+    // CLIENT
+    return ['Welcome', 'License', 'Mode', 'Device Role', 'Network', 'Done'];
+  })();
+
+  /* Map wizard step index → step bar position */
+  const stepBarPos = (() => {
+    if (!topology || topology === 'STANDALONE' || topology === 'SERVER') {
+      return [0, 1, 2, -1, -1, 3][step] ?? step;
+    }
+    if (topology === 'CLOUD') {
+      return [0, 1, 2, -1, 3, 4][step] ?? step;
+    }
+    // CLIENT — all 6 steps map 1:1
+    return step;
+  })();
+
   useEffect(() => {
     void (async () => {
       try {
         const info = await invoke<{ machine_id: string; hostname: string }>('get_machine_id');
         setMachineId(info.machine_id);
+        setTerminalName(`Terminal-${info.hostname}`);
       } catch { /* ok */ }
 
       try {
@@ -193,34 +300,42 @@ export default function DesktopSetupPage() {
         if (url) setCloudUrl(url);
       } catch { /* ok */ }
 
+      // If already configured, redirect straight to app
       try {
-        const cfg = await invoke<SetupConfig>('get_setup_mode');
-        if (cfg.mode && cfg.mode !== 'UNSET' && cfg.mode !== 'STANDALONE') {
-          navigate('/');
-        }
+        const cfg = await invoke<{ mode: string }>('get_setup_mode');
+        if (cfg.mode && cfg.mode !== 'UNCONFIGURED') navigate('/');
       } catch { /* first run */ }
     })();
   }, [navigate]);
+
+  /* ── Handlers ─────────────────────────────────────────────────────────────── */
 
   async function validateLicense() {
     const key = licenseKey.trim().toUpperCase();
     if (!key) { setLicenseError('Please enter your license key.'); return; }
     if (!key.startsWith('KPS-')) { setLicenseError('License key must start with KPS-'); return; }
-
     setLicenseLoading(true);
     setLicenseError('');
     try {
       const valid = await invoke<boolean>('validate_license_key', { key, machineId });
-      if (valid) {
-        setLicenseValid(true);
-        setStep(2);
-      } else {
-        setLicenseError('Invalid license key. Please check the key or contact support.');
-      }
+      if (valid) { setLicenseValid(true); setStep(S.TOPOLOGY); }
+      else        setLicenseError('Invalid key. Please check the key or contact support.');
     } catch (e) {
       setLicenseError('Validation failed: ' + String(e));
     } finally {
       setLicenseLoading(false);
+    }
+  }
+
+  function afterTopology() {
+    if (!topology) return;
+    if (topology === 'STANDALONE' || topology === 'SERVER') {
+      setStep(S.DONE);          // No role or network step needed
+    } else if (topology === 'CLOUD') {
+      setServerUrl(cloudUrl);
+      setStep(S.NETWORK);       // Skip role for cloud
+    } else {
+      setStep(S.ROLE);          // CLIENT → choose role first
     }
   }
 
@@ -235,8 +350,7 @@ export default function DesktopSetupPage() {
   }
 
   async function scanForServers() {
-    setScanning(true);
-    setDiscovered([]);
+    setScanning(true); setDiscovered([]);
     try {
       const found = await invoke<DiscoveredServer[]>('discover_servers');
       setDiscovered(found);
@@ -251,75 +365,78 @@ export default function DesktopSetupPage() {
   async function finish() {
     setSaving(true);
     try {
-      const finalMode = mode ?? 'STANDALONE';
-      const finalUrl = (finalMode === 'CLIENT' || finalMode === 'CLOUD') ? serverUrl : null;
+      const finalTopology  = topology ?? 'STANDALONE';
+      const needsServerUrl = finalTopology === 'CLIENT' || finalTopology === 'CLOUD';
+      const role           = (finalTopology === 'STANDALONE' || finalTopology === 'SERVER')
+                               ? 'FULL_POS'
+                               : deviceRole;
 
       await invoke('set_setup_mode', {
-        mode: finalMode,
-        serverUrl: finalUrl,
-        storeId: null,
+        mode:         finalTopology,
+        deviceRole:   role,
+        serverUrl:    needsServerUrl ? serverUrl : null,
+        storeId:      null,
+        licenseKey:   licenseValid ? licenseKey : null,
+        terminalName: terminalName || null,
       });
 
-      // Store the server URL so api.ts routes calls correctly
-      if (finalUrl) {
-        localStorage.setItem('kastra-server-url', finalUrl);
-      } else {
-        localStorage.removeItem('kastra-server-url');
-      }
+      if (needsServerUrl) localStorage.setItem('kastra-server-url', serverUrl);
+      else                localStorage.removeItem('kastra-server-url');
 
       localStorage.setItem('desktop-setup-done', '1');
-      navigate('/');
+      localStorage.setItem('desktop-device-role', role);
+
+      // Always go to login first — staff logs in once to activate the terminal.
+      // After login, LoginPage reads desktop-device-role and redirects to the
+      // correct screen (kiosk, KDS, POS, etc.) with the correct businessId/storeId.
+      navigate('/login');
     } catch (e) {
-      toast.error('Failed to save configuration: ' + String(e));
+      toast.error('Failed to save: ' + String(e));
     } finally {
       setSaving(false);
     }
   }
 
-  const handleModeNext = () => {
-    if (!mode) return;
-    if (mode === 'CLIENT') {
-      setStep(3);       // LAN — show server scan/IP entry
-    } else if (mode === 'CLOUD') {
-      setServerUrl(cloudUrl);
-      setStep(3);       // Cloud — show connection test (URL pre-filled)
-    } else {
-      setStep(4);       // Standalone / Server — no network config needed
-    }
-  };
+  /* ── Render ───────────────────────────────────────────────────────────────── */
+
+  const selectedRole = DEVICE_ROLES.find((r) => r.value === deviceRole);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+    <div className="min-h-screen bg-[#0a0f1e] flex items-center justify-center p-4"
+         style={{ background: 'radial-gradient(ellipse 80% 60% at 50% 0%, #1e3a5f 0%, #0a0f1e 70%)' }}>
+      <div className="w-full max-w-[560px] bg-white rounded-2xl shadow-[0_32px_80px_rgba(0,0,0,0.5)] overflow-hidden">
 
-        {/* Step bar (hidden on welcome + done) */}
-        {step > 0 && step < 4 && <StepBar current={step} mode={mode} />}
+        {/* Step bar — hidden on welcome */}
+        {step > S.WELCOME && step < S.DONE && (
+          <StepBar steps={visibleSteps} current={stepBarPos} />
+        )}
 
         <div className="p-8">
 
-          {/* ── Step 0: Welcome ── */}
-          {step === 0 && (
+          {/* ── Step 0: Welcome ──────────────────────────────────────────── */}
+          {step === S.WELCOME && (
             <div className="text-center space-y-6">
-              <div className="w-20 h-20 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto shadow-lg">
+              <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-700 rounded-2xl flex items-center justify-center mx-auto shadow-lg">
                 <ShoppingCart className="w-10 h-10 text-white" />
               </div>
               <div>
-                <h1 className="text-3xl font-bold text-gray-900">KASTRA POS</h1>
-                <p className="text-gray-500 mt-1 text-sm">Enterprise Point of Sale — Desktop Edition</p>
+                <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">KASTRA POS</h1>
+                <p className="text-gray-500 mt-1 text-sm">Enterprise Point of Sale · Desktop Edition</p>
                 <div className="mt-3 inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 text-xs font-semibold px-3 py-1.5 rounded-full">
-                  <Shield className="w-3.5 h-3.5" /> First-time setup
+                  <Shield className="w-3.5 h-3.5" /> First-time installation wizard
                 </div>
               </div>
 
               <div className="text-left space-y-2">
                 {[
-                  { icon: Key,    label: 'License Activation', desc: 'Verify your purchase' },
-                  { icon: Server, label: 'Installation Mode',  desc: 'Standalone, Server, or Client' },
-                  { icon: CheckCircle, label: 'Ready to Launch', desc: 'Start taking sales' },
+                  { icon: Key,         label: 'License Activation',  desc: 'Verify your purchase (optional trial)' },
+                  { icon: Server,      label: 'Installation Mode',   desc: 'Standalone, Server, Client, or Cloud' },
+                  { icon: Tablet,      label: 'Device Role',         desc: 'POS terminal, kiosk, KDS, or back office' },
+                  { icon: CheckCircle, label: 'Ready to Launch',     desc: 'Start taking sales immediately' },
                 ].map(({ icon: Icon, label, desc }) => (
                   <div key={label} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50">
                     <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
-                      <Icon className="w-4.5 h-4.5 text-blue-600" />
+                      <Icon className="w-[18px] h-[18px] text-blue-600" />
                     </div>
                     <div>
                       <div className="text-sm font-semibold text-gray-800">{label}</div>
@@ -330,40 +447,33 @@ export default function DesktopSetupPage() {
               </div>
 
               <button
-                onClick={() => setStep(1)}
-                className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-lg flex items-center justify-center gap-2 transition-colors"
+                onClick={() => setStep(S.LICENSE)}
+                className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-[15px] flex items-center justify-center gap-2 transition-colors shadow-lg"
               >
                 Begin Setup <ChevronRight className="w-5 h-5" />
               </button>
             </div>
           )}
 
-          {/* ── Step 1: License Key ── */}
-          {step === 1 && (
+          {/* ── Step 1: License ──────────────────────────────────────────── */}
+          {step === S.LICENSE && (
             <div className="space-y-6">
               <div>
                 <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center mb-3">
                   <Key className="w-6 h-6 text-amber-600" />
                 </div>
                 <h2 className="text-xl font-bold text-gray-900">License Activation</h2>
-                <p className="text-gray-500 text-sm mt-1">
-                  Enter the license key from your purchase confirmation email.
-                </p>
+                <p className="text-gray-500 text-sm mt-1">Enter the license key from your purchase email.</p>
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  License Key
-                </label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">License Key</label>
                 <input
                   value={licenseKey}
-                  onChange={(e) => {
-                    setLicenseKey(e.target.value.toUpperCase());
-                    setLicenseError('');
-                  }}
+                  onChange={(e) => { setLicenseKey(e.target.value.toUpperCase()); setLicenseError(''); }}
                   onKeyDown={(e) => { if (e.key === 'Enter') void validateLicense(); }}
                   placeholder="KPS-XXXXXXXX-XXXXXXXX-XXXXXXXX"
-                  className="w-full border-2 rounded-xl px-4 py-3 font-mono text-sm tracking-widest focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full border-2 rounded-xl px-4 py-3 font-mono text-sm tracking-widest focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   autoFocus
                 />
                 {licenseError && (
@@ -378,15 +488,13 @@ export default function DesktopSetupPage() {
                 )}
               </div>
 
-              {/* Machine ID — shown so support can generate correct key */}
               <div className="bg-gray-50 rounded-xl p-3 space-y-1">
-                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Machine ID (for support)</div>
-                <div className="font-mono text-xs text-gray-700 break-all">{machineId || 'Loading…'}</div>
-                <div className="text-xs text-gray-400">Provide this to support if you need a license key generated for this machine.</div>
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Machine ID · for license generation</div>
+                <div className="font-mono text-xs text-gray-700 break-all select-all">{machineId || 'Loading…'}</div>
               </div>
 
               <div className="flex gap-3">
-                <button onClick={() => setStep(0)} className="px-4 py-2.5 border rounded-xl text-gray-600 hover:bg-gray-50 flex items-center gap-1">
+                <button onClick={() => setStep(S.WELCOME)} className="px-4 py-2.5 border rounded-xl text-gray-600 hover:bg-gray-50 flex items-center gap-1">
                   <ChevronLeft className="w-4 h-4" /> Back
                 </button>
                 <button
@@ -394,53 +502,59 @@ export default function DesktopSetupPage() {
                   disabled={licenseLoading || !licenseKey.trim()}
                   className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl disabled:opacity-40 flex items-center justify-center gap-2"
                 >
-                  {licenseLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Verifying…</> : <>Verify & Continue <ChevronRight className="w-4 h-4" /></>}
+                  {licenseLoading
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Verifying…</>
+                    : <>Verify & Continue <ChevronRight className="w-4 h-4" /></>
+                  }
                 </button>
               </div>
 
               <button
-                onClick={() => setStep(2)}
-                className="w-full text-xs text-gray-400 hover:text-gray-600 text-center py-1"
+                onClick={() => setStep(S.TOPOLOGY)}
+                className="w-full text-xs text-gray-400 hover:text-gray-600 py-1"
               >
                 Skip — I'll activate later (trial mode)
               </button>
             </div>
           )}
 
-          {/* ── Step 2: Installation Mode ── */}
-          {step === 2 && (
+          {/* ── Step 2: Topology ─────────────────────────────────────────── */}
+          {step === S.TOPOLOGY && (
             <div className="space-y-5">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">Installation Mode</h2>
-                <p className="text-gray-500 text-sm mt-1">How will this computer be used?</p>
+                <p className="text-gray-500 text-sm mt-1">How will this computer be used in your setup?</p>
               </div>
 
-              <div className="space-y-3">
-                {MODES.map((m) => (
+              <div className="space-y-2.5">
+                {TOPOLOGIES.map((t) => (
                   <button
-                    key={m.value}
-                    onClick={() => setMode(m.value)}
+                    key={t.value}
+                    onClick={() => setTopology(t.value)}
                     className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
-                      mode === m.value ? COLOR_MAP[m.color] : 'border-gray-200 hover:border-gray-300'
+                      topology === t.value ? BORDER_BG[t.color] : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50/60'
                     }`}
                   >
                     <div className="flex items-start gap-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${ICON_COLOR[m.color]}`}>
-                        <m.icon className="w-5 h-5" />
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${ICON_CLS[t.color]}`}>
+                        <t.icon className="w-5 h-5" />
                       </div>
                       <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-gray-800">{m.label}</span>
-                          {mode === m.value && <CheckCircle className="w-4 h-4 text-green-500" />}
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-[13px] text-gray-800">{t.label}</span>
+                          {t.badge && <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">{t.badge}</span>}
+                          {topology === t.value && <CheckCircle className="w-4 h-4 text-green-500 ml-auto" />}
                         </div>
-                        <p className="text-sm text-gray-500 mt-0.5">{m.desc}</p>
-                        <ul className="mt-2 space-y-0.5">
-                          {m.details.map((d) => (
-                            <li key={d} className="text-xs text-gray-400 flex items-center gap-1.5">
-                              <span className="w-1 h-1 rounded-full bg-gray-300 flex-shrink-0" />{d}
-                            </li>
-                          ))}
-                        </ul>
+                        <p className="text-xs text-gray-500 mt-0.5">{t.desc}</p>
+                        {topology === t.value && (
+                          <ul className="mt-2 space-y-0.5">
+                            {t.details.map((d) => (
+                              <li key={d} className="text-[11px] text-gray-400 flex items-center gap-1.5">
+                                <span className="w-1 h-1 rounded-full bg-gray-300 flex-shrink-0" />{d}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                       </div>
                     </div>
                   </button>
@@ -448,12 +562,12 @@ export default function DesktopSetupPage() {
               </div>
 
               <div className="flex gap-3 pt-1">
-                <button onClick={() => setStep(1)} className="px-4 py-2.5 border rounded-xl text-gray-600 hover:bg-gray-50 flex items-center gap-1">
+                <button onClick={() => setStep(S.LICENSE)} className="px-4 py-2.5 border rounded-xl text-gray-600 hover:bg-gray-50 flex items-center gap-1">
                   <ChevronLeft className="w-4 h-4" /> Back
                 </button>
                 <button
-                  onClick={handleModeNext}
-                  disabled={!mode}
+                  onClick={afterTopology}
+                  disabled={!topology}
                   className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl disabled:opacity-40 flex items-center justify-center gap-2"
                 >
                   Continue <ChevronRight className="w-4 h-4" />
@@ -462,109 +576,159 @@ export default function DesktopSetupPage() {
             </div>
           )}
 
-          {/* ── Step 3: Cloud / Client — Server connection ── */}
-          {step === 3 && (mode === 'CLIENT' || mode === 'CLOUD') && (
+          {/* ── Step 3: Device Role (CLIENT only) ────────────────────────── */}
+          {step === S.ROLE && (
             <div className="space-y-5">
               <div>
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 ${mode === 'CLOUD' ? 'bg-sky-100' : 'bg-emerald-100'}`}>
-                  {mode === 'CLOUD'
+                <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center mb-3">
+                  <Tablet className="w-6 h-6 text-emerald-600" />
+                </div>
+                <h2 className="text-xl font-bold text-gray-900">Device Role</h2>
+                <p className="text-gray-500 text-sm mt-1">
+                  What will this terminal be used for? This controls which screens are visible and how the app launches.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                {DEVICE_ROLES.map((r) => (
+                  <button
+                    key={r.value}
+                    onClick={() => setDeviceRole(r.value)}
+                    className={`w-full text-left p-3.5 rounded-xl border-2 transition-all ${
+                      deviceRole === r.value ? BORDER_BG[r.color] : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${ICON_CLS[r.color]}`}>
+                        <r.icon className="w-4.5 h-4.5" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-[13px] text-gray-800">{r.label}</span>
+                          {deviceRole === r.value && <CheckCircle className="w-4 h-4 text-green-500" />}
+                        </div>
+                        <p className="text-[11px] text-gray-500 mt-0.5">{r.desc}</p>
+                        {deviceRole === r.value && r.warning && (
+                          <div className="mt-1.5 flex items-start gap-1.5 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                            <AlertCircle className="w-3 h-3 text-amber-500 flex-shrink-0 mt-0.5" />
+                            <span className="text-[11px] text-amber-700">{r.warning}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex gap-3 pt-1">
+                <button onClick={() => setStep(S.TOPOLOGY)} className="px-4 py-2.5 border rounded-xl text-gray-600 hover:bg-gray-50 flex items-center gap-1">
+                  <ChevronLeft className="w-4 h-4" /> Back
+                </button>
+                <button
+                  onClick={() => setStep(S.NETWORK)}
+                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-2"
+                >
+                  Continue <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 4: Network / Server URL ─────────────────────────────── */}
+          {step === S.NETWORK && (topology === 'CLIENT' || topology === 'CLOUD') && (
+            <div className="space-y-5">
+              <div>
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 ${topology === 'CLOUD' ? 'bg-sky-100' : 'bg-emerald-100'}`}>
+                  {topology === 'CLOUD'
                     ? <ArrowRight className="w-6 h-6 text-sky-600" />
                     : <Wifi className="w-6 h-6 text-emerald-600" />
                   }
                 </div>
                 <h2 className="text-xl font-bold text-gray-900">
-                  {mode === 'CLOUD' ? 'Connect to KASTRA Cloud' : 'Connect to LAN Server'}
+                  {topology === 'CLOUD' ? 'Connect to KASTRA Cloud' : 'Connect to LAN Server'}
                 </h2>
                 <p className="text-gray-500 text-sm mt-1">
-                  {mode === 'CLOUD'
-                    ? 'Your data will be stored in the cloud. The owner can monitor all branches from anywhere.'
-                    : 'Scan your network to find a KASTRA Server automatically, or enter the IP manually.'
-                  }
+                  {topology === 'CLOUD'
+                    ? 'Your data is stored securely in the cloud.'
+                    : 'Find the KASTRA Server on your network or enter its IP manually.'}
                 </p>
               </div>
 
-              {/* Cloud mode: show pre-filled URL with info box */}
-              {mode === 'CLOUD' && (
-                <div className="bg-sky-50 border border-sky-200 rounded-xl p-4 space-y-2">
-                  <div className="flex items-center gap-2 text-sky-700 font-semibold text-sm">
-                    <Shield className="w-4 h-4" /> KASTRA Cloud Server
+              {topology === 'CLOUD' && (
+                <div className="bg-sky-50 border border-sky-200 rounded-xl p-4">
+                  <div className="flex items-center gap-2 text-sky-700 font-semibold text-sm mb-1">
+                    <Shield className="w-4 h-4" /> KASTRA Cloud
                   </div>
-                  <div className="font-mono text-sm text-sky-800 bg-white border border-sky-200 rounded-lg px-3 py-2">
-                    {cloudUrl}
-                  </div>
-                  <p className="text-xs text-sky-600">
-                    This is the official KASTRA cloud server. Your business data is isolated and encrypted — other businesses cannot see your data.
-                  </p>
+                  <div className="font-mono text-sm text-sky-800 bg-white border border-sky-200 rounded-lg px-3 py-2">{cloudUrl}</div>
+                  <p className="text-xs text-sky-600 mt-1">Official cloud server — your data is isolated and encrypted.</p>
                 </div>
               )}
 
-              {/* LAN mode: auto-scan */}
-              {mode === 'CLIENT' && (
-              <button
-                onClick={() => void scanForServers()}
-                disabled={scanning}
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {scanning
-                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Scanning network… (2s)</>
-                  : <><RefreshCw className="w-4 h-4" /> Scan for KASTRA Servers</>
-                }
-              </button>
+              {topology === 'CLIENT' && (
+                <>
+                  <button
+                    onClick={() => void scanForServers()}
+                    disabled={scanning}
+                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {scanning
+                      ? <><Loader2 className="w-4 h-4 animate-spin" /> Scanning…</>
+                      : <><RefreshCw className="w-4 h-4" /> Scan for KASTRA Servers</>
+                    }
+                  </button>
+
+                  {discovered.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{discovered.length} server{discovered.length > 1 ? 's' : ''} found</p>
+                      {discovered.map((s) => (
+                        <button
+                          key={s.url}
+                          onClick={() => { setServerUrl(s.url); setConnectStatus('idle'); }}
+                          className={`w-full text-left p-3 rounded-xl border-2 transition-all ${serverUrl === s.url ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 hover:border-emerald-300'}`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="font-semibold text-sm">{s.hostname}</div>
+                              <div className="font-mono text-xs text-gray-500">{s.url}</div>
+                            </div>
+                            {serverUrl === s.url && <CheckCircle className="w-4 h-4 text-emerald-500" />}
+                          </div>
+                        </button>
+                      ))}
+                      <div className="border-t border-dashed border-gray-200 pt-1" />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Server URL</label>
+                    <input
+                      value={serverUrl}
+                      onChange={(e) => { setServerUrl(e.target.value); setConnectStatus('idle'); }}
+                      placeholder="http://192.168.1.100:3010"
+                      className="w-full border-2 rounded-xl px-4 py-3 font-mono text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Find the IP in Settings → General on the Server PC.</p>
+                  </div>
+                </>
               )}
 
-              {/* Discovered servers list — LAN only */}
-              {mode === 'CLIENT' && discovered.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    {discovered.length} server{discovered.length > 1 ? 's' : ''} found
-                  </p>
-                  {discovered.map((s) => (
-                    <button
-                      key={s.url}
-                      onClick={() => { setServerUrl(s.url); setConnectStatus('idle'); }}
-                      className={`w-full text-left p-3 rounded-xl border-2 transition-all ${
-                        serverUrl === s.url
-                          ? 'border-emerald-500 bg-emerald-50'
-                          : 'border-gray-200 hover:border-emerald-300'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-semibold text-sm text-gray-800">{s.hostname}</div>
-                          <div className="font-mono text-xs text-gray-500">{s.url}</div>
-                        </div>
-                        {serverUrl === s.url && <CheckCircle className="w-4 h-4 text-emerald-500" />}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {mode === 'CLIENT' && discovered.length > 0 && <div className="border-t border-dashed border-gray-200 pt-1" />}
-
-              {/* Manual entry — LAN only (Cloud URL is fixed) */}
-              {mode === 'CLIENT' && (
+              {/* Terminal name */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
-                  Or enter server URL manually
-                </label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Terminal Name <span className="text-gray-400 font-normal">(optional)</span></label>
                 <input
-                  value={serverUrl}
-                  onChange={(e) => { setServerUrl(e.target.value); setConnectStatus('idle'); }}
-                  placeholder="http://192.168.1.100:3010"
-                  className="w-full border-2 rounded-xl px-4 py-3 font-mono text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  value={terminalName}
+                  onChange={(e) => setTerminalName(e.target.value)}
+                  placeholder="e.g. Cashier-1, Kiosk-Main-Entrance"
+                  className="w-full border-2 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 />
-                <p className="text-xs text-gray-400 mt-1">
-                  Find the IP in Settings → General on the Server PC.
-                </p>
+                <p className="text-xs text-gray-400 mt-1">Shown in the admin panel so you can identify which terminal is which.</p>
               </div>
-              )}
 
               {/* Test connection */}
               <button
                 onClick={() => void testConnection()}
                 disabled={connectStatus === 'testing' || !serverUrl.trim()}
-                className="w-full py-2.5 border-2 border-emerald-500 text-emerald-700 font-semibold rounded-xl hover:bg-emerald-50 disabled:opacity-40 flex items-center justify-center gap-2"
+                className="w-full py-2.5 border-2 border-blue-400 text-blue-700 font-semibold rounded-xl hover:bg-blue-50 disabled:opacity-40 flex items-center justify-center gap-2"
               >
                 {connectStatus === 'testing'
                   ? <><Loader2 className="w-4 h-4 animate-spin" /> Testing…</>
@@ -575,24 +739,27 @@ export default function DesktopSetupPage() {
               {connectStatus === 'ok' && (
                 <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-xl text-sm text-green-700">
                   <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                  Connected successfully to <span className="font-mono font-semibold ml-1">{serverUrl}</span>
+                  Connected to <span className="font-mono font-semibold ml-1">{serverUrl}</span>
                 </div>
               )}
               {connectStatus === 'fail' && (
                 <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  Cannot reach server. Check the IP and ensure the Server is running.
+                  Cannot reach server. Check the IP and ensure the server is running.
                 </div>
               )}
 
               <div className="flex gap-3 pt-1">
-                <button onClick={() => setStep(2)} className="px-4 py-2.5 border rounded-xl text-gray-600 hover:bg-gray-50 flex items-center gap-1">
+                <button
+                  onClick={() => setStep(topology === 'CLIENT' ? S.ROLE : S.TOPOLOGY)}
+                  className="px-4 py-2.5 border rounded-xl text-gray-600 hover:bg-gray-50 flex items-center gap-1"
+                >
                   <ChevronLeft className="w-4 h-4" /> Back
                 </button>
                 <button
-                  onClick={() => setStep(4)}
+                  onClick={() => setStep(S.DONE)}
                   disabled={connectStatus !== 'ok'}
-                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl disabled:opacity-40 flex items-center justify-center gap-2"
+                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl disabled:opacity-40 flex items-center justify-center gap-2"
                 >
                   Continue <ChevronRight className="w-4 h-4" />
                 </button>
@@ -600,55 +767,84 @@ export default function DesktopSetupPage() {
             </div>
           )}
 
-          {/* ── Step 4: Done ── */}
-          {step === 4 && (
+          {/* ── Step 5: Done ─────────────────────────────────────────────── */}
+          {step === S.DONE && (
             <div className="text-center space-y-6">
               <div className="w-20 h-20 bg-green-100 rounded-2xl flex items-center justify-center mx-auto">
                 <CheckCircle className="w-12 h-12 text-green-600" />
               </div>
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">Setup Complete!</h2>
-                <p className="text-gray-500 text-sm mt-2">
-                  KASTRA POS is configured as a{' '}
-                  <span className="font-semibold text-gray-700">
-                    {mode === 'CLOUD' ? 'Cloud' : mode === 'SERVER' ? 'LAN Server' : mode === 'CLIENT' ? 'LAN Client' : 'Standalone'}
-                  </span>{' '}
-                  installation.
-                </p>
-                {mode === 'CLOUD' && (
-                  <div className="mt-2 bg-sky-50 border border-sky-200 rounded-xl p-3 text-left space-y-1">
-                    <p className="text-xs text-sky-700 font-semibold">✓ Connected to KASTRA Cloud</p>
-                    <p className="text-xs text-sky-600">
-                      Your data is stored securely online. The business owner can monitor all branches by logging in at:
-                    </p>
-                    <p className="font-mono text-xs text-sky-800 bg-white border border-sky-200 rounded px-2 py-1">
-                      {serverUrl.replace('/api/v1', '').replace(':3010', '')}
-                    </p>
-                    <p className="text-xs text-sky-500">from any browser, anywhere.</p>
+                <p className="text-gray-500 text-sm mt-2">This terminal is configured as:</p>
+              </div>
+
+              {/* Summary card */}
+              <div className="text-left bg-gray-50 rounded-2xl border border-gray-200 divide-y divide-gray-200 overflow-hidden">
+                <div className="px-4 py-3 flex items-center justify-between">
+                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Mode</span>
+                  <span className="text-sm font-semibold text-gray-800">
+                    {topology === 'CLOUD' ? 'Cloud (SaaS)'
+                      : topology === 'SERVER' ? 'LAN Server'
+                      : topology === 'CLIENT' ? 'LAN Client'
+                      : 'Standalone'}
+                  </span>
+                </div>
+                <div className="px-4 py-3 flex items-center justify-between">
+                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Device Role</span>
+                  <span className={`text-sm font-semibold ${
+                    deviceRole === 'KIOSK' ? 'text-orange-600'
+                    : deviceRole === 'KDS'  ? 'text-red-600'
+                    : 'text-blue-700'
+                  }`}>
+                    {selectedRole?.label ?? deviceRole}
+                  </span>
+                </div>
+                {(topology === 'CLIENT' || topology === 'CLOUD') && (
+                  <div className="px-4 py-3 flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Server</span>
+                    <span className="text-xs font-mono text-gray-700 truncate max-w-[260px]">{serverUrl}</span>
                   </div>
                 )}
-                {mode === 'SERVER' && (
-                  <p className="text-xs text-purple-600 mt-2 bg-purple-50 rounded-lg p-2">
-                    Other cashier PCs on your network can connect to this machine.
-                    Find your IP in Settings → General after logging in.
-                  </p>
+                {terminalName && (
+                  <div className="px-4 py-3 flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Terminal Name</span>
+                    <span className="text-sm font-semibold text-gray-800">{terminalName}</span>
+                  </div>
                 )}
-                {mode === 'CLIENT' && (
-                  <p className="text-xs text-emerald-700 mt-2 bg-emerald-50 rounded-lg p-2">
-                    Connected to LAN server: <span className="font-mono font-bold">{serverUrl}</span>
-                  </p>
-                )}
+                <div className="px-4 py-3 flex items-center justify-between">
+                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">License</span>
+                  <span className={`text-sm font-semibold ${licenseValid ? 'text-green-600' : 'text-amber-600'}`}>
+                    {licenseValid ? 'Activated' : 'Trial mode'}
+                  </span>
+                </div>
               </div>
+
+              {(deviceRole === 'KIOSK' || deviceRole === 'KDS') && (
+                <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-xl text-left">
+                  <CheckCircle className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                  <div className="text-xs text-blue-700">
+                    After login you'll land on the normal{' '}
+                    {deviceRole === 'KIOSK' ? 'POS screen. You can launch Kiosk Mode at any time from the POS toolbar.' : 'dashboard. You can launch KDS fullscreen from the Hospitality screen.'}
+                  </div>
+                </div>
+              )}
 
               <button
                 onClick={() => void finish()}
                 disabled={saving}
-                className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-lg flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-[15px] flex items-center justify-center gap-2 transition-colors disabled:opacity-50 shadow-lg"
               >
                 {saving
-                  ? <><Loader2 className="w-5 h-5 animate-spin" /> Saving…</>
+                  ? <><Loader2 className="w-5 h-5 animate-spin" /> Launching…</>
                   : <><ArrowRight className="w-5 h-5" /> Launch KASTRA POS</>
                 }
+              </button>
+
+              <button
+                onClick={() => setStep(topology === 'CLIENT' || topology === 'CLOUD' ? S.NETWORK : S.TOPOLOGY)}
+                className="w-full text-xs text-gray-400 hover:text-gray-600 py-1"
+              >
+                ← Go back and change something
               </button>
             </div>
           )}

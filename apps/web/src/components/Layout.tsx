@@ -7,7 +7,7 @@ import {
   Tag, Gift, Sun, Moon, Monitor, Wand2, ArrowRightLeft, LayoutDashboard,
   AlertTriangle, X, Pill, CalendarClock, TrendingUp, GitBranch, Landmark,
   Fuel, Lock, BedDouble, CheckCircle2, Trash2, Radio, BookOpen,
-  Link2, FileText, Clock, Send, Tablet, Shield,
+  Link2, FileText, Clock, Send, Shield, Tablet,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { api, getToken } from '../lib/api';
@@ -55,7 +55,7 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
       { to: '/supermart', icon: ShoppingCart, label: 'Supermarket POS', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['SUPERMARKET'] },
       { to: '/hospitality', icon: Coffee, label: 'Hospitality', roles: ['OWNER', 'MANAGER', 'WAITER'], businessTypes: ['HOSPITALITY', 'FAST_FOOD'] },
       { to: '/kds', icon: Monitor, label: 'Kitchen Display', roles: ['OWNER', 'MANAGER', 'WAITER', 'KITCHEN'], businessTypes: ['HOSPITALITY', 'FAST_FOOD'] },
-      { to: '/kiosk', icon: Tablet, label: 'Kiosk Mode', roles: ['OWNER', 'MANAGER'], newTab: true },
+      // Kiosk mode is launched from within the POS page (not a permanent nav item)
       { to: '/layaway', icon: Layers, label: 'Layaway', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['RETAIL', 'SUPERMARKET'] },
       { to: '/proforma', icon: CreditCard, label: 'Proformas', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
       { to: '/prescriptions', icon: Pill, label: 'Prescriptions', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['CLINIC'] },
@@ -169,6 +169,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { isDark, toggle: toggleTheme } = useThemeStore();
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [trialBannerDismissed, setTrialBannerDismissed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const { data: subscription } = useQuery<{
     subscriptionStatus: string;
@@ -325,6 +326,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       else next.add(label);
       return next;
     });
+
+  // Current page label + icon for the top header bar
+  const currentPageInfo = (() => {
+    const allItems = NAV_GROUPS.flatMap((g) => g.items);
+    const match = allItems.find((item) => isActive(item.to));
+    if (match) return { label: match.label, Icon: match.icon };
+    if (location.pathname === '/notifications') return { label: 'Notifications', Icon: Bell };
+    if (location.pathname.startsWith('/settings'))   return { label: 'Settings',      Icon: Settings };
+    if (location.pathname.startsWith('/setup'))      return { label: 'Setup Wizard',  Icon: Wand2 };
+    return { label: 'Dashboard', Icon: LayoutDashboard };
+  })();
 
   const canSee = (roles?: string[]) => !roles || roles.includes(userRole);
   const canSeeBusinessType = (businessTypes?: string[]) =>
@@ -517,9 +529,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   <div className="space-y-[2px]">
                     {group.items.map((item) => {
                       const active = isActive(item.to);
-                      const navCls = `group flex items-center gap-2.5 px-2 py-[6px] rounded-lg text-[13px] font-medium transition-all duration-150 ${
+                      const navCls = `group flex items-center gap-2.5 px-2 py-[7px] rounded-lg text-[13px] font-medium transition-all duration-150 ${
                         active
-                          ? 'bg-blue-600/[0.09] dark:bg-blue-500/[0.14] text-blue-700 dark:text-blue-300'
+                          ? 'bg-blue-600/[0.10] dark:bg-blue-500/[0.16] text-blue-700 dark:text-blue-300 shadow-[inset_2px_0_0_#3b82f6] dark:shadow-[inset_2px_0_0_#60a5fa]'
                           : 'text-gray-500/90 dark:text-white/38 hover:text-gray-800 dark:hover:text-white/75 hover:bg-gray-900/[0.04] dark:hover:bg-white/[0.05]'
                       }`;
                       const navInner = (
@@ -579,65 +591,33 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {/* Separator above footer */}
           <div className="mx-0.5 mb-2 h-px bg-gray-200/70 dark:bg-white/[0.055]" />
 
-          {/* Footer actions grouped in a card */}
+          {/* Footer actions */}
           <div className="rounded-xl bg-white/70 dark:bg-white/[0.035] border border-gray-200/60 dark:border-white/[0.07] overflow-hidden divide-y divide-gray-200/50 dark:divide-white/[0.05]">
-
-            {/* Notifications */}
-            <Link
-              to="/notifications"
-              className={`group flex items-center gap-2.5 px-3 py-[8px] text-[13px] font-medium transition-colors duration-150 ${
-                isActive('/notifications')
-                  ? 'bg-blue-600/[0.09] dark:bg-blue-500/[0.14] text-blue-700 dark:text-blue-300'
-                  : 'text-gray-500 dark:text-white/42 hover:text-gray-800 dark:hover:text-white/75 hover:bg-gray-50 dark:hover:bg-white/[0.05]'
-              }`}
-            >
-              <div className={`flex-shrink-0 flex items-center justify-center w-[26px] h-[26px] rounded-md transition-all duration-150 ${
-                isActive('/notifications')
-                  ? 'bg-blue-600/[0.12] dark:bg-blue-400/[0.18]'
-                  : 'bg-transparent group-hover:bg-gray-900/[0.05] dark:group-hover:bg-white/[0.07]'
-              }`}>
-                <Bell className={`w-[14px] h-[14px] ${isActive('/notifications') ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-white/32 group-hover:text-gray-600 dark:group-hover:text-white/60'}`} />
-              </div>
-              <span className="flex-1">Notifications</span>
-              {unreadCount > 0 && (
-                <div className="flex-shrink-0 flex items-center justify-center min-w-[16px] h-4 bg-red-500 rounded-full px-1 text-[10px] font-bold text-white shadow-sm shadow-red-500/40">
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </div>
-              )}
-            </Link>
 
             {showSettings && (
               <>
                 <Link
                   to="/settings"
-                  className={`group flex items-center gap-2.5 px-3 py-[8px] text-[13px] font-medium transition-colors duration-150 ${
+                  className={`group flex items-center gap-2.5 px-3 py-[8px] text-[13px] font-medium transition-all duration-150 ${
                     isActive('/settings')
-                      ? 'bg-blue-600/[0.09] dark:bg-blue-500/[0.14] text-blue-700 dark:text-blue-300'
+                      ? 'bg-blue-600/[0.09] dark:bg-blue-500/[0.14] text-blue-700 dark:text-blue-300 shadow-[inset_2px_0_0_#3b82f6] dark:shadow-[inset_2px_0_0_#60a5fa]'
                       : 'text-gray-500 dark:text-white/42 hover:text-gray-800 dark:hover:text-white/75 hover:bg-gray-50 dark:hover:bg-white/[0.05]'
                   }`}
                 >
-                  <div className={`flex-shrink-0 flex items-center justify-center w-[26px] h-[26px] rounded-md transition-all duration-150 ${
-                    isActive('/settings')
-                      ? 'bg-blue-600/[0.12] dark:bg-blue-400/[0.18]'
-                      : 'bg-transparent group-hover:bg-gray-900/[0.05] dark:group-hover:bg-white/[0.07]'
-                  }`}>
+                  <div className={`flex-shrink-0 flex items-center justify-center w-[26px] h-[26px] rounded-md transition-all duration-150 ${isActive('/settings') ? 'bg-blue-600/[0.12] dark:bg-blue-400/[0.18]' : 'bg-transparent group-hover:bg-gray-900/[0.05] dark:group-hover:bg-white/[0.07]'}`}>
                     <Settings className={`w-[14px] h-[14px] group-hover:rotate-90 transition-all duration-300 ${isActive('/settings') ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-white/32 group-hover:text-gray-600 dark:group-hover:text-white/60'}`} />
                   </div>
                   <span className="flex-1">Settings</span>
                 </Link>
                 <Link
                   to="/setup"
-                  className={`group flex items-center gap-2.5 px-3 py-[8px] text-[13px] font-medium transition-colors duration-150 ${
+                  className={`group flex items-center gap-2.5 px-3 py-[8px] text-[13px] font-medium transition-all duration-150 ${
                     isActive('/setup')
-                      ? 'bg-blue-600/[0.09] dark:bg-blue-500/[0.14] text-blue-700 dark:text-blue-300'
+                      ? 'bg-blue-600/[0.09] dark:bg-blue-500/[0.14] text-blue-700 dark:text-blue-300 shadow-[inset_2px_0_0_#3b82f6] dark:shadow-[inset_2px_0_0_#60a5fa]'
                       : 'text-gray-500 dark:text-white/42 hover:text-gray-800 dark:hover:text-white/75 hover:bg-gray-50 dark:hover:bg-white/[0.05]'
                   }`}
                 >
-                  <div className={`flex-shrink-0 flex items-center justify-center w-[26px] h-[26px] rounded-md transition-all duration-150 ${
-                    isActive('/setup')
-                      ? 'bg-blue-600/[0.12] dark:bg-blue-400/[0.18]'
-                      : 'bg-transparent group-hover:bg-gray-900/[0.05] dark:group-hover:bg-white/[0.07]'
-                  }`}>
+                  <div className={`flex-shrink-0 flex items-center justify-center w-[26px] h-[26px] rounded-md transition-all duration-150 ${isActive('/setup') ? 'bg-blue-600/[0.12] dark:bg-blue-400/[0.18]' : 'bg-transparent group-hover:bg-gray-900/[0.05] dark:group-hover:bg-white/[0.07]'}`}>
                     <Wand2 className={`w-[14px] h-[14px] ${isActive('/setup') ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-white/32 group-hover:text-gray-600 dark:group-hover:text-white/60'}`} />
                   </div>
                   <span className="flex-1">Setup Wizard</span>
@@ -645,24 +625,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </>
             )}
 
-            {/* Theme toggle */}
-            <button
-              onClick={toggleTheme}
-              className="w-full group flex items-center gap-2.5 px-3 py-[8px] text-[13px] font-medium text-gray-500 dark:text-white/42 hover:text-gray-800 dark:hover:text-white/75 hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors duration-150"
-            >
-              <div className="flex-shrink-0 flex items-center justify-center w-[26px] h-[26px] rounded-md bg-transparent group-hover:bg-gray-900/[0.05] dark:group-hover:bg-white/[0.07] transition-all duration-150">
-                {isDark
-                  ? <Sun className="w-[14px] h-[14px] text-amber-500 group-hover:rotate-12 transition-transform duration-300" />
-                  : <Moon className="w-[14px] h-[14px] text-gray-400 group-hover:text-indigo-500 transition-colors duration-200" />
-                }
-              </div>
-              <span className="flex-1 text-left">{isDark ? 'Light Mode' : 'Dark Mode'}</span>
-            </button>
-
-            {/* Sign out — danger-tinted */}
+            {/* Sign out */}
             <button
               onClick={logout}
-              className="w-full group flex items-center gap-2.5 px-3 py-[8px] text-[13px] font-medium text-gray-400 dark:text-white/32 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50/80 dark:hover:bg-red-500/[0.07] transition-colors duration-150"
+              className="w-full group flex items-center gap-2.5 px-3 py-[8px] text-[13px] font-medium text-gray-400 dark:text-white/32 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50/80 dark:hover:bg-red-500/[0.07] transition-all duration-150"
             >
               <div className="flex-shrink-0 flex items-center justify-center w-[26px] h-[26px] rounded-md bg-transparent group-hover:bg-red-100/60 dark:group-hover:bg-red-500/10 transition-all duration-150">
                 <LogOut className="w-[14px] h-[14px] group-hover:translate-x-0.5 transition-transform duration-200" />
@@ -675,8 +641,65 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* ── Content area ────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <MobileNav />
+        <MobileNav isOpen={mobileMenuOpen} onOpen={() => setMobileMenuOpen(true)} onClose={() => setMobileMenuOpen(false)} />
         <OfflineBanner />
+
+        {/* ── Top header bar (desktop) ──────────────────────────────────── */}
+        <header className="hidden md:flex items-center justify-between px-5 h-[52px] bg-white/95 dark:bg-[#0d1117]/95 backdrop-blur-sm border-b border-gray-200/60 dark:border-white/[0.055] flex-shrink-0 z-10">
+          {/* Page title */}
+          <div className="flex items-center gap-2.5">
+            <div className="w-6 h-6 rounded-md bg-gray-100 dark:bg-white/[0.07] flex items-center justify-center flex-shrink-0">
+              <currentPageInfo.Icon className="w-3.5 h-3.5 text-gray-500 dark:text-white/40" />
+            </div>
+            <h1 className="text-[14px] font-bold text-gray-800 dark:text-white/90 tracking-tight">{currentPageInfo.label}</h1>
+          </div>
+          {/* Actions */}
+          <div className="flex items-center gap-0.5">
+            {/* Kiosk launcher — optional, only shown to owners/managers */}
+            {(user?.role === 'OWNER' || user?.role === 'MANAGER') && (
+              <button
+                onClick={() => {
+                  const token = getToken();
+                  if (token) localStorage.setItem('kiosk-tab-token', token);
+                  window.open(
+                    `/kiosk?businessId=${user.businessId ?? ''}&storeId=${user.storeId ?? ''}`,
+                    '_blank',
+                    'noopener',
+                  );
+                }}
+                title="Launch Kiosk Mode (opens in new tab)"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-gray-400 dark:text-white/30 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all duration-150 mr-1"
+              >
+                <Tablet className="w-3.5 h-3.5" />
+                Kiosk
+              </button>
+            )}
+            <Link
+              to="/notifications"
+              className="relative p-2 rounded-lg text-gray-400 dark:text-white/30 hover:bg-gray-100 dark:hover:bg-white/[0.06] hover:text-gray-600 dark:hover:text-white/65 transition-all duration-150"
+              title="Notifications"
+            >
+              <Bell className="w-[15px] h-[15px]" />
+              {unreadCount > 0 && (
+                <span className="absolute top-[7px] right-[7px] w-[7px] h-[7px] rounded-full bg-red-500 border-[1.5px] border-white dark:border-[#0d1117]" />
+              )}
+            </Link>
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-lg text-gray-400 dark:text-white/30 hover:bg-gray-100 dark:hover:bg-white/[0.06] hover:text-gray-600 dark:hover:text-white/65 transition-all duration-150"
+              title={isDark ? 'Light mode' : 'Dark mode'}
+            >
+              {isDark
+                ? <Sun className="w-[15px] h-[15px] text-amber-400" />
+                : <Moon className="w-[15px] h-[15px]" />
+              }
+            </button>
+            <div className="w-px h-4 bg-gray-200 dark:bg-white/[0.07] mx-1.5" />
+            <div className={`w-7 h-7 rounded-full ${avatarColor(user?.name ?? 'U')} flex items-center justify-center text-white text-[10px] font-bold ring-[1.5px] ring-white dark:ring-white/10 shadow-sm cursor-default`}>
+              {getInitials(user?.name ?? 'U')}
+            </div>
+          </div>
+        </header>
 
         {/* Trial banner */}
         {showTrialBanner && (
@@ -704,7 +727,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-950 pb-16 md:pb-0 relative">
+        <main className={`flex-1 flex flex-col bg-gray-50 dark:bg-gray-950 pb-16 md:pb-0 relative ${
+          // POS pages manage their own internal scroll — prevent double-scroll
+          ['/pos', '/supermart', '/hospitality', '/kds'].some(p => location.pathname.startsWith(p))
+            ? 'overflow-hidden'
+            : 'overflow-y-auto'
+        }`}>
           {/* Subtle background pattern */}
           <div className="absolute inset-0 opacity-[0.02] dark:opacity-[0.01]">
             <div className="absolute inset-0" style={{
@@ -712,7 +740,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               backgroundSize: '20px 20px'
             }} />
           </div>
-          <div className="relative z-10">
+          <div className={`relative z-10 ${
+            ['/pos', '/supermart', '/hospitality', '/kds'].some(p => location.pathname.startsWith(p))
+              ? 'flex-1 flex flex-col overflow-hidden'
+              : ''
+          }`}>
             {children}
           </div>
         </main>

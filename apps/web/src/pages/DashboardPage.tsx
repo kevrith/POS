@@ -109,15 +109,15 @@ function KpiCard({
   icon: React.ElementType; trend?: number; accent: string; valueColor?: string;
 }) {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5 flex flex-col gap-3">
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700/60 shadow-card hover:shadow-card-hover transition-all duration-200 p-5 flex flex-col gap-3 group">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{label}</span>
-        <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${accent}`}>
+        <span className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-[0.1em]">{label}</span>
+        <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${accent} group-hover:scale-110 transition-transform duration-200`}>
           <Icon className="w-[18px] h-[18px]" />
         </div>
       </div>
       <div>
-        <p className={`text-2xl font-black tracking-tight ${valueColor ?? 'text-gray-900 dark:text-white'}`}>{value}</p>
+        <p className={`text-2xl font-extrabold tracking-tight tabular-nums ${valueColor ?? 'text-gray-900 dark:text-white'}`}>{value}</p>
         {sub && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{sub}</p>}
       </div>
       {trend !== undefined && <Trend value={trend} />}
@@ -133,9 +133,9 @@ function QuickAction({ icon: Icon, label, desc, onClick, color }: {
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl hover:shadow-md hover:border-gray-200 dark:hover:border-gray-600 transition-all text-left group"
+      className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700/60 rounded-xl hover:shadow-card-hover hover:border-blue-100 dark:hover:border-gray-600 transition-all duration-200 text-left group active:scale-[0.98]"
     >
-      <div className={`w-10 h-10 rounded-xl ${color} flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform`}>
+      <div className={`w-10 h-10 rounded-xl ${color} flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-200`}>
         <Icon className="w-5 h-5" />
       </div>
       <div className="flex-1 min-w-0">
@@ -258,7 +258,7 @@ export default function DashboardPage() {
   const dateStr = now.toLocaleDateString('en-KE', { weekday: 'long', day: 'numeric', month: 'long' });
 
   return (
-    <div className="min-h-full bg-gray-50 dark:bg-gray-950">
+    <div className="min-h-full bg-gray-50 dark:bg-gray-950 animate-fade-in">
 
       {/* ── Header ── */}
       <div className="bg-gradient-to-r from-blue-700 via-blue-800 to-indigo-900 px-6 py-8">

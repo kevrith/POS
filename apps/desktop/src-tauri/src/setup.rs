@@ -4,9 +4,18 @@ use std::path::PathBuf;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct SetupConfig {
-    pub mode: String, // SERVER | CLIENT | STANDALONE
+    /// Network topology: STANDALONE | SERVER | CLIENT
+    pub mode: String,
+    /// Device role: FULL_POS | CASHIER | KIOSK | KDS | MANAGER
+    /// Meaningful on CLIENT; defaults to FULL_POS for STANDALONE/SERVER
+    pub device_role: Option<String>,
+    /// Only set when mode == CLIENT
     pub server_url: Option<String>,
     pub store_id: Option<String>,
+    /// Activated license key (on-premise deployments)
+    pub license_key: Option<String>,
+    /// Display name for this terminal (shown in admin panel)
+    pub terminal_name: Option<String>,
 }
 
 fn get_config_path() -> PathBuf {
@@ -22,10 +31,14 @@ fn get_config_path() -> PathBuf {
 pub async fn get_setup_mode() -> Result<SetupConfig, String> {
     let path = get_config_path();
     if !path.exists() {
+        // Return a sentinel value so the UI knows first-run wizard must be shown
         return Ok(SetupConfig {
-            mode: "STANDALONE".to_string(),
+            mode: "UNCONFIGURED".to_string(),
+            device_role: None,
             server_url: None,
             store_id: None,
+            license_key: None,
+            terminal_name: None,
         });
     }
     let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
@@ -35,17 +48,33 @@ pub async fn get_setup_mode() -> Result<SetupConfig, String> {
 #[tauri::command]
 pub async fn set_setup_mode(
     mode: String,
+    device_role: Option<String>,
     server_url: Option<String>,
     store_id: Option<String>,
+    license_key: Option<String>,
+    terminal_name: Option<String>,
 ) -> Result<bool, String> {
     let config = SetupConfig {
         mode,
+        device_role,
         server_url,
         store_id,
+        license_key,
+        terminal_name,
     };
     let content = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
     let path = get_config_path();
     fs::write(&path, content).map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
+/// Reset setup config — shows the wizard again on next launch
+#[tauri::command]
+pub async fn reset_setup() -> Result<bool, String> {
+    let path = get_config_path();
+    if path.exists() {
+        fs::remove_file(&path).map_err(|e| e.to_string())?;
+    }
     Ok(true)
 }
 

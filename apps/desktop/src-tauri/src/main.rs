@@ -82,6 +82,7 @@ fn main() {
             // Setup / mode
             setup::get_setup_mode,
             setup::set_setup_mode,
+            setup::reset_setup,
             setup::test_server_connection,
             setup::get_cloud_url,
             // License

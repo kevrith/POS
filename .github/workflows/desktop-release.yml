@@ -3,65 +3,70 @@ name: Desktop App Release
 on:
   push:
     tags:
-      - 'desktop-v*'   # trigger on tags like desktop-v1.0.0, desktop-v1.2.3
+      - 'desktop-v*'   # git tag desktop-v1.0.0 && git push --tags
   workflow_dispatch:
     inputs:
       version:
         description: 'Release version (e.g. 1.0.0)'
         required: true
+        default: '1.0.0'
 
 permissions:
   contents: write  # needed to create GitHub releases
 
 jobs:
   build:
+    name: Build — ${{ matrix.platform }} (${{ matrix.target }})
     strategy:
       fail-fast: false
       matrix:
         include:
+          # Linux — AppImage (portable) + .deb (Debian/Ubuntu installer)
           - platform: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
-            artifact_name: kastra-pos
-            artifact_ext: .AppImage
-          - platform: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-            artifact_name: kastra-pos
-            artifact_ext: .deb
+            label: Linux x86_64
+
+          # Windows — .msi installer + .exe setup
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact_name: kastra-pos
-            artifact_ext: .msi
-          - platform: macos-latest
+            label: Windows x86_64
+
+          # macOS Intel
+          - platform: macos-13
             target: x86_64-apple-darwin
-            artifact_name: kastra-pos
-            artifact_ext: .dmg
+            label: macOS Intel
+
+          # macOS Apple Silicon (M1/M2/M3)
           - platform: macos-latest
             target: aarch64-apple-darwin
-            artifact_name: kastra-pos
-            artifact_ext: .dmg
+            label: macOS Apple Silicon
 
     runs-on: ${{ matrix.platform }}
 
     steps:
+      # ── Checkout ──────────────────────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Node.js 20
+      # ── Node.js ───────────────────────────────────────────────────────────────
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
+      # ── Rust ──────────────────────────────────────────────────────────────────
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - name: Cache Rust
+      - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: './apps/desktop/src-tauri -> target'
 
+      # ── Linux system deps ─────────────────────────────────────────────────────
       - name: Install Linux system dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
@@ -72,21 +77,40 @@ jobs:
             librsvg2-dev \
             patchelf \
             libssl-dev \
-            pkg-config
+            pkg-config \
+            libglib2.0-dev
 
-      - name: Install npm dependencies (monorepo root)
+      # ── Install npm dependencies ───────────────────────────────────────────────
+      # Install web app deps first — Tauri's beforeBuildCommand needs them
+      - name: Install web dependencies
+        working-directory: apps/web
         run: npm ci --legacy-peer-deps
 
-      - name: Build Web frontend (required by Tauri)
-        run: npm run build --workspace=apps/web
+      # Root deps (shared packages, Tauri CLI wrapper, etc.)
+      - name: Install root dependencies
+        run: npm ci --legacy-peer-deps
 
-      - name: Build Tauri app
+      # ── Build web frontend ─────────────────────────────────────────────────────
+      # Build the React app that Tauri will bundle into the desktop binary.
+      # VITE_API_URL is intentionally left as /api/v1 (relative) so the desktop
+      # app talks to whatever server URL is configured in the setup wizard.
+      - name: Build web frontend
+        working-directory: apps/web
+        env:
+          VITE_API_URL: /api/v1
+          NODE_ENV: production
+        run: npm run build
+
+      # ── Tauri build + GitHub Release ───────────────────────────────────────────
+      - name: Build and release Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Updater signing keys (generate with: tauri signer generate)
+          # Set TAURI_PRIVATE_KEY and TAURI_KEY_PASSWORD in repo Secrets
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
-          # macOS code signing (optional — remove if not signing)
+          # macOS code signing — remove/leave blank if not signing
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -95,34 +119,38 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           projectPath: apps/desktop
-          tagName: ${{ github.ref_name }}
-          releaseName: 'KASTRA POS Desktop ${{ github.ref_name }}'
+          # Tag-based releases use the tag name; workflow_dispatch uses input
+          tagName: ${{ github.ref_name || format('desktop-v{0}', github.event.inputs.version) }}
+          releaseName: 'KASTRA POS Desktop ${{ github.ref_name || github.event.inputs.version }}'
           releaseBody: |
-            ## KASTRA POS Desktop ${{ github.ref_name }}
-
-            ### What's included
-            - Full POS functionality (web app wrapped in native window)
-            - **VSCU offline eTIMS** — sells and queues eTIMS submissions when offline
-            - **LAN sync** — sync sales across terminals on local network without internet
-            - **Local SQLite queue** — at `~/.local/share/kastra-pos/vscu.db`
-            - **Machine-bound license** validation
-            - Auto-update notifications
+            ## KASTRA POS Desktop — ${{ github.ref_name || github.event.inputs.version }}
 
             ### Downloads
             | Platform | File | Notes |
             |----------|------|-------|
-            | Windows 10/11 | `.msi` | Recommended for Windows |
-            | macOS 11+ (Intel) | `.dmg` | For Intel Macs |
-            | macOS 11+ (Apple Silicon) | `.dmg` | For M1/M2/M3 Macs |
-            | Ubuntu/Debian | `.deb` | Debian-based distros |
-            | Linux (all) | `.AppImage` | Portable, no install needed |
+            | Windows 10/11 | `.msi` | Recommended installer |
+            | Windows | `.exe` | NSIS setup |
+            | macOS 11+ Intel | `.dmg` | For Intel Macs |
+            | macOS 11+ Apple Silicon | `.dmg` | For M1/M2/M3 Macs |
+            | Ubuntu/Debian | `.deb` | `sudo dpkg -i kastra-pos_*.deb` |
+            | Linux (all) | `.AppImage` | Portable — `chmod +x` then run |
 
-            ### Requirements
-            - Server must be running and accessible (local network or internet)
-            - On first launch: enter your server URL in the setup wizard
+            ### First-time Setup
+            1. Download and install for your platform
+            2. Launch the app — the **Setup Wizard** opens automatically
+            3. Choose your network topology (Standalone / Server / Client)
+            4. Enter your server URL (if Client or Cloud mode)
+            5. Log in with your KASTRA POS credentials
 
-            ### Update from previous version
-            The app will prompt you automatically when a new version is available.
+            ### What's included
+            - Full POS, Inventory, Reports, HR, Payroll in a native window
+            - **VSCU offline eTIMS** — queues KRA submissions when offline
+            - **LAN sync** — sync across terminals without internet
+            - **Auto-update** notifications when a new version is available
+            - Machine-bound license validation
+
+            ### Upgrading
+            The app will notify you automatically when a new version is available.
           releaseDraft: false
           prerelease: false
           args: --target ${{ matrix.target }}

@@ -95,6 +95,18 @@ export class ItemsService {
   }
 
   async create(dto: CreateItemDto) {
+    // Resolve storeId — owners have no storeId in JWT, fall back to first store
+    let storeId = dto.storeId;
+    if (!storeId) {
+      const store = await this.prisma.store.findFirst({
+        where: { businessId: dto.businessId },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      });
+      if (!store) throw new BadRequestException('No store found for this business');
+      storeId = store.id;
+    }
+
     const item = await this.prisma.item.create({
       data: {
         offlineId: uuidv4(),
@@ -113,7 +125,7 @@ export class ItemsService {
         defaultExpiryDays: dto.defaultExpiryDays,
         vatApplicable: dto.vatApplicable ?? true,
         totApplicable: dto.totApplicable ?? false,
-        storeId: dto.storeId,
+        storeId,
         businessId: dto.businessId,
       },
     });
@@ -121,7 +133,7 @@ export class ItemsService {
     if (dto.initialStock && dto.initialStock > 0 && dto.trackStock) {
       await this.inventory.createMovement({
         itemId: item.id,
-        storeId: dto.storeId,
+        storeId,
         businessId: dto.businessId,
         type: InventoryMovementType.INITIAL,
         quantity: dto.initialStock,

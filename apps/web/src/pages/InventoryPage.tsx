@@ -1881,6 +1881,7 @@ function BatchesTab({ batches, isLoading, businessId }: BatchesTabProps) {
 export default function InventoryPage() {
   const user = useAuthStore((s) => s.user);
   const businessId = user?.businessId ?? '';
+  // Owners have no storeId in JWT — the API will resolve to the first store automatically
   const storeId = user?.storeId;
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('items');

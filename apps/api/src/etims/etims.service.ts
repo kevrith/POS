@@ -286,7 +286,6 @@ export class EtimsService {
       data: {
         etimsSubmitted: true,
         etimsControlNumber: controlNumber,
-        ...(intrlData && { etimsInvoiceNo: intrlData }),
       },
     });
 

@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Req, Get, Redirect, Delete, Param } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Req, Get, Redirect, Delete, Param, UnauthorizedException } from '@nestjs/common';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
@@ -92,6 +92,34 @@ export class AuthController {
     return {
       url: `${frontendUrl}/?oauth_token=${accessToken}&oauth_businessId=${user.businessId}&oauth_role=${user.role}&oauth_name=${encodeURIComponent(user.name)}&oauth_id=${user.id}`,
     };
+  }
+
+  /**
+   * Frontend-initiated Google OAuth (used by @react-oauth/google).
+   * Receives the Google access token from the browser, verifies it with Google,
+   * and returns a KASTRA JWT.
+   */
+  @Public()
+  @SkipThrottle()
+  @Post('google/token')
+  async googleToken(@Body() body: { accessToken: string }) {
+    // Fetch user profile from Google using the access token
+    const res = await fetch(
+      `https://www.googleapis.com/oauth2/v3/userinfo?access_token=${body.accessToken}`,
+    );
+    if (!res.ok) throw new UnauthorizedException('Invalid Google access token');
+    const profile = await res.json() as {
+      sub: string;
+      email?: string;
+      name?: string;
+      picture?: string;
+    };
+    return this.authService.loginWithGoogle({
+      googleId: profile.sub,
+      email: profile.email ?? null,
+      name: profile.name ?? 'Google User',
+      avatarUrl: profile.picture ?? null,
+    });
   }
 
   @UseGuards(JwtAuthGuard)

@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useGoogleLogin } from '@react-oauth/google';
 import { useAuthStore } from '../stores/auth';
 import type { AuthUser } from '../stores/auth';
 import { Eye, EyeOff, Delete, ChevronLeft, Building2, Sparkles, Fingerprint } from 'lucide-react';
 import { isBiometricAvailable, authenticateBiometric } from '../lib/biometric';
+import { setToken } from '../lib/api';
 
 const PLAN_LABELS: Record<string, { label: string; color: string; price: string }> = {
   STARTER:    { label: 'Starter',    color: 'bg-emerald-500', price: 'KES 1,499/mo' },
@@ -111,8 +113,9 @@ export default function LoginPage() {
   };
 
   const { login, loginWithPin, loginWithOAuth } = useAuthStore();
+  const API_URL = import.meta.env.VITE_API_URL ?? '/api/v1';
 
-  // Handle OAuth redirect
+  // Handle OAuth redirect (legacy redirect flow fallback)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('oauth_token');
@@ -135,6 +138,29 @@ export default function LoginPage() {
       window.history.replaceState({}, '', '/');
     }
   }, [loginWithOAuth]);
+
+  // Google login via @react-oauth/google (frontend-initiated flow)
+  const handleGoogleLogin = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      try {
+        setLoading(true);
+        const res = await fetch(`${API_URL}/auth/google/token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accessToken: tokenResponse.access_token }),
+        });
+        const data = await res.json() as { accessToken?: string; user?: AuthUser; message?: string };
+        if (!res.ok) throw new Error(data.message ?? 'Google login failed');
+        setToken(data.accessToken!);
+        await loginWithOAuth(data.accessToken!, data.user!);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Google login failed');
+      } finally {
+        setLoading(false);
+      }
+    },
+    onError: () => setError('Google sign-in was cancelled or failed'),
+  });
 
   // Check biometric availability on mount
   useEffect(() => {
@@ -651,8 +677,9 @@ export default function LoginPage() {
                 <div className="flex-1 border-t border-gray-200" />
               </div>
 
-              <a
-                href="/api/v1/auth/google"
+              <button
+                type="button"
+                onClick={() => handleGoogleLogin()}
                 className="flex items-center justify-center gap-3 w-full py-3 border-2 border-gray-200 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors text-sm"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -662,7 +689,7 @@ export default function LoginPage() {
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                 </svg>
                 Sign in with Google
-              </a>
+              </button>
             </form>
           )}
 

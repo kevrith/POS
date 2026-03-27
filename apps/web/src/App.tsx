@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useAuthStore } from './stores/auth';
 import LoginPage from './pages/LoginPage';
 import Layout from './components/Layout';
@@ -76,6 +77,7 @@ declare global { interface Window { __TAURI__?: { invoke: <T>(cmd: string, args?
 
 export default function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
 
   // On first Tauri launch: redirect to desktop setup wizard
   if (
@@ -172,7 +174,11 @@ export default function App() {
 
   if (!isAuthenticated) {
     // Ensure any /login?... URL is preserved so LoginPage can read params
-    return <LoginPage />;
+    return (
+      <GoogleOAuthProvider clientId={googleClientId || 'disabled'}>
+        <LoginPage />
+      </GoogleOAuthProvider>
+    );
   }
 
   return (

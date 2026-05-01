@@ -40,17 +40,33 @@ async function bootstrap() {
 
     // Security headers (HSTS, XSS protection, content-type sniff prevention, etc.)
     app.use(helmet({
-      contentSecurityPolicy: false, // disabled to allow Swagger UI
+      contentSecurityPolicy: false,       // disabled to allow Swagger UI
       crossOriginEmbedderPolicy: false,
+      // Google OAuth popup needs to communicate back to the opener window.
+      // same-origin COOP blocks window.closed polling used by @react-oauth/google.
+      crossOriginOpenerPolicy: false,
     }));
 
     logger.log('Enabling CORS...');
     const allowedOrigins = [
       process.env.FRONTEND_URL ?? 'http://localhost:3001',
       process.env.ADMIN_URL ?? 'http://localhost:3002',
-      ...(process.env.EXTRA_ORIGINS ? process.env.EXTRA_ORIGINS.split(',') : []),
+      ...(process.env.EXTRA_ORIGINS ? process.env.EXTRA_ORIGINS.split(',').map(o => o.trim()).filter(Boolean) : []),
     ];
-    app.enableCors({ origin: allowedOrigins, credentials: true });
+    logger.log(`CORS allowed origins: ${allowedOrigins.join(', ')}`);
+    app.enableCors({
+      origin: (origin, callback) => {
+        // Allow requests with no origin (mobile apps, curl, Render health checks)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.includes(origin)) return callback(null, true);
+        // Allow any *.vercel.app preview deployment
+        if (origin.endsWith('.vercel.app')) return callback(null, true);
+        // Deny silently — using callback(new Error(...)) can interfere with
+        // Express error handling before CORS headers are written to the response.
+        callback(null, false);
+      },
+      credentials: true,
+    });
 
     logger.log('Setting global prefix to /api...');
     app.setGlobalPrefix('api');

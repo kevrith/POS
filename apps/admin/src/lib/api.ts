@@ -1,4 +1,7 @@
-const API_BASE = `${import.meta.env.VITE_API_URL ?? ''}/api/v1/super-admin`;
+// Strip any trailing /api/v1 from VITE_API_URL so it works whether the env var
+// is set to the bare host (http://localhost:3010) or the full prefix (https://pos-bhe5.onrender.com/api/v1)
+const _base = (import.meta.env.VITE_API_URL ?? 'http://localhost:3010').replace(/\/api\/v1\/?$/, '');
+const API_BASE = `${_base}/api/v1/super-admin`;
 
 let _token = '';
 

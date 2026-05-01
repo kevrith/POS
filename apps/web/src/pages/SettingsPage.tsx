@@ -40,6 +40,7 @@ import {
   FileText,
   Activity,
   Filter,
+  Fingerprint,
 } from 'lucide-react';
 import { UserRole } from '@pos/shared';
 
@@ -397,6 +398,27 @@ export default function SettingsPage() {
     receiptFooter: '',
   });
 
+  // ─── Font size (localStorage, applied to html root) ──────────────────────
+  const [fontSize, setFontSize] = useState<'sm' | 'md' | 'lg' | 'xl'>(() => {
+    return (localStorage.getItem('pos-font-size') as 'sm' | 'md' | 'lg' | 'xl') || 'md';
+  });
+  function applyFontSize(size: 'sm' | 'md' | 'lg' | 'xl') {
+    const map = { sm: '13px', md: '15px', lg: '17px', xl: '19px' };
+    document.documentElement.style.fontSize = map[size];
+    localStorage.setItem('pos-font-size', size);
+    setFontSize(size);
+  }
+
+  // ─── Auto-logout after sale ───────────────────────────────────────────────
+  const [autoLogoutAfterSale, setAutoLogoutAfterSale] = useState(
+    () => localStorage.getItem('pos-auto-logout-sale') === 'true',
+  );
+  function toggleAutoLogoutAfterSale() {
+    const next = !autoLogoutAfterSale;
+    localStorage.setItem('pos-auto-logout-sale', String(next));
+    setAutoLogoutAfterSale(next);
+  }
+
   // ─── Multi-currency ────────────────────────────────────────────────────────
   const SUPPORTED_CURRENCIES = ['KES', 'USD', 'EUR', 'GBP', 'TZS', 'UGX', 'ETB', 'RWF', 'ZAR', 'AED', 'CNY', 'INR'];
   const [selectedCurrencies, setSelectedCurrencies] = useState<string[]>([]);
@@ -423,8 +445,8 @@ export default function SettingsPage() {
   // ─── Loyalty program form ──────────────────────────────────────────────────
   const [loyaltyForm, setLoyaltyForm] = useState({
     name: 'Customer Loyalty',
-    pointsPerCent: 0.01,
-    redemptionRate: 10,
+    kesPerPoint: 100,
+    pointValueCents: 50,
     minRedemption: 100,
   });
   const [loyaltySaved, setLoyaltySaved] = useState(false);
@@ -515,6 +537,9 @@ export default function SettingsPage() {
   const [showAddUser, setShowAddUser] = useState(false);
   const [editingUser, setEditingUser] = useState<StaffUser | null>(null);
   const [storeAssignUser, setStoreAssignUser] = useState<StaffUser | null>(null);
+  const [biometricUserId, setBiometricUserId] = useState<string | null>(null);
+  const [biometricCreds, setBiometricCreds] = useState<Record<string, { id: string; deviceName: string; createdAt: string }[]>>({});
+  const [biometricRegistering, setBiometricRegistering] = useState(false);
   const [newStore, setNewStore] = useState({ name: '', storeCode: '' });
   const [tierForm, setTierForm] = useState({ name: '', minPoints: '', multiplier: '1', color: 'gray' });
   const [showAddTier, setShowAddTier] = useState(false);
@@ -550,12 +575,23 @@ export default function SettingsPage() {
   });
 
   const { data: loyaltyProgram } = useQuery<{
-    id: string; name: string; pointsPerCent: number; redemptionRate: number; minRedemption: number;
+    id: string; name: string; kesPerPoint: number; pointValueCents: number; minRedemption: number;
   } | null>({
     queryKey: ['loyalty-program-settings', businessId],
-    queryFn: () => (api.get(`/loyalty/program?businessId=${businessId}`) as Promise<{ id: string; name: string; pointsPerCent: number; redemptionRate: number; minRedemption: number } | null>).catch(() => null),
+    queryFn: () => (api.get(`/loyalty/program?businessId=${businessId}`) as Promise<{ id: string; name: string; kesPerPoint: number; pointValueCents: number; minRedemption: number } | null>).catch(() => null),
     enabled: !!businessId && activeTab === 'loyalty',
   });
+
+  useEffect(() => {
+    if (loyaltyProgram) {
+      setLoyaltyForm({
+        name: loyaltyProgram.name,
+        kesPerPoint: loyaltyProgram.kesPerPoint,
+        pointValueCents: loyaltyProgram.pointValueCents,
+        minRedemption: loyaltyProgram.minRedemption,
+      });
+    }
+  }, [loyaltyProgram]);
 
   const { data: loyaltyTiers = [], refetch: refetchTiers } = useQuery<Array<{
     id: string; name: string; minPoints: number; multiplier: number; color: string; perksJson?: string;
@@ -752,6 +788,103 @@ export default function SettingsPage() {
       void queryClient.invalidateQueries({ queryKey: ['business-users'] });
     },
   });
+
+  // ─── Biometric management ─────────────────────────────────────────────────
+  async function loadBiometricCreds(userId: string) {
+    try {
+      const creds = await api.get<{ id: string; deviceName: string; createdAt: string }[]>(
+        `/auth/webauthn/credentials?userId=${userId}`,
+      );
+      setBiometricCreds(prev => ({ ...prev, [userId]: creds }));
+    } catch {
+      setBiometricCreds(prev => ({ ...prev, [userId]: [] }));
+    }
+  }
+
+  async function handleRegisterBiometric(u: { id: string; name: string }) {
+    if (!('credentials' in navigator)) {
+      toast.error('WebAuthn not supported in this browser');
+      return;
+    }
+    setBiometricRegistering(true);
+    try {
+      const options = await api.get<{
+        challenge: string;
+        rp: { id: string; name: string };
+        user: { id: string; name: string; displayName: string };
+        pubKeyCredParams: { type: string; alg: number }[];
+        timeout: number;
+        attestation: AttestationConveyancePreference;
+        authenticatorSelection: AuthenticatorSelectionCriteria;
+      }>(`/auth/webauthn/register/begin?userId=${u.id}&businessId=${businessId}`);
+
+      const toBytes = (b64url: string) =>
+        Uint8Array.from(atob(b64url.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+
+      const credential = await navigator.credentials.create({
+        publicKey: {
+          challenge: toBytes(options.challenge),
+          rp: options.rp,
+          user: {
+            id: toBytes(options.user.id),
+            name: options.user.name ?? u.name,
+            displayName: options.user.displayName ?? u.name,
+          },
+          pubKeyCredParams: options.pubKeyCredParams as PublicKeyCredentialParameters[],
+          timeout: options.timeout,
+          attestation: options.attestation,
+          authenticatorSelection: options.authenticatorSelection,
+        },
+      }) as PublicKeyCredential | null;
+
+      if (!credential) { setBiometricRegistering(false); return; }
+      const response = credential.response as AuthenticatorAttestationResponse;
+      const toBase64url = (buf: ArrayBuffer) =>
+        btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+
+      let publicKeyDer = '';
+      if (typeof response.getPublicKey === 'function') {
+        const pk = response.getPublicKey();
+        if (pk) publicKeyDer = toBase64url(pk);
+      }
+
+      const deviceName = navigator.userAgent.includes('Mac') ? 'Mac Touch ID'
+        : navigator.userAgent.includes('Windows') ? 'Windows Hello'
+        : navigator.userAgent.includes('Android') ? 'Android Fingerprint'
+        : navigator.userAgent.includes('iPhone') || navigator.userAgent.includes('iPad') ? 'Face ID / Touch ID'
+        : 'Biometric Device';
+
+      await api.post('/auth/webauthn/register/complete', {
+        userId: u.id,
+        businessId,
+        credentialId: credential.id,
+        clientDataJSON: toBase64url(response.clientDataJSON),
+        publicKeyDer,
+        transports: typeof response.getTransports === 'function' ? response.getTransports() : [],
+        deviceName,
+      });
+
+      toast.success(`Biometric registered for ${u.name}`);
+      await loadBiometricCreds(u.id);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Registration failed';
+      if (!msg.includes('cancelled') && !msg.includes('NotAllowedError')) {
+        toast.error(`Biometric registration failed: ${msg}`);
+      }
+    } finally {
+      setBiometricRegistering(false);
+    }
+  }
+
+  async function handleDeleteBiometric(credId: string, userId: string) {
+    try {
+      await api.delete(`/auth/webauthn/credentials/${credId}?userId=${userId}`);
+      await loadBiometricCreds(userId);
+      toast.success('Biometric credential removed');
+    } catch {
+      toast.error('Failed to remove credential');
+    }
+  }
 
   const assignStoreMutation = useMutation({
     mutationFn: ({ userId, storeId }: { userId: string; storeId: string }) =>
@@ -1393,6 +1526,53 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          {/* ── Display / Accessibility ───────────────────────────────────── */}
+          <div className="border rounded-xl p-4 space-y-4 bg-gray-50 dark:bg-gray-800/50">
+            <div>
+              <h3 className="font-semibold text-gray-800 dark:text-white">Display &amp; Accessibility</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Adjust the interface font size for better readability.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Font Size</label>
+              <div className="flex gap-2 flex-wrap">
+                {([
+                  { id: 'sm' as const, label: 'Small', preview: 'Aa' },
+                  { id: 'md' as const, label: 'Default', preview: 'Aa' },
+                  { id: 'lg' as const, label: 'Large', preview: 'Aa' },
+                  { id: 'xl' as const, label: 'X-Large', preview: 'Aa' },
+                ] as const).map(({ id, label, preview }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => applyFontSize(id)}
+                    className={`flex flex-col items-center gap-1 px-4 py-3 rounded-xl border-2 transition-colors min-w-[72px] ${
+                      fontSize === id
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
+                        : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'
+                    }`}
+                  >
+                    <span style={{ fontSize: id === 'sm' ? '12px' : id === 'md' ? '15px' : id === 'lg' ? '18px' : '22px', lineHeight: 1.2, fontWeight: 600 }}>{preview}</span>
+                    <span className="text-xs font-medium">{label}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">Changes apply immediately and persist across sessions.</p>
+            </div>
+            <div className="flex items-center justify-between pt-2 border-t dark:border-gray-600">
+              <div>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Auto-logout after sale</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Return to PIN screen automatically after each completed sale.</p>
+              </div>
+              <button
+                type="button"
+                onClick={toggleAutoLogoutAfterSale}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${autoLogoutAfterSale ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+              >
+                <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform ${autoLogoutAfterSale ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </div>
+          </div>
+
           {/* ── Hardware Toggles ──────────────────────────────────────────── */}
           <div className="border rounded-xl p-4 space-y-4 bg-gray-50 dark:bg-gray-800/50">
             <div>
@@ -1541,63 +1721,117 @@ export default function SettingsPage() {
 
           <div className="bg-white rounded-xl shadow divide-y">
             {users.map((u) => (
-              <div key={u.id} className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-sm font-semibold text-gray-600">
-                    {u.name.charAt(0).toUpperCase()}
+              <div key={u.id} className="divide-y divide-gray-50 dark:divide-gray-700/50">
+                {/* ── User row ── */}
+                <div className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-sm font-semibold text-gray-600">
+                      {u.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">{u.name}</p>
+                      <p className="text-xs text-gray-400">{u.email ?? 'No email (PIN only)'}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium text-sm">{u.name}</p>
-                    <p className="text-xs text-gray-400">{u.email ?? 'No email (PIN only)'}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-                      ROLE_COLORS[u.role] ?? 'bg-gray-100 text-gray-600'
-                    }`}
-                  >
-                    {ROLE_LABELS[u.role] ?? u.role}
-                  </span>
-                  {u.role === 'MANAGER' && (settings?.stores ?? []).length > 1 && (
-                    <button
-                      onClick={() => setStoreAssignUser(u)}
-                      className="text-xs px-2 py-1 rounded border border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                      title="Assign stores"
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                        ROLE_COLORS[u.role] ?? 'bg-gray-100 text-gray-600'
+                      }`}
                     >
-                      <span className="flex items-center gap-1">
-                        <Store className="w-3 h-3" />
-                        {(u.assignedStores ?? []).length === 0
-                          ? 'All stores'
-                          : `${(u.assignedStores ?? []).length} store${(u.assignedStores ?? []).length !== 1 ? 's' : ''}`}
-                      </span>
-                    </button>
-                  )}
-                  {u.role !== 'OWNER' && (
-                    <>
+                      {ROLE_LABELS[u.role] ?? u.role}
+                    </span>
+                    {u.role === 'MANAGER' && (settings?.stores ?? []).length > 1 && (
                       <button
-                        onClick={() => setEditingUser(u)}
-                        className="text-gray-400 hover:text-blue-600 p-1"
-                        title="Update PIN"
+                        onClick={() => setStoreAssignUser(u)}
+                        className="text-xs px-2 py-1 rounded border border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                        title="Assign stores"
                       >
-                        <Edit2 className="w-4 h-4" />
+                        <span className="flex items-center gap-1">
+                          <Store className="w-3 h-3" />
+                          {(u.assignedStores ?? []).length === 0
+                            ? 'All stores'
+                            : `${(u.assignedStores ?? []).length} store${(u.assignedStores ?? []).length !== 1 ? 's' : ''}`}
+                        </span>
                       </button>
+                    )}
+                    {/* Biometric button — PRO/ENTERPRISE only */}
+                    {['PRO', 'ENTERPRISE'].includes(settings?.subscriptionTier ?? '') && (
                       <button
-                        onClick={() =>
-                          showConfirm(
-                            'Remove Team Member',
-                            `Remove ${u.name} from your team? This action cannot be undone.`,
-                            () => deleteUserMutation.mutate(u.id),
-                          )
-                        }
-                        className="text-gray-400 hover:text-red-600 p-1"
-                        title="Delete user"
+                        onClick={() => {
+                          const next = biometricUserId === u.id ? null : u.id;
+                          setBiometricUserId(next);
+                          if (next) void loadBiometricCreds(next);
+                        }}
+                        className={`p-1 transition-colors ${biometricUserId === u.id ? 'text-emerald-600' : 'text-gray-400 hover:text-emerald-600'}`}
+                        title="Manage biometrics (Fingerprint / Face ID)"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Fingerprint className="w-4 h-4" />
                       </button>
-                    </>
-                  )}
+                    )}
+                    {u.role !== 'OWNER' && (
+                      <>
+                        <button
+                          onClick={() => setEditingUser(u)}
+                          className="text-gray-400 hover:text-blue-600 p-1"
+                          title="Update PIN"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() =>
+                            showConfirm(
+                              'Remove Team Member',
+                              `Remove ${u.name} from your team? This action cannot be undone.`,
+                              () => deleteUserMutation.mutate(u.id),
+                            )
+                          }
+                          className="text-gray-400 hover:text-red-600 p-1"
+                          title="Delete user"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
+                {/* ── Biometric panel ── */}
+                {biometricUserId === u.id && (
+                  <div className="px-4 py-3 bg-emerald-50 dark:bg-emerald-900/10">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                        <Fingerprint className="w-3.5 h-3.5" />
+                        Biometric Credentials
+                      </p>
+                      <button
+                        onClick={() => void handleRegisterBiometric(u)}
+                        disabled={biometricRegistering}
+                        className="text-xs px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium disabled:opacity-50 flex items-center gap-1"
+                      >
+                        <Fingerprint className="w-3 h-3" />
+                        {biometricRegistering ? 'Registering…' : 'Register This Device'}
+                      </button>
+                    </div>
+                    {(biometricCreds[u.id] ?? []).length === 0 ? (
+                      <p className="text-xs text-gray-500">No biometric devices registered yet.</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {(biometricCreds[u.id] ?? []).map(cred => (
+                          <div key={cred.id} className="flex items-center justify-between text-xs">
+                            <span className="text-gray-700 dark:text-gray-300">{cred.deviceName} — <span className="text-gray-400">{new Date(cred.createdAt).toLocaleDateString()}</span></span>
+                            <button
+                              onClick={() => void handleDeleteBiometric(cred.id, u.id)}
+                              className="text-red-500 hover:text-red-700 p-0.5"
+                              title="Remove credential"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
             {users.length === 0 && (
@@ -1611,6 +1845,9 @@ export default function SettingsPage() {
           <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-blue-700">
             <strong>Tip:</strong> Cashiers, Waiters, and Kitchen Staff log in with a PIN at the
             POS terminal. Managers and Accountants use email + password.
+            {['PRO', 'ENTERPRISE'].includes(settings?.subscriptionTier ?? '') && (
+              <span> Staff can also use <strong>Fingerprint / Face ID</strong> — click the <Fingerprint className="inline w-3.5 h-3.5 mx-0.5" /> icon on each user to register their device.</span>
+            )}
           </div>
         </div>
         );
@@ -2364,7 +2601,7 @@ export default function SettingsPage() {
                 <span className="font-medium text-green-700">Loyalty program active: {loyaltyProgram.name}</span>
               </div>
               <p className="text-sm text-gray-600 mt-1">
-                {loyaltyProgram.pointsPerCent} pts per KES 1 · KES {(loyaltyProgram.redemptionRate / 100).toFixed(2)} per point · Min {loyaltyProgram.minRedemption} pts to redeem
+                1 pt per KES {loyaltyProgram.kesPerPoint} spent · 1 pt = KES {(loyaltyProgram.pointValueCents / 100).toFixed(2)} discount · Min {loyaltyProgram.minRedemption} pts to redeem
               </p>
             </div>
           )}
@@ -2386,29 +2623,32 @@ export default function SettingsPage() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Points per KES 1</label>
-                <input
-                  type="number"
-                  min={0.001}
-                  max={1}
-                  step={0.001}
-                  value={loyaltyForm.pointsPerCent}
-                  onChange={(e) => setLoyaltyForm((f) => ({ ...f, pointsPerCent: Number(e.target.value) }))}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-xs text-gray-400 mt-1">e.g. 0.01 = 1 pt per KES 100</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Value per point (KES cents)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">KES spent per 1 point</label>
                 <input
                   type="number"
                   min={1}
                   step={1}
-                  value={loyaltyForm.redemptionRate}
-                  onChange={(e) => setLoyaltyForm((f) => ({ ...f, redemptionRate: Number(e.target.value) }))}
+                  value={loyaltyForm.kesPerPoint}
+                  onChange={(e) => setLoyaltyForm((f) => ({ ...f, kesPerPoint: Number(e.target.value) }))}
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
-                <p className="text-xs text-gray-400 mt-1">e.g. 10 = 1 pt worth KES 0.10</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  KES 100 sale = {loyaltyForm.kesPerPoint > 0 ? Math.floor(100 / loyaltyForm.kesPerPoint) : 0} pts
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">1 point value (KES cents)</label>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={loyaltyForm.pointValueCents}
+                  onChange={(e) => setLoyaltyForm((f) => ({ ...f, pointValueCents: Number(e.target.value) }))}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  100 pts = KES {loyaltyForm.pointValueCents > 0 ? (100 * loyaltyForm.pointValueCents / 100).toFixed(2) : '0.00'} discount
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Min points to redeem</label>

@@ -11,6 +11,7 @@ export interface ReceiptData {
   cashierName: string;
   customerName?: string;
   customerPhone?: string;
+  customerKraPin?: string;
   items: Array<{
     name: string;
     quantity: number;
@@ -35,10 +36,15 @@ export interface ReceiptData {
   etimsControlNumber?: string; // human-readable KRA control/receipt number shown on receipt
   etimsSubmitted?: boolean;
   voided?: boolean;
+  isCreditSale?: boolean;
+  previousBalanceCents?: number;  // customer's debt BEFORE this sale
+  newBalanceCents?: number;       // customer's total debt AFTER this sale
   notes?: string;
   saleId?: string;
   receiptHeader?: string;
   receiptFooter?: string;
+  pointsEarned?: number;
+  loyaltyBalance?: number;
 }
 
 // ESC/POS Commands
@@ -108,6 +114,61 @@ function line(char: string = '-', width: number = 32): string {
   return char.repeat(width);
 }
 
+// ─── Payment grouping ─────────────────────────────────────────────────────────
+// Groups payment lines by category for cleaner receipts.
+// M-Pesa variants → "M-Pesa", Card variants → "Card", etc.
+interface GroupedPayment {
+  label: string;        // display name for the group header
+  totalCents: number;
+  lines: Array<{ method: string; amountCents: number; reference?: string }>;
+  isGroup: boolean;     // true when multiple methods collapsed
+}
+
+function groupPayments(payments: ReceiptData['payments']): GroupedPayment[] {
+  const classify = (method: string): string => {
+    const m = method.toUpperCase();
+    if (m.includes('MPESA') || m.includes('M-PESA') || m.includes('M_PESA') || m === 'MOBILE_MONEY' || m.includes('QR')) return 'MPESA';
+    if (m.includes('CARD') || m.includes('VISA') || m.includes('MASTERCARD') || m.includes('PAYSTACK') || m === 'DEBIT' || m === 'CREDIT') return 'CARD';
+    if (m === 'CASH' || m === 'CASH_EXACT') return 'CASH';
+    if (m.includes('BANK') || m.includes('EFT') || m.includes('TRANSFER')) return 'BANK';
+    if (m.includes('GIFT')) return 'GIFT';
+    if (m.includes('LOYALTY') || m.includes('POINTS')) return 'LOYALTY';
+    if (m.includes('ROOM')) return 'ROOM';
+    return 'OTHER';
+  };
+
+  const GROUP_LABELS: Record<string, string> = {
+    MPESA: 'M-Pesa',
+    CARD: 'Card Payment',
+    CASH: 'Cash',
+    BANK: 'Bank Transfer',
+    GIFT: 'Gift Card',
+    LOYALTY: 'Loyalty Points',
+    ROOM: 'Room Charge',
+    OTHER: 'Other',
+  };
+
+  // Build buckets
+  const buckets = new Map<string, ReceiptData['payments']>();
+  for (const p of payments) {
+    const key = classify(p.method);
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key)!.push(p);
+  }
+
+  const result: GroupedPayment[] = [];
+  for (const [key, lines] of buckets.entries()) {
+    const total = lines.reduce((s, l) => s + l.amountCents, 0);
+    result.push({
+      label: GROUP_LABELS[key] ?? key,
+      totalCents: total,
+      lines,
+      isGroup: lines.length > 1,
+    });
+  }
+  return result;
+}
+
 // Generate ESC/POS commands for thermal printer
 export function generateESCPOS(receipt: ReceiptData, enableCashDrawer = false): string {
   // Open cash drawer first if any payment is cash (drawer is wired to printer's RJ11 port)
@@ -120,6 +181,14 @@ export function generateESCPOS(receipt: ReceiptData, enableCashDrawer = false): 
     output += ESCPOS.ALIGN_CENTER + ESCPOS.BOLD_ON + ESCPOS.DOUBLE_HEIGHT;
     output += '*** VOID ***' + ESCPOS.FEED;
     output += ESCPOS.NORMAL_SIZE + ESCPOS.BOLD_OFF;
+  }
+
+  // Credit sale banner
+  if (receipt.isCreditSale && !receipt.voided) {
+    output += ESCPOS.ALIGN_CENTER + ESCPOS.BOLD_ON;
+    output += '*** CREDIT SALE — AMOUNT DUE ***' + ESCPOS.FEED;
+    if (receipt.customerName) output += `Debtor: ${receipt.customerName}` + ESCPOS.FEED;
+    output += ESCPOS.BOLD_OFF;
   }
 
   // Pending KRA watermark
@@ -146,6 +215,9 @@ export function generateESCPOS(receipt: ReceiptData, enableCashDrawer = false): 
   output += `Cashier: ${receipt.cashierName}` + ESCPOS.FEED;
   if (receipt.customerName) {
     output += `Customer: ${receipt.customerName}` + ESCPOS.FEED;
+  }
+  if (receipt.customerKraPin) {
+    output += `Buyer PIN: ${receipt.customerKraPin}` + ESCPOS.FEED;
   }
   output += line('=', 32) + ESCPOS.FEED;
   output += ESCPOS.FEED;
@@ -194,15 +266,54 @@ export function generateESCPOS(receipt: ReceiptData, enableCashDrawer = false): 
 
   // Payments
   output += ESCPOS.FEED;
-  receipt.payments.forEach((payment) => {
-    const method = payment.reference ? `${payment.method} (${payment.reference})` : payment.method;
-    output += pad(method, 20) + pad(formatKES(payment.amountCents), 12, 'right') + ESCPOS.FEED;
-  });
-  
-  if (receipt.changeCents && receipt.changeCents > 0) {
+  if (receipt.isCreditSale && !receipt.voided) {
     output += ESCPOS.BOLD_ON;
-    output += pad('CHANGE:', 20) + pad(formatKES(receipt.changeCents), 12, 'right') + ESCPOS.FEED;
+    output += pad('CREDIT THIS SALE:', 20) + pad(formatKES(receipt.totalCents), 12, 'right') + ESCPOS.FEED;
     output += ESCPOS.BOLD_OFF;
+    if (receipt.previousBalanceCents !== undefined && receipt.previousBalanceCents < 0) {
+      output += pad('PREV BALANCE OWED:', 20) + pad(formatKES(Math.abs(receipt.previousBalanceCents)), 12, 'right') + ESCPOS.FEED;
+    }
+    if (receipt.newBalanceCents !== undefined) {
+      output += line('-', 32) + ESCPOS.FEED;
+      output += ESCPOS.BOLD_ON;
+      output += pad('TOTAL OUTSTANDING:', 20) + pad(formatKES(Math.abs(receipt.newBalanceCents)), 12, 'right') + ESCPOS.FEED;
+      output += ESCPOS.BOLD_OFF;
+    }
+  } else {
+    const groups = groupPayments(receipt.payments);
+    groups.forEach((group) => {
+      if (group.isGroup) {
+        // Group header with total
+        output += ESCPOS.BOLD_ON;
+        output += pad(group.label + ':', 20) + pad(formatKES(group.totalCents), 12, 'right') + ESCPOS.FEED;
+        output += ESCPOS.BOLD_OFF;
+        // Sub-lines indented
+        group.lines.forEach((p) => {
+          const label = '  ' + p.method + (p.reference ? ` (${p.reference})` : '');
+          output += pad(label, 20) + pad(formatKES(p.amountCents), 12, 'right') + ESCPOS.FEED;
+        });
+      } else {
+        const p = group.lines[0];
+        const label = group.label + (p.reference ? ` (${p.reference})` : '');
+        output += pad(label, 20) + pad(formatKES(p.amountCents), 12, 'right') + ESCPOS.FEED;
+      }
+    });
+    if (receipt.changeCents && receipt.changeCents > 0) {
+      output += ESCPOS.BOLD_ON;
+      output += pad('CHANGE:', 20) + pad(formatKES(receipt.changeCents), 12, 'right') + ESCPOS.FEED;
+      output += ESCPOS.BOLD_OFF;
+    }
+  }
+
+  if ((receipt.pointsEarned ?? 0) > 0 || (receipt.loyaltyBalance ?? 0) > 0) {
+    output += ESCPOS.FEED + line('-', 32) + ESCPOS.FEED;
+    output += ESCPOS.ALIGN_CENTER + ESCPOS.BOLD_ON;
+    if ((receipt.pointsEarned ?? 0) > 0) {
+      output += `+${receipt.pointsEarned} LOYALTY POINTS EARNED` + ESCPOS.FEED;
+    }
+    output += ESCPOS.BOLD_OFF;
+    output += `Loyalty balance: ${(receipt.loyaltyBalance ?? 0).toLocaleString()} pts` + ESCPOS.FEED;
+    output += ESCPOS.ALIGN_LEFT;
   }
 
   // KRA eTIMS Section
@@ -244,8 +355,22 @@ export function generateESCPOS(receipt: ReceiptData, enableCashDrawer = false): 
   return output;
 }
 
+
 // Generate HTML for browser printing
 export function generateHTML(receipt: ReceiptData): string {
+  // Pre-compute loyalty section before the template literal
+  const pe = receipt.pointsEarned ?? 0;
+  const lb = receipt.loyaltyBalance ?? 0;
+  const loyaltySectionHtml = (pe > 0 || lb > 0)
+    ? '<div style="border-top:2px solid #000;margin:6px 0"></div>'
+      + '<div style="text-align:center;padding:8px 4px;background:#fffbeb;border:1px dashed #d97706;border-radius:6px;margin:4px 0">'
+      + (pe > 0
+        ? '<div style="font-weight:bold;font-size:14px;color:#92400e">\u2B50 +' + pe + ' Loyalty Points Earned!</div>'
+        : '<div style="font-weight:bold;font-size:14px;color:#92400e">\u2B50 Loyalty Points</div>')
+      + '<div style="font-size:12px;color:#78350f;margin-top:3px">Your balance: <strong>' + lb.toLocaleString() + ' pts</strong></div>'
+      + '</div>'
+    : '';
+
   return `
 <!DOCTYPE html>
 <html>
@@ -320,12 +445,24 @@ export function generateHTML(receipt: ReceiptData): string {
       letter-spacing: 4px;
       border: 3px solid #000;
     }
+    .credit-watermark {
+      background: #fef3c7;
+      border: 2px solid #d97706;
+      color: #92400e;
+      text-align: center;
+      font-weight: bold;
+      font-size: 12px;
+      padding: 8px 4px;
+      margin-bottom: 8px;
+      letter-spacing: 0.5px;
+    }
   </style>
 </head>
 <body>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"><\/script>
   <button class="print-btn no-print" onclick="window.print()">🖨 Print Receipt</button>
   ${receipt.voided ? `<div class="void-watermark">★ VOID ★</div>` : ''}
+  ${receipt.isCreditSale && !receipt.voided ? `<div class="credit-watermark">★ CREDIT SALE — AMOUNT DUE: ${formatKES(receipt.totalCents)} ★</div>` : ''}
   ${receipt.etimsSubmitted === false && !receipt.voided ? `<div class="pending-watermark">⚠ PENDING KRA SUBMISSION</div>` : ''}
   <div class="center bold large">${receipt.businessName}</div>
   <div class="center">${receipt.storeName}</div>
@@ -339,8 +476,9 @@ export function generateHTML(receipt: ReceiptData): string {
     <tr><td>Date:</td><td class="right">${new Date(receipt.date).toLocaleString('en-KE')}</td></tr>
     <tr><td>Cashier:</td><td class="right">${receipt.cashierName}</td></tr>
     ${receipt.customerName ? `<tr><td>Customer:</td><td class="right">${receipt.customerName}</td></tr>` : ''}
+    ${receipt.customerKraPin ? `<tr><td>Buyer PIN:</td><td class="right">${receipt.customerKraPin}</td></tr>` : ''}
   </table>
-  
+
   <div class="line"></div>
   
   ${receipt.items.map(item => `
@@ -368,14 +506,42 @@ export function generateHTML(receipt: ReceiptData): string {
   <div class="line"></div>
   
   <table class="small">
-    ${receipt.payments.map(p => `
-      <tr>
-        <td>${p.method}${p.reference ? ` (${p.reference})` : ''}</td>
-        <td class="right">${formatKES(p.amountCents)}</td>
+    ${receipt.isCreditSale ? `
+      <tr style="color:#92400e;font-weight:bold">
+        <td>CREDIT (This Sale)</td>
+        <td class="right">${formatKES(receipt.totalCents)}</td>
       </tr>
-    `).join('')}
-    ${receipt.changeCents && receipt.changeCents > 0 ? `<tr class="bold"><td>CHANGE:</td><td class="right">${formatKES(receipt.changeCents)}</td></tr>` : ''}
+      ${receipt.customerName ? `<tr><td>Debtor:</td><td class="right">${receipt.customerName}</td></tr>` : ''}
+      ${receipt.previousBalanceCents !== undefined && receipt.previousBalanceCents < 0 ? `
+        <tr style="color:#b45309"><td>Previous Balance Owed:</td><td class="right">${formatKES(Math.abs(receipt.previousBalanceCents))}</td></tr>
+      ` : ''}
+      ${receipt.newBalanceCents !== undefined ? `
+        <tr style="color:#991b1b;font-weight:bold;border-top:1px solid #fca5a5"><td>TOTAL OUTSTANDING:</td><td class="right">${formatKES(Math.abs(receipt.newBalanceCents))}</td></tr>
+      ` : ''}
+    ` : (() => {
+        const groups = groupPayments(receipt.payments);
+        return groups.map(group => {
+          if (group.isGroup) {
+            return `
+              <tr style="border-top:1px solid #e5e7eb">
+                <td style="font-weight:600;padding-top:4px">${group.label}</td>
+                <td class="right" style="font-weight:600;padding-top:4px">${formatKES(group.totalCents)}</td>
+              </tr>
+              ${group.lines.map(p => `
+                <tr>
+                  <td style="padding-left:12px;color:#6b7280;font-size:10px">${p.method}${p.reference ? ` — ${p.reference}` : ''}</td>
+                  <td class="right" style="color:#6b7280;font-size:10px">${formatKES(p.amountCents)}</td>
+                </tr>
+              `).join('')}`;
+          }
+          const p = group.lines[0];
+          return `<tr><td>${group.label}${p.reference ? ` (${p.reference})` : ''}</td><td class="right">${formatKES(p.amountCents)}</td></tr>`;
+        }).join('');
+      })()}
+    ${receipt.changeCents && receipt.changeCents > 0 && !receipt.isCreditSale ? `<tr class="bold"><td>CHANGE:</td><td class="right">${formatKES(receipt.changeCents)}</td></tr>` : ''}
   </table>
+
+  ${loyaltySectionHtml}
   
   ${receipt.etimsSubmitted && (receipt.etimsControlNumber ?? receipt.kraControlNumber) ? `
     <div class="line"></div>
@@ -411,6 +577,7 @@ export function generateHTML(receipt: ReceiptData): string {
 
 // Print to browser
 export function printToBrowser(receipt: ReceiptData): void {
+  console.log('[PRINTER] pointsEarned:', receipt.pointsEarned, 'loyaltyBalance:', receipt.loyaltyBalance, 'customerName:', receipt.customerName);
   const html = generateHTML(receipt);
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
   const winFeatures = isMobile
@@ -918,11 +1085,15 @@ export function generateStarWebPRNT(receipt: ReceiptData): string {
       <text align="right">KES ${(item.totalCents / 100).toFixed(2)}</text>
     </line>`).join('');
 
-  const paymentLines = receipt.payments.map((p) => `
-    <line>
-      <text>${esc(p.method)}${p.reference ? ` (${esc(p.reference)})` : ''}</text>
-      <text align="right">KES ${(p.amountCents / 100).toFixed(2)}</text>
-    </line>`).join('');
+  const paymentLines = groupPayments(receipt.payments).map((group) => {
+    if (group.isGroup) {
+      return `
+    <line><bold><text>${esc(group.label)}:</text></bold><bold><text align="right">KES ${(group.totalCents / 100).toFixed(2)}</text></bold></line>
+    ${group.lines.map(p => `<line><text>  ${esc(p.method)}${p.reference ? ` (${esc(p.reference)})` : ''}</text><text align="right">KES ${(p.amountCents / 100).toFixed(2)}</text></line>`).join('')}`;
+    }
+    const p = group.lines[0];
+    return `<line><text>${esc(group.label)}${p.reference ? ` (${esc(p.reference)})` : ''}</text><text align="right">KES ${(p.amountCents / 100).toFixed(2)}</text></line>`;
+  }).join('');
 
   const kraSection = receipt.etimsSubmitted && receipt.etimsControlNumber ? `
     <line><text align="center">--- KRA eTIMS VERIFIED ---</text></line>
@@ -959,6 +1130,13 @@ export function generateStarWebPRNT(receipt: ReceiptData): string {
     <line><text>--------------------------------</text></line>
     ${paymentLines}
     ${receipt.changeCents && receipt.changeCents > 0 ? `<line><text>CHANGE:</text><text align="right">KES ${(receipt.changeCents / 100).toFixed(2)}</text></line>` : ''}
+    ${((receipt.pointsEarned ?? 0) > 0 || (receipt.loyaltyBalance ?? 0) > 0) ? `
+    <line><text>================================</text></line>
+    <align value="center"/>
+    ${(receipt.pointsEarned ?? 0) > 0 ? `<bold><text>* +${receipt.pointsEarned} LOYALTY POINTS EARNED *</text></bold>` : ''}
+    <text>Loyalty balance: ${(receipt.loyaltyBalance ?? 0).toLocaleString()} pts</text>
+    <align value="left"/>
+    <line><text>================================</text></line>` : ''}
     ${kraSection}
     <align value="center"/>
     <text>Thank you for your business!</text>
@@ -1046,8 +1224,14 @@ export function generateEpsonEPOS(receipt: ReceiptData): string {
       <text>${esc(item.name.substring(0, 24))}&#10;</text>
       <text>${item.quantity} x KES ${(item.unitPriceCents / 100).toFixed(2)}        KES ${(item.totalCents / 100).toFixed(2)}&#10;</text>`).join('');
 
-  const paymentLines = receipt.payments.map((p) =>
-    `<text>${esc(p.method)}${p.reference ? ` (${esc(p.reference)})` : ''}        KES ${(p.amountCents / 100).toFixed(2)}&#10;</text>`).join('');
+  const paymentLines = groupPayments(receipt.payments).map((group) => {
+    if (group.isGroup) {
+      return `<text bold="true">${esc(group.label)}:        KES ${(group.totalCents / 100).toFixed(2)}&#10;</text>` +
+        group.lines.map(p => `<text>  ${esc(p.method)}${p.reference ? ` (${esc(p.reference)})` : ''}  KES ${(p.amountCents / 100).toFixed(2)}&#10;</text>`).join('');
+    }
+    const p = group.lines[0];
+    return `<text>${esc(group.label)}${p.reference ? ` (${esc(p.reference)})` : ''}        KES ${(p.amountCents / 100).toFixed(2)}&#10;</text>`;
+  }).join('');
 
   const kraSection = receipt.etimsSubmitted && receipt.etimsControlNumber
     ? `<text align="center">--- KRA eTIMS VERIFIED ---&#10;</text>
@@ -1077,6 +1261,7 @@ export function generateEpsonEPOS(receipt: ReceiptData): string {
       <text>--------------------------------&#10;</text>
       ${paymentLines}
       ${receipt.changeCents && receipt.changeCents > 0 ? `<text bold="true">CHANGE:          KES ${(receipt.changeCents / 100).toFixed(2)}&#10;</text>` : ''}
+      ${((receipt.pointsEarned ?? 0) > 0 || (receipt.loyaltyBalance ?? 0) > 0) ? `<text>================================&#10;</text>${(receipt.pointsEarned ?? 0) > 0 ? `<text align="center" bold="true" width="2" height="1">+${receipt.pointsEarned} POINTS EARNED&#10;</text>` : ''}<text align="center">Loyalty balance: ${(receipt.loyaltyBalance ?? 0).toLocaleString()} pts&#10;</text><text>================================&#10;</text>` : ''}
       ${kraSection}
       <text align="center">Thank you for your business!&#10;</text>
       <cut type="part"/>

@@ -454,6 +454,13 @@ export class ReportsController {
     res.send(html);
   }
 
+  @Get('pdf/field-order-invoice/:orderId')
+  async fieldOrderInvoicePdf(@Param('orderId') orderId: string, @Res() res: Response) {
+    const html = await this.pdf.generateFieldOrderInvoice(orderId);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  }
+
   @Get('pdf/debit-note/:returnId')
   async debitNotePdf(@Param('returnId') returnId: string, @Res() res: Response) {
     const html = await this.pdf.generateDebitNote(returnId);
@@ -632,5 +639,10 @@ export class ReportsController {
     @Query('endDate') endDate?: string,
   ) {
     return this.reports.npsSummary(businessId, startDate, endDate);
+  }
+
+  @Get('field-invoice-ageing')
+  async fieldInvoiceAgeing(@Query('businessId') businessId: string) {
+    return this.reports.fieldInvoiceAgeing(businessId);
   }
 }

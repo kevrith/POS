@@ -880,7 +880,7 @@ export class ReportsService {
     // not item.storeId (which is just the creation store).
     const items = await this.prisma.item.findMany({
       where: { businessId, trackStock: true, deletedAt: null },
-      select: { id: true, name: true, category: true, costPriceCents: true, barcode: true },
+      select: { id: true, name: true, category: true, costPriceCents: true, retailPriceCents: true, barcode: true },
     });
 
     const movements = await this.prisma.inventoryMovement.findMany({
@@ -900,14 +900,18 @@ export class ReportsService {
 
     const rows = items.map((item) => {
       const qty = qtyByItem[item.id] ?? 0;
+      const costPriceCents = item.costPriceCents ?? 0;
+      const retailPriceCents = item.retailPriceCents ?? 0;
       return {
         itemId: item.id,
         name: item.name,
         category: item.category ?? '',
         barcode: item.barcode ?? '',
         quantity: qty,
-        costPriceCents: item.costPriceCents ?? 0,
-        valueCents: qty > 0 ? qty * (item.costPriceCents ?? 0) : 0,
+        costPriceCents,
+        valueCents: qty > 0 ? qty * costPriceCents : 0,
+        retailPriceCents,
+        retailValueCents: qty > 0 ? qty * retailPriceCents : 0,
       };
     // When store-scoped, hide items with no movements at that store
     }).filter((r) => storeId ? r.quantity !== 0 : r.quantity >= 0);
@@ -916,6 +920,7 @@ export class ReportsService {
       asOfDate,
       items: rows,
       totalValueCents: rows.reduce((s, r) => s + r.valueCents, 0),
+      totalRetailValueCents: rows.reduce((s, r) => s + r.retailValueCents, 0),
       totalItems: rows.length,
     };
   }
@@ -2583,5 +2588,58 @@ export class ReportsService {
       count: scores.length,
     })).sort((a, b) => a.date.localeCompare(b.date));
     return { total, avg, npsScore, promoters, passives, detractors, trend, recent: responses.slice(0, 20) };
+  }
+
+  // ─── Field Invoice Ageing ─────────────────────────────────────────────────
+
+  async fieldInvoiceAgeing(businessId: string) {
+    const orders = await (this.prisma as any).fieldOrder.findMany({
+      where: {
+        businessId,
+        status: 'INVOICED',
+        paymentStatus: { not: 'PAID' },
+      },
+      include: {
+        customer: { select: { name: true, phone: true } },
+        agent: { select: { name: true } },
+      },
+      orderBy: { invoicedAt: 'asc' },
+    });
+
+    const now = Date.now();
+    const rows = orders.map((o: any) => {
+      const invoicedMs = o.invoicedAt ? new Date(o.invoicedAt).getTime() : new Date(o.createdAt).getTime();
+      const daysOut = Math.floor((now - invoicedMs) / 86400000);
+      const outstanding = o.totalCents - o.paidAmountCents;
+      const bucket =
+        daysOut <= 30 ? '0-30d' :
+        daysOut <= 60 ? '31-60d' :
+        daysOut <= 90 ? '61-90d' : '90+d';
+      return {
+        orderId: o.id,
+        orderNumber: o.orderNumber,
+        invoiceNumber: o.invoiceNumber,
+        invoicedAt: o.invoicedAt,
+        customerName: o.customer?.name,
+        customerPhone: o.customer?.phone,
+        agentName: o.agent?.name,
+        totalCents: o.totalCents,
+        paidAmountCents: o.paidAmountCents,
+        outstandingCents: outstanding,
+        daysOutstanding: daysOut,
+        paymentStatus: o.paymentStatus,
+        bucket,
+      };
+    });
+
+    const summary = {
+      '0-30d': rows.filter((r: any) => r.bucket === '0-30d').reduce((s: number, r: any) => s + r.outstandingCents, 0),
+      '31-60d': rows.filter((r: any) => r.bucket === '31-60d').reduce((s: number, r: any) => s + r.outstandingCents, 0),
+      '61-90d': rows.filter((r: any) => r.bucket === '61-90d').reduce((s: number, r: any) => s + r.outstandingCents, 0),
+      '90+d': rows.filter((r: any) => r.bucket === '90+d').reduce((s: number, r: any) => s + r.outstandingCents, 0),
+      totalOutstanding: rows.reduce((s: number, r: any) => s + r.outstandingCents, 0),
+    };
+
+    return { rows, summary };
   }
 }

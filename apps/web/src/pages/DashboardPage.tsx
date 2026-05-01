@@ -1,10 +1,10 @@
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   ShoppingCart, DollarSign, TrendingUp, TrendingDown, Package,
   AlertTriangle, CreditCard, Users, BarChart3, ChevronRight,
-  RefreshCw, Coffee, Wallet, Zap, Clock, CheckCircle2,
+  RefreshCw, Coffee, Wallet, Zap, Clock, CheckCircle2, MessageSquare, Check,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
@@ -168,6 +168,7 @@ const METHOD_COLORS: Record<string, string> = {
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const businessId = user?.businessId ?? '';
   const storeId = user?.storeId ?? '';
   const role = user?.role ?? '';
@@ -213,6 +214,21 @@ export default function DashboardPage() {
       api.get(`/items/low-stock?businessId=${businessId}&storeId=${storeId}`),
     enabled: !!businessId && ['OWNER', 'MANAGER'].includes(role),
     refetchInterval: 300000,
+  });
+
+  const { data: stockRequests = [] } = useQuery<{ id: string; title: string; body: string; createdAt: string }[]>({
+    queryKey: ['dashboard-stock-requests', businessId],
+    queryFn: () => api.get(`/notifications?businessId=${businessId}&type=STOCK_REQUEST&unreadOnly=true`),
+    enabled: !!businessId && ['OWNER', 'MANAGER'].includes(role),
+    refetchInterval: 120_000,
+  });
+
+  const markRequestDoneMutation = useMutation({
+    mutationFn: (id: string) => api.patch(`/notifications/${id}/read`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['dashboard-stock-requests', businessId] });
+      qc.invalidateQueries({ queryKey: ['notifications-stock-requests', businessId] });
+    },
   });
 
   const { data: plData } = useQuery<PLData>({
@@ -518,6 +534,53 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+
+        {/* ── Stock Requests Card (OWNER/MANAGER only) ── */}
+        {['OWNER', 'MANAGER'].includes(role) && stockRequests.length > 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-orange-100 dark:border-orange-900/30 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-orange-50 dark:border-orange-900/20 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-orange-500" />
+                <h2 className="font-bold text-gray-900 dark:text-white text-sm">Customer Stock Requests</h2>
+                <span className="text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 font-bold px-2 py-0.5 rounded-full">
+                  {stockRequests.length}
+                </span>
+              </div>
+              <button
+                onClick={() => navigate('/inventory')}
+                className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+              >
+                Go to Inventory <ChevronRight className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="divide-y divide-gray-50 dark:divide-gray-700/50">
+              {stockRequests.slice(0, 8).map((req) => (
+                <div key={req.id} className="flex items-start gap-3 px-5 py-3">
+                  <div className="w-7 h-7 rounded-lg bg-orange-50 dark:bg-orange-900/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <MessageSquare className="w-3.5 h-3.5 text-orange-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{req.title}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{req.body}</p>
+                    <p className="text-[10px] text-gray-400 mt-1">{new Date(req.createdAt).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                  </div>
+                  <button
+                    onClick={() => markRequestDoneMutation.mutate(req.id)}
+                    title="Mark as done / restocked"
+                    className="flex-shrink-0 p-1.5 rounded-lg text-gray-400 hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-900/20 transition-colors mt-0.5"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+              {stockRequests.length > 8 && (
+                <div className="px-5 py-2 text-xs text-gray-400 text-center">
+                  +{stockRequests.length - 8} more requests
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ── Quick Actions ── */}
         <div>

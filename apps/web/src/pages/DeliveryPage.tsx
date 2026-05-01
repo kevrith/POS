@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useDialog } from '../components/Dialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
@@ -15,6 +16,7 @@ interface DeliveryOrder {
   scheduledAt?: string;
   pickedUpAt?: string;
   deliveredAt?: string;
+  receivedBy?: string;
   status: string;
   deliveryFeeCents: number;
   notes?: string;
@@ -44,10 +46,14 @@ export default function DeliveryPage() {
   const businessId = user?.businessId ?? '';
   const storeId = user?.storeId;
   const qc = useQueryClient();
+  const { confirm } = useDialog();
   const [tab, setTab] = useState<'PENDING' | 'ASSIGNED' | 'IN_TRANSIT' | 'DELIVERED' | 'ALL'>('PENDING');
   const [showCreate, setShowCreate] = useState(false);
   const [assignTarget, setAssignTarget] = useState<DeliveryOrder | null>(null);
   const [selectedDriver, setSelectedDriver] = useState('');
+  const [deliverTarget, setDeliverTarget] = useState<DeliveryOrder | null>(null);
+  const [recipientName, setRecipientName] = useState('');
+  const [receivedAt, setReceivedAt] = useState('');
 
   const [form, setForm] = useState({
     customerName: '',
@@ -61,7 +67,11 @@ export default function DeliveryPage() {
 
   const { data: deliveries = [] } = useQuery<DeliveryOrder[]>({
     queryKey: ['deliveries', businessId, storeId, tab],
-    queryFn: () => api.get(`/delivery?businessId=${businessId}&storeId=${storeId}&status=${tab}`),
+    queryFn: () => {
+      const params = new URLSearchParams({ businessId, status: tab });
+      if (storeId) params.set('storeId', storeId);
+      return api.get(`/delivery?${params.toString()}`);
+    },
     enabled: !!businessId,
     refetchInterval: 30000,
   });
@@ -110,7 +120,7 @@ export default function DeliveryPage() {
     ${d.scheduledAt ? `<p><b>Scheduled:</b> ${new Date(d.scheduledAt).toLocaleString()}</p>` : ''}
     ${d.deliveryFeeCents > 0 ? `<p><b>Delivery Fee:</b> ${formatKES(d.deliveryFeeCents)}</p>` : ''}
     ${d.notes ? `<hr/><p>${d.notes}</p>` : ''}
-    <hr/><p style="margin-top:24px">Received by: _____________________ Date: _________</p>
+    <hr/><p style="margin-top:24px">${d.status === 'DELIVERED' && d.receivedBy ? `Received by: <b>${d.receivedBy}</b> &nbsp; Date: <b>${d.deliveredAt ? new Date(d.deliveredAt).toLocaleString() : ''}</b>` : 'Received by: _____________________ Date: _________'}</p>
     </body></html>`);
     win.document.close();
     win.onafterprint = () => win.close();
@@ -187,6 +197,11 @@ export default function DeliveryPage() {
                     {driverName && <p className="text-sm text-gray-500 flex items-center gap-1"><User className="w-3.5 h-3.5" /> Driver: {driverName}</p>}
                     {d.scheduledAt && <p className="text-xs text-gray-400 mt-0.5"><Clock className="w-3 h-3 inline mr-1" />{new Date(d.scheduledAt).toLocaleString()}</p>}
                     {d.deliveryFeeCents > 0 && <p className="text-xs text-gray-400">Fee: {formatKES(d.deliveryFeeCents)}</p>}
+                    {d.status === 'DELIVERED' && d.receivedBy && (
+                      <p className="text-xs text-green-600 font-medium mt-0.5 flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3" /> Signed by {d.receivedBy}{d.deliveredAt ? ` · ${new Date(d.deliveredAt).toLocaleString()}` : ''}
+                      </p>
+                    )}
                   </div>
                 </div>
                 {canManage && (
@@ -201,11 +216,15 @@ export default function DeliveryPage() {
                         className="px-3 py-1.5 text-xs bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-medium">Pick Up</button>
                     )}
                     {d.status === 'IN_TRANSIT' && (
-                      <button onClick={() => updateMutation.mutate({ id: d.id, status: 'DELIVERED' })}
+                      <button onClick={() => {
+                        setDeliverTarget(d);
+                        setRecipientName(user?.name ?? '');
+                        setReceivedAt(new Date().toISOString().slice(0, 16));
+                      }}
                         className="px-3 py-1.5 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">Deliver</button>
                     )}
                     {['PENDING', 'ASSIGNED'].includes(d.status) && (
-                      <button onClick={() => { if (confirm('Cancel delivery?')) cancelMutation.mutate(d.id); }}
+                      <button onClick={async () => { const ok = await confirm({ title: 'Cancel Delivery', message: 'Cancel this delivery? The driver will be notified.', variant: 'warning', confirmLabel: 'Cancel Delivery' }); if (ok) cancelMutation.mutate(d.id); }}
                         className="px-3 py-1.5 text-xs border border-red-300 text-red-600 rounded-lg hover:bg-red-50">Cancel</button>
                     )}
                   </div>
@@ -240,6 +259,56 @@ export default function DeliveryPage() {
                   disabled={!selectedDriver || assignMutation.isPending}
                   className="px-6 py-2 text-sm bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50">
                   {assignMutation.isPending ? 'Assigning…' : 'Assign Driver'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delivery Sign Modal */}
+      {deliverTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-sm shadow-2xl">
+            <div className="p-6">
+              <h3 className="font-bold text-gray-900 dark:text-white mb-1 flex items-center gap-2">
+                <CheckCircle className="w-5 h-5 text-green-600" /> Confirm Delivery — {deliverTarget.orderNumber}
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Customer: {deliverTarget.customerName}</p>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Received By *</label>
+                  <input
+                    value={recipientName}
+                    onChange={(e) => setRecipientName(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    placeholder="Recipient name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Date &amp; Time Received</label>
+                  <input
+                    type="datetime-local"
+                    value={receivedAt}
+                    onChange={(e) => setReceivedAt(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end mt-5">
+                <button onClick={() => setDeliverTarget(null)} className="px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">Cancel</button>
+                <button
+                  disabled={!recipientName.trim() || updateMutation.isPending}
+                  onClick={() => {
+                    updateMutation.mutate({
+                      id: deliverTarget.id,
+                      status: 'DELIVERED',
+                      receivedBy: recipientName.trim(),
+                      deliveredAt: receivedAt ? new Date(receivedAt).toISOString() : new Date().toISOString(),
+                    }, { onSuccess: () => setDeliverTarget(null) });
+                  }}
+                  className="px-6 py-2 text-sm bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:opacity-50">
+                  {updateMutation.isPending ? 'Saving…' : 'Confirm Delivered'}
                 </button>
               </div>
             </div>

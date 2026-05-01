@@ -89,18 +89,19 @@ export class StocktakeService {
     }
 
     await Promise.all(
-      updates.map((u) =>
-        this.prisma.stocktakeCount.update({
+      updates.map((u) => {
+        const qty = Math.floor(Math.max(0, u.countedQty)); // enforce non-negative integer
+        return this.prisma.stocktakeCount.update({
           where: { id: u.countId },
           data: {
-            countedQty: u.countedQty,
+            countedQty: qty,
             varianceQty: undefined, // computed on finalize
             note: u.note,
             countedBy: u.countedBy,
             countedAt: new Date(),
           },
-        }),
-      ),
+        });
+      }),
     );
 
     return { saved: updates.length };

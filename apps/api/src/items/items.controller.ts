@@ -23,6 +23,7 @@ interface CreateItemDto {
   type: ItemType;
   barcode?: string;
   categoryId?: string;
+  categoryName?: string;
   retailPriceCents: number;
   wholesalePriceCents?: number;
   vipPriceCents?: number;
@@ -118,6 +119,23 @@ export class ItemsController {
     return this.items.createCategory(businessId, body.name, body.color);
   }
 
+  @Patch('categories/:id')
+  updateCategory(
+    @Param('id') id: string,
+    @Query('businessId') businessId: string,
+    @Body() body: { name?: string; color?: string; sortOrder?: number },
+  ) {
+    return this.items.updateCategory(id, businessId, body);
+  }
+
+  @Delete('categories/:id')
+  deleteCategory(
+    @Param('id') id: string,
+    @Query('businessId') businessId: string,
+  ) {
+    return this.items.deleteCategory(id, businessId);
+  }
+
   @Post('import')
   importBulk(
     @Query('businessId') businessId: string,
@@ -211,5 +229,42 @@ export class ItemsController {
     @Query('businessId') businessId: string,
   ) {
     return this.items.deleteVariant(itemId, variantId, businessId);
+  }
+
+  // ── Item UOM (packaging / units of measure) ────────────────────────────────
+  @Get(':id/uoms')
+  getUOMs(
+    @Param('id') id: string,
+    @Query('businessId') businessId: string,
+  ) {
+    return this.items.getUOMs(id, businessId);
+  }
+
+  @Post(':id/uoms')
+  createUOM(
+    @Param('id') id: string,
+    @Query('businessId') businessId: string,
+    @Body() body: { unitName: string; unitAbbrev: string; conversionFactor: number; isBaseUnit?: boolean; priceCents?: number; barcode?: string },
+  ) {
+    return this.items.createUOM(id, businessId, body);
+  }
+
+  @Patch(':id/uoms/:uomId')
+  updateUOM(
+    @Param('id') id: string,
+    @Param('uomId') uomId: string,
+    @Query('businessId') businessId: string,
+    @Body() body: Partial<{ unitName: string; unitAbbrev: string; conversionFactor: number; isBaseUnit: boolean; priceCents: number; barcode: string }>,
+  ) {
+    return this.items.updateUOM(id, uomId, businessId, body);
+  }
+
+  @Delete(':id/uoms/:uomId')
+  deleteUOM(
+    @Param('id') id: string,
+    @Param('uomId') uomId: string,
+    @Query('businessId') businessId: string,
+  ) {
+    return this.items.deleteUOM(uomId, id, businessId);
   }
 }

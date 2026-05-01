@@ -8,6 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: 'auto',
       includeAssets: ['favicon.png', 'logo.png', 'icons/*.png'],
       manifest: {
         name: 'KASTRA POS',
@@ -27,6 +28,8 @@ export default defineConfig({
         categories: ['business', 'finance', 'productivity'],
       },
       workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//, /^\/offline\.html$/],
@@ -41,11 +44,15 @@ export default defineConfig({
             },
           },
           {
+            urlPattern: /^\/api\/v1\/(sales|loyalty|etims|payments|gift-cards|notifications)/,
+            handler: 'NetworkOnly',
+          },
+          {
             urlPattern: /^\/api\//,
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cache',
-              expiration: { maxEntries: 200, maxAgeSeconds: 86400 },
+              expiration: { maxEntries: 200, maxAgeSeconds: 3600 },
               networkTimeoutSeconds: 10,
             },
           },

@@ -54,6 +54,7 @@ async function main() {
   // Sales / loyalty leaf records
   await d((prisma as any).creditNote?.deleteMany());
   await d(prisma.loyaltyTransaction.deleteMany());
+  await d(prisma.loyaltyProgram.deleteMany());
   await d(prisma.giftCard.deleteMany());
   await d(prisma.promotion.deleteMany());
   await d((prisma as any).proforma?.deleteMany());
@@ -284,6 +285,13 @@ async function main() {
   });
 
   console.log('✅ Stock, batches, serials ready');
+
+  // ─── Loyalty Program ────────────────────────────────────────────────────
+  await prisma.loyaltyProgram.upsert({
+    where: { id: 'lp-001' },
+    update: {},
+    create: { id: 'lp-001', businessId: business.id, name: 'Premier Café Rewards', kesPerPoint: 100, pointValueCents: 50, minRedemption: 100, isActive: true },
+  });
 
   // ─── Customers ──────────────────────────────────────────────────────────
   await prisma.customer.createMany({

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ShoppingCart, Trash2, Plus, Minus, X, PauseCircle, PlayCircle, AlertTriangle, Edit2, Scale, UserPlus } from 'lucide-react';
+import { ShoppingCart, Trash2, Plus, Minus, X, PauseCircle, PlayCircle, AlertTriangle, Edit2, Scale, UserPlus, FileText } from 'lucide-react';
 import type { CartItem, PriceLevel } from '../../stores/pos';
 import { isSerialSupported, requestScalePort, readWeight, type ScaleProtocol } from '../../lib/scale';
 
@@ -56,9 +56,12 @@ interface Props {
   totalCents: number;
   fxRates: Record<string, number>;
   activeCurrencies: string[];
+  manualDiscountCents: number;
+  setManualDiscountCents: (v: number) => void;
   isPaying: boolean;
   payError?: string;
   onPay: () => void;
+  onSaveAsInvoice?: () => void;
 }
 
 export default function CartPanel({
@@ -68,7 +71,8 @@ export default function CartPanel({
   fefoAlerts, subtotalCents, vatCents, totCents = 0, taxType = 'VAT', promoDiscountCents, appliedPromotion,
   serviceChargeEnabled, setServiceChargeEnabled, serviceChargeRate, serviceChargeCents,
   tipInput, setTipInput, tipCents, totalCents, fxRates, activeCurrencies,
-  isPaying, payError, onPay,
+  manualDiscountCents, setManualDiscountCents,
+  isPaying, payError, onPay, onSaveAsInvoice,
 }: Props) {
   return (
     <>
@@ -207,6 +211,53 @@ export default function CartPanel({
               <span>-{formatKES(promoDiscountCents)}</span>
             </div>
           )}
+          {/* Manual sale discount — bidirectional % ↔ KES */}
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-500 text-xs whitespace-nowrap w-14">Discount</span>
+              <div className="flex items-center gap-1 flex-1">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={subtotalCents > 0 ? parseFloat(((manualDiscountCents / subtotalCents) * 100).toFixed(1)) || '' : ''}
+                  onChange={(e) => {
+                    const pct = Math.min(100, Math.max(0, parseFloat(e.target.value) || 0));
+                    setManualDiscountCents(Math.round(subtotalCents * pct / 100));
+                  }}
+                  placeholder="0"
+                  className="w-14 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-600 focus:ring-1 focus:ring-orange-500 focus:border-orange-500 outline-none text-right"
+                />
+                <span className="text-slate-600 text-xs">%</span>
+                <span className="text-slate-700 text-xs">/</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={manualDiscountCents > 0 ? (manualDiscountCents / 100).toFixed(0) : ''}
+                  onChange={(e) => {
+                    const amt = Math.max(0, parseFloat(e.target.value) || 0);
+                    setManualDiscountCents(Math.min(Math.round(amt * 100), subtotalCents));
+                  }}
+                  placeholder="0"
+                  className="w-16 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-600 focus:ring-1 focus:ring-orange-500 focus:border-orange-500 outline-none text-right"
+                />
+                <span className="text-slate-600 text-xs">KES</span>
+                {manualDiscountCents > 0 && (
+                  <button onClick={() => setManualDiscountCents(0)} className="text-slate-600 hover:text-red-400 ml-auto">
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+            {manualDiscountCents > 0 && (
+              <div className="flex justify-between text-orange-400 text-xs font-semibold">
+                <span>Sale discount</span>
+                <span>-{formatKES(manualDiscountCents)}</span>
+              </div>
+            )}
+          </div>
           {serviceChargeCents > 0 && (
             <div className="flex justify-between text-slate-400">
               <span>Service ({serviceChargeRate}%)</span>
@@ -300,6 +351,16 @@ export default function CartPanel({
             </div>
           </div>
 
+          {onSaveAsInvoice && (
+            <button
+              onClick={onSaveAsInvoice}
+              disabled={cart.length === 0}
+              className="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold rounded-xl disabled:opacity-40 transition-colors flex items-center justify-center gap-2 text-sm"
+            >
+              <FileText className="w-4 h-4" />
+              Save as Invoice / Proforma
+            </button>
+          )}
           <button
             onClick={onPay}
             disabled={cart.length === 0 || isPaying}
@@ -400,20 +461,40 @@ function CartItemRow({ item, onRemove, onQuantityChange, onDiscountChange, onPri
           {`KES ${(item.totalCents / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`}
         </span>
       </div>
-      <div className="flex items-center gap-2 mt-2">
+      <div className="flex items-center gap-1.5 mt-2">
+        {/* Per-item discount — bidirectional % ↔ KES */}
         <input
           type="number"
           min="0"
           max="100"
-          value={item.discountPercent ?? 0}
-          onChange={(e) => onDiscountChange(parseFloat(e.target.value) || 0)}
-          placeholder="Disc %"
-          className="w-20 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-slate-300 focus:ring-1 focus:ring-blue-500 outline-none"
+          step="0.1"
+          value={item.discountPercent ? parseFloat(item.discountPercent.toFixed(1)) : ''}
+          onChange={(e) => onDiscountChange(Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))}
+          placeholder="0"
+          className="w-14 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-600 focus:ring-1 focus:ring-orange-500 outline-none text-right"
         />
-        <span className="text-xs text-slate-600">% off</span>
+        <span className="text-slate-600 text-xs">%</span>
+        <span className="text-slate-700 text-xs">/</span>
+        <input
+          type="number"
+          min="0"
+          step="1"
+          value={item.discountPercent && item.discountPercent > 0
+            ? Math.round(item.unitPriceCents * item.quantity * item.discountPercent / 100 / 100)
+            : ''}
+          onChange={(e) => {
+            const amt = Math.max(0, parseFloat(e.target.value) || 0);
+            const base = item.unitPriceCents * item.quantity;
+            const pct = base > 0 ? Math.min(100, (amt * 100 / base) * 100) : 0;
+            onDiscountChange(Math.round(pct * 10) / 10);
+          }}
+          placeholder="0"
+          className="w-16 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-600 focus:ring-1 focus:ring-orange-500 outline-none text-right"
+        />
+        <span className="text-slate-600 text-xs">KES</span>
         <button
           onClick={onPriceOverride}
-          className="flex items-center gap-1 px-2 py-1 text-xs border border-amber-700/50 text-amber-400 rounded hover:bg-amber-900/30 transition-colors"
+          className="flex items-center gap-1 px-2 py-1 text-xs border border-amber-700/50 text-amber-400 rounded hover:bg-amber-900/30 transition-colors ml-auto"
           title="Override price"
         >
           <Edit2 className="w-3 h-3" />

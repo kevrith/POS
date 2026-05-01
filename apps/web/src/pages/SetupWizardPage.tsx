@@ -99,6 +99,15 @@ export default function SetupWizardPage() {
     enabled: !!businessId,
   });
 
+  // Fetch existing stores to avoid unique-constraint crash on re-run
+  const { data: existingStores = [] } = useQuery<{ id: string; name: string; storeCode: string }[]>({
+    queryKey: ['setup-stores', businessId],
+    queryFn: () => api.get(`/business/${businessId}/stores`),
+    enabled: !!businessId,
+  });
+
+  const [showNewStoreForm, setShowNewStoreForm] = useState(false);
+
   useEffect(() => {
     if (existingSettings?.name) {
       setBizForm((f) => ({
@@ -325,46 +334,104 @@ export default function SetupWizardPage() {
                 <p className="text-gray-500 text-sm mt-1">Configure your physical store location</p>
               </div>
 
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Store Name *</label>
-                  <input
-                    type="text"
-                    value={storeForm.name}
-                    onChange={(e) => setStoreForm((f) => ({ ...f, name: e.target.value }))}
-                    placeholder="e.g. Main Branch - Nairobi CBD"
-                    className="w-full border rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    autoFocus
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Store Code *</label>
-                  <input
-                    type="text"
-                    value={storeForm.storeCode}
-                    onChange={(e) => setStoreForm((f) => ({ ...f, storeCode: e.target.value.toUpperCase() }))}
-                    placeholder="e.g. NRB01"
-                    maxLength={10}
-                    className="w-full border rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
-                  />
-                  <p className="text-xs text-gray-400 mt-1">Short code used for receipts and KRA eTIMS (max 10 chars)</p>
-                </div>
-              </div>
+              {existingStores.length > 0 && !showNewStoreForm ? (
+                /* ── Existing stores found: let user select one ── */
+                <div className="space-y-4">
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+                    Your business already has {existingStores.length === 1 ? 'a store' : `${existingStores.length} stores`} configured.
+                    Select one to continue, or add a new store below.
+                  </div>
 
-              <div className="flex gap-3 pt-2">
-                <button onClick={prev} className="px-5 py-2.5 border rounded-lg text-gray-700 hover:bg-gray-50 flex items-center gap-1.5">
-                  <ChevronLeft className="w-4 h-4" /> Back
-                </button>
-                <button
-                  onClick={() => createStoreMutation.mutate()}
-                  disabled={!storeForm.name.trim() || !storeForm.storeCode.trim() || createStoreMutation.isPending}
-                  className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {createStoreMutation.isPending ? 'Creating…' : <>Create Store <ChevronRight className="w-4 h-4" /></>}
-                </button>
-              </div>
-              {createStoreMutation.isError && (
-                <p className="text-sm text-red-600">{(createStoreMutation.error as Error).message}</p>
+                  <div className="space-y-2">
+                    {existingStores.map((store) => (
+                      <div
+                        key={store.id}
+                        className="flex items-center justify-between p-4 border-2 border-gray-200 rounded-xl hover:border-blue-300 hover:bg-blue-50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-gray-100 rounded-lg">
+                            <Store className="w-5 h-5 text-gray-500" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-gray-900">{store.name}</p>
+                            <p className="text-xs text-gray-400 font-mono">{store.storeCode}</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setStep(3)}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-1.5"
+                        >
+                          Use this store <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => setShowNewStoreForm(true)}
+                    className="w-full py-2.5 border-2 border-dashed border-gray-300 rounded-xl text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                  >
+                    + Add a new store instead
+                  </button>
+
+                  <div className="flex gap-3 pt-2">
+                    <button onClick={prev} className="px-5 py-2.5 border rounded-lg text-gray-700 hover:bg-gray-50 flex items-center gap-1.5">
+                      <ChevronLeft className="w-4 h-4" /> Back
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* ── No stores yet (or user chose to add new) ── */
+                <div className="space-y-4">
+                  {existingStores.length > 0 && (
+                    <button
+                      onClick={() => setShowNewStoreForm(false)}
+                      className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" /> Back to existing stores
+                    </button>
+                  )}
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Store Name *</label>
+                    <input
+                      type="text"
+                      value={storeForm.name}
+                      onChange={(e) => setStoreForm((f) => ({ ...f, name: e.target.value }))}
+                      placeholder="e.g. Main Branch - Nairobi CBD"
+                      className="w-full border rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Store Code *</label>
+                    <input
+                      type="text"
+                      value={storeForm.storeCode}
+                      onChange={(e) => setStoreForm((f) => ({ ...f, storeCode: e.target.value.toUpperCase() }))}
+                      placeholder="e.g. NRB02"
+                      maxLength={10}
+                      className="w-full border rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Short code used for receipts and KRA eTIMS (max 10 chars)</p>
+                  </div>
+
+                  <div className="flex gap-3 pt-2">
+                    <button onClick={prev} className="px-5 py-2.5 border rounded-lg text-gray-700 hover:bg-gray-50 flex items-center gap-1.5">
+                      <ChevronLeft className="w-4 h-4" /> Back
+                    </button>
+                    <button
+                      onClick={() => createStoreMutation.mutate()}
+                      disabled={!storeForm.name.trim() || !storeForm.storeCode.trim() || createStoreMutation.isPending}
+                      className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {createStoreMutation.isPending ? 'Creating…' : <>Create Store <ChevronRight className="w-4 h-4" /></>}
+                    </button>
+                  </div>
+                  {createStoreMutation.isError && (
+                    <p className="text-sm text-red-600">{(createStoreMutation.error as Error).message}</p>
+                  )}
+                </div>
               )}
             </div>
           )}

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, HttpException, HttpStatus } from '@nestjs/common';
 import { CustomersService } from './customers.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../auth/tenant.guard';
@@ -58,6 +58,26 @@ export class CustomersController {
     return this.customersService.findOne(id, businessId);
   }
 
+  @Patch(':id')
+  @RequirePermission('customers.create')
+  async update(
+    @Param('businessId') businessId: string,
+    @Param('id') id: string,
+    @Body() body: { name?: string; phone?: string; email?: string; kraPin?: string; creditLimitCents?: number },
+  ) {
+    return this.customersService.update(id, businessId, body);
+  }
+
+  @Patch(':id/set-credit-limit')
+  @RequirePermission('customers.create')
+  async setCreditLimit(
+    @Param('businessId') businessId: string,
+    @Param('id') id: string,
+    @Body('newLimitCents') newLimitCents: number,
+  ) {
+    return this.customersService.setCreditLimit(id, businessId, newLimitCents);
+  }
+
   @Patch(':id/request-credit')
   @RequirePermission('customers.create')
   async requestCreditIncrease(@Param('id') id: string, @Body('requestedLimitCents') requestedLimitCents: number) {
@@ -74,5 +94,24 @@ export class CustomersController {
   @RequirePermission('customers.create')
   async rejectCredit(@Param('id') id: string) {
     return this.customersService.rejectCredit(id);
+  }
+
+  @Post(':id/payment')
+  @RequirePermission('customers.create')
+  async recordPayment(
+    @Param('businessId') businessId: string,
+    @Param('id') id: string,
+    @Body() body: { amountCents: number; notes?: string },
+  ) {
+    return this.customersService.recordPayment(id, businessId, body.amountCents, body.notes);
+  }
+
+  @Get(':id/payment-history')
+  @RequirePermission('customers.read')
+  async paymentHistory(
+    @Param('businessId') businessId: string,
+    @Param('id') id: string,
+  ) {
+    return this.customersService.getPaymentHistory(id, businessId);
   }
 }

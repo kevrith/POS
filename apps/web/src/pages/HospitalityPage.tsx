@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useDialog } from '../components/Dialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, Users, Clock, ChefHat, X, Trash2, Send, Receipt, RefreshCw,
@@ -1279,6 +1280,7 @@ function fmtTable(number: string, prefix: string): string {
 function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh, userName, tablePrefix = 'T' }: OrderPanelProps) {
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const { confirm } = useDialog();
   const [showPicker, setShowPicker] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
@@ -1656,10 +1658,9 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
               {/* Clear table — for guests who sat but left without ordering */}
               {activeOrder && table.status === 'OCCUPIED' && allItems.length === 0 && (
                 <button
-                  onClick={() => {
-                    if (confirm('Clear this table? This will cancel the empty order and mark the table as available.')) {
-                      cancelOrderMutation.mutate(activeOrder.id);
-                    }
+                  onClick={async () => {
+                    const ok = await confirm({ title: 'Clear Table', message: 'Clear this table? This will cancel the empty order and mark the table as available.', variant: 'warning', confirmLabel: 'Clear Table' });
+                    if (ok) cancelOrderMutation.mutate(activeOrder.id);
                   }}
                   disabled={cancelOrderMutation.isPending}
                   className="mt-4 flex items-center gap-1.5 px-4 py-2 mx-auto text-xs font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50"
@@ -1988,12 +1989,14 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
            activeOrder.items.length > 0 &&
            (user?.role === 'OWNER' || user?.role === 'MANAGER') && (
             <button
-              onClick={() => {
-                if (confirm(
-                  `Clear ${fmtTable(table.number, tablePrefix)}? This will void the current order (${activeOrder.items.length} item${activeOrder.items.length !== 1 ? 's' : ''}) and mark the table as available.\n\nUse this only when guests have left without paying.`
-                )) {
-                  cancelOrderMutation.mutate(activeOrder.id);
-                }
+              onClick={async () => {
+                const ok = await confirm({
+                  title: 'Clear Table',
+                  message: `Clear ${fmtTable(table.number, tablePrefix)}? This will void the current order (${activeOrder.items.length} item${activeOrder.items.length !== 1 ? 's' : ''}) and mark the table as available. Use this only when guests have left without paying.`,
+                  variant: 'warning',
+                  confirmLabel: 'Clear Table',
+                });
+                if (ok) cancelOrderMutation.mutate(activeOrder.id);
               }}
               disabled={cancelOrderMutation.isPending}
               className="w-full py-2 border border-red-200 text-red-600 hover:bg-red-50 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
@@ -2311,6 +2314,7 @@ function KDSView({ storeId, onClose, tablePrefix = 'T' }: KDSViewProps) {
 export default function HospitalityPage() {
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const { confirm } = useDialog();
   const [view, setView] = useState<'tables' | 'bar-tabs' | 'rooms'>('tables');
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [showKDS, setShowKDS] = useState(false);
@@ -2337,7 +2341,16 @@ export default function HospitalityPage() {
   const [revPASHDate, setRevPASHDate] = useState(new Date().toISOString().split('T')[0]);
 
   const businessId = user?.businessId ?? '';
-  const storeId = user?.storeId ?? '';
+  const rawStoreId = user?.storeId ?? '';
+
+  // Owners have no storeId in JWT — resolve the first store for the business
+  const { data: firstStore } = useQuery<{ id: string }>({
+    queryKey: ['first-store', businessId],
+    queryFn: () => api.get<{ id: string }[]>(`/business/${businessId}/stores`).then(s => s[0]),
+    enabled: !!businessId && !rawStoreId,
+    staleTime: Infinity,
+  });
+  const storeId = rawStoreId || firstStore?.id || '';
 
   const { data: tables = [], isLoading, refetch } = useQuery<Table[]>({
     queryKey: ['tables', storeId],
@@ -3539,8 +3552,9 @@ export default function HospitalityPage() {
                     Confirm Check-In
                   </button>
                   <button
-                    onClick={() => {
-                      if (confirm('Cancel this reservation?')) cancelBookingMutation.mutate(selectedRoom.bookings[0].id);
+                    onClick={async () => {
+                      const ok = await confirm({ title: 'Cancel Reservation', message: 'Cancel this reservation?', variant: 'warning', confirmLabel: 'Cancel' });
+                      if (ok) cancelBookingMutation.mutate(selectedRoom.bookings[0].id);
                     }}
                     disabled={cancelBookingMutation.isPending}
                     className="w-full py-2.5 border border-red-200 text-red-600 hover:bg-red-50 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"

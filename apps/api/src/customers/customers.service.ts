@@ -1,10 +1,19 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 interface CreateCustomerDto {
   name: string;
   phone?: string;
   email?: string;
+  kraPin?: string;
+  creditLimitCents?: number;
+}
+
+interface UpdateCustomerDto {
+  name?: string;
+  phone?: string;
+  email?: string;
+  kraPin?: string;
   creditLimitCents?: number;
 }
 
@@ -19,7 +28,23 @@ export class CustomersService {
         name: dto.name,
         phone: dto.phone,
         email: dto.email,
+        kraPin: dto.kraPin,
         creditLimitCents: dto.creditLimitCents ?? 0,
+      },
+    });
+  }
+
+  async update(id: string, businessId: string, dto: UpdateCustomerDto) {
+    const customer = await this.prisma.customer.findFirst({ where: { id, businessId } });
+    if (!customer) throw new NotFoundException('Customer not found');
+    return this.prisma.customer.update({
+      where: { id },
+      data: {
+        ...(dto.name !== undefined && { name: dto.name }),
+        ...(dto.phone !== undefined && { phone: dto.phone }),
+        ...(dto.email !== undefined && { email: dto.email }),
+        ...(dto.kraPin !== undefined && { kraPin: dto.kraPin }),
+        ...(dto.creditLimitCents !== undefined && { creditLimitCents: dto.creditLimitCents }),
       },
     });
   }
@@ -131,6 +156,21 @@ export class CustomersService {
     return this.prisma.customer.findUnique({ where: { id: primaryId } });
   }
 
+  /** Manager/owner: directly set the credit limit (increase or decrease, no approval needed) */
+  async setCreditLimit(id: string, businessId: string, newLimitCents: number) {
+    const customer = await this.prisma.customer.findFirst({ where: { id, businessId } });
+    if (!customer) throw new NotFoundException('Customer not found');
+    if (newLimitCents < 0) throw new BadRequestException('Credit limit cannot be negative');
+    return this.prisma.customer.update({
+      where: { id },
+      data: {
+        creditLimitCents: newLimitCents,
+        creditLimitPendingCents: 0,
+        creditApprovalStatus: 'NONE',
+      },
+    });
+  }
+
   async requestCreditIncrease(id: string, requestedLimitCents: number) {
     return this.prisma.customer.update({
       where: { id },
@@ -205,5 +245,52 @@ export class CustomersService {
     }
 
     return { created, skipped, errors };
+  }
+
+  async recordPayment(id: string, businessId: string, amountCents: number, notes?: string) {
+    const customer = await this.prisma.customer.findFirst({ where: { id, businessId } });
+    if (!customer) throw new NotFoundException('Customer not found');
+
+    const outstanding = Math.max(0, -customer.balanceCents);
+    if (outstanding === 0) throw new BadRequestException('This customer has no outstanding debt');
+    if (amountCents <= 0) throw new BadRequestException('Payment amount must be greater than zero');
+
+    // Cap payment at outstanding amount
+    const applied = Math.min(amountCents, outstanding);
+
+    // Increment balanceCents (moves toward zero / settles debt)
+    const updated = await this.prisma.customer.update({
+      where: { id },
+      data: { balanceCents: { increment: applied } },
+    });
+
+    return {
+      customerId: id,
+      amountApplied: applied,
+      previousBalanceCents: customer.balanceCents,
+      newBalanceCents: updated.balanceCents,
+      outstandingBefore: outstanding,
+      outstandingAfter: Math.max(0, -updated.balanceCents),
+      fullySettled: updated.balanceCents >= 0,
+    };
+  }
+
+  async getPaymentHistory(id: string, businessId: string) {
+    const customer = await this.prisma.customer.findFirst({
+      where: { id, businessId },
+      include: {
+        sales: {
+          where: { status: { in: ['CREDIT', 'PAID'] } },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          select: {
+            id: true, receiptNumber: true, totalCents: true,
+            status: true, createdAt: true, type: true,
+          },
+        },
+      },
+    });
+    if (!customer) throw new NotFoundException('Customer not found');
+    return customer;
   }
 }

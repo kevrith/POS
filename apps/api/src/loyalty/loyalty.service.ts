@@ -8,11 +8,15 @@ export class LoyaltyService {
   async createProgram(data: {
     businessId: string;
     name: string;
-    pointsPerCent: number;
-    redemptionRate: number;
+    kesPerPoint: number;
+    pointValueCents: number;
     minRedemption: number;
   }) {
-    return this.prisma.loyaltyProgram.create({ data });
+    return this.prisma.loyaltyProgram.upsert({
+      where: { businessId: data.businessId },
+      update: { name: data.name, kesPerPoint: data.kesPerPoint, pointValueCents: data.pointValueCents, minRedemption: data.minRedemption, isActive: true },
+      create: { ...data, isActive: true },
+    });
   }
 
   async getProgram(businessId: string) {
@@ -22,17 +26,24 @@ export class LoyaltyService {
   }
 
   async earnPoints(customerId: string, saleCents: number, saleId: string) {
-    const customer = await this.prisma.customer.findUnique({
-      where: { id: customerId },
-    });
+    const customer = await this.prisma.customer.findUnique({ where: { id: customerId } });
+    if (!customer) return { points: 0, balance: 0 };
 
     const program = await this.prisma.loyaltyProgram.findFirst({
       where: { businessId: customer.businessId, isActive: true },
     });
+    if (!program) return { points: 0, balance: customer.loyaltyPoints };
 
-    if (!program) return { points: 0 };
+    // Guard: never award twice for the same sale
+    const existing = await this.prisma.loyaltyTransaction.findFirst({
+      where: { saleId, type: 'EARN' },
+    });
+    if (existing) return { points: 0, balance: customer.loyaltyPoints };
 
-    const points = Math.floor(saleCents * program.pointsPerCent);
+    // 1 point per kesPerPoint shillings spent
+    const points = Math.floor(saleCents / 100 / program.kesPerPoint);
+    if (points <= 0) return { points: 0, balance: customer.loyaltyPoints };
+
     const newBalance = customer.loyaltyPoints + points;
 
     await this.prisma.customer.update({
@@ -41,50 +52,30 @@ export class LoyaltyService {
     });
 
     await this.prisma.loyaltyTransaction.create({
-      data: {
-        customerId,
-        saleId,
-        type: 'EARN',
-        points,
-        balanceAfter: newBalance,
-      },
+      data: { customerId, saleId, type: 'EARN', points, balanceAfter: newBalance },
     });
 
     return { points, balance: newBalance };
   }
 
   async redeemPoints(customerId: string, points: number, saleId: string) {
-    // Use $transaction to prevent race conditions (double-spend of loyalty points)
     return this.prisma.$transaction(async (tx) => {
-      const customer = await tx.customer.findUnique({
-        where: { id: customerId },
-      });
+      const customer = await tx.customer.findUnique({ where: { id: customerId } });
       if (!customer) throw new Error('Customer not found');
 
       const program = await tx.loyaltyProgram.findFirst({
         where: { businessId: customer.businessId, isActive: true },
       });
-
       if (!program) throw new Error('No active loyalty program');
       if (points < program.minRedemption) throw new Error('Below minimum redemption');
       if (customer.loyaltyPoints < points) throw new Error('Insufficient points');
 
-      const discountCents = Math.floor(points * program.redemptionRate);
+      const discountCents = Math.floor(points * program.pointValueCents);
       const newBalance = customer.loyaltyPoints - points;
 
-      await tx.customer.update({
-        where: { id: customerId },
-        data: { loyaltyPoints: newBalance },
-      });
-
+      await tx.customer.update({ where: { id: customerId }, data: { loyaltyPoints: newBalance } });
       await tx.loyaltyTransaction.create({
-        data: {
-          customerId,
-          saleId,
-          type: 'REDEEM',
-          points: -points,
-          balanceAfter: newBalance,
-        },
+        data: { customerId, saleId, type: 'REDEEM', points: -points, balanceAfter: newBalance },
       });
 
       return { discountCents, balance: newBalance };
@@ -92,49 +83,26 @@ export class LoyaltyService {
   }
 
   async getCustomerPoints(customerId: string) {
-    const customer = await this.prisma.customer.findUnique({
-      where: { id: customerId },
-    });
-
+    const customer = await this.prisma.customer.findUnique({ where: { id: customerId } });
     const transactions = await this.prisma.loyaltyTransaction.findMany({
       where: { customerId },
       orderBy: { createdAt: 'desc' },
-      take: 10,
+      take: 100,
     });
-
-    return {
-      balance: customer.loyaltyPoints,
-      transactions,
-    };
+    return { balance: customer.loyaltyPoints, transactions };
   }
 
-  // ─── Tier CRUD ─────────────────────────────────────────────────────────────
+  // ─── Tiers ─────────────────────────────────────────────────────────────────
 
-  async createTier(data: {
-    businessId: string;
-    name: string;
-    minPoints: number;
-    multiplier: number;
-    color: string;
-    perksJson?: string;
-  }) {
+  async createTier(data: { businessId: string; name: string; minPoints: number; multiplier: number; color: string; perksJson?: string }) {
     return this.prisma.loyaltyTier.create({ data });
   }
 
   async getTiers(businessId: string) {
-    return this.prisma.loyaltyTier.findMany({
-      where: { businessId },
-      orderBy: { minPoints: 'asc' },
-    });
+    return this.prisma.loyaltyTier.findMany({ where: { businessId }, orderBy: { minPoints: 'asc' } });
   }
 
-  async updateTier(id: string, data: Partial<{
-    name: string;
-    minPoints: number;
-    multiplier: number;
-    color: string;
-    perksJson: string;
-  }>) {
+  async updateTier(id: string, data: Partial<{ name: string; minPoints: number; multiplier: number; color: string; perksJson: string }>) {
     return this.prisma.loyaltyTier.update({ where: { id }, data });
   }
 

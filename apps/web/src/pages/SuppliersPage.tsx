@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useDialog } from '../components/Dialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
@@ -494,6 +495,7 @@ interface PODetailProps {
 
 function PODetail({ po, storeId, onBack, onRefresh }: PODetailProps) {
   const qc = useQueryClient();
+  const { confirm } = useDialog();
   const [showGRN, setShowGRN] = useState(false);
   const [showEmailPO, setShowEmailPO] = useState(false);
   const [emailRecipient, setEmailRecipient] = useState(po.supplier?.contact ?? '');
@@ -749,7 +751,7 @@ function PODetail({ po, storeId, onBack, onRefresh }: PODetailProps) {
       <div className="px-6 pb-4 flex gap-2">
         {po.status === 'PARTIALLY_RECEIVED' && (
           <button
-            onClick={() => { if (confirm('Close this PO as fully received?')) closePOMutation.mutate(); }}
+            onClick={async () => { const ok = await confirm({ title: 'Close Purchase Order', message: 'Mark this PO as fully received? This cannot be undone.', variant: 'warning', confirmLabel: 'Close PO' }); if (ok) closePOMutation.mutate(); }}
             disabled={closePOMutation.isPending}
             className="flex-1 py-2 px-3 text-xs bg-orange-100 text-orange-700 border border-orange-300 rounded-xl hover:bg-orange-200 disabled:opacity-50 font-medium"
           >
@@ -867,6 +869,7 @@ function VendorCatalogueTab({
   catalogueItems, setCatalogueItems, catalogueSearch, setCatalogueSearch, onPOCreated,
 }: VendorCatalogueTabProps) {
   const qc = useQueryClient();
+  const { confirm } = useDialog();
 
   const { data: existingItems = [], isLoading } = useQuery<any[]>({
     queryKey: ['supplier-catalogue', businessId, catalogueSupplierId],
@@ -990,7 +993,7 @@ function VendorCatalogueTab({
                     </td>
                     <td className="px-2 py-2.5">
                       <button
-                        onClick={() => { if (confirm('Remove from catalogue?')) deleteItem.mutate(item.id); }}
+                        onClick={async () => { const ok = await confirm({ title: 'Remove Item', message: 'Remove this item from the supplier catalogue?', variant: 'danger', confirmLabel: 'Remove' }); if (ok) deleteItem.mutate(item.id); }}
                         className="text-red-400 hover:text-red-600"
                       >
                         <X className="w-4 h-4" />
@@ -1203,6 +1206,7 @@ type Tab = 'suppliers' | 'purchase-orders' | 'credit-notes' | 'returns' | 'invoi
 export default function SuppliersPage() {
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const { confirm } = useDialog();
   const [tab, setTab] = useState<Tab>('suppliers');
   const [showAddSupplier, setShowAddSupplier] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
@@ -2426,7 +2430,7 @@ export default function SuppliersPage() {
                       <td className="px-4 py-3">{a.validTo ? new Date(a.validTo).toLocaleDateString() : 'Open'}</td>
                       <td className="px-4 py-3">{a.minQty}</td>
                       <td className="px-4 py-3">
-                        <button onClick={() => { if (confirm('Delete agreement?')) deleteAgreement.mutate(a.id); }}
+                        <button onClick={async () => { const ok = await confirm({ title: 'Delete Agreement', message: 'Delete this supplier agreement? This cannot be undone.', variant: 'danger', confirmLabel: 'Delete' }); if (ok) deleteAgreement.mutate(a.id); }}
                           className="text-red-500 hover:text-red-700 text-xs">Delete</button>
                       </td>
                     </tr>

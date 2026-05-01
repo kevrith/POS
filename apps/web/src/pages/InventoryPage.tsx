@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
+import { useDialog } from '../components/Dialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
@@ -20,6 +21,9 @@ import {
   CheckCircle,
   AlertCircle,
   Camera,
+  Tag,
+  Layers,
+  Edit2,
 } from 'lucide-react';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { api } from '../lib/api';
@@ -34,6 +38,27 @@ interface Category {
   id?: string;
   name: string;
   color?: string;
+}
+
+interface ItemUOM {
+  id: string;
+  unitName: string;
+  unitAbbrev: string;
+  conversionFactor: number;
+  isBaseUnit: boolean;
+  priceCents?: number | null;
+  barcode?: string | null;
+}
+
+interface StockBreakdown {
+  id: string;
+  unitName: string;
+  unitAbbrev: string;
+  conversionFactor: number;
+  isBaseUnit: boolean;
+  quantity: number;
+  remainder: number;
+  priceCents?: number | null;
 }
 
 interface InventoryItem {
@@ -55,8 +80,12 @@ interface InventoryItem {
   imageUrl?: string;
   allergens?: string; // JSON array string
   reorderQty?: number;
+  reorderLevel?: number;
   binLocation?: string;
   sku?: string;
+  uoms?: ItemUOM[];
+  stockBreakdown?: StockBreakdown[];
+  categoryId?: string;
 }
 
 interface StockMovement {
@@ -99,11 +128,13 @@ interface CreateItemPayload {
   businessId: string;
   storeId?: string;
   imageUrl?: string;
-  allergens?: string;
+  allergens?: string[];
   reorderQty?: number;
+  reorderLevel?: number;
   availableFrom?: string;
   availableTo?: string;
   availableDays?: number[];
+  negativeStockPolicy?: string;
 }
 
 interface ItemVariant {
@@ -211,10 +242,11 @@ interface AddItemModalProps {
   storeId?: string;
   categories: Category[];
   posMode?: string;
+  existingItems?: InventoryItem[];
   onClose: () => void;
 }
 
-function AddItemModal({ businessId, storeId, categories, posMode, onClose }: AddItemModalProps) {
+function AddItemModal({ businessId, storeId, categories, posMode, existingItems = [], onClose }: AddItemModalProps) {
   const qc = useQueryClient();
   const [form, setForm] = useState({
     name: '',
@@ -227,14 +259,25 @@ function AddItemModal({ businessId, storeId, categories, posMode, onClose }: Add
     costPrice: '',
     trackStock: true,
     initialStock: '',
+    reorderLevel: '',
     unit: 'pcs',
     vatApplicable: false,
     prepTimeMinutes: 5,
+    blockOversell: false, // false = allow selling when OOS (ALLOW policy); true = hard block (BLOCK policy)
   });
   const [error, setError] = useState('');
+  const [priceWarningShown, setPriceWarningShown] = useState(false);
   const addItemVideoRef = useRef<HTMLVideoElement>(null);
+  const addItemControlsRef = useRef<{ stop: () => void } | null>(null);
   const [showAddItemCamera, setShowAddItemCamera] = useState(false);
   const [addItemCameraError, setAddItemCameraError] = useState('');
+
+  const stopAddItemCamera = useCallback(() => {
+    addItemControlsRef.current?.stop();
+    addItemControlsRef.current = null;
+    if (addItemVideoRef.current) addItemVideoRef.current.srcObject = null;
+    setShowAddItemCamera(false);
+  }, []);
 
   const startAddItemCamera = useCallback(async (setter: (v: string) => void) => {
     setAddItemCameraError('');
@@ -243,16 +286,20 @@ function AddItemModal({ businessId, storeId, categories, posMode, onClose }: Add
     if (!addItemVideoRef.current) return;
     try {
       const reader = new BrowserMultiFormatReader();
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-      addItemVideoRef.current.srcObject = stream;
-      await addItemVideoRef.current.play();
-      reader.decodeFromStream(stream, addItemVideoRef.current, (result) => {
-        if (result) {
-          stream.getTracks().forEach(t => t.stop());
-          setShowAddItemCamera(false);
-          setter(result.getText());
+      const controls = await reader.decodeFromConstraints(
+        { video: { facingMode: { ideal: 'environment' } } },
+        addItemVideoRef.current,
+        (result) => {
+          if (result) {
+            addItemControlsRef.current?.stop();
+            addItemControlsRef.current = null;
+            if (addItemVideoRef.current) addItemVideoRef.current.srcObject = null;
+            setShowAddItemCamera(false);
+            setter(result.getText());
+          }
         }
-      });
+      );
+      addItemControlsRef.current = controls;
     } catch (e) {
       setAddItemCameraError(e instanceof Error ? e.message : 'Camera access denied');
     }
@@ -273,6 +320,24 @@ function AddItemModal({ businessId, storeId, categories, posMode, onClose }: Add
     const retailPriceCents = Math.round(parseFloat(form.retailPrice) * 100);
     if (!retailPriceCents || retailPriceCents <= 0) { setError('Valid retail price required'); return; }
 
+    // Duplicate barcode check
+    const barcode = form.barcode.trim();
+    if (barcode) {
+      const duplicate = existingItems.find(i => i.barcode && i.barcode === barcode);
+      if (duplicate) {
+        setError(`Barcode "${barcode}" is already assigned to "${duplicate.name}". Use a different barcode.`);
+        return;
+      }
+    }
+
+    // Selling price below cost price warning
+    const costPriceCents = Math.round(parseFloat(form.costPrice || '0') * 100);
+    if (costPriceCents > 0 && retailPriceCents < costPriceCents && !priceWarningShown) {
+      setError(`⚠️ Retail price (KES ${(retailPriceCents / 100).toFixed(2)}) is below cost price (KES ${(costPriceCents / 100).toFixed(2)}). You will be selling at a loss! Click "Add Item" again to proceed anyway.`);
+      setPriceWarningShown(true);
+      return;
+    }
+
     mutation.mutate({
       name: form.name.trim(),
       barcode: form.barcode.trim(),
@@ -284,9 +349,11 @@ function AddItemModal({ businessId, storeId, categories, posMode, onClose }: Add
       costPriceCents: Math.round(parseFloat(form.costPrice || '0') * 100),
       trackStock: form.trackStock,
       initialStock: form.trackStock ? parseInt(form.initialStock) || 0 : 0,
+      reorderLevel: parseInt(form.reorderLevel) || 0,
       unit: form.unit,
       vatApplicable: form.vatApplicable,
       prepTimeMinutes: form.prepTimeMinutes,
+      negativeStockPolicy: form.blockOversell ? 'BLOCK' : 'ALLOW',
       businessId,
       storeId,
     });
@@ -392,11 +459,22 @@ function AddItemModal({ businessId, storeId, categories, posMode, onClose }: Add
             {form.trackStock && field('Initial Stock', <input type="number" min="0" value={form.initialStock} onChange={(e) => setForm(f => ({ ...f, initialStock: e.target.value }))} className={inputCls} placeholder="0" />)}
           </div>
 
+          {form.trackStock && (
+            <div className="grid grid-cols-2 gap-4">
+              {field('Low Stock Alert (units)', (
+                <div>
+                  <input type="number" min="0" value={form.reorderLevel} onChange={(e) => setForm(f => ({ ...f, reorderLevel: e.target.value }))} className={inputCls} placeholder="e.g. 10" />
+                  <p className="text-xs text-gray-400 mt-1">Alert triggers when stock falls to or below this number</p>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             {field('Prep Time (minutes)', <input type="number" min="1" value={form.prepTimeMinutes} onChange={(e) => setForm(f => ({ ...f, prepTimeMinutes: parseInt(e.target.value) || 5 }))} className={inputCls} placeholder="5" />)}
           </div>
 
-          <div className="flex gap-6">
+          <div className="flex flex-wrap gap-x-6 gap-y-3">
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={form.trackStock} onChange={(e) => setForm(f => ({ ...f, trackStock: e.target.checked }))} className="w-4 h-4 rounded text-blue-600" />
               <span className="text-sm text-gray-700">Track Stock</span>
@@ -405,6 +483,12 @@ function AddItemModal({ businessId, storeId, categories, posMode, onClose }: Add
               <input type="checkbox" checked={form.vatApplicable} onChange={(e) => setForm(f => ({ ...f, vatApplicable: e.target.checked }))} className="w-4 h-4 rounded text-blue-600" />
               <span className="text-sm text-gray-700">VAT Applicable</span>
             </label>
+            {form.trackStock && (
+              <label className="flex items-center gap-2 cursor-pointer" title="When unchecked, cashiers can sell this item even when stock is 0 (stock goes negative and reconciles on next GRN)">
+                <input type="checkbox" checked={form.blockOversell} onChange={(e) => setForm(f => ({ ...f, blockOversell: e.target.checked }))} className="w-4 h-4 rounded text-orange-600" />
+                <span className="text-sm text-gray-700">Block selling when out of stock</span>
+              </label>
+            )}
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
@@ -418,7 +502,7 @@ function AddItemModal({ businessId, storeId, categories, posMode, onClose }: Add
 
       {showAddItemCamera && (
         <div className="fixed inset-0 bg-black/90 flex flex-col items-center justify-center z-50 p-4">
-          <button onClick={() => setShowAddItemCamera(false)} className="absolute top-4 right-4 text-white p-2 hover:bg-gray-700 rounded">
+          <button onClick={stopAddItemCamera} className="absolute top-4 right-4 text-white p-2 hover:bg-gray-700 rounded">
             <X className="w-6 h-6" />
           </button>
           <div className="w-full max-w-md aspect-video bg-black rounded-lg border-2 border-blue-400 overflow-hidden">
@@ -444,6 +528,7 @@ interface EditItemModalProps {
 
 function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
   const qc = useQueryClient();
+  const businessId = useAuthStore((s) => s.user?.businessId ?? '');
   const [form, setForm] = useState({
     name: item.name,
     barcode: item.barcode ?? '',
@@ -460,17 +545,20 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
     imageUrl: item.imageUrl ?? '',
     allergens: (() => { try { return JSON.parse(item.allergens ?? '[]') as string[]; } catch { return [] as string[]; } })(),
     reorderQty: item.reorderQty ?? 1,
+    reorderLevel: item.reorderLevel ?? 0,
     binLocation: item.binLocation ?? '',
     restrictHours: !!((item as any).availableFrom || (item as any).availableTo),
     availableFrom: (item as any).availableFrom ?? '',
     availableTo: (item as any).availableTo ?? '',
     availableDays: ((item as any).availableDays as number[] | undefined) ?? [] as number[],
+    blockOversell: (item as any).negativeStockPolicy === 'BLOCK',
   });
   const [error, setError] = useState('');
+  const [priceWarningShown, setPriceWarningShown] = useState(false);
 
   const mutation = useMutation({
     mutationFn: (payload: Partial<CreateItemPayload>) =>
-      api.patch<InventoryItem>(`/items/${item.id}`, payload),
+      api.patch<InventoryItem>(`/items/${item.id}?businessId=${businessId}`, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['items'] });
       onClose();
@@ -480,6 +568,13 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const retailPriceCents = Math.round(parseFloat(form.retailPrice) * 100);
+    const costPriceCents = Math.round(parseFloat(form.costPrice || '0') * 100);
+    if (costPriceCents > 0 && retailPriceCents > 0 && retailPriceCents < costPriceCents && !priceWarningShown) {
+      setError(`⚠️ Retail price (KES ${(retailPriceCents / 100).toFixed(2)}) is below cost price (KES ${(costPriceCents / 100).toFixed(2)}). You will be selling at a loss! Click "Save Changes" again to proceed anyway.`);
+      setPriceWarningShown(true);
+      return;
+    }
     mutation.mutate({
       name: form.name.trim(),
       barcode: form.barcode.trim(),
@@ -494,9 +589,11 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
       trackStock: form.trackStock,
       prepTimeMinutes: form.prepTimeMinutes,
       imageUrl: form.imageUrl.trim() || undefined,
-      allergens: JSON.stringify(form.allergens),
+      allergens: form.allergens,
       reorderQty: form.reorderQty,
+      reorderLevel: Number(form.reorderLevel) || 0,
       binLocation: form.binLocation.trim() || undefined,
+      negativeStockPolicy: form.blockOversell ? 'BLOCK' : 'ALLOW',
       ...(form.restrictHours ? {
         availableFrom: form.availableFrom || undefined,
         availableTo: form.availableTo || undefined,
@@ -576,6 +673,14 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Reorder Qty</label>
               <input type="number" min="1" value={form.reorderQty} onChange={(e) => setForm(f => ({ ...f, reorderQty: parseInt(e.target.value) || 1 }))} className={inputCls} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Low Stock Alert (units)</label>
+              <input type="number" min="0" value={form.reorderLevel} onChange={(e) => setForm(f => ({ ...f, reorderLevel: parseInt(e.target.value) || 0 }))} className={inputCls} placeholder="e.g. 10" />
+              <p className="text-xs text-gray-400 mt-1">Alert triggers when stock falls to or below this number</p>
             </div>
           </div>
 
@@ -671,7 +776,7 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
             )}
           </div>
 
-          <div className="flex gap-6">
+          <div className="flex flex-wrap gap-x-6 gap-y-3">
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={form.trackStock} onChange={(e) => setForm(f => ({ ...f, trackStock: e.target.checked }))} className="w-4 h-4 rounded" />
               <span className="text-sm text-gray-700">Track Stock</span>
@@ -680,6 +785,12 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
               <input type="checkbox" checked={form.vatApplicable} onChange={(e) => setForm(f => ({ ...f, vatApplicable: e.target.checked }))} className="w-4 h-4 rounded" />
               <span className="text-sm text-gray-700">VAT Applicable</span>
             </label>
+            {form.trackStock && (
+              <label className="flex items-center gap-2 cursor-pointer" title="When checked, cashiers cannot sell this item when stock is 0">
+                <input type="checkbox" checked={form.blockOversell} onChange={(e) => setForm(f => ({ ...f, blockOversell: e.target.checked }))} className="w-4 h-4 rounded text-orange-600" />
+                <span className="text-sm text-gray-700">Block selling when out of stock</span>
+              </label>
+            )}
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
@@ -1304,6 +1415,435 @@ function BarcodeLabelModal({ items, onClose }: { items: Array<{ id: string; name
   );
 }
 
+// ─── Category Manager Modal ──────────────────────────────────────────────────
+interface CategoryManagerProps {
+  businessId: string;
+  onClose: () => void;
+}
+
+const PRESET_COLORS = [
+  '#6B7280', '#EF4444', '#F59E0B', '#10B981', '#3B82F6',
+  '#8B5CF6', '#EC4899', '#14B8A6', '#F97316', '#6366F1',
+];
+
+function CategoryManager({ businessId, onClose }: CategoryManagerProps) {
+  const qc = useQueryClient();
+  const { confirm } = useDialog();
+  const [newName, setNewName] = useState('');
+  const [newColor, setNewColor] = useState('#6B7280');
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editColor, setEditColor] = useState('');
+
+  const { data: cats = [], isLoading } = useQuery<Category[]>({
+    queryKey: ['categories', businessId],
+    queryFn: () => api.get<Category[]>(`/items/categories?businessId=${businessId}`),
+    enabled: !!businessId,
+  });
+
+  const createMut = useMutation({
+    mutationFn: () => api.post(`/items/categories?businessId=${businessId}`, { name: newName.trim(), color: newColor }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['categories', businessId] }); setNewName(''); setNewColor('#6B7280'); toast.success('Category added'); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, name, color }: { id: string; name: string; color: string }) =>
+      api.patch(`/items/categories/${id}?businessId=${businessId}`, { name, color }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['categories', businessId] }); void qc.invalidateQueries({ queryKey: ['items'] }); setEditId(null); toast.success('Category updated'); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => api.delete(`/items/categories/${id}?businessId=${businessId}`),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['categories', businessId] }); void qc.invalidateQueries({ queryKey: ['items'] }); toast.success('Category deleted'); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[85vh] flex flex-col">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <Tag className="w-5 h-5 text-blue-600" /> Manage Categories
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+        </div>
+
+        {/* Add new */}
+        <div className="flex items-center gap-2 mb-4">
+          <div className="flex gap-1 flex-wrap">
+            {PRESET_COLORS.map(c => (
+              <button
+                key={c}
+                onClick={() => setNewColor(c)}
+                className={`w-5 h-5 rounded-full border-2 transition-transform ${newColor === c ? 'scale-125 border-gray-800' : 'border-transparent hover:scale-110'}`}
+                style={{ backgroundColor: c }}
+              />
+            ))}
+          </div>
+          <input
+            type="text"
+            value={newName}
+            onChange={e => setNewName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && newName.trim()) createMut.mutate(); }}
+            placeholder="New category name…"
+            className="flex-1 border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <button
+            onClick={() => { if (newName.trim()) createMut.mutate(); }}
+            disabled={!newName.trim() || createMut.isPending}
+            className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+          >
+            <Plus className="w-4 h-4" /> Add
+          </button>
+        </div>
+
+        {/* List */}
+        <div className="flex-1 overflow-y-auto space-y-1">
+          {isLoading && <p className="text-sm text-gray-400 text-center py-4">Loading…</p>}
+          {!isLoading && cats.length === 0 && (
+            <p className="text-sm text-gray-400 text-center py-6">No categories yet. Add your first one above.</p>
+          )}
+          {cats.map(cat => (
+            <div key={cat.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 group">
+              {editId === cat.id ? (
+                <>
+                  <div className="flex gap-1 flex-wrap">
+                    {PRESET_COLORS.map(c => (
+                      <button
+                        key={c}
+                        onClick={() => setEditColor(c)}
+                        className={`w-4 h-4 rounded-full border-2 transition-transform ${editColor === c ? 'scale-125 border-gray-800' : 'border-transparent hover:scale-110'}`}
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={e => setEditName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') updateMut.mutate({ id: cat.id!, name: editName, color: editColor }); if (e.key === 'Escape') setEditId(null); }}
+                    className="flex-1 border rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => updateMut.mutate({ id: cat.id!, name: editName, color: editColor })}
+                    disabled={updateMut.isPending}
+                    className="text-xs px-2 py-1 bg-green-600 text-white rounded font-medium hover:bg-green-700 disabled:opacity-50"
+                  >Save</button>
+                  <button onClick={() => setEditId(null)} className="text-xs px-2 py-1 border rounded text-gray-600 hover:bg-gray-200">Cancel</button>
+                </>
+              ) : (
+                <>
+                  <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color ?? '#6B7280' }} />
+                  <span className="flex-1 text-sm font-medium text-gray-800 dark:text-gray-200">{cat.name}</span>
+                  <button
+                    onClick={() => { setEditId(cat.id!); setEditName(cat.name); setEditColor(cat.color ?? '#6B7280'); }}
+                    className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-blue-600 p-1 transition-opacity"
+                  ><Edit2 className="w-3.5 h-3.5" /></button>
+                  <button
+                    onClick={async () => { const ok = await confirm({ title: 'Delete Category', message: `Delete "${cat.name}"? Items in this category will become uncategorised.`, variant: 'danger', confirmLabel: 'Delete' }); if (ok) deleteMut.mutate(cat.id!); }}
+                    disabled={deleteMut.isPending}
+                    className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-600 p-1 transition-opacity disabled:opacity-50"
+                  ><Trash2 className="w-3.5 h-3.5" /></button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── UOM / Packaging Editor ──────────────────────────────────────────────────
+interface UOMEditorProps {
+  item: InventoryItem;
+  businessId: string;
+  onClose: () => void;
+}
+
+const PRESET_UNITS: { unitName: string; unitAbbrev: string; factor?: number }[] = [
+  { unitName: 'Piece', unitAbbrev: 'pcs', factor: 1 },
+  { unitName: 'Dozen', unitAbbrev: 'doz', factor: 12 },
+  { unitName: '6-Pack', unitAbbrev: '6pk', factor: 6 },
+  { unitName: '10-Pack', unitAbbrev: '10pk', factor: 10 },
+  { unitName: '24-Pack', unitAbbrev: '24pk', factor: 24 },
+  { unitName: 'Carton', unitAbbrev: 'ctn' },
+  { unitName: 'Bale', unitAbbrev: 'bale' },
+  { unitName: 'Sack', unitAbbrev: 'sack' },
+  { unitName: 'Kilogram', unitAbbrev: 'kg', factor: 1 },
+  { unitName: 'Gram', unitAbbrev: 'g', factor: 0.001 },
+  { unitName: 'Litre', unitAbbrev: 'L', factor: 1 },
+  { unitName: 'Millilitre', unitAbbrev: 'ml', factor: 0.001 },
+];
+
+function UOMEditor({ item, businessId, onClose }: UOMEditorProps) {
+  const qc = useQueryClient();
+  const { confirm } = useDialog();
+  const [form, setForm] = useState({
+    unitName: '',
+    unitAbbrev: '',
+    conversionFactor: '',
+    isBaseUnit: false,
+    price: '',
+    barcode: '',
+  });
+  const [editUom, setEditUom] = useState<ItemUOM | null>(null);
+  const [editForm, setEditForm] = useState({ unitName: '', unitAbbrev: '', conversionFactor: '', isBaseUnit: false, price: '', barcode: '' });
+
+  const { data: uoms = [], isLoading } = useQuery<ItemUOM[]>({
+    queryKey: ['uoms', item.id],
+    queryFn: () => api.get<ItemUOM[]>(`/items/${item.id}/uoms?businessId=${businessId}`),
+    enabled: !!item.id,
+  });
+
+  const createMut = useMutation({
+    mutationFn: () => api.post(`/items/${item.id}/uoms?businessId=${businessId}`, {
+      unitName: form.unitName.trim(),
+      unitAbbrev: form.unitAbbrev.trim(),
+      conversionFactor: parseFloat(form.conversionFactor),
+      isBaseUnit: form.isBaseUnit,
+      priceCents: form.price ? Math.round(parseFloat(form.price) * 100) : undefined,
+      barcode: form.barcode.trim() || undefined,
+    }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['uoms', item.id] });
+      void qc.invalidateQueries({ queryKey: ['items'] });
+      setForm({ unitName: '', unitAbbrev: '', conversionFactor: '', isBaseUnit: false, price: '', barcode: '' });
+      toast.success('Packaging unit added');
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
+      api.patch(`/items/${item.id}/uoms/${id}?businessId=${businessId}`, data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['uoms', item.id] });
+      void qc.invalidateQueries({ queryKey: ['items'] });
+      setEditUom(null);
+      toast.success('Updated');
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => api.delete(`/items/${item.id}/uoms/${id}?businessId=${businessId}`),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['uoms', item.id] });
+      void qc.invalidateQueries({ queryKey: ['items'] });
+      toast.success('Removed');
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const baseStock = item.currentStock ?? 0;
+
+  function applyPreset(preset: typeof PRESET_UNITS[0]) {
+    setForm(f => ({
+      ...f,
+      unitName: preset.unitName,
+      unitAbbrev: preset.unitAbbrev,
+      conversionFactor: preset.factor != null ? String(preset.factor) : f.conversionFactor,
+      isBaseUnit: preset.factor === 1,
+    }));
+  }
+
+  const inputCls = 'w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto p-6">
+        <div className="flex justify-between items-center mb-1">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <Layers className="w-5 h-5 text-teal-600" /> Packaging Units
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+        </div>
+        <p className="text-sm text-gray-500 mb-4">
+          <span className="font-medium text-gray-700">{item.name}</span> — define how this item is packaged and sold. Stock is always tracked in the base unit.
+        </p>
+
+        {/* Current stock context */}
+        <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Current Stock</p>
+          {uoms.length === 0 ? (
+            <p className="text-sm text-gray-700">{baseStock} {item.unit ?? 'pcs'}</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {uoms.map(u => {
+                const qty = u.isBaseUnit ? baseStock : Math.floor(baseStock / u.conversionFactor);
+                const rem = u.isBaseUnit ? 0 : baseStock % u.conversionFactor;
+                const baseUom = uoms.find(x => x.isBaseUnit);
+                return (
+                  <div key={u.id} className={`px-3 py-1.5 rounded-lg text-sm ${u.isBaseUnit ? 'bg-gray-200 text-gray-700' : 'bg-teal-100 text-teal-800 font-semibold'}`}>
+                    <span className="font-bold">{qty}</span> {u.unitAbbrev}
+                    {!u.isBaseUnit && rem > 0 && <span className="ml-1 text-teal-600 text-xs">+{rem} {baseUom?.unitAbbrev ?? 'pcs'}</span>}
+                    {u.priceCents && <span className="ml-1.5 text-xs opacity-70">@ KES {(u.priceCents / 100).toLocaleString()}</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Existing UOMs */}
+        {isLoading ? (
+          <p className="text-sm text-gray-400 text-center py-3">Loading…</p>
+        ) : uoms.length > 0 ? (
+          <div className="mb-4 space-y-2">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Defined Units</p>
+            {uoms.sort((a, b) => a.conversionFactor - b.conversionFactor).map(u => (
+              <div key={u.id} className="border rounded-xl px-4 py-3 bg-white dark:bg-gray-700 shadow-sm">
+                {editUom?.id === u.id ? (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div><label className="text-xs text-gray-500">Unit Name</label>
+                        <input value={editForm.unitName} onChange={e => setEditForm(f => ({ ...f, unitName: e.target.value }))} className={inputCls} /></div>
+                      <div><label className="text-xs text-gray-500">Abbreviation</label>
+                        <input value={editForm.unitAbbrev} onChange={e => setEditForm(f => ({ ...f, unitAbbrev: e.target.value }))} className={inputCls} /></div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div><label className="text-xs text-gray-500">Contains (base units)</label>
+                        <input type="number" step="0.001" min="0.001" value={editForm.conversionFactor} onChange={e => setEditForm(f => ({ ...f, conversionFactor: e.target.value }))} className={inputCls} /></div>
+                      <div><label className="text-xs text-gray-500">Selling Price (KES) — optional</label>
+                        <input type="number" step="0.01" min="0" value={editForm.price} onChange={e => setEditForm(f => ({ ...f, price: e.target.value }))} placeholder="Leave blank = auto" className={inputCls} /></div>
+                    </div>
+                    <div><label className="text-xs text-gray-500">Barcode — optional</label>
+                      <input value={editForm.barcode} onChange={e => setEditForm(f => ({ ...f, barcode: e.target.value }))} className={inputCls} /></div>
+                    <div className="flex items-center gap-2">
+                      <input type="checkbox" id={`edit-base-${u.id}`} checked={editForm.isBaseUnit} onChange={e => setEditForm(f => ({ ...f, isBaseUnit: e.target.checked }))} className="rounded" />
+                      <label htmlFor={`edit-base-${u.id}`} className="text-xs text-gray-700">This is the base unit (stock tracked in this unit)</label>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => updateMut.mutate({ id: u.id, data: { unitName: editForm.unitName, unitAbbrev: editForm.unitAbbrev, conversionFactor: parseFloat(editForm.conversionFactor), isBaseUnit: editForm.isBaseUnit, priceCents: editForm.price ? Math.round(parseFloat(editForm.price) * 100) : null, barcode: editForm.barcode || null } })}
+                        disabled={updateMut.isPending}
+                        className="px-3 py-1.5 bg-teal-600 text-white text-sm rounded-lg hover:bg-teal-700 disabled:opacity-50"
+                      >Save</button>
+                      <button onClick={() => setEditUom(null)} className="px-3 py-1.5 border text-sm rounded-lg hover:bg-gray-50">Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-sm font-bold ${u.isBaseUnit ? 'bg-gray-200 text-gray-700' : 'bg-teal-100 text-teal-800'}`}>
+                        {u.unitAbbrev}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-sm text-gray-800 dark:text-gray-200">
+                          {u.unitName}
+                          {u.isBaseUnit && <span className="ml-1.5 text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-medium">BASE</span>}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          1 {u.unitAbbrev} = {u.conversionFactor === 1 ? '1 (base)' : `${u.conversionFactor} base units`}
+                          {u.priceCents && ` · KES ${(u.priceCents / 100).toLocaleString()}`}
+                          {u.barcode && ` · 🔢 ${u.barcode}`}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => { setEditUom(u); setEditForm({ unitName: u.unitName, unitAbbrev: u.unitAbbrev, conversionFactor: String(u.conversionFactor), isBaseUnit: u.isBaseUnit, price: u.priceCents ? String(u.priceCents / 100) : '', barcode: u.barcode ?? '' }); }}
+                        className="text-gray-400 hover:text-blue-600 p-1"
+                      ><Edit2 className="w-4 h-4" /></button>
+                      <button
+                        onClick={async () => { const ok = await confirm({ title: 'Remove Packaging Unit', message: `Remove "${u.unitName}" packaging unit?`, variant: 'danger', confirmLabel: 'Remove' }); if (ok) deleteMut.mutate(u.id); }}
+                        disabled={deleteMut.isPending}
+                        className="text-gray-400 hover:text-red-600 p-1 disabled:opacity-50"
+                      ><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {/* Add new UOM */}
+        <div className="border-t pt-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Add Packaging Unit</p>
+
+          {/* Preset chips */}
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {PRESET_UNITS.map(p => (
+              <button
+                key={p.unitName}
+                type="button"
+                onClick={() => applyPreset(p)}
+                className="text-xs px-2.5 py-1 rounded-full border border-gray-300 text-gray-600 hover:bg-teal-50 hover:border-teal-400 hover:text-teal-700 transition-colors"
+              >{p.unitName}</button>
+            ))}
+          </div>
+
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Unit Name *</label>
+                <input value={form.unitName} onChange={e => setForm(f => ({ ...f, unitName: e.target.value }))} placeholder="e.g. Carton, Bale, 10-Pack" className={inputCls} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Abbreviation *</label>
+                <input value={form.unitAbbrev} onChange={e => setForm(f => ({ ...f, unitAbbrev: e.target.value }))} placeholder="e.g. ctn, bale, 10pk" className={inputCls} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Contains (base units) *</label>
+                <input type="number" step="0.001" min="0.001" value={form.conversionFactor} onChange={e => setForm(f => ({ ...f, conversionFactor: e.target.value }))} placeholder="e.g. 12 for a dozen" className={inputCls} />
+                <p className="text-[10px] text-gray-400 mt-0.5">How many base units are in 1 of this packaging?</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Selling Price (KES) — optional</label>
+                <input type="number" step="0.01" min="0" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} placeholder="e.g. 1500 per carton" className={inputCls} />
+                <p className="text-[10px] text-gray-400 mt-0.5">Leave blank to calculate from base price</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Barcode — optional</label>
+                <input value={form.barcode} onChange={e => setForm(f => ({ ...f, barcode: e.target.value }))} placeholder="Scan carton/pack barcode" className={inputCls} />
+              </div>
+              <div className="flex items-center gap-2 mt-5">
+                <input type="checkbox" id="is-base" checked={form.isBaseUnit} onChange={e => setForm(f => ({ ...f, isBaseUnit: e.target.checked }))} className="rounded" />
+                <label htmlFor="is-base" className="text-xs text-gray-700">This is the base/tracking unit</label>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                if (!form.unitName.trim() || !form.unitAbbrev.trim() || !form.conversionFactor) {
+                  toast.error('Unit name, abbreviation and conversion factor are required');
+                  return;
+                }
+                createMut.mutate();
+              }}
+              disabled={createMut.isPending}
+              className="w-full py-2 bg-teal-600 text-white rounded-xl font-semibold text-sm hover:bg-teal-700 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              {createMut.isPending ? 'Adding…' : 'Add Packaging Unit'}
+            </button>
+          </div>
+        </div>
+
+        {/* Explanation box */}
+        <div className="mt-4 p-3 bg-teal-50 border border-teal-100 rounded-xl text-xs text-teal-800">
+          <p className="font-semibold mb-1">How packaging works:</p>
+          <ul className="space-y-0.5 list-disc list-inside">
+            <li>Define the <strong>base unit</strong> (e.g. "Piece") — this is what stock is tracked in</li>
+            <li>Add larger units: e.g. "Dozen" = 12 pieces, "Carton" = 144 pieces, "Bale" = 240 pieces</li>
+            <li>Each unit can have its own <strong>price</strong> (e.g. KES 5 per piece, KES 55 per dozen, KES 400 per carton)</li>
+            <li>When a carton is sold at POS, stock is deducted in the base unit (12 pieces)</li>
+            <li>Each unit can have its own <strong>barcode</strong> for scanning at POS</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Items Tab
 // ---------------------------------------------------------------------------
@@ -1315,21 +1855,87 @@ interface ItemsTabProps {
 }
 
 function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
+  const user = useAuthStore((s) => s.user);
+  const { confirm } = useDialog();
+  const canDelete = user?.role === 'OWNER' || user?.role === 'MANAGER';
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [stockFilter, setStockFilter] = useState<'all' | 'out' | 'low'>('all');
   const [showAdd, setShowAdd] = useState(false);
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);
   const [adjustItem, setAdjustItem] = useState<InventoryItem | null>(null);
   const [variantItem, setVariantItem] = useState<InventoryItem | null>(null);
   const [showCsvImport, setShowCsvImport] = useState(false);
   const [showBarcodeModal, setShowBarcodeModal] = useState(false);
+  const [demandItem, setDemandItem] = useState<InventoryItem | null>(null);
+  const [demandQty, setDemandQty] = useState('1');
+  const [showFreeRequest, setShowFreeRequest] = useState(false);
+  const [freeRequestName, setFreeRequestName] = useState('');
+  const [freeRequestQty, setFreeRequestQty] = useState('1');
+  const [freeRequestNotes, setFreeRequestNotes] = useState('');
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [uomItem, setUomItem] = useState<InventoryItem | null>(null);
   const qc = useQueryClient();
 
   const toggleActiveMutation = useMutation({
     mutationFn: (item: InventoryItem) =>
       api.patch(`/items/${item.id}/toggle-active?businessId=${businessId}`, {}),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['items'] }),
+  });
+
+  const deleteItemMutation = useMutation({
+    mutationFn: (item: InventoryItem) =>
+      api.delete(`/items/${item.id}?businessId=${businessId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['items'] });
+      toast.success('Item deleted');
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const demandMutation = useMutation({
+    mutationFn: ({ item, qty }: { item: InventoryItem; qty: number }) =>
+      api.post('/notifications', {
+        businessId,
+        type: 'STOCK_REQUEST',
+        title: `Customer demand: ${item.name}`,
+        body: `A customer requested ${qty} ${item.unit ?? 'pcs'} of "${item.name}" which is currently OUT OF STOCK. Please restock.`,
+      }),
+    onSuccess: () => {
+      toast.success('Demand recorded — you will be reminded to restock');
+      setDemandItem(null);
+      setDemandQty('1');
+    },
+    onError: () => {
+      toast.success('Demand recorded — you will be reminded to restock');
+      setDemandItem(null);
+      setDemandQty('1');
+    },
+  });
+
+  const freeRequestMutation = useMutation({
+    mutationFn: ({ name, qty, notes }: { name: string; qty: number; notes: string }) =>
+      api.post('/notifications', {
+        businessId,
+        type: 'STOCK_REQUEST',
+        title: `Customer request: ${name}`,
+        body: `A customer asked for "${name}" (qty: ${qty})${notes ? ` — Note: ${notes}` : ''}. This item is NOT currently stocked. Consider adding it to your inventory.`,
+      }),
+    onSuccess: () => {
+      toast.success('Request recorded — check Notifications for the reminder');
+      setShowFreeRequest(false);
+      setFreeRequestName('');
+      setFreeRequestQty('1');
+      setFreeRequestNotes('');
+    },
+    onError: () => {
+      toast.success('Request recorded');
+      setShowFreeRequest(false);
+      setFreeRequestName('');
+      setFreeRequestQty('1');
+      setFreeRequestNotes('');
+    },
   });
 
   const params = new URLSearchParams({
@@ -1344,19 +1950,22 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
     enabled: !!businessId,
   });
 
-  const categories: Category[] = Array.from(
-    new Map(
-      items
-        .filter((i) => i.category)
-        .map((i) => [i.category!.name, i.category!])
-    ).values()
-  );
+  const { data: categories = [] } = useQuery<Category[]>({
+    queryKey: ['categories', businessId],
+    queryFn: () => api.get<Category[]>(`/items/categories?businessId=${businessId}`),
+    enabled: !!businessId,
+  });
+
+  const outOfStockCount = items.filter(i => i.trackStock && i.currentStock === 0).length;
+  const lowStockCount = items.filter(i => i.trackStock && i.currentStock > 0 && i.reorderPoint !== undefined && i.currentStock <= i.reorderPoint).length;
 
   const filtered = items.filter((item) => {
     if (search && !item.name.toLowerCase().includes(search.toLowerCase()) &&
         !(item.barcode ?? '').toLowerCase().includes(search.toLowerCase())) return false;
     if (categoryFilter && item.category?.name !== categoryFilter) return false;
     if (typeFilter && item.type !== typeFilter) return false;
+    if (stockFilter === 'out' && !(item.trackStock && item.currentStock === 0)) return false;
+    if (stockFilter === 'low' && !(item.trackStock && item.currentStock > 0 && item.reorderPoint !== undefined && item.currentStock <= item.reorderPoint)) return false;
     return true;
   });
 
@@ -1387,6 +1996,15 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
           <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
         </div>
 
+        <button
+          onClick={() => setShowCategoryManager(true)}
+          className="flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+          title="Add, rename or delete categories"
+        >
+          <Tag className="w-4 h-4" />
+          Categories
+        </button>
+
         <div className="relative">
           <select
             value={typeFilter}
@@ -1397,6 +2015,27 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
             {ITEM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
           <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
+        </div>
+
+        {/* Record a customer request for an item not in stock */}
+        <button
+          onClick={() => setShowFreeRequest(true)}
+          className="flex items-center gap-1.5 px-3 py-2 border border-blue-300 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-50"
+          title="Record that a customer asked for an item you don't currently stock"
+        >
+          <TrendingUp className="w-4 h-4" />
+          Record Request
+        </button>
+
+        {/* Stock status quick filters */}
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+          <button onClick={() => setStockFilter('all')} className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${stockFilter === 'all' ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}>All</button>
+          <button onClick={() => setStockFilter('out')} className={`px-2.5 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1 ${stockFilter === 'out' ? 'bg-red-600 shadow text-white' : 'text-gray-500 hover:text-red-600'}`}>
+            <AlertCircle className="w-3 h-3" /> Out ({outOfStockCount})
+          </button>
+          <button onClick={() => setStockFilter('low')} className={`px-2.5 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1 ${stockFilter === 'low' ? 'bg-amber-500 shadow text-white' : 'text-gray-500 hover:text-amber-600'}`}>
+            <TrendingDown className="w-3 h-3" /> Low ({lowStockCount})
+          </button>
         </div>
 
         <button
@@ -1449,7 +2088,7 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  {['Name', 'Barcode', 'Category', 'Type', 'Retail Price', 'Stock', 'Bin', 'Status', 'Actions'].map(h => (
+                  {['Name', 'Barcode', 'Cost Price', 'Type', 'Retail Price', 'Stock', 'Bin', 'Status', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
@@ -1478,15 +2117,8 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
                       </div>
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-gray-500">{item.barcode ?? '—'}</td>
-                    <td className="px-4 py-3">
-                      {item.category ? (
-                        <span
-                          className="inline-flex items-center px-2 py-0.5 rounded text-xs"
-                          style={{ backgroundColor: item.category.color ? `${item.category.color}20` : '#f3f4f6', color: item.category.color ?? '#374151' }}
-                        >
-                          {item.category.name}
-                        </span>
-                      ) : <span className="text-gray-400">—</span>}
+                    <td className="px-4 py-3 font-medium text-gray-700">
+                      {item.costPriceCents ? fmt(item.costPriceCents) : <span className="text-gray-400">—</span>}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${typeBadgeColor(item.type)}`}>
@@ -1496,10 +2128,43 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
                     <td className="px-4 py-3 font-medium">{fmt(item.retailPriceCents)}</td>
                     <td className="px-4 py-3">
                       {item.trackStock ? (
-                        <span className={stockColor(item)}>
-                          {item.currentStock} {item.unit ?? 'pcs'}
-                          {item.currentStock === 0 && <span className="ml-1 text-xs">(Out)</span>}
-                        </span>
+                        item.currentStock === 0 ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700 border border-red-200">
+                            <AlertCircle className="w-3 h-3" /> OUT OF STOCK
+                          </span>
+                        ) : item.stockBreakdown && item.stockBreakdown.length > 1 ? (
+                          <div className="space-y-0.5">
+                            {item.stockBreakdown.map((b) => (
+                              b.quantity > 0 || b.isBaseUnit ? (
+                                <div key={b.unitName} className="text-xs">
+                                  <span className={`font-semibold ${b.isBaseUnit ? 'text-gray-700' : 'text-blue-700'}`}>
+                                    {b.quantity} {b.unitAbbrev}
+                                  </span>
+                                  {!b.isBaseUnit && b.remainder > 0 && (
+                                    <span className="text-gray-400 ml-1">+{b.remainder} {item.stockBreakdown!.find(x => x.isBaseUnit)?.unitAbbrev ?? 'pcs'}</span>
+                                  )}
+                                  {b.priceCents && (
+                                    <span className="ml-1 text-gray-400">@ KES {(b.priceCents / 100).toLocaleString()}</span>
+                                  )}
+                                </div>
+                              ) : null
+                            ))}
+                            {item.reorderPoint !== undefined && item.currentStock <= item.reorderPoint && (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full">
+                                <TrendingDown className="w-2.5 h-2.5" /> LOW
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className={stockColor(item)}>
+                            {item.currentStock} {item.unit ?? 'pcs'}
+                            {item.reorderPoint !== undefined && item.currentStock <= item.reorderPoint && (
+                              <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full">
+                                <TrendingDown className="w-2.5 h-2.5" /> LOW
+                              </span>
+                            )}
+                          </span>
+                        )
                       ) : (
                         <span className="text-gray-400 text-xs">Not tracked</span>
                       )}
@@ -1532,6 +2197,38 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
                           <Sliders className="w-3 h-3" />
                           Variants
                         </button>
+                        <button
+                          onClick={() => setUomItem(item)}
+                          className="text-xs text-teal-600 hover:text-teal-800 font-medium flex items-center gap-1"
+                          title="Manage packaging units (piece/dozen/carton/bale)"
+                        >
+                          <Layers className="w-3 h-3" />
+                          Packaging
+                        </button>
+                        {item.trackStock && item.currentStock === 0 && (
+                          <button
+                            onClick={() => { setDemandItem(item); setDemandQty('1'); }}
+                            className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                            title="Record that a customer asked for this item"
+                          >
+                            <TrendingUp className="w-3 h-3" />
+                            Demand
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={async () => {
+                              const ok = await confirm({ title: 'Delete Item', message: `Delete "${item.name}"? This cannot be undone.`, variant: 'danger', confirmLabel: 'Delete' });
+                              if (ok) deleteItemMutation.mutate(item);
+                            }}
+                            disabled={deleteItemMutation.isPending}
+                            className="text-xs text-red-500 hover:text-red-700 font-medium flex items-center gap-1 disabled:opacity-40"
+                            title="Delete item (Manager/Owner only)"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            Delete
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1543,7 +2240,82 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
         )}
       </div>
 
-      {showAdd && <AddItemModal businessId={businessId} storeId={storeId} categories={categories} posMode={posMode} onClose={() => setShowAdd(false)} />}
+      {/* Free-text Customer Request Modal (item not in inventory) */}
+      {showFreeRequest && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6">
+            <h3 className="font-bold text-gray-900 mb-1 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-blue-600" /> Record Customer Request
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">Log what a customer asked for — even if you've never stocked it. A reminder will appear in Notifications.</p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Item / Product Name *</label>
+                <input
+                  type="text"
+                  value={freeRequestName}
+                  onChange={(e) => setFreeRequestName(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g. Omo 1kg, Brookside Yoghurt 500ml…"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Quantity Requested</label>
+                <input
+                  type="number" min="1"
+                  value={freeRequestQty}
+                  onChange={(e) => setFreeRequestQty(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Notes (optional)</label>
+                <input
+                  type="text"
+                  value={freeRequestNotes}
+                  onChange={(e) => setFreeRequestNotes(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g. Customer comes every Friday…"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end mt-5">
+              <button onClick={() => { setShowFreeRequest(false); setFreeRequestName(''); setFreeRequestQty('1'); setFreeRequestNotes(''); }} className="px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">Cancel</button>
+              <button
+                onClick={() => freeRequestMutation.mutate({ name: freeRequestName.trim(), qty: parseInt(freeRequestQty) || 1, notes: freeRequestNotes.trim() })}
+                disabled={!freeRequestName.trim() || freeRequestMutation.isPending}
+                className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50">
+                {freeRequestMutation.isPending ? 'Saving…' : 'Record Request'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Customer Demand Modal */}
+      {demandItem && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6">
+            <h3 className="font-bold text-gray-900 mb-1">Record Customer Demand</h3>
+            <p className="text-sm text-gray-500 mb-4">Log that a customer asked for <strong>{demandItem.name}</strong> (currently out of stock). A restock reminder will be created.</p>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Quantity Requested</label>
+            <input type="number" min="1" value={demandQty} onChange={(e) => setDemandQty(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setDemandItem(null)} className="px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">Cancel</button>
+              <button
+                onClick={() => demandMutation.mutate({ item: demandItem, qty: parseInt(demandQty) || 1 })}
+                disabled={demandMutation.isPending}
+                className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50">
+                Record Demand
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAdd && <AddItemModal businessId={businessId} storeId={storeId} categories={categories} posMode={posMode} existingItems={items} onClose={() => setShowAdd(false)} />}
       {editItem && <EditItemModal item={editItem} categories={categories} onClose={() => setEditItem(null)} />}
       {adjustItem && <AdjustStockModal item={adjustItem} businessId={businessId} storeId={storeId} onClose={() => setAdjustItem(null)} />}
       {variantItem && <VariantsModal item={variantItem} businessId={businessId} onClose={() => setVariantItem(null)} />}
@@ -1560,6 +2332,12 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
           items={items}
           onClose={() => setShowBarcodeModal(false)}
         />
+      )}
+      {showCategoryManager && (
+        <CategoryManager businessId={businessId} onClose={() => setShowCategoryManager(false)} />
+      )}
+      {uomItem && (
+        <UOMEditor item={uomItem} businessId={businessId} onClose={() => setUomItem(null)} />
       )}
     </div>
   );

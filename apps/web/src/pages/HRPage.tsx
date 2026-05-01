@@ -1081,7 +1081,7 @@ function AddEmployeeModal({ businessId, onClose, onSuccess }: {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type Tab = 'overview' | 'employees' | 'attendance' | 'leave' | 'commissions' | 'shifts' | 'performance' | 'contracts' | 'disciplinary';
+type Tab = 'overview' | 'employees' | 'attendance' | 'leave' | 'commissions' | 'shifts' | 'performance' | 'contracts' | 'disciplinary' | 'advances';
 
 export default function HRPage() {
   const qc = useQueryClient();
@@ -1239,6 +1239,7 @@ export default function HRPage() {
     { id: 'performance', label: 'Performance', icon: Award },
     { id: 'contracts', label: 'Contracts', icon: AlertCircle },
     { id: 'disciplinary', label: 'Disciplinary', icon: AlertCircle },
+    { id: 'advances', label: 'Advances', icon: TrendingUp },
   ];
 
   // Contracts tab data
@@ -1253,12 +1254,44 @@ export default function HRPage() {
   const [discForm, setDiscForm] = useState({ type: 'WARNING', incidentDate: new Date().toISOString().split('T')[0], description: '', actionTaken: '' });
   const { data: disciplinaryRecords = [], refetch: refetchDisc } = useQuery<any[]>({
     queryKey: ['disciplinary', businessId, disciplinaryEmpId],
-    queryFn: () => api.get(`/disciplinary?businessId=${businessId}${disciplinaryEmpId ? `&employeeId=${disciplinaryEmpId}` : ''}`),
+    queryFn: () => api.get(`/hr/disciplinary?businessId=${businessId}${disciplinaryEmpId ? `&employeeId=${disciplinaryEmpId}` : ''}`),
     enabled: !!businessId && tab === 'disciplinary',
   });
   const createDiscMutation = useMutation({
-    mutationFn: (data: any) => api.post('/disciplinary', data),
+    mutationFn: (data: any) => api.post('/hr/disciplinary', data),
     onSuccess: () => { void refetchDisc(); setDiscForm({ type: 'WARNING', incidentDate: new Date().toISOString().split('T')[0], description: '', actionTaken: '' }); },
+  });
+
+  // ─── Salary Advances ─────────────────────────────────────────────────────────
+  const [advanceForm, setAdvanceForm] = useState({ employeeId: '', amountCents: '', reason: '' });
+  const [advanceFormError, setAdvanceFormError] = useState('');
+
+  const { data: advances = [], refetch: refetchAdvances } = useQuery<any[]>({
+    queryKey: ['salary-advances', businessId],
+    queryFn: () => api.get(`/hr/salary-advances?businessId=${businessId}`),
+    enabled: !!businessId && tab === 'advances',
+  });
+
+  const requestAdvanceMutation = useMutation({
+    mutationFn: (data: any) => api.post('/hr/salary-advances', data),
+    onSuccess: () => { void refetchAdvances(); setAdvanceForm({ employeeId: '', amountCents: '', reason: '' }); setAdvanceFormError(''); },
+    onError: (e: any) => setAdvanceFormError(e?.message ?? 'Failed to request advance'),
+  });
+
+  const approveAdvanceMutation = useMutation({
+    mutationFn: (id: string) => api.patch(`/hr/salary-advances/${id}/approve`, { approvedBy: user?.id ?? '' }),
+    onSuccess: () => void refetchAdvances(),
+  });
+
+  const rejectAdvanceMutation = useMutation({
+    mutationFn: ({ id, note }: { id: string; note?: string }) =>
+      api.patch(`/hr/salary-advances/${id}/reject`, { rejectedBy: user?.id ?? '', rejectionNote: note }),
+    onSuccess: () => void refetchAdvances(),
+  });
+
+  const deductAdvanceMutation = useMutation({
+    mutationFn: (id: string) => api.patch(`/hr/salary-advances/${id}/deducted`, {}),
+    onSuccess: () => void refetchAdvances(),
   });
 
   return (
@@ -2025,6 +2058,138 @@ export default function HRPage() {
                         </div>
                         <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{r.description}</p>
                         <p className="text-xs text-gray-400 mt-0.5">Action: {r.actionTaken}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab === 'advances' && (
+          <div className="p-6 space-y-6">
+            {/* Pending requests banner for managers */}
+            {isManager && advances.filter((a: any) => a.status === 'PENDING').length > 0 && (
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-4">
+                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-2">
+                  {advances.filter((a: any) => a.status === 'PENDING').length} pending advance request(s)
+                </p>
+                {advances.filter((a: any) => a.status === 'PENDING').map((a: any) => (
+                  <div key={a.id} className="flex items-center justify-between py-2 border-t border-amber-200 dark:border-amber-700">
+                    <div>
+                      <span className="text-sm font-medium text-gray-800 dark:text-white">
+                        {a.employee?.user?.name}
+                      </span>
+                      <span className="text-sm text-gray-600 dark:text-gray-300 ml-2">
+                        KES {(a.amountCents / 100).toLocaleString()}
+                      </span>
+                      {a.reason && <p className="text-xs text-gray-500 mt-0.5">{a.reason}</p>}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => approveAdvanceMutation.mutate(a.id)}
+                        disabled={approveAdvanceMutation.isPending}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg disabled:opacity-40">
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => rejectAdvanceMutation.mutate({ id: a.id })}
+                        disabled={rejectAdvanceMutation.isPending}
+                        className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg disabled:opacity-40">
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Request Form */}
+              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 space-y-4">
+                <h3 className="font-semibold text-gray-800 dark:text-white">Request Advance</h3>
+                {isManager && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Employee</label>
+                    <select value={advanceForm.employeeId} onChange={e => setAdvanceForm(f => ({ ...f, employeeId: e.target.value }))}
+                      className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                      <option value="">Select employee</option>
+                      {employees.map(e => <option key={e.id} value={e.id}>{e.user.name}</option>)}
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount (KES)</label>
+                  <input
+                    type="number" min="0" step="100"
+                    value={advanceForm.amountCents}
+                    onChange={e => setAdvanceForm(f => ({ ...f, amountCents: e.target.value }))}
+                    placeholder="e.g. 5000"
+                    className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reason (optional)</label>
+                  <textarea rows={2} value={advanceForm.reason} onChange={e => setAdvanceForm(f => ({ ...f, reason: e.target.value }))}
+                    placeholder="Medical, school fees, etc."
+                    className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                </div>
+                {advanceFormError && <p className="text-xs text-red-600">{advanceFormError}</p>}
+                <button
+                  onClick={() => {
+                    const empId = isManager ? advanceForm.employeeId : myEmployee?.id;
+                    if (!empId) { setAdvanceFormError('Select an employee'); return; }
+                    const amount = parseFloat(advanceForm.amountCents);
+                    if (!amount || amount <= 0) { setAdvanceFormError('Enter a valid amount'); return; }
+                    requestAdvanceMutation.mutate({
+                      businessId,
+                      employeeId: empId,
+                      amountCents: Math.round(amount * 100),
+                      reason: advanceForm.reason || undefined,
+                    });
+                  }}
+                  disabled={requestAdvanceMutation.isPending}
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold disabled:opacity-40 flex items-center justify-center gap-2">
+                  {requestAdvanceMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  Submit Request
+                </button>
+              </div>
+
+              {/* Advances List */}
+              <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div className="px-5 py-4 border-b dark:border-gray-700 font-semibold text-gray-800 dark:text-white">All Advances</div>
+                {advances.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">No salary advances</div>
+                ) : (
+                  <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                    {advances.map((a: any) => (
+                      <div key={a.id} className="px-5 py-4 flex items-center justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                              a.status === 'PENDING' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                              a.status === 'APPROVED' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                              a.status === 'DEDUCTED' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                              'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                            }`}>{a.status}</span>
+                            <span className="text-sm font-medium text-gray-800 dark:text-white">
+                              {a.employee?.user?.name}
+                            </span>
+                            <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+                              KES {(a.amountCents / 100).toLocaleString()}
+                            </span>
+                          </div>
+                          {a.reason && <p className="text-xs text-gray-500 mt-0.5 truncate">{a.reason}</p>}
+                          <p className="text-xs text-gray-400 mt-0.5">{new Date(a.requestedAt).toLocaleDateString()}</p>
+                        </div>
+                        {isManager && a.status === 'APPROVED' && (
+                          <button
+                            onClick={() => deductAdvanceMutation.mutate(a.id)}
+                            disabled={deductAdvanceMutation.isPending}
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg disabled:opacity-40 whitespace-nowrap">
+                            Mark Deducted
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>

@@ -41,6 +41,7 @@ interface EtimsInvoicePayload {
   salesSttsCd?: string;
   totItemCnt?: number;
   prchrAcptcYn?: string;
+  prchrTpin?: string;   // buyer KRA PIN — required when prchrAcptcYn = 'Y'
   remark?: string;
   taxblAmtA: number;
   taxblAmtB: number;
@@ -317,6 +318,62 @@ export class EtimsService {
     return { success: true };
   }
 
+  /**
+   * Submit a Credit Note (rcptTyCd = 'R') to eTIMS for a processed return.
+   * Called non-blocking after the return transaction commits.
+   * KRA requires a CN referencing the original invoice for every return.
+   */
+  async submitCreditNote(returnId: string): Promise<void> {
+    const ret = await this.prisma.return.findUnique({
+      where: { id: returnId },
+      include: {
+        sale: {
+          include: { items: { include: { item: true } } },
+        },
+      },
+    });
+    if (!ret) return;
+    if (ret.etimsCreditNoteSubmitted) return;
+
+    const sale = ret.sale;
+    if (!sale.etimsSubmitted || !sale.etimsControlNumber) {
+      // Original sale was never submitted to eTIMS — no CN needed
+      return;
+    }
+
+    const business = await this.prisma.business.findUnique({ where: { id: ret.businessId } });
+
+    let creditNoteRef: string;
+
+    if (business?.etimsMode === 'PRODUCTION' && business.etimsCredentialsEncrypted) {
+      try {
+        creditNoteRef = await this.submitToEtimsCreditNote(ret, sale, business);
+      } catch (error) {
+        console.error('eTIMS credit note submission failed:', error);
+        return;
+      }
+    } else {
+      // Sandbox: generate mock ref
+      creditNoteRef = `CN${Date.now()}`;
+    }
+
+    await this.prisma.return.update({
+      where: { id: returnId },
+      data: { etimsCreditNoteSubmitted: true, etimsCreditNoteRef: creditNoteRef },
+    });
+
+    await this.audit.createEntry({
+      businessId: ret.businessId,
+      actor: 'system',
+      actorType: 'SYSTEM',
+      action: 'ETIMS_CREDIT_NOTE',
+      entity: 'Return',
+      entityId: returnId,
+      after: { creditNoteRef, originalInvoice: sale.etimsControlNumber },
+      source: 'SYSTEM',
+    });
+  }
+
   async voidSale(saleId: string, reason: string) {
     const sale = await this.prisma.sale.findUnique({ where: { id: saleId } });
     if (!sale) throw new BadRequestException('Sale not found');
@@ -381,13 +438,16 @@ export class EtimsService {
 
   private async submitToEtims(sale: any, business: any): Promise<{ controlNumber: string; intrlData: string }> {
     const creds = this.decryptCredentials(business.etimsCredentialsEncrypted);
-    const saleWithItems = await this.prisma.sale.findUnique({
-      where: { id: sale.id },
-      include: {
-        items: { include: { item: true } },
-        payments: true,
-      },
-    });
+    const [saleWithItems, customerRecord] = await Promise.all([
+      this.prisma.sale.findUnique({
+        where: { id: sale.id },
+        include: { items: { include: { item: true } }, payments: true },
+      }),
+      sale.customerId
+        ? this.prisma.customer.findUnique({ where: { id: sale.customerId }, select: { kraPin: true } })
+        : null,
+    ]);
+    const buyerKraPin = customerRecord?.kraPin ?? null;
 
     const saleDateStr = new Date(sale.createdAt).toISOString().slice(0, 10).replace(/-/g, '');
 
@@ -439,7 +499,8 @@ export class EtimsService {
       salesSttsCd: '02',           // 02 = Approved/Confirmed
       totItemCnt: itemList.length,
       cfmDt: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-      prchrAcptcYn: 'N',           // N = walk-in retail customer
+      prchrAcptcYn: buyerKraPin ? 'Y' : 'N',
+      ...(buyerKraPin ? { prchrTpin: buyerKraPin } : {}),
       taxblAmtA: 0,
       taxblAmtB: taxblAmt,
       taxblAmtC: 0,
@@ -489,6 +550,77 @@ export class EtimsService {
       remark: reason,
     });
     return response.voidRef ?? `VOID_${Date.now()}`;
+  }
+
+  /**
+   * Submit credit note (rcptTyCd = 'R') to KRA eTIMS.
+   * References the original sale's eTIMS control number via orgInvcNo.
+   * Only the returned items are included in the itemList.
+   */
+  private async submitToEtimsCreditNote(ret: any, sale: any, business: any): Promise<string> {
+    const creds = this.decryptCredentials(business.etimsCredentialsEncrypted);
+
+    const returnedIds: string[] = JSON.parse(ret.returnedItemIds || '[]');
+    const itemsToReturn = returnedIds.length > 0
+      ? sale.items.filter((i: any) => returnedIds.includes(i.id))
+      : sale.items;
+
+    const cnDate = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+
+    const itemList = itemsToReturn.map((si: any, idx: number) => {
+      const totalAmt  = Math.round(si.totalCents) / 100;
+      const taxblAmt  = Math.round((totalAmt / 1.16) * 100) / 100;
+      const taxAmt    = Math.round((totalAmt - taxblAmt) * 100) / 100;
+      return {
+        itemSeq:    idx + 1,
+        itemCd:     si.item?.barcode ?? si.item?.sku ?? `KA${String(idx + 1).padStart(5,'0')}`,
+        itemClsCd:  si.item?.kraItemCode ?? '5020230602',
+        itemNm:     si.item?.name ?? 'Item',
+        bcd:        si.item?.barcode ?? '',
+        pkgUnitCd:  'NT',
+        pkg:        si.quantity,
+        qtyUnitCd:  'U',
+        qty:        si.quantity,
+        prc:        si.unitPriceCents / 100,
+        splyAmt:    totalAmt,
+        dcRt:       0,
+        dcAmt:      0,
+        taxblAmt,
+        taxTyCd:    'B',
+        taxAmt,
+        totAmt:     totalAmt,
+      };
+    });
+
+    const totAmt   = itemsToReturn.reduce((s: number, i: any) => s + i.totalCents, 0) / 100;
+    const totVat   = Math.round((totAmt - totAmt / 1.16) * 100) / 100;
+    const totTaxbl = Math.round((totAmt / 1.16) * 100) / 100;
+
+    const payload = {
+      invoiceNo:    `${sale.receiptNumber}-CN`,
+      tpin:         creds.kraPin,
+      branchId:     creds.branchId ?? '00',
+      orgInvcNo:    sale.etimsControlNumber,   // links CN to original invoice
+      rcptTyCd:     'R',                        // R = Return / Credit Note
+      salesSttsCd:  '02',
+      saleDate:     cnDate,
+      stockRlsDt:   cnDate,
+      cfmDt:        cnDate,
+      pmtTyCd:      'CN',                       // credit note payment type
+      rfdRsnCd:     '01',                       // 01 = customer return
+      tradeTerms:   'CSH',
+      prchrAcptcYn: 'N',
+      totItemCnt:   itemList.length,
+      taxblAmtA: 0, taxblAmtB: totTaxbl, taxblAmtC: 0, taxblAmtD: 0,
+      taxAmtA:   0, taxAmtB:   totVat,   taxAmtC:   0, taxAmtD:   0,
+      totTaxblAmt: totTaxbl,
+      totTaxAmt:   totVat,
+      totAmt,
+      itemList,
+    };
+
+    const response = await this.callEtimsApiWithAuth(creds, '/api/trnsSales/saveTaxInvoice', payload);
+    return response.controlNo ?? response.rcptNo ?? `CN${Date.now()}`;
   }
 
   // ─── HTTP helpers ─────────────────────────────────────────────────────────

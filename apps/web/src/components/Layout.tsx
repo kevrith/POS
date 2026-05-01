@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   ShoppingCart, BarChart3, Package, Settings, LogOut, Users,
   CreditCard, Truck, DollarSign, UserCheck, Coffee, Layers,
@@ -7,7 +7,8 @@ import {
   Tag, Gift, Sun, Moon, Monitor, Wand2, ArrowRightLeft, LayoutDashboard,
   AlertTriangle, X, Pill, CalendarClock, TrendingUp, GitBranch, Landmark,
   Fuel, Lock, BedDouble, CheckCircle2, Trash2, Radio, BookOpen,
-  Link2, FileText, Clock, Send, Shield, Tablet,
+  Link2, FileText, Clock, Send, Shield, Tablet, Fingerprint,
+  ClipboardList, MapPin, Store, Zap, Building2, PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { api, getToken } from '../lib/api';
@@ -46,16 +47,15 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
     label: 'Home',
     items: [
       { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+      { to: '/agent', icon: UserCheck, label: 'Agent Dashboard', roles: ['SALES_AGENT', 'OWNER', 'MANAGER'] },
     ],
   },
   {
     label: 'Sales',
     items: [
-      { to: '/pos', icon: ShoppingCart, label: 'Point of Sale', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
-      // Supermarket POS is rendered automatically via POSRouterPage when posMode=SUPERMARKET
-      // No separate nav item needed — /pos already shows the right interface.
-      { to: '/hospitality', icon: Coffee, label: 'Hospitality', roles: ['OWNER', 'MANAGER', 'WAITER'], businessTypes: ['HOSPITALITY', 'FAST_FOOD'] },
-      { to: '/kds', icon: Monitor, label: 'Kitchen Display', roles: ['OWNER', 'MANAGER', 'WAITER', 'KITCHEN'], businessTypes: ['HOSPITALITY', 'FAST_FOOD'] },
+      // /pos is the universal entry-point; POSRouterPage redirects to the right UI per posMode
+      { to: '/pos', icon: ShoppingCart, label: 'Point of Sale', roles: ['OWNER', 'MANAGER', 'CASHIER', 'WAITER'] },
+      { to: '/kds', icon: Monitor, label: 'Kitchen Display', roles: ['OWNER', 'MANAGER', 'WAITER', 'KITCHEN'], businessTypes: ['HOSPITALITY', 'FAST_FOOD', 'BAR_TAB'] },
       // Kiosk mode is launched from within the POS page (not a permanent nav item)
       { to: '/layaway', icon: Layers, label: 'Layaway', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['RETAIL', 'SUPERMARKET'] },
       { to: '/proforma', icon: CreditCard, label: 'Proformas', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
@@ -70,6 +70,8 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
     items: [
       { to: '/delivery', icon: Truck, label: 'Delivery', businessTypes: ['HOSPITALITY', 'FAST_FOOD', 'RETAIL', 'SUPERMARKET'] },
       { to: '/delivery-management', icon: Truck, label: 'Delivery Dispatch', roles: ['OWNER', 'MANAGER'], businessTypes: ['HOSPITALITY', 'FAST_FOOD', 'RETAIL', 'SUPERMARKET'] },
+      { to: '/field-orders', icon: ClipboardList, label: 'Field Orders', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
+      { to: '/delivery-routes', icon: MapPin, label: 'Delivery Routes', roles: ['OWNER', 'MANAGER'] },
       { to: '/waitlist', icon: Clock, label: 'Waitlist', roles: ['OWNER', 'MANAGER', 'WAITER'], businessTypes: ['HOSPITALITY', 'FAST_FOOD'] },
       { to: '/hotel', icon: BedDouble, label: 'Hotel Integration', roles: ['OWNER', 'MANAGER'], businessTypes: ['HOSPITALITY'] },
       { to: '/channel-manager', icon: Radio, label: 'Channel Manager', roles: ['OWNER', 'MANAGER'], businessTypes: ['HOSPITALITY'] },
@@ -151,14 +153,39 @@ function getInitials(name: string) {
   return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 }
 
+// POS mode display metadata
+const POS_MODE_META: Record<string, { label: string; color: string; icon: React.ComponentType<{className?: string}> }> = {
+  RETAIL:       { label: 'Retail',       color: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400',      icon: ShoppingCart },
+  SUPERMARKET:  { label: 'Supermarket',  color: 'bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-400',   icon: Store },
+  HOSPITALITY:  { label: 'Hospitality',  color: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',   icon: Coffee },
+  FAST_FOOD:    { label: 'Fast Food',    color: 'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400', icon: Zap },
+  FUEL_PUMP:    { label: 'Fuel Station', color: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400',           icon: Fuel },
+  CYBERCAFE:    { label: 'Cybercafe',    color: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-400', icon: Monitor },
+  CLINIC:       { label: 'Clinic',       color: 'bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-400',       icon: Pill },
+  SALON:        { label: 'Salon',        color: 'bg-pink-100 text-pink-700 dark:bg-pink-500/15 dark:text-pink-400',       icon: CalendarClock },
+  BAR_TAB:      { label: 'Bar',          color: 'bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-400', icon: Coffee },
+};
+
 export default function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
   const user = useAuthStore((s) => s.user);
   const { isDark, toggle: toggleTheme } = useThemeStore();
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [trialBannerDismissed, setTrialBannerDismissed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => localStorage.getItem('sidebar-collapsed') === 'true',
+  );
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((v) => {
+      const next = !v;
+      localStorage.setItem('sidebar-collapsed', String(next));
+      return next;
+    });
+  }, []);
 
   const { data: subscription } = useQuery<{
     subscriptionStatus: string;
@@ -173,7 +200,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     retry: false,
   });
 
-  const { data: businessSettings } = useQuery<{ posMode: string }>({
+  const { data: businessSettings } = useQuery<{ posMode: string; name: string; stores?: { id: string; name: string; storeCode: string }[] }>({
     queryKey: ['business-settings', user?.businessId],
     queryFn: () => api.get(`/business/${user!.businessId}/settings`),
     enabled: !!user?.businessId,
@@ -182,6 +209,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   });
 
   const businessType = businessSettings?.posMode ?? 'RETAIL';
+  const businessName = businessSettings?.name ?? 'KASTRA POS';
+  const currentStore = businessSettings?.stores?.find(s => s.id === user?.storeId);
+
+  // ─── Live clock ───────────────────────────────────────────────────────────
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const tick = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(tick);
+  }, []);
+  const timeStr = now.toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' });
+  const dateStr = now.toLocaleDateString('en-KE', { weekday: 'short', day: 'numeric', month: 'short' });
 
   const showTrialBanner =
     !trialBannerDismissed &&
@@ -212,6 +250,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     enabled: !!user?.businessId,
     refetchInterval: 60_000,
   });
+
+  // ─── Stock Request badge (unread STOCK_REQUEST notifications) ─────────────
+  const { data: stockRequestNotifs = [] } = useQuery<{ id: string }[]>({
+    queryKey: ['notifications-stock-requests', user?.businessId],
+    queryFn: () => api.get(`/notifications?businessId=${user!.businessId}&type=STOCK_REQUEST&unreadOnly=true`),
+    enabled: !!user?.businessId && ['OWNER', 'MANAGER'].includes(user?.role ?? ''),
+    refetchInterval: 120_000,
+  });
+  const stockRequestCount = stockRequestNotifs.length;
   useEffect(() => {
     if (unreadData?.count !== undefined) setUnreadCount(unreadData.count);
   }, [unreadData?.count]);
@@ -237,6 +284,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [isLocked, setIsLocked] = useState(false);
   const [lockPin, setLockPin] = useState('');
   const [lockError, setLockError] = useState('');
+  const [biometricLoading, setBiometricLoading] = useState(false);
+  const [hasBiometric, setHasBiometric] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const resetTimer = useCallback(() => {
@@ -253,6 +302,84 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [resetTimer]);
+
+  // Check if user has registered biometrics
+  useEffect(() => {
+    if (!isLocked || !user?.id) return;
+    void (async () => {
+      try {
+        const creds = await api.get<{ id: string }[]>(`/auth/webauthn/credentials?userId=${user.id}`);
+        setHasBiometric(Array.isArray(creds) && creds.length > 0);
+      } catch {
+        setHasBiometric(false);
+      }
+    })();
+  }, [isLocked, user?.id]);
+
+  async function handleBiometricUnlock() {
+    if (!user?.businessId || !user?.id) return;
+    setBiometricLoading(true);
+    setLockError('');
+    try {
+      const options = await api.get<{
+        challenge: string;
+        challengeKey: string;
+        rpId: string;
+        allowCredentials: { type: string; id: string; transports?: AuthenticatorTransport[] }[];
+        userVerification: UserVerificationRequirement;
+        timeout: number;
+      }>(`/auth/webauthn/login/begin?businessId=${user.businessId}&userId=${user.id}`);
+
+      const credential = await navigator.credentials.get({
+        publicKey: {
+          challenge: Uint8Array.from(atob(options.challenge.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)),
+          rpId: options.rpId,
+          allowCredentials: options.allowCredentials.map(c => ({
+            type: 'public-key' as const,
+            id: Uint8Array.from(atob(c.id.replace(/-/g, '+').replace(/_/g, '/')), x => x.charCodeAt(0)),
+            transports: c.transports,
+          })),
+          userVerification: options.userVerification,
+          timeout: options.timeout,
+        },
+      }) as PublicKeyCredential | null;
+
+      if (!credential) { setBiometricLoading(false); return; }
+      const response = credential.response as AuthenticatorAssertionResponse;
+
+      const toBase64url = (buf: ArrayBuffer) =>
+        btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+
+      const result = await api.post<{ accessToken: string; user: { id: string; name: string; role: string; businessId: string; storeId?: string } }>(
+        '/auth/webauthn/login/complete',
+        {
+          businessId: user.businessId,
+          challengeKey: options.challengeKey,
+          credentialId: credential.id,
+          clientDataJSON: toBase64url(response.clientDataJSON),
+          authenticatorData: toBase64url(response.authenticatorData),
+          signature: toBase64url(response.signature),
+          userHandle: response.userHandle ? toBase64url(response.userHandle) : undefined,
+        },
+      );
+
+      if (result?.accessToken) {
+        sessionStorage.setItem('pos-auth', JSON.stringify(result));
+        setIsLocked(false);
+        setLockPin('');
+        setLockError('');
+        resetTimer();
+        toast.success('Unlocked with biometrics');
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Biometric auth failed';
+      if (!msg.includes('cancelled') && !msg.includes('NotAllowedError')) {
+        setLockError('Biometric failed — use PIN');
+      }
+    } finally {
+      setBiometricLoading(false);
+    }
+  }
 
   async function handleUnlock(pinValue?: string) {
     const p = pinValue ?? lockPin;
@@ -407,10 +534,22 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <button
             onClick={() => void handleUnlock()}
             disabled={lockPin.length < 4}
-            className="w-full h-12 mb-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-30 text-white font-bold rounded-xl transition-all text-sm flex items-center justify-center gap-2"
+            className="w-full h-12 mb-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-30 text-white font-bold rounded-xl transition-all text-sm flex items-center justify-center gap-2"
           >
             Unlock  <kbd className="bg-white/20 text-white text-xs px-1.5 py-0.5 rounded font-mono">↵ Enter</kbd>
           </button>
+
+          {/* Biometric button */}
+          {hasBiometric && (
+            <button
+              onClick={() => void handleBiometricUnlock()}
+              disabled={biometricLoading}
+              className="w-full h-11 mb-4 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-semibold rounded-xl transition-all text-sm flex items-center justify-center gap-2 border border-emerald-200 dark:border-emerald-800 disabled:opacity-50"
+            >
+              <Fingerprint className="w-4 h-4" />
+              {biometricLoading ? 'Verifying…' : 'Use Fingerprint / Face ID'}
+            </button>
+          )}
 
           <button
             onClick={logout}
@@ -428,7 +567,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <div className="flex h-screen bg-gray-50 dark:bg-gray-950 overflow-hidden">
 
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
-      <aside className="hidden md:flex w-[260px] flex-col flex-shrink-0 bg-[#f8f9fb] dark:bg-[#0d1117] border-r border-gray-200/80 dark:border-white/[0.055] relative">
+      <aside className={`hidden md:flex flex-col flex-shrink-0 bg-[#f8f9fb] dark:bg-[#0d1117] border-r border-gray-200/80 dark:border-white/[0.055] relative transition-all duration-300 ease-in-out overflow-hidden ${sidebarCollapsed ? 'w-0 border-r-0' : 'w-[260px]'}`}>
 
         {/* 2px gradient accent line at the very top */}
         <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500 z-10" />
@@ -451,9 +590,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <div className="absolute -bottom-0.5 -right-0.5 w-[11px] h-[11px] bg-emerald-400 rounded-full border-2 border-[#f8f9fb] dark:border-[#0d1117] shadow-sm" />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[14.5px] font-extrabold text-gray-900 dark:text-white leading-tight tracking-[-0.01em]">KASTRA POS</div>
-              <div className="flex items-center gap-1.5 mt-[3px]">
-                <span className="text-[9.5px] font-bold tracking-[0.14em] uppercase text-blue-600 dark:text-blue-400">Enterprise</span>
+              <div className="text-[14px] font-extrabold text-gray-900 dark:text-white leading-tight tracking-[-0.01em] truncate" title={businessName}>
+                {businessName}
+              </div>
+              <div className="flex items-center gap-1.5 mt-[3px] flex-wrap">
+                {/* POS mode badge */}
+                {(() => {
+                  const meta = POS_MODE_META[businessType] ?? POS_MODE_META.RETAIL;
+                  const ModeIcon = meta.icon;
+                  return (
+                    <span className={`inline-flex items-center gap-[3px] text-[9px] font-bold px-1.5 py-[1.5px] rounded-full uppercase tracking-wide ${meta.color}`}>
+                      <ModeIcon className="w-[9px] h-[9px]" />
+                      {meta.label}
+                    </span>
+                  );
+                })()}
                 <span className="w-[3px] h-[3px] rounded-full bg-gray-300 dark:bg-white/20 flex-shrink-0" />
                 <span className={`text-[9px] font-semibold px-1.5 py-[1px] rounded-full uppercase tracking-wide ${
                   subscription?.subscriptionStatus === 'ACTIVE'
@@ -475,9 +626,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-[13px] font-semibold text-gray-800 dark:text-white/90 truncate leading-tight">{user?.name}</div>
-              <div className="flex items-center gap-1.5 mt-[3px]">
+              <div className="flex items-center gap-1.5 mt-[2px]">
                 <div className="w-[5px] h-[5px] rounded-full bg-emerald-400 ring-[2px] ring-emerald-400/25 flex-shrink-0" />
                 <span className="text-[11px] text-gray-400 dark:text-white/35 capitalize font-medium leading-none">{user?.role?.toLowerCase()}</span>
+                {currentStore && (
+                  <>
+                    <span className="text-[9px] text-gray-300 dark:text-white/15">·</span>
+                    <span className="text-[10px] text-gray-400 dark:text-white/30 font-medium leading-none truncate max-w-[70px]" title={currentStore.name}>
+                      {currentStore.storeCode}
+                    </span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -523,6 +682,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                           ? 'bg-blue-600/[0.10] dark:bg-blue-500/[0.16] text-blue-700 dark:text-blue-300 shadow-[inset_2px_0_0_#3b82f6] dark:shadow-[inset_2px_0_0_#60a5fa]'
                           : 'text-gray-500/90 dark:text-white/38 hover:text-gray-800 dark:hover:text-white/75 hover:bg-gray-900/[0.04] dark:hover:bg-white/[0.05]'
                       }`;
+                      const isInventoryItem = item.to === '/inventory';
                       const navInner = (
                         <>
                           <div className={`flex-shrink-0 flex items-center justify-center w-[26px] h-[26px] rounded-md transition-all duration-150 ${
@@ -539,7 +699,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                           <span className={`flex-1 truncate transition-all duration-150 ${active ? 'font-semibold' : 'font-medium'}`}>
                             {item.label}
                           </span>
-                          {active && <div className="flex-shrink-0 w-1 h-1 rounded-full bg-blue-500 dark:bg-blue-400 opacity-70" />}
+                          {isInventoryItem && stockRequestCount > 0 && (
+                            <span className="flex-shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                              {stockRequestCount > 99 ? '99+' : stockRequestCount}
+                            </span>
+                          )}
+                          {!isInventoryItem && active && <div className="flex-shrink-0 w-1 h-1 rounded-full bg-blue-500 dark:bg-blue-400 opacity-70" />}
+                          {isInventoryItem && active && stockRequestCount === 0 && <div className="flex-shrink-0 w-1 h-1 rounded-full bg-blue-500 dark:bg-blue-400 opacity-70" />}
                         </>
                       );
                       return item.newTab ? (
@@ -635,16 +801,53 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
         {/* ── Top header bar (desktop) ──────────────────────────────────── */}
         <header className="hidden md:flex items-center justify-between px-5 h-[52px] bg-white/95 dark:bg-[#0d1117]/95 backdrop-blur-sm border-b border-gray-200/60 dark:border-white/[0.055] flex-shrink-0 z-10">
-          {/* Page title */}
-          <div className="flex items-center gap-2.5">
+          {/* Left: Sidebar toggle + Page title */}
+          <div className="flex items-center gap-2 min-w-0">
+            {/* Sidebar collapse / expand toggle */}
+            <button
+              onClick={toggleSidebar}
+              title={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
+              className="flex-shrink-0 p-1.5 rounded-lg text-gray-400 dark:text-white/30 hover:bg-gray-100 dark:hover:bg-white/[0.06] hover:text-gray-600 dark:hover:text-white/65 transition-all duration-150"
+            >
+              {sidebarCollapsed
+                ? <PanelLeftOpen className="w-[15px] h-[15px]" />
+                : <PanelLeftClose className="w-[15px] h-[15px]" />}
+            </button>
+            <div className="w-px h-4 bg-gray-200 dark:bg-white/[0.07]" />
             <div className="w-6 h-6 rounded-md bg-gray-100 dark:bg-white/[0.07] flex items-center justify-center flex-shrink-0">
               <currentPageInfo.Icon className="w-3.5 h-3.5 text-gray-500 dark:text-white/40" />
             </div>
-            <h1 className="text-[14px] font-bold text-gray-800 dark:text-white/90 tracking-tight">{currentPageInfo.label}</h1>
+            <h1 className="text-[14px] font-bold text-gray-800 dark:text-white/90 tracking-tight truncate">{currentPageInfo.label}</h1>
+            {/* Store context pill */}
+            {currentStore && (
+              <span className="hidden lg:inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 dark:text-white/28 bg-gray-100 dark:bg-white/[0.05] border border-gray-200/70 dark:border-white/[0.06] px-2 py-[3px] rounded-full">
+                <Building2 className="w-[9px] h-[9px]" />
+                {currentStore.name}
+              </span>
+            )}
           </div>
-          {/* Actions */}
+          {/* Right: Actions */}
           <div className="flex items-center gap-0.5">
-            {/* Kiosk launcher — optional, only shown to owners/managers */}
+            {/* Live clock */}
+            <div className="hidden lg:flex flex-col items-end mr-2 select-none">
+              <span className="text-[13px] font-bold text-gray-700 dark:text-white/75 tabular-nums leading-tight">{timeStr}</span>
+              <span className="text-[9.5px] text-gray-400 dark:text-white/30 leading-tight">{dateStr}</span>
+            </div>
+            <div className="hidden lg:block w-px h-5 bg-gray-200 dark:bg-white/[0.07] mx-1" />
+
+            {/* Quick New Sale button */}
+            {['OWNER', 'MANAGER', 'CASHIER'].includes(user?.role ?? '') && location.pathname !== '/pos' && (
+              <button
+                onClick={() => navigate('/pos')}
+                title="New Sale (go to POS)"
+                className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white shadow-sm shadow-blue-500/20 transition-all duration-150 mr-1"
+              >
+                <ShoppingCart className="w-3.5 h-3.5" />
+                New Sale
+              </button>
+            )}
+
+            {/* Kiosk launcher */}
             {(user?.role === 'OWNER' || user?.role === 'MANAGER') && (
               <button
                 onClick={() => {
@@ -657,7 +860,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   );
                 }}
                 title="Launch Kiosk Mode (opens in new tab)"
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-gray-400 dark:text-white/30 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all duration-150 mr-1"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-gray-400 dark:text-white/30 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all duration-150 mr-0.5"
               >
                 <Tablet className="w-3.5 h-3.5" />
                 Kiosk
@@ -717,8 +920,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         )}
 
         <main className={`flex-1 flex flex-col bg-gray-50 dark:bg-gray-950 pb-16 md:pb-0 relative ${
-          // POS pages manage their own internal scroll — prevent double-scroll
-          ['/pos', '/supermart', '/hospitality', '/kds'].some(p => location.pathname.startsWith(p))
+          // POS-style pages manage their own internal scroll — prevent double-scroll
+          ['/pos', '/supermart', '/hospitality', '/kds', '/fuel-pump', '/cybercafe'].some(p => location.pathname.startsWith(p))
             ? 'overflow-hidden'
             : 'overflow-y-auto'
         }`}>
@@ -730,7 +933,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             }} />
           </div>
           <div className={`relative z-10 ${
-            ['/pos', '/supermart', '/hospitality', '/kds'].some(p => location.pathname.startsWith(p))
+            ['/pos', '/supermart', '/hospitality', '/kds', '/fuel-pump', '/cybercafe'].some(p => location.pathname.startsWith(p))
               ? 'flex-1 flex flex-col overflow-hidden'
               : ''
           }`}>

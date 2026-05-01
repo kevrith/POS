@@ -297,9 +297,11 @@ function CreateBundleModal({
   const [newQty, setNewQty] = useState('');
   const [search, setSearch] = useState('');
 
-  const existingIds = new Set(bundles.map((b) => b.id));
+  // Only exclude items that already have components defined — items with 0 components
+  // can still be selected to have components added via this modal.
+  const configuredIds = new Set(bundles.filter((b) => b.bundleComponents.length > 0).map((b) => b.id));
   const availableBundleItems = catalog.filter(
-    (c) => c.type === 'BUNDLE' && !existingIds.has(c.id),
+    (c) => c.type === 'BUNDLE' && !configuredIds.has(c.id),
   );
 
   const saveMutation = useMutation({
@@ -360,7 +362,7 @@ function CreateBundleModal({
             </select>
             {availableBundleItems.length === 0 && (
               <p className="text-sm text-amber-600 mt-1">
-                No unused BUNDLE-type items. Create items with type "Bundle" in Inventory first.
+                All BUNDLE-type items already have components. Use "Edit Components" on the card below to modify them, or create a new item with type "Bundle" in Inventory first.
               </p>
             )}
           </div>

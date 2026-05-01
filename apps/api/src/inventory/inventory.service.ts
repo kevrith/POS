@@ -35,6 +35,24 @@ export class InventoryService {
     return map;
   }
 
+  /** Sum stock across all stores for a business (used when no storeId is scoped, e.g. owner view) */
+  async getStockLevelsByBusiness(
+    itemIds: string[],
+    businessId: string,
+  ): Promise<Map<string, number>> {
+    if (itemIds.length === 0) return new Map();
+    const movements = await this.prisma.inventoryMovement.groupBy({
+      by: ['itemId'],
+      where: { itemId: { in: itemIds }, businessId },
+      _sum: { quantity: true },
+    });
+    const map = new Map<string, number>();
+    for (const m of movements) {
+      map.set(m.itemId, m._sum.quantity ?? 0);
+    }
+    return map;
+  }
+
   async checkAndDeductStock(
     itemId: string,
     storeId: string,
@@ -50,7 +68,7 @@ export class InventoryService {
     if (!item.trackStock) return; // SERVICE items skip stock tracking
 
     const stock = await this.getStockLevel(itemId, storeId);
-    const policy = item.negativeStockPolicy ?? 'BLOCK';
+    const policy = item.negativeStockPolicy ?? 'ALLOW';
 
     if (stock < quantity) {
       if (policy === NegativeStockPolicy.BLOCK) {

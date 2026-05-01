@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useDialog } from '../components/Dialog';
 import { toast } from 'sonner';
 import { subscribeToEvent, SocketEvents } from '../lib/socket';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -179,6 +180,7 @@ export default function CybercafePage() {
   const businessId = user?.businessId ?? '';
   const storeId = user?.storeId ?? '';
   const qc = useQueryClient();
+  const { confirm } = useDialog();
 
   const [tab, setTab] = useState<Tab>('stations');
   const [startDate, setStartDate] = useState('');
@@ -978,7 +980,7 @@ ${catRates.map((r: any) => `<tr><td>${r.service}</td><td style="font-size:11px;c
                                   className="text-xs text-indigo-500 hover:underline"
                                 >Edit</button>
                                 <button
-                                  onClick={() => { if (confirm('Delete this rate?')) deleteRateMut.mutate(r.id); }}
+                                  onClick={async () => { const ok = await confirm({ title: 'Delete Rate', message: 'Delete this pricing rate?', variant: 'danger', confirmLabel: 'Delete' }); if (ok) deleteRateMut.mutate(r.id); }}
                                   disabled={deleteRateMut.isPending}
                                   className="text-red-400 hover:text-red-600"
                                 >

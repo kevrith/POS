@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Param, Query, UseGuards, Req } from '@nestjs/common';
+import { Controller, Post, Get, Body, Patch, Param, Query, UseGuards, Req } from '@nestjs/common';
 import { SalesService } from './sales.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../auth/tenant.guard';
@@ -18,6 +18,7 @@ interface CheckoutDto {
   discountCents?: number;
   promotionId?: string;
   serviceChargeCents?: number;
+  tipCents?: number;
   orderId?: string; // hospitality order — if provided, close it and free the table
 }
 
@@ -25,6 +26,7 @@ interface VoidDto {
   managerId: string;
   reason: string;
   voidedItemIds?: string[];
+  voidedItemQuantities?: Array<{ itemId: string; quantity: number }>;
 }
 
 @UseGuards(JwtAuthGuard, TenantGuard)
@@ -50,6 +52,7 @@ export class SalesController {
       discountCents: dto.discountCents,
       promotionId: dto.promotionId,
       serviceChargeCents: dto.serviceChargeCents,
+      tipCents: dto.tipCents,
       orderId: dto.orderId,
     });
   }
@@ -79,6 +82,21 @@ export class SalesController {
     });
   }
 
+  @Get('voided-returns')
+  async getVoidedAndReturns(
+    @Query('businessId') businessId: string,
+    @Query('storeId') storeId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.salesService.getVoidedAndReturns(
+      businessId,
+      storeId,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
+
   @Get('proformas')
   async getProformas(@Query('businessId') businessId: string) {
     return this.salesService.getProformas(businessId);
@@ -98,7 +116,7 @@ export class SalesController {
     @Query('businessId') businessId: string,
     @Body() dto: VoidDto,
   ) {
-    return this.salesService.voidSale(id, businessId, dto.managerId, dto.reason, dto.voidedItemIds);
+    return this.salesService.voidSale(id, businessId, dto.managerId, dto.reason, dto.voidedItemIds, dto.voidedItemQuantities);
   }
 
   @Post('verify-manager-pin')
@@ -129,11 +147,20 @@ export class SalesController {
     return this.salesService.convertProformaToSaleV2(id, dto);
   }
 
+  @Patch(':id/mark-credit-paid')
+  async markCreditPaid(
+    @Param('id') id: string,
+    @Query('businessId') businessId: string,
+    @Body('amountCents') amountCents?: number,
+  ) {
+    return this.salesService.markCreditPaid(id, businessId, amountCents);
+  }
+
   @Post(':id/return')
   async returnSale(
     @Param('id') id: string,
     @Query('businessId') businessId: string,
-    @Body() dto: { returnedItemIds?: string[]; reason: string; refundMethod: 'CASH' | 'STORE_CREDIT' },
+    @Body() dto: { returnedItemIds?: string[]; reason: string; refundMethod: 'CASH' | 'STORE_CREDIT'; processedBy?: string },
   ) {
     return this.salesService.returnSale(id, businessId, dto);
   }

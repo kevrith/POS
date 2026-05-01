@@ -688,4 +688,62 @@ export class HrService {
     });
     return { isClockedIn: !!open, clockedInSince: open?.clockIn ?? null, entryId: open?.id ?? null };
   }
+
+  // ─── Salary Advances ─────────────────────────────────────────────────────────
+
+  async getSalaryAdvances(businessId: string, employeeId?: string, status?: string) {
+    return this.prisma.salaryAdvance.findMany({
+      where: {
+        businessId,
+        ...(employeeId && { employeeId }),
+        ...(status && { status }),
+      },
+      include: {
+        employee: { select: { id: true, user: { select: { name: true } } } },
+      },
+      orderBy: { requestedAt: 'desc' },
+    });
+  }
+
+  async requestSalaryAdvance(businessId: string, employeeId: string, amountCents: number, reason?: string) {
+    if (amountCents <= 0) throw new BadRequestException('Amount must be greater than 0');
+    // Check for existing pending advance
+    const pending = await this.prisma.salaryAdvance.findFirst({
+      where: { businessId, employeeId, status: 'PENDING' },
+    });
+    if (pending) throw new BadRequestException('Employee already has a pending advance request');
+    return this.prisma.salaryAdvance.create({
+      data: { businessId, employeeId, amountCents, reason: reason ?? '', status: 'PENDING' },
+    });
+  }
+
+  async approveSalaryAdvance(id: string, approvedBy: string) {
+    const advance = await this.prisma.salaryAdvance.findUnique({ where: { id } });
+    if (!advance) throw new BadRequestException('Advance not found');
+    if (advance.status !== 'PENDING') throw new BadRequestException('Advance is not pending');
+    return this.prisma.salaryAdvance.update({
+      where: { id },
+      data: { status: 'APPROVED', approvedBy },
+    });
+  }
+
+  async rejectSalaryAdvance(id: string, rejectedBy: string, rejectionNote?: string) {
+    const advance = await this.prisma.salaryAdvance.findUnique({ where: { id } });
+    if (!advance) throw new BadRequestException('Advance not found');
+    if (advance.status !== 'PENDING') throw new BadRequestException('Advance is not pending');
+    return this.prisma.salaryAdvance.update({
+      where: { id },
+      data: { status: 'REJECTED', rejectedBy, rejectionNote },
+    });
+  }
+
+  async markAdvanceDeducted(id: string, payrollRunId?: string) {
+    const advance = await this.prisma.salaryAdvance.findUnique({ where: { id } });
+    if (!advance) throw new BadRequestException('Advance not found');
+    if (advance.status !== 'APPROVED') throw new BadRequestException('Advance must be approved before marking deducted');
+    return this.prisma.salaryAdvance.update({
+      where: { id },
+      data: { status: 'DEDUCTED', deductedAt: new Date(), ...(payrollRunId && { payrollRunId }) },
+    });
+  }
 }

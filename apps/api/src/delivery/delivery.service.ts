@@ -426,7 +426,7 @@ export class DeliveryService {
     }
   }
 
-  async updateDeliveryOrder(id: string, dto: { status?: string; notes?: string; scheduledAt?: string; deliveryFeeCents?: number }) {
+  async updateDeliveryOrder(id: string, dto: { status?: string; notes?: string; scheduledAt?: string; deliveryFeeCents?: number; receivedBy?: string; deliveredAt?: string }) {
     const delivery = await this.prisma.deliveryOrder.findUnique({ where: { id } });
     if (!delivery) throw new NotFoundException('Delivery not found');
     return this.prisma.deliveryOrder.update({
@@ -436,6 +436,8 @@ export class DeliveryService {
         ...(dto.notes !== undefined && { notes: dto.notes }),
         ...(dto.scheduledAt && { scheduledAt: new Date(dto.scheduledAt) }),
         ...(dto.deliveryFeeCents !== undefined && { deliveryFeeCents: dto.deliveryFeeCents }),
+        ...(dto.receivedBy !== undefined && { receivedBy: dto.receivedBy }),
+        ...(dto.status === 'DELIVERED' && { deliveredAt: dto.deliveredAt ? new Date(dto.deliveredAt) : new Date() }),
       },
     });
   }

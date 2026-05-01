@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useDialog } from '../components/Dialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, ClipboardList, CheckCircle2, AlertTriangle, Loader2,
@@ -214,10 +215,10 @@ function CountSheet({
     const updates = Object.entries(localCounts)
       .map(([countId, val]) => ({
         countId,
-        countedQty: parseFloat(val),
+        countedQty: parseInt(val, 10),
         countedBy: user?.id,
       }))
-      .filter((u) => !isNaN(u.countedQty));
+      .filter((u) => !isNaN(u.countedQty) && u.countedQty >= 0);
     saveMutation.mutate(updates);
   }
 
@@ -372,10 +373,21 @@ function CountSheet({
                       ) : (
                         <input
                           type="number"
-                          step="0.01"
+                          min="0"
+                          step="1"
                           value={localVal}
-                          onChange={(e) => setLocalCounts((prev) => ({ ...prev, [count.id]: e.target.value }))}
-                          placeholder={count.countedQty !== null ? String(count.countedQty) : ''}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            // Only allow non-negative integers
+                            if (raw === '' || /^\d+$/.test(raw)) {
+                              setLocalCounts((prev) => ({ ...prev, [count.id]: raw }));
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            // Block decimal point and minus sign
+                            if (e.key === '.' || e.key === ',' || e.key === '-') e.preventDefault();
+                          }}
+                          placeholder={count.countedQty !== null ? String(count.countedQty) : '0'}
                           className="w-24 text-right px-2 py-1 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       )}
@@ -461,8 +473,19 @@ function CountSheet({
 function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const user = useAuthStore((s) => s.user);
   const qc = useQueryClient();
+  const businessId = user?.businessId ?? '';
   const [name, setName] = useState(`Stocktake ${new Date().toLocaleDateString('en-KE')}`);
   const [notes, setNotes] = useState('');
+  const [storeId, setStoreId] = useState(user?.storeId ?? '');
+
+  const { data: stores = [] } = useQuery<Array<{ id: string; name: string }>>({
+    queryKey: ['stores-list', businessId],
+    queryFn: () => api.get(`/business/${businessId}/stores`),
+    enabled: !!businessId,
+  });
+
+  // Auto-select first store if storeId not set
+  const effectiveStoreId = storeId || stores[0]?.id || '';
 
   const createMutation = useMutation({
     mutationFn: (dto: { businessId: string; storeId: string; name: string; createdBy: string; notes?: string }) =>
@@ -476,10 +499,10 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim() || !effectiveStoreId) return;
     createMutation.mutate({
-      businessId: user?.businessId ?? '',
-      storeId: user?.storeId ?? '',
+      businessId,
+      storeId: effectiveStoreId,
       name: name.trim(),
       createdBy: user?.id ?? '',
       notes: notes.trim() || undefined,
@@ -511,6 +534,22 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
             />
           </div>
+          {stores.length > 1 && (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                Store
+              </label>
+              <select
+                value={effectiveStoreId}
+                onChange={(e) => setStoreId(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              >
+                {stores.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
               Notes <span className="font-normal text-gray-400">(optional)</span>
@@ -536,7 +575,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
             </button>
             <button
               type="submit"
-              disabled={createMutation.isPending}
+              disabled={createMutation.isPending || !effectiveStoreId}
               className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50"
             >
               {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
@@ -556,6 +595,7 @@ export default function StocktakePage() {
   const businessId = user?.businessId ?? '';
   const storeId = user?.storeId ?? '';
   const qc = useQueryClient();
+  const { confirm } = useDialog();
 
   const [activeSession, setActiveSession] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -605,8 +645,9 @@ export default function StocktakePage() {
         <SessionsList
           sessions={sessions}
           onOpen={(s) => setActiveSession(s.id)}
-          onDelete={(id) => {
-            if (confirm('Delete this session?')) deleteMutation.mutate(id);
+          onDelete={async (id) => {
+            const ok = await confirm({ title: 'Delete Session', message: 'Delete this session? This cannot be undone.', variant: 'danger', confirmLabel: 'Delete' });
+            if (ok) deleteMutation.mutate(id);
           }}
           onCreate={() => setShowCreate(true)}
         />

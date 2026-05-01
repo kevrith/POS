@@ -31,7 +31,8 @@ interface Category {
 
 interface LoyaltyData {
   loyaltyPoints: number;
-  program?: { redemptionRate: number; minRedemption: number };
+  balanceCents?: number;
+  program?: { redemptionRate?: number; pointValueCents?: number; minRedemption: number };
 }
 
 interface Props {
@@ -199,11 +200,15 @@ export default function ItemGrid({
                   ? item.vipPriceCents
                   : item.retailPriceCents;
             const outOfStock = item.trackStock && (item.currentStock ?? 0) <= 0;
-            const isExpiringSoon = !!(item.trackExpiry && item.defaultExpiryDays != null && item.defaultExpiryDays <= 30);
-            const isExpired = !!(item.trackExpiry && item.defaultExpiryDays != null && item.defaultExpiryDays <= 0);
+            // Use real batch expiry data from API (not the defaultExpiryDays config field)
+            const isExpired = !!(item as any).batchExpired;
+            const isExpiringSoon = !!(item as any).batchExpiringSoon;
+            // null / ALLOW / WARN → allow selling when OOS; BLOCK → hard disable
+            const canOversell = !item.negativeStockPolicy || item.negativeStockPolicy !== 'BLOCK';
+            const hardDisabled = (outOfStock && !canOversell) || isExpired || !!item.soldOut;
 
             const handleClick = () => {
-              if (outOfStock || isExpired || item.soldOut) return;
+              if (hardDisabled) return;
               if (item.ageRestricted && !ageConfirmed) {
                 onAgeRestrictedItem(item);
                 return;
@@ -215,11 +220,13 @@ export default function ItemGrid({
               <button
                 key={item.id}
                 onClick={handleClick}
-                disabled={outOfStock || isExpired || !!item.soldOut}
+                disabled={hardDisabled}
                 className={`p-3 rounded-xl border-2 text-left transition-all relative ${
-                  outOfStock || isExpired || item.soldOut
+                  hardDisabled
                     ? 'border-slate-800 bg-slate-900/30 opacity-50 cursor-not-allowed'
-                    : 'border-slate-700 bg-slate-800/50 hover:bg-slate-700/60 hover:border-slate-500 active:scale-95'
+                    : outOfStock && canOversell
+                      ? 'border-orange-700/60 bg-orange-950/30 hover:bg-orange-900/30 hover:border-orange-600/70 active:scale-95'
+                      : 'border-slate-700 bg-slate-800/50 hover:bg-slate-700/60 hover:border-slate-500 active:scale-95'
                 }`}
               >
                 {item.ageRestricted && (
@@ -244,15 +251,17 @@ export default function ItemGrid({
                 )}
                 <div
                   className="w-full h-12 rounded-lg mb-2 flex items-center justify-center text-xl font-bold text-white"
-                  style={{ backgroundColor: categoryColor(item.category) }}
+                  style={{ backgroundColor: categoryColor(typeof item.category === 'object' ? item.category?.name : item.category) }}
                 >
                   {item.name[0]?.toUpperCase() ?? '?'}
                 </div>
                 <p className="text-xs font-medium text-slate-200 leading-tight line-clamp-2">{item.name}</p>
                 <p className="text-sm font-bold text-blue-400 mt-1">{formatKES(price)}</p>
                 {item.trackStock && (
-                  <p className={`text-xs mt-0.5 ${outOfStock ? 'text-red-500' : 'text-slate-500'}`}>
-                    {outOfStock ? 'Out of stock' : `${item.currentStock ?? 0} in stock`}
+                  <p className={`text-xs mt-0.5 ${outOfStock ? 'text-orange-400' : 'text-slate-500'}`}>
+                    {outOfStock
+                      ? hardDisabled ? 'Blocked' : `${item.currentStock ?? 0} (neg. stock)`
+                      : `${item.currentStock ?? 0} left`}
                   </p>
                 )}
               </button>

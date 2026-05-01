@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, DollarSign, Smartphone, CreditCard, Scissors, AlertCircle, Loader2, CheckCircle, Gift, BedDouble, Building2, Camera, Nfc, Terminal } from 'lucide-react';
+import { X, DollarSign, Smartphone, CreditCard, Scissors, AlertCircle, Loader2, CheckCircle, Gift, BedDouble, Building2, Camera, Nfc, Terminal, BookOpen } from 'lucide-react';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { api } from '../lib/api';
 import IncomingPaymentsPanel from './pos/IncomingPaymentsPanel';
@@ -13,7 +13,7 @@ function formatKES(cents: number): string {
   })}`;
 }
 
-type PaymentMethod = 'CASH' | 'MPESA_STK' | 'MPESA_QR' | 'MPESA_C2B' | 'SPLIT' | 'GIFT_CARD' | 'ROOM_CHARGE' | 'CARD' | 'BANK_TRANSFER' | 'NFC' | 'CARD_TERMINAL';
+type PaymentMethod = 'CASH' | 'MPESA_STK' | 'MPESA_QR' | 'MPESA_C2B' | 'SPLIT' | 'GIFT_CARD' | 'ROOM_CHARGE' | 'CARD' | 'BANK_TRANSFER' | 'NFC' | 'CARD_TERMINAL' | 'CREDIT';
 
 interface GiftCard {
   code: string;
@@ -48,9 +48,162 @@ interface PaymentModalProps {
   isProcessing?: boolean;
   error?: string | null;
   businessId?: string;
+  customerName?: string | null;
+  customerId?: string | null;
 }
 
 const QUICK_CASH = [50, 100, 200, 500, 1000, 2000, 5000] as const;
+
+// ─── Credit Sale Panel ─────────────────────────────────────────────────────
+
+interface CustomerCredit {
+  creditLimitCents: number;
+  balanceCents: number; // negative = owes money
+  creditApprovalStatus: string;
+}
+
+function CreditSalePanel({
+  totalCents, customerId, customerName, businessId, isProcessing, onComplete,
+}: {
+  totalCents: number;
+  customerId?: string | null;
+  customerName?: string | null;
+  businessId: string;
+  isProcessing: boolean;
+  onComplete: (payments: PaymentEntry[]) => void;
+}) {
+  const [creditInfo, setCreditInfo] = useState<CustomerCredit | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [requestSent, setRequestSent] = useState(false);
+  const [requestLoading, setRequestLoading] = useState(false);
+  const [requestError, setRequestError] = useState('');
+
+  useEffect(() => {
+    if (!customerId || !businessId) return;
+    setLoading(true);
+    api.get<CustomerCredit>(`/businesses/${businessId}/customers/${customerId}`)
+      .then((c) => { setCreditInfo(c); setRequestSent(c.creditApprovalStatus === 'PENDING'); })
+      .catch(() => setCreditInfo(null))
+      .finally(() => setLoading(false));
+  }, [customerId, businessId]);
+
+  function handleRequestIncrease() {
+    if (!customerId || !creditInfo) return;
+    const requested = outstanding + totalCents; // request exactly what's needed
+    setRequestLoading(true);
+    setRequestError('');
+    api.patch(`/businesses/${businessId}/customers/${customerId}/request-credit`, { requestedLimitCents: requested })
+      .then(() => setRequestSent(true))
+      .catch(() => setRequestError('Failed to send request. Try again.'))
+      .finally(() => setRequestLoading(false));
+  }
+
+  if (!customerId) {
+    return (
+      <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-300 rounded-xl">
+        <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="font-semibold text-amber-800 text-sm">Customer required</p>
+          <p className="text-xs text-amber-700 mt-0.5">
+            Select a customer first (F2) before recording a credit sale.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const outstanding = creditInfo ? Math.max(0, -creditInfo.balanceCents) : 0;
+  const limit = creditInfo?.creditLimitCents ?? 0;
+  const available = Math.max(0, limit - outstanding);
+  const wouldExceed = limit > 0 && (outstanding + totalCents) > limit;
+  const noLimit = limit === 0;
+
+  return (
+    <div className="space-y-3">
+      {loading && (
+        <div className="flex items-center gap-2 text-sm text-gray-500 p-3">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Loading credit info…
+        </div>
+      )}
+
+      {!loading && creditInfo && (
+        <div className="p-4 rounded-xl space-y-2 border border-blue-200 bg-blue-50">
+          <div className="flex items-center gap-2 mb-1">
+            <BookOpen className="w-4 h-4 text-blue-600" />
+            <p className="text-sm font-semibold text-blue-800">{customerName}</p>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-xs">
+            <div className="bg-white rounded-lg p-2 text-center border border-blue-100">
+              <p className="text-gray-500">Credit Limit</p>
+              <p className="font-bold text-gray-800">{noLimit ? '—' : formatKES(limit)}</p>
+            </div>
+            <div className="bg-white rounded-lg p-2 text-center border border-blue-100">
+              <p className="text-gray-500">Outstanding</p>
+              <p className={`font-bold ${outstanding > 0 ? 'text-red-600' : 'text-gray-800'}`}>{formatKES(outstanding)}</p>
+            </div>
+            <div className={`rounded-lg p-2 text-center border ${wouldExceed ? 'bg-red-50 border-red-200' : 'bg-white border-blue-100'}`}>
+              <p className="text-gray-500">Available</p>
+              <p className={`font-bold ${wouldExceed ? 'text-red-600' : noLimit ? 'text-green-600' : 'text-blue-700'}`}>
+                {noLimit ? '∞' : formatKES(available)}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {wouldExceed && (
+        <div className="space-y-2">
+          <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-300 rounded-xl">
+            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-red-800 text-sm">Credit limit exceeded</p>
+              <p className="text-xs text-red-700 mt-0.5">
+                This sale of {formatKES(totalCents)} would bring outstanding to {formatKES(outstanding + totalCents)},
+                exceeding the {formatKES(limit)} limit by {formatKES(outstanding + totalCents - limit)}.
+              </p>
+            </div>
+          </div>
+          {requestSent ? (
+            <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-300 rounded-xl">
+              <CheckCircle className="w-4 h-4 text-yellow-600 flex-shrink-0" />
+              <p className="text-xs text-yellow-800 font-medium">
+                Credit increase request sent to manager. Proceed once approved.
+              </p>
+            </div>
+          ) : (
+            <div>
+              {requestError && <p className="text-xs text-red-600 mb-1">{requestError}</p>}
+              <button
+                onClick={handleRequestIncrease}
+                disabled={requestLoading}
+                className="w-full py-2 text-sm font-semibold bg-amber-500 hover:bg-amber-600 text-white rounded-xl disabled:opacity-50 transition-colors"
+              >
+                {requestLoading ? 'Sending…' : 'Request Credit Increase from Manager'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!wouldExceed && (
+        <p className="text-xs text-gray-500 px-1">
+          Sale recorded as unpaid. Collect payment later via Reports → Credit Book.
+        </p>
+      )}
+
+      <button
+        onClick={() => onComplete([{ method: 'CREDIT', amountCents: totalCents }])}
+        disabled={isProcessing || wouldExceed}
+        className={`w-full py-3.5 font-bold rounded-xl disabled:opacity-40 transition-colors text-white ${
+          wouldExceed ? 'bg-red-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+        }`}
+      >
+        {isProcessing ? 'Processing…' : wouldExceed ? 'Limit Exceeded — Cannot Proceed' : `Record Credit — ${formatKES(totalCents)}`}
+      </button>
+    </div>
+  );
+}
 
 export default function PaymentModal({
   totalCents,
@@ -59,6 +212,8 @@ export default function PaymentModal({
   isProcessing = false,
   error,
   businessId = '',
+  customerName,
+  customerId,
 }: PaymentModalProps) {
   const [method, setMethod] = useState<PaymentMethod>('CASH');
   const [cashInput, setCashInput] = useState('');
@@ -274,18 +429,42 @@ export default function PaymentModal({
     setSplitLegs(splitLegs.filter((_, i) => i !== idx));
   }
 
-  const tabs: Array<{ id: PaymentMethod; label: string; Icon: typeof DollarSign }> = [
-    { id: 'CASH', label: 'Cash', Icon: DollarSign },
-    { id: 'MPESA_STK', label: 'M-Pesa', Icon: Smartphone },
-    { id: 'MPESA_C2B', label: 'Paybill', Icon: Smartphone },
-    { id: 'MPESA_QR', label: 'QR', Icon: CreditCard },
-    { id: 'CARD', label: 'Card', Icon: CreditCard },
-    { id: 'CARD_TERMINAL', label: 'Terminal', Icon: Terminal },
-    { id: 'NFC', label: 'NFC', Icon: Nfc },
-    { id: 'BANK_TRANSFER', label: 'Bank', Icon: Building2 },
-    { id: 'GIFT_CARD', label: 'Gift Card', Icon: Gift },
-    { id: 'ROOM_CHARGE', label: 'Room', Icon: BedDouble },
-    { id: 'SPLIT', label: 'Split', Icon: Scissors },
+  const tabGroups: Array<{
+    label: string;
+    methods: Array<{ id: PaymentMethod; label: string; Icon: typeof DollarSign }>;
+  }> = [
+    {
+      label: 'Cash',
+      methods: [
+        { id: 'CASH', label: 'Cash', Icon: DollarSign },
+      ],
+    },
+    {
+      label: 'M-Pesa',
+      methods: [
+        { id: 'MPESA_STK', label: 'STK Push', Icon: Smartphone },
+        { id: 'MPESA_C2B', label: 'Paybill', Icon: Smartphone },
+        { id: 'MPESA_QR', label: 'QR Code', Icon: CreditCard },
+      ],
+    },
+    {
+      label: 'Card',
+      methods: [
+        { id: 'CARD', label: 'Paystack', Icon: CreditCard },
+        { id: 'CARD_TERMINAL', label: 'Terminal', Icon: Terminal },
+        { id: 'NFC', label: 'NFC', Icon: Nfc },
+      ],
+    },
+    {
+      label: 'Other',
+      methods: [
+        { id: 'BANK_TRANSFER', label: 'Bank Transfer', Icon: Building2 },
+        { id: 'GIFT_CARD', label: 'Gift Card', Icon: Gift },
+        { id: 'ROOM_CHARGE', label: 'Room Charge', Icon: BedDouble },
+        { id: 'CREDIT', label: 'Credit Sale', Icon: BookOpen },
+        { id: 'SPLIT', label: 'Split Pay', Icon: Scissors },
+      ],
+    },
   ];
 
   // Fetch bank details when bank transfer tab is selected
@@ -305,6 +484,12 @@ export default function PaymentModal({
       const config = await api.get<{ publicKey: string | null }>(
         `/payments/paystack/config?businessId=${businessId}`,
       );
+
+      if (!config.publicKey) {
+        setCardError('Card payments not configured. Add your Paystack public key in Settings → Payments.');
+        setCardStatus('idle');
+        return;
+      }
 
       // Load Paystack inline script if needed
       if (!window.PaystackPop) {
@@ -363,21 +548,40 @@ export default function PaymentModal({
           </button>
         </div>
 
-        <div className="flex border-b">
-          {tabs.map(({ id, label, Icon }) => (
-            <button
-              key={id}
-              onClick={() => { setMethod(id); cancelMpesa(); }}
-              className={`flex-1 py-3 text-xs font-medium transition-colors flex flex-col items-center gap-1 ${
-                method === id
-                  ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                  : 'text-gray-500 hover:bg-gray-50'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              {label}
-            </button>
-          ))}
+        {/* Grouped payment method tabs */}
+        <div className="border-b bg-gray-50">
+          <div className="flex">
+            {tabGroups.map((group) => {
+              const groupActive = group.methods.some((m) => m.id === method);
+              return (
+                <div key={group.label} className={`flex-1 border-r last:border-r-0 ${groupActive ? 'bg-white' : ''}`}>
+                  {/* Group label */}
+                  <div className={`text-center text-[10px] font-semibold uppercase tracking-wide pt-1.5 pb-0.5 ${
+                    groupActive ? 'text-blue-600' : 'text-gray-400'
+                  }`}>
+                    {group.label}
+                  </div>
+                  {/* Methods within group */}
+                  <div className="flex">
+                    {group.methods.map(({ id, label, Icon }) => (
+                      <button
+                        key={id}
+                        onClick={() => { setMethod(id); cancelMpesa(); }}
+                        className={`flex-1 py-2 text-[11px] font-medium transition-colors flex flex-col items-center gap-0.5 ${
+                          method === id
+                            ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                            : 'text-gray-500 hover:bg-gray-100'
+                        }`}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                        <span className="leading-tight text-center">{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         <div className="p-6">
@@ -1148,6 +1352,18 @@ export default function PaymentModal({
                 {isProcessing ? 'Processing…' : 'Confirm Transfer Received'}
               </button>
             </div>
+          )}
+
+          {/* ── CREDIT SALE ── */}
+          {method === 'CREDIT' && (
+            <CreditSalePanel
+              totalCents={totalCents}
+              customerId={customerId}
+              customerName={customerName}
+              businessId={businessId}
+              isProcessing={isProcessing}
+              onComplete={onComplete}
+            />
           )}
 
           {/* ── SPLIT ── */}

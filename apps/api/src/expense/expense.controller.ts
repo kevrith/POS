@@ -44,13 +44,15 @@ export class ExpenseController {
     @Query('category') category?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
-    @Query('approvalStatus') approvalStatus?: string
+    @Query('approvalStatus') approvalStatus?: string,
+    @Query('submittedBy') submittedBy?: string,
   ) {
     return this.expenseService.findAll(businessId, {
       category,
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
       approvalStatus,
+      submittedBy,
     });
   }
 

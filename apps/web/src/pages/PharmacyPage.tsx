@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
+import { useDialog } from '../components/Dialog';
 import {
   Pill, AlertTriangle, Shield, FileText, Plus, Trash2,
   RefreshCw, TrendingUp, BookOpen, Pencil, Check, X, Tag, List,
@@ -29,6 +30,7 @@ export default function PharmacyPage() {
   const user = useAuthStore((s) => s.user);
   const businessId = user?.businessId ?? '';
   const qc = useQueryClient();
+  const { prompt, confirm } = useDialog();
   const [tab, setTab] = useState<Tab>('drugs');
 
   // ── Drug Catalogue ──
@@ -640,8 +642,8 @@ export default function PharmacyPage() {
                         )}
                         {(claim.status === 'SUBMITTED' || claim.status === 'APPROVED') && (
                           <button
-                            onClick={() => {
-                              const reason = window.prompt('Rejection reason:');
+                            onClick={async () => {
+                              const reason = await prompt({ title: 'Reject Claim', message: 'Provide a reason for rejection.', placeholder: 'Enter reason...', confirmLabel: 'Reject' });
                               if (reason) updateClaim.mutate({ id: claim.id, status: 'REJECTED', rejectionReason: reason });
                             }}
                             className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs"
@@ -989,7 +991,7 @@ function FormularyTab({ businessId }: { businessId: string }) {
                   </td>
                   <td className="px-4 py-3">
                     <button
-                      onClick={() => { if (confirm('Remove from formulary?')) remove.mutate(e.id); }}
+                      onClick={async () => { const ok = await confirm({ title: 'Remove from Formulary', message: 'Remove this item from the formulary?', variant: 'warning', confirmLabel: 'Remove' }); if (ok) remove.mutate(e.id); }}
                       className="text-red-400 hover:text-red-600"
                     >
                       <Trash2 className="w-4 h-4" />

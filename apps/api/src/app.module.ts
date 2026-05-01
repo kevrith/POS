@@ -67,6 +67,9 @@ import { SecurityModule } from './security/security.module';
 import { NpsModule } from './nps/nps.module';
 import { FuelPumpModule } from './fuel-pump/fuel-pump.module';
 import { CybercafeModule } from './cybercafe/cybercafe.module';
+import { FieldSalesModule } from './field-sales/field-sales.module';
+import { DeliveryRoutesModule } from './delivery-routes/delivery-routes.module';
+import { CustomerPortalModule } from './customer-portal/customer-portal.module';
 
 @Module({
   imports: [
@@ -140,6 +143,9 @@ import { CybercafeModule } from './cybercafe/cybercafe.module';
     NpsModule,
     FuelPumpModule,
     CybercafeModule,
+    FieldSalesModule,
+    DeliveryRoutesModule,
+    CustomerPortalModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AppThrottlerGuard },

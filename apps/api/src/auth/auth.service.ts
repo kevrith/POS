@@ -433,7 +433,7 @@ export class AuthService {
       }
     }
 
-    throw new UnauthorizedException('Invalid manager PIN');
+    throw new BadRequestException('Invalid manager PIN. Check the PIN and try again.');
   }
 
   // ─── Change password ─────────────────────────────────────────

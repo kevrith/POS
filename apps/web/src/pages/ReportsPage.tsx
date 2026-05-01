@@ -10,7 +10,7 @@ import {
   BarChart3, Calendar, Download, RefreshCw, AlertCircle,
   ChefHat, Truck, Layers, CreditCard, History, BookOpen,
   ClipboardList, Hash, Flag, Shield, AlertTriangle, DatabaseBackup,
-  Users, Smartphone, X, Pencil, Printer, BarChart2, ArrowRightLeft,
+  Users, Smartphone, X, Pencil, Printer, BarChart2, ArrowRightLeft, MapPin,
 } from 'lucide-react';
 import { api, openPdfReport } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
@@ -330,8 +330,8 @@ interface NpsSummary {
   recent: Array<{ score: number; comment: string; createdAt: string }>;
 }
 
-type Tab = 'overview' | 'sales' | 'customer-analytics' | 'forecasting' | 'item-summary' | 'tax' | 'vat-return' | 'pl' | 'inventory' | 'fiscal' | 'attendance' | 'commissions' | 'employee-sales' | 'recipes' | 'bundles' | 'suppliers' | 'supplier-ageing' | 'credit' | 'layaway' | 'proforma' | 'serials' | 'kra' | 'audit' | 'grn' | 'export' | 'dead-stock' | 'gross-margin' | 'shrinkage' | 'dept-pnl' | 'recipe-costing' | 'transfers' | 'menu-engineering' | 'basket-analysis' | 'clv' | 'nps';
-type TabGroup = 'financial' | 'inventory' | 'customers' | 'hr' | 'suppliers' | 'compliance';
+type Tab = 'overview' | 'sales' | 'customer-analytics' | 'forecasting' | 'item-summary' | 'tax' | 'vat-return' | 'pl' | 'inventory' | 'fiscal' | 'attendance' | 'commissions' | 'employee-sales' | 'recipes' | 'bundles' | 'suppliers' | 'supplier-ageing' | 'credit' | 'layaway' | 'proforma' | 'serials' | 'kra' | 'audit' | 'grn' | 'export' | 'dead-stock' | 'gross-margin' | 'shrinkage' | 'dept-pnl' | 'recipe-costing' | 'transfers' | 'menu-engineering' | 'basket-analysis' | 'clv' | 'nps' | 'route-analytics' | 'invoice-ageing';
+type TabGroup = 'financial' | 'inventory' | 'customers' | 'hr' | 'suppliers' | 'compliance' | 'field-sales';
 type Range = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom';
 type ComparisonPeriod = 'none' | 'previous' | 'yoy' | 'mom';
 
@@ -783,8 +783,9 @@ export default function ReportsPage() {
 
   const { data: historicalStock } = useQuery<{
     asOfDate: string;
-    items: Array<{ itemId: string; name: string; category: string; barcode: string; quantity: number; costPriceCents: number; valueCents: number }>;
+    items: Array<{ itemId: string; name: string; category: string; barcode: string; quantity: number; costPriceCents: number; valueCents: number; retailPriceCents: number; retailValueCents: number }>;
     totalValueCents: number;
+    totalRetailValueCents: number;
     totalItems: number;
   }>({
     queryKey: ['report-historical-stock', businessId, storeId, historyAsOf],
@@ -969,6 +970,31 @@ export default function ReportsPage() {
     enabled: !!businessId && tab === 'nps',
   });
 
+  const { data: routeProfitability = [] } = useQuery<Array<{
+    routeId: string; routeName: string; deliveryDays: string[];
+    totalOrdersCents: number; deliveredOrdersCents: number;
+    expensesCents: number; netProfitCents: number; ordersCount: number;
+    topItems: Array<{ itemName: string; totalQty: number }>;
+  }>>({
+    queryKey: ['route-profitability', businessId, startDate, endDate],
+    queryFn: () => api.get(`/delivery-routes/profitability?businessId=${businessId}&startDate=${startDate}&endDate=${endDate}`),
+    enabled: !!businessId && tab === 'route-analytics',
+  });
+
+  const { data: invoiceAgeing } = useQuery<{
+    rows: Array<{
+      orderId: string; orderNumber: string; invoiceNumber: string; invoicedAt: string;
+      customerName: string; customerPhone: string; agentName: string;
+      totalCents: number; paidAmountCents: number; outstandingCents: number;
+      daysOutstanding: number; paymentStatus: string; bucket: string;
+    }>;
+    summary: { '0-30d': number; '31-60d': number; '61-90d': number; '90+d': number; totalOutstanding: number };
+  }>({
+    queryKey: ['invoice-ageing', businessId],
+    queryFn: () => api.get(`/reports/field-invoice-ageing?businessId=${businessId}`),
+    enabled: !!businessId && tab === 'invoice-ageing',
+  });
+
   const writeOffMutation = useMutation({
     mutationFn: (vars: { itemId: string; qty: number; reason: string; notes: string }) =>
       api.post('/inventory/adjustment', {
@@ -1115,6 +1141,13 @@ export default function ReportsPage() {
         { id: 'kra', label: 'KRA Export', icon: Flag },
         { id: 'audit', label: 'Audit Log', icon: Shield },
         { id: 'export', label: 'Full Export', icon: DatabaseBackup },
+      ],
+    },
+    {
+      id: 'field-sales', label: 'Field Sales', icon: MapPin,
+      tabs: [
+        { id: 'route-analytics', label: 'Route Analytics', icon: MapPin },
+        { id: 'invoice-ageing', label: 'Invoice Ageing', icon: Calendar },
       ],
     },
   ];
@@ -2628,10 +2661,11 @@ export default function ReportsPage() {
                 {/* ── Historical view ── */}
                 {stockViewMode === 'historical' && historicalStock && (
                   <>
-                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                       <StatCard label="Stock Lines" value={historicalStock.totalItems} icon={Package} color="bg-blue-500" />
-                      <StatCard label="Total Value" value={formatKES(historicalStock.totalValueCents)} icon={DollarSign} color="bg-green-500" />
-                      <StatCard label="As-of Date" value={new Date(historyAsOf).toLocaleDateString('en-KE')} icon={History} color="bg-purple-500" />
+                      <StatCard label="Total Cost Value" value={formatKES(historicalStock.totalValueCents)} icon={DollarSign} color="bg-orange-500" />
+                      <StatCard label="Total Retail Value" value={formatKES(historicalStock.totalRetailValueCents)} icon={TrendingUp} color="bg-green-500" />
+                      <StatCard label="Gross Profit Potential" value={formatKES(historicalStock.totalRetailValueCents - historicalStock.totalValueCents)} icon={TrendingUp} color="bg-purple-500" />
                     </div>
                     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                       <div className="px-5 py-4 border-b flex justify-between items-center">
@@ -2640,11 +2674,13 @@ export default function ReportsPage() {
                           onClick={() => {
                             if (!historicalStock.items.length) return;
                             downloadCsv(`stock-history-${historyAsOf}.csv`, [
-                              ['Item', 'Category', 'Barcode', 'Qty', 'Cost (KES)', 'Value (KES)'],
+                              ['Item', 'Category', 'Barcode', 'Qty', 'Cost/Unit (KES)', 'Total Cost (KES)', 'Retail/Unit (KES)', 'Retail Value (KES)'],
                               ...historicalStock.items.map((i) => [
                                 i.name, i.category, i.barcode, String(i.quantity),
                                 (i.costPriceCents / 100).toFixed(2), (i.valueCents / 100).toFixed(2),
+                                (i.retailPriceCents / 100).toFixed(2), (i.retailValueCents / 100).toFixed(2),
                               ]),
+                              ['', '', '', 'TOTALS', '', (historicalStock.totalValueCents / 100).toFixed(2), '', (historicalStock.totalRetailValueCents / 100).toFixed(2)],
                             ]);
                           }}
                           className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700"
@@ -2660,14 +2696,16 @@ export default function ReportsPage() {
                               <th className="text-left px-5 py-3 font-medium text-gray-600">Category</th>
                               <th className="text-right px-5 py-3 font-medium text-gray-600">Qty</th>
                               <th className="text-right px-5 py-3 font-medium text-gray-600">Cost/Unit</th>
-                              <th className="text-right px-5 py-3 font-medium text-gray-600">Value</th>
+                              <th className="text-right px-5 py-3 font-medium text-orange-700">Total Cost</th>
+                              <th className="text-right px-5 py-3 font-medium text-gray-600">Retail/Unit</th>
+                              <th className="text-right px-5 py-3 font-medium text-green-700">Retail Value</th>
                               <th className="px-5 py-3"></th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
                             {historicalStock.items.length === 0 && (
                               <tr>
-                                <td colSpan={6} className="px-5 py-10 text-center text-gray-400">
+                                <td colSpan={8} className="px-5 py-10 text-center text-gray-400">
                                   <Package className="w-10 h-10 mx-auto mb-2 opacity-30" />
                                   No stock data for this date.
                                 </td>
@@ -2679,7 +2717,9 @@ export default function ReportsPage() {
                                 <td className="px-5 py-3 text-gray-500">{item.category || '—'}</td>
                                 <td className={`px-5 py-3 text-right font-semibold ${item.quantity === 0 ? 'text-gray-400' : ''}`}>{item.quantity}</td>
                                 <td className="px-5 py-3 text-right text-gray-500">{formatKES(item.costPriceCents)}</td>
-                                <td className="px-5 py-3 text-right font-semibold text-green-700">{item.quantity > 0 ? formatKES(item.valueCents) : '—'}</td>
+                                <td className="px-5 py-3 text-right font-semibold text-orange-700">{item.quantity > 0 ? formatKES(item.valueCents) : '—'}</td>
+                                <td className="px-5 py-3 text-right text-gray-500">{formatKES(item.retailPriceCents)}</td>
+                                <td className="px-5 py-3 text-right font-semibold text-green-700">{item.quantity > 0 ? formatKES(item.retailValueCents) : '—'}</td>
                                 <td className="px-5 py-3 text-right">
                                   <button
                                     onClick={() => {
@@ -2697,10 +2737,19 @@ export default function ReportsPage() {
                               </tr>
                             ))}
                           </tbody>
-                          <tfoot className="bg-gray-50 font-bold">
+                          <tfoot className="bg-gray-50 font-bold border-t-2 border-gray-200">
                             <tr>
-                              <td colSpan={4} className="px-5 py-3">TOTAL VALUE</td>
-                              <td className="px-5 py-3 text-right text-green-700">{formatKES(historicalStock.totalValueCents)}</td>
+                              <td colSpan={4} className="px-5 py-3 text-gray-700">TOTAL COST VALUE</td>
+                              <td className="px-5 py-3 text-right text-orange-700">{formatKES(historicalStock.totalValueCents)}</td>
+                              <td className="px-5 py-3 text-right text-gray-500 font-normal text-xs">Retail totals →</td>
+                              <td className="px-5 py-3 text-right text-green-700">{formatKES(historicalStock.totalRetailValueCents)}</td>
+                              <td></td>
+                            </tr>
+                            <tr className="border-t border-gray-200">
+                              <td colSpan={4} className="px-5 py-2 text-gray-500 font-normal text-xs">Gross Profit Potential (Retail − Cost)</td>
+                              <td colSpan={3} className="px-5 py-2 text-right font-bold text-purple-700">
+                                {formatKES(historicalStock.totalRetailValueCents - historicalStock.totalValueCents)}
+                              </td>
                               <td></td>
                             </tr>
                           </tfoot>
@@ -5523,6 +5572,200 @@ export default function ReportsPage() {
                     <RefreshCw className="w-5 h-5 animate-spin mr-2" /> Loading NPS data…
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* ── ROUTE ANALYTICS TAB ── */}
+            {tab === 'route-analytics' && (
+              <div className="space-y-6">
+                {/* Summary cards */}
+                {routeProfitability.length > 0 && (() => {
+                  const totRev = routeProfitability.reduce((s, r) => s + r.deliveredOrdersCents, 0);
+                  const totExp = routeProfitability.reduce((s, r) => s + r.expensesCents, 0);
+                  const totNet = routeProfitability.reduce((s, r) => s + r.netProfitCents, 0);
+                  return (
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-4 border border-indigo-200 dark:border-indigo-700/40">
+                        <div className="text-xs text-indigo-500 uppercase tracking-wide mb-1">Active Routes</div>
+                        <div className="text-2xl font-bold text-indigo-700 dark:text-indigo-300">{routeProfitability.length}</div>
+                      </div>
+                      <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 border border-green-200 dark:border-green-700/40">
+                        <div className="text-xs text-green-500 uppercase tracking-wide mb-1">Route Revenue</div>
+                        <div className="text-2xl font-bold text-green-700 dark:text-green-300">KES {(totRev/100).toLocaleString()}</div>
+                      </div>
+                      <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 border border-red-200 dark:border-red-700/40">
+                        <div className="text-xs text-red-500 uppercase tracking-wide mb-1">Route Expenses</div>
+                        <div className="text-2xl font-bold text-red-700 dark:text-red-300">KES {(totExp/100).toLocaleString()}</div>
+                      </div>
+                      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-700/40">
+                        <div className="text-xs text-blue-500 uppercase tracking-wide mb-1">Net Route Profit</div>
+                        <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">KES {(totNet/100).toLocaleString()}</div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Per-route table */}
+                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-indigo-500" /> Route Breakdown
+                    </h3>
+                    <button
+                      onClick={() => {
+                        const csv = ['Route,Orders,Revenue (KES),Expenses (KES),Net Profit (KES),Margin %',
+                          ...routeProfitability.map(r =>
+                            `${r.routeName},${r.ordersCount},${(r.deliveredOrdersCents/100).toFixed(2)},${(r.expensesCents/100).toFixed(2)},${(r.netProfitCents/100).toFixed(2)},${r.deliveredOrdersCents > 0 ? ((r.netProfitCents/r.deliveredOrdersCents)*100).toFixed(1) : 0}%`)
+                        ].join('\n');
+                        const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+                        a.download = 'route-analytics.csv'; a.click();
+                      }}
+                      className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                    >
+                      <Download className="w-3.5 h-3.5" /> CSV
+                    </button>
+                  </div>
+                  {routeProfitability.length === 0 ? (
+                    <div className="text-center py-12 text-gray-400 text-sm">No route data for the selected period</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50 dark:bg-gray-700/50">
+                          <tr>
+                            {['Route','Days','Orders','Revenue','Expenses','Net Profit','Margin','Top Item'].map(h => (
+                              <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                          {routeProfitability.map(r => {
+                            const margin = r.deliveredOrdersCents > 0 ? ((r.netProfitCents / r.deliveredOrdersCents) * 100).toFixed(1) : '0.0';
+                            const maxNet = Math.max(...routeProfitability.map(x => x.netProfitCents), 1);
+                            return (
+                              <tr key={r.routeId} className="hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
+                                <td className="px-4 py-3">
+                                  <div className="text-sm font-semibold text-gray-900 dark:text-white">{r.routeName}</div>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div className="flex flex-wrap gap-1">
+                                    {r.deliveryDays.map((d: string) => (
+                                      <span key={d} className="text-[10px] bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded px-1.5 py-0.5">{d.slice(0,3)}</span>
+                                    ))}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{r.ordersCount}</td>
+                                <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">KES {(r.deliveredOrdersCents/100).toLocaleString()}</td>
+                                <td className="px-4 py-3 text-sm text-red-500">KES {(r.expensesCents/100).toLocaleString()}</td>
+                                <td className="px-4 py-3">
+                                  <div className="text-sm font-semibold text-green-600 dark:text-green-400">KES {(r.netProfitCents/100).toLocaleString()}</div>
+                                  <div className="mt-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden w-24">
+                                    <div className="h-full bg-green-500 rounded-full" style={{ width: `${(r.netProfitCents / maxNet) * 100}%` }} />
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">{margin}%</td>
+                                <td className="px-4 py-3 text-xs text-gray-500">{r.topItems?.[0]?.itemName ?? '—'}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Top items per route */}
+                {routeProfitability.some(r => r.topItems?.length > 0) && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {routeProfitability.filter(r => r.topItems?.length > 0).map(r => (
+                      <div key={r.routeId} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+                        <div className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                          <MapPin className="w-3.5 h-3.5 text-indigo-500" /> {r.routeName}
+                        </div>
+                        <div className="space-y-2">
+                          {r.topItems.slice(0, 5).map((item, i) => (
+                            <div key={i} className="flex items-center justify-between text-xs">
+                              <span className="text-gray-600 dark:text-gray-400 truncate flex-1">{item.itemName}</span>
+                              <span className="text-gray-900 dark:text-white font-medium ml-2">×{item.totalQty}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Invoice Ageing ─────────────────────────────────────────────── */}
+            {tab === 'invoice-ageing' && (
+              <div className="space-y-6">
+                {invoiceAgeing && (
+                  <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                    {[
+                      { label: 'Total Outstanding', value: invoiceAgeing.summary.totalOutstanding, color: 'bg-gray-700 text-white' },
+                      { label: '0–30 Days', value: invoiceAgeing.summary['0-30d'], color: 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300' },
+                      { label: '31–60 Days', value: invoiceAgeing.summary['31-60d'], color: 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300' },
+                      { label: '61–90 Days', value: invoiceAgeing.summary['61-90d'], color: 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300' },
+                      { label: '90+ Days', value: invoiceAgeing.summary['90+d'], color: 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300' },
+                    ].map(({ label, value, color }) => (
+                      <div key={label} className={`rounded-xl p-4 border border-gray-200 dark:border-gray-700 ${color}`}>
+                        <div className="text-xs font-semibold uppercase tracking-wide mb-1 opacity-70">{label}</div>
+                        <div className="text-xl font-bold">KES {((value ?? 0) / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Outstanding Field Invoices</h3>
+                    <button
+                      onClick={() => {
+                        if (!invoiceAgeing) return;
+                        const csv = ['Invoice #,Order #,Customer,Agent,Invoiced On,Days Out,Total (KES),Paid (KES),Outstanding (KES),Bucket',
+                          ...invoiceAgeing.rows.map(r =>
+                            `${r.invoiceNumber},${r.orderNumber},${r.customerName},${r.agentName},${r.invoicedAt ? new Date(r.invoicedAt).toLocaleDateString('en-KE') : ''},${r.daysOutstanding},${(r.totalCents/100).toFixed(2)},${(r.paidAmountCents/100).toFixed(2)},${(r.outstandingCents/100).toFixed(2)},${r.bucket}`)
+                        ].join('\n');
+                        const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+                        a.download = 'invoice-ageing.csv'; a.click();
+                      }}
+                      className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
+                    ><Download className="w-3.5 h-3.5" /> CSV</button>
+                  </div>
+                  {!invoiceAgeing || invoiceAgeing.rows.length === 0 ? (
+                    <div className="text-center py-12 text-gray-400 text-sm">No outstanding invoices</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50 dark:bg-gray-700/50">
+                          <tr>{['Invoice #','Customer','Agent','Invoiced','Days Out','Total','Paid','Outstanding','Bucket'].map(h => (
+                            <th key={h} className="text-left px-3 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                          ))}</tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                          {invoiceAgeing.rows.map(r => {
+                            const bc = r.bucket === '0-30d' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' :
+                              r.bucket === '31-60d' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300' :
+                              r.bucket === '61-90d' ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300' :
+                              'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300';
+                            return (
+                              <tr key={r.orderId} className="hover:bg-gray-50 dark:hover:bg-gray-700/40">
+                                <td className="px-3 py-2.5 text-xs font-mono font-semibold text-purple-600 dark:text-purple-400">{r.invoiceNumber}</td>
+                                <td className="px-3 py-2.5"><div className="text-sm font-medium text-gray-900 dark:text-white">{r.customerName}</div><div className="text-xs text-gray-400">{r.customerPhone}</div></td>
+                                <td className="px-3 py-2.5 text-sm text-gray-600 dark:text-gray-400">{r.agentName}</td>
+                                <td className="px-3 py-2.5 text-xs text-gray-500 whitespace-nowrap">{r.invoicedAt ? new Date(r.invoicedAt).toLocaleDateString('en-KE') : '—'}</td>
+                                <td className="px-3 py-2.5 text-sm font-semibold">{r.daysOutstanding}d</td>
+                                <td className="px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">KES {(r.totalCents/100).toLocaleString('en-KE',{minimumFractionDigits:2})}</td>
+                                <td className="px-3 py-2.5 text-sm text-green-600 whitespace-nowrap">KES {(r.paidAmountCents/100).toLocaleString('en-KE',{minimumFractionDigits:2})}</td>
+                                <td className="px-3 py-2.5 text-sm font-bold text-red-600 dark:text-red-400 whitespace-nowrap">KES {(r.outstandingCents/100).toLocaleString('en-KE',{minimumFractionDigits:2})}</td>
+                                <td className="px-3 py-2.5"><span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${bc}`}>{r.bucket}</span></td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

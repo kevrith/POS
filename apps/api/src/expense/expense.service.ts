@@ -45,6 +45,7 @@ export class ExpenseService {
     startDate?: Date;
     endDate?: Date;
     approvalStatus?: string;
+    submittedBy?: string;
   }) {
     return this.prisma.expense.findMany({
       where: {
@@ -52,10 +53,12 @@ export class ExpenseService {
         deletedAt: null,
         ...(filters?.category && { category: filters.category }),
         ...(filters?.approvalStatus && { approvalStatus: filters.approvalStatus }),
+        ...(filters?.submittedBy && { submittedBy: filters.submittedBy }),
         ...(filters?.startDate && filters?.endDate && {
           createdAt: {
             gte: filters.startDate,
-            lte: filters.endDate,
+            // Include the full end day (set to end of day)
+            lte: new Date(filters.endDate.getFullYear(), filters.endDate.getMonth(), filters.endDate.getDate(), 23, 59, 59, 999),
           },
         }),
       },

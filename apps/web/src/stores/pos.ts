@@ -3,6 +3,16 @@ import { create } from 'zustand';
 export type PriceLevel = 'RETAIL' | 'WHOLESALE' | 'VIP';
 export type ItemType = 'PRODUCT' | 'SERVICE' | 'WEIGHTED' | 'BUNDLE' | 'RECIPE';
 
+export interface ItemUOM {
+  id: string;
+  unitName: string;
+  unitAbbrev: string;
+  conversionFactor: number;
+  isBaseUnit: boolean;
+  priceCents?: number | null;
+  barcode?: string | null;
+}
+
 export interface CartItem {
   id: string;
   name: string;
@@ -18,6 +28,9 @@ export interface CartItem {
   totApplicable: boolean;
   weightGrams?: number;
   tareGrams?: number;
+  // UOM packaging support
+  selectedUOM?: ItemUOM | null;       // which packaging was selected at POS
+  stockDeductionPerUnit?: number;     // base units to deduct per cart qty (= conversionFactor)
 }
 
 export interface ApiItem {
@@ -35,13 +48,15 @@ export interface ApiItem {
   defaultExpiryDays?: number | null;
   vatApplicable: boolean;
   totApplicable: boolean;
-  category?: string | null;  // stored as plain string in DB (e.g. "Food", "Beverages")
+  category?: { id: string; name: string; color?: string } | string | null;
   ageRestricted?: boolean;
   minAgeYears?: number;
   tareWeightGrams?: number;
   binLocation?: string;
   sku?: string;
   soldOut?: boolean;
+  negativeStockPolicy?: string | null;
+  uoms?: ItemUOM[];
 }
 
 export interface HeldSale {
@@ -60,7 +75,7 @@ interface POSState {
   customerId: string | null;
   customerName: string | null;
   heldSales: HeldSale[];
-  addToCart: (item: ApiItem) => void;
+  addToCart: (item: ApiItem, uom?: ItemUOM) => void;
   addWeightedToCart: (item: ApiItem, weightGrams: number, overridePriceCents?: number) => void;
   removeFromCart: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
@@ -88,23 +103,30 @@ export const usePOSStore = create<POSState>()((set, _get) => ({
   customerName: null,
   heldSales: [],
 
-  addToCart: (item: ApiItem) =>
+  addToCart: (item: ApiItem, uom?: ItemUOM) =>
     set((state) => {
-      const unitPrice = getPriceForLevel(item, state.priceLevel);
-      const existing = state.cart.find((i) => i.id === item.id);
+      const basePrice = getPriceForLevel(item, state.priceLevel);
+      // If a UOM is selected, use its price (if set) or calculate from base price × conversion
+      const unitPrice = uom
+        ? (uom.priceCents ?? Math.round(basePrice * uom.conversionFactor))
+        : basePrice;
+      const deduction = uom?.conversionFactor ?? 1;
+      const cartKey = uom ? `${item.id}::${uom.id}` : item.id;
+
+      const existing = state.cart.find((i) => i.id === cartKey);
       if (existing) {
         return {
           cart: state.cart.map((i) =>
-            i.id === item.id
+            i.id === cartKey
               ? { ...i, quantity: i.quantity + 1, totalCents: (i.quantity + 1) * i.unitPriceCents }
               : i,
           ),
         };
       }
       const newItem: CartItem = {
-        id: item.id,
-        name: item.name,
-        barcode: item.barcode,
+        id: cartKey,
+        name: uom && !uom.isBaseUnit ? `${item.name} (${uom.unitName})` : item.name,
+        barcode: uom?.barcode ?? item.barcode,
         quantity: 1,
         unitPriceCents: unitPrice,
         totalCents: unitPrice,
@@ -113,6 +135,8 @@ export const usePOSStore = create<POSState>()((set, _get) => ({
         itemType: item.type,
         vatApplicable: item.vatApplicable,
         totApplicable: item.totApplicable,
+        selectedUOM: uom ?? null,
+        stockDeductionPerUnit: deduction,
       };
       return { cart: [...state.cart, newItem] };
     }),

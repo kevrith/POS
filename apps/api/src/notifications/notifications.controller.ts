@@ -9,8 +9,9 @@ export class NotificationsController {
   async getNotifications(
     @Query('businessId') businessId: string,
     @Query('unreadOnly') unreadOnly?: string,
+    @Query('type') type?: string,
   ) {
-    return this.notificationsService.getNotifications(businessId, unreadOnly === 'true');
+    return this.notificationsService.getNotifications(businessId, unreadOnly === 'true', type);
   }
 
   @Get('unread-count')

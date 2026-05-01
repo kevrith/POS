@@ -359,4 +359,35 @@ export class HrController {
   async biometricClockOut(@Body() body: { businessId: string; employeePin: string; deviceId?: string }) {
     return this.hrService.biometricClockOut(body.businessId, body.employeePin, 'BIOMETRIC');
   }
+
+  // ─── Salary Advances ──────────────────────────────────────────────────────────
+
+  @Get('salary-advances')
+  getSalaryAdvances(
+    @Query('businessId') businessId: string,
+    @Query('employeeId') employeeId?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.hrService.getSalaryAdvances(businessId, employeeId, status);
+  }
+
+  @Post('salary-advances')
+  requestSalaryAdvance(@Body() body: { businessId: string; employeeId: string; amountCents: number; reason?: string }) {
+    return this.hrService.requestSalaryAdvance(body.businessId, body.employeeId, body.amountCents, body.reason);
+  }
+
+  @Patch('salary-advances/:id/approve')
+  approveSalaryAdvance(@Param('id') id: string, @Body() body: { approvedBy: string }) {
+    return this.hrService.approveSalaryAdvance(id, body.approvedBy);
+  }
+
+  @Patch('salary-advances/:id/reject')
+  rejectSalaryAdvance(@Param('id') id: string, @Body() body: { rejectedBy: string; rejectionNote?: string }) {
+    return this.hrService.rejectSalaryAdvance(id, body.rejectedBy, body.rejectionNote);
+  }
+
+  @Patch('salary-advances/:id/deducted')
+  markAdvanceDeducted(@Param('id') id: string, @Body() body: { payrollRunId?: string }) {
+    return this.hrService.markAdvanceDeducted(id, body.payrollRunId);
+  }
 }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useDialog } from '../components/Dialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
@@ -239,6 +240,7 @@ export default function PromotionsPage() {
   const user = useAuthStore((s) => s.user);
   const businessId = user?.businessId ?? '';
   const queryClient = useQueryClient();
+  const { confirm } = useDialog();
   const [showAdd, setShowAdd] = useState(false);
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
@@ -423,8 +425,9 @@ export default function PromotionsPage() {
                 </button>
                 {/* Delete */}
                 <button
-                  onClick={() => {
-                    if (confirm(`Delete "${promo.name}"?`)) deleteMutation.mutate(promo.id);
+                  onClick={async () => {
+                    const ok = await confirm({ title: 'Delete Promotion', message: `Delete "${promo.name}"? This cannot be undone.`, variant: 'danger', confirmLabel: 'Delete' });
+                    if (ok) deleteMutation.mutate(promo.id);
                   }}
                   disabled={deleteMutation.isPending}
                   className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"

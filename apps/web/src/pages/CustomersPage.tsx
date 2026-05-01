@@ -2,13 +2,16 @@ import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, openPdfReport } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
-import { Plus, Search, CreditCard, ChevronRight, X, DollarSign, Users, AlertTriangle, Star, Upload, FileText, GitMerge, TrendingUp } from 'lucide-react';
+import { useDialog } from '../components/Dialog';
+import { toast } from 'sonner';
+import { Plus, Search, CreditCard, ChevronRight, X, DollarSign, Users, AlertTriangle, Star, Upload, FileText, GitMerge, TrendingUp, CheckCircle, ShieldCheck, Clock } from 'lucide-react';
 
 interface Customer {
   id: string;
   name: string;
   phone?: string;
   email?: string;
+  kraPin?: string;
   creditLimitCents: number;
   creditLimitPendingCents?: number;
   creditApprovalStatus?: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -56,9 +59,9 @@ interface DupeCustomer {
   loyaltyPoints: number;
 }
 
-type ActiveTab = 'list' | 'segments';
+type ActiveTab = 'list' | 'segments' | 'credit-requests';
 
-const blankForm = { name: '', phone: '', email: '', creditLimitCents: 0 };
+const blankForm = { name: '', phone: '', email: '', kraPin: '', creditLimitCents: 0 };
 
 function formatKES(cents: number) {
   return `KES ${(cents / 100).toFixed(2)}`;
@@ -117,10 +120,13 @@ export default function CustomersPage() {
   const user = useAuthStore((s) => s.user);
   const businessId = user?.businessId ?? '';
   const isManager = user?.role === 'OWNER' || user?.role === 'MANAGER';
+  const { prompt } = useDialog();
 
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState(blankForm);
+  const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', phone: '', email: '', kraPin: '', creditLimitCents: 0 });
   const [selected, setSelected] = useState<Customer | null>(null);
   const [payAmount, setPayAmount] = useState('');
   const [activeTab, setActiveTab] = useState<ActiveTab>('list');
@@ -137,11 +143,17 @@ export default function CustomersPage() {
   const [showStatement, setShowStatement] = useState(false);
   const [statementCustomer, setStatementCustomer] = useState<Customer | null>(null);
 
-  // Credit request state
+  // Credit request state (cashier)
   const [showCreditRequest, setShowCreditRequest] = useState(false);
   const [creditRequestCustomer, setCreditRequestCustomer] = useState<Customer | null>(null);
   const [creditRequestAmount, setCreditRequestAmount] = useState('');
   const [creditRequestError, setCreditRequestError] = useState('');
+
+  // Set credit limit state (manager/owner)
+  const [showSetLimit, setShowSetLimit] = useState(false);
+  const [setLimitCustomer, setSetLimitCustomer] = useState<Customer | null>(null);
+  const [setLimitAmount, setSetLimitAmount] = useState('');
+  const [setLimitError, setSetLimitError] = useState('');
   const today = new Date();
   const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
   const todayStr = today.toISOString().split('T')[0];
@@ -158,6 +170,25 @@ export default function CustomersPage() {
     queryKey: ['rfm-segments', businessId],
     queryFn: () => api.get<SegmentData>(`/businesses/${businessId}/customers/segmentation`),
     enabled: activeTab === 'segments' && !!businessId,
+  });
+
+  const [creditRequestStatus, setCreditRequestStatus] = useState<'PENDING'|'APPROVED'|'DECLINED'>('PENDING');
+  const { data: creditRequests = [] } = useQuery<Array<{
+    id: string; status: string; reason?: string; reviewNote?: string;
+    currentLimitCents: number; requestedLimitCents: number; orderTotalCents: number; createdAt: string;
+    customer: { id: string; name: string; shopCode?: string };
+    requestedByUser: { name: string };
+  }>>({
+    queryKey: ['credit-requests', businessId, creditRequestStatus],
+    queryFn: () => api.get(`/field-sales/credit-requests?businessId=${businessId}&status=${creditRequestStatus}`),
+    enabled: activeTab === 'credit-requests' && !!businessId,
+    refetchInterval: activeTab === 'credit-requests' ? 15000 : false,
+  });
+  const reviewCreditMutation = useMutation({
+    mutationFn: ({ id, status, reviewNote }: { id: string; status: string; reviewNote?: string }) =>
+      api.patch(`/field-sales/credit-requests/${id}/review`, { status, reviewNote }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['credit-requests'] }); },
+    onError: () => toast.error('Failed to update credit request'),
   });
 
   const { data: dupes = [], refetch: refetchDupes } = useQuery<Array<{ type: string; customers: DupeCustomer[] }>>({
@@ -181,6 +212,17 @@ export default function CustomersPage() {
   const createMutation = useMutation({
     mutationFn: (data: typeof formData) => api.post(`/businesses/${businessId}/customers`, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['customers', businessId] }); setShowForm(false); setFormData(blankForm); },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<typeof formData> }) =>
+      api.patch(`/businesses/${businessId}/customers/${id}`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['customers', businessId] });
+      qc.invalidateQueries({ queryKey: ['customer-detail', businessId, selected?.id] });
+      setEditCustomer(null);
+      toast.success('Customer updated');
+    },
   });
 
   const payMutation = useMutation({
@@ -214,6 +256,19 @@ export default function CustomersPage() {
     onError: (err) => setCreditRequestError(err instanceof Error ? err.message : 'Failed to submit request'),
   });
 
+  const setCreditLimitMutation = useMutation({
+    mutationFn: ({ customerId, newLimitCents }: { customerId: string; newLimitCents: number }) =>
+      api.patch(`/businesses/${businessId}/customers/${customerId}/set-credit-limit`, { newLimitCents }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['customers', businessId] });
+      qc.invalidateQueries({ queryKey: ['customer-detail', businessId, setLimitCustomer?.id] });
+      setShowSetLimit(false);
+      setSetLimitAmount('');
+      setSetLimitError('');
+    },
+    onError: (err) => setSetLimitError(err instanceof Error ? err.message : 'Failed to set limit'),
+  });
+
   const approveCreditMutation = useMutation({
     mutationFn: (customerId: string) =>
       api.patch(`/businesses/${businessId}/customers/${customerId}/approve-credit`, {}),
@@ -224,6 +279,15 @@ export default function CustomersPage() {
     mutationFn: (customerId: string) =>
       api.patch(`/businesses/${businessId}/customers/${customerId}/reject-credit`, {}),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['customers', businessId] }),
+  });
+
+  const markCreditPaidMutation = useMutation({
+    mutationFn: (saleId: string) =>
+      api.patch(`/sales/${saleId}/mark-credit-paid?businessId=${businessId}`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['customers', businessId] });
+      qc.invalidateQueries({ queryKey: ['customer-detail', businessId, selected?.id] });
+    },
   });
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -243,6 +307,8 @@ export default function CustomersPage() {
   const creditSales = detail?.sales?.filter((s) => s.status === 'CREDIT') ?? [];
   const totalLoyaltyPoints = customers.reduce((s, c) => s + c.loyaltyPoints, 0);
   const withCreditCount = customers.filter((c) => c.balanceCents < 0).length;
+  const totalOutstandingDebtCents = customers.reduce((s, c) => s + Math.max(0, -c.balanceCents), 0);
+  const pendingCreditRequests = isManager ? customers.filter((c) => c.creditApprovalStatus === 'PENDING') : [];
 
   return (
     <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900">
@@ -281,6 +347,11 @@ export default function CustomersPage() {
           <button onClick={() => setActiveTab('segments')} className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${activeTab === 'segments' ? 'bg-indigo-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}>
             <TrendingUp className="w-3.5 h-3.5" /> RFM Segments
           </button>
+          {isManager && (
+            <button onClick={() => setActiveTab('credit-requests')} className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${activeTab === 'credit-requests' ? 'bg-indigo-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}>
+              <ShieldCheck className="w-3.5 h-3.5" /> Credit Requests
+            </button>
+          )}
         </div>
       </div>
 
@@ -351,6 +422,91 @@ export default function CustomersPage() {
           </div>
         )}
 
+        {/* ── CREDIT REQUESTS TAB ── */}
+        {activeTab === 'credit-requests' && (
+          <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto">
+            {/* Status filter */}
+            <div className="flex gap-2">
+              {(['PENDING', 'APPROVED', 'DECLINED'] as const).map(s => (
+                <button key={s} onClick={() => setCreditRequestStatus(s)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${creditRequestStatus === s ? 'bg-indigo-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}>
+                  {s === 'PENDING' ? <><Clock className="inline w-3 h-3 mr-1" />Pending</> : s === 'APPROVED' ? <><CheckCircle className="inline w-3 h-3 mr-1" />Approved</> : <><X className="inline w-3 h-3 mr-1" />Declined</>}
+                </button>
+              ))}
+            </div>
+            {creditRequests.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                <ShieldCheck className="w-10 h-10 mb-3 opacity-40" />
+                <p className="text-sm">No {creditRequestStatus.toLowerCase()} credit requests</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {creditRequests.map(req => (
+                  <div key={req.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-semibold text-gray-900 dark:text-white text-sm">{req.customer.name}</span>
+                          {req.customer.shopCode && <span className="text-xs text-indigo-500 font-mono">{req.customer.shopCode}</span>}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                          Requested by <strong>{req.requestedByUser.name}</strong> · {new Date(req.createdAt).toLocaleDateString('en-KE')}
+                        </div>
+                        <div className="grid grid-cols-3 gap-3 text-xs">
+                          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-2">
+                            <div className="text-gray-400 mb-0.5">Current Limit</div>
+                            <div className="font-semibold text-gray-900 dark:text-white">{formatKES(req.currentLimitCents)}</div>
+                          </div>
+                          <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-2">
+                            <div className="text-indigo-400 mb-0.5">Requested</div>
+                            <div className="font-semibold text-indigo-600 dark:text-indigo-400">{formatKES(req.requestedLimitCents)}</div>
+                          </div>
+                          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-2">
+                            <div className="text-gray-400 mb-0.5">Order Total</div>
+                            <div className="font-semibold text-gray-900 dark:text-white">{formatKES(req.orderTotalCents)}</div>
+                          </div>
+                        </div>
+                        {req.reason && <div className="text-xs text-gray-500 mt-2 italic">"{req.reason}"</div>}
+                        {req.reviewNote && (
+                          <div className={`text-xs mt-2 px-2 py-1 rounded ${req.status === 'APPROVED' ? 'bg-green-900/20 text-green-400' : 'bg-red-900/20 text-red-400'}`}>
+                            Note: {req.reviewNote}
+                          </div>
+                        )}
+                      </div>
+                      {req.status === 'PENDING' && (
+                        <div className="flex flex-col gap-2 flex-shrink-0">
+                          <button
+                            onClick={() => reviewCreditMutation.mutate({ id: req.id, status: 'APPROVED' })}
+                            disabled={reviewCreditMutation.isPending}
+                            className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg transition-colors"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={async () => {
+                              const note = await prompt({ title: 'Decline Reason', placeholder: 'Reason for declining…', confirmLabel: 'Decline' });
+                              if (note !== null) reviewCreditMutation.mutate({ id: req.id, status: 'DECLINED', reviewNote: note ?? undefined });
+                            }}
+                            disabled={reviewCreditMutation.isPending}
+                            className="px-3 py-1.5 bg-red-900/40 hover:bg-red-900/60 text-red-400 border border-red-700/40 text-xs font-semibold rounded-lg transition-colors"
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      )}
+                      {req.status !== 'PENDING' && (
+                        <div className={`text-xs font-semibold px-2 py-1 rounded-lg ${req.status === 'APPROVED' ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
+                          {req.status}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── LIST TAB ── */}
         {activeTab === 'list' && (
           <>
@@ -367,7 +523,10 @@ export default function CustomersPage() {
                   <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Outstanding Credit</p>
                   <AlertTriangle className="w-4 h-4 text-amber-500 dark:text-amber-400" />
                 </div>
-                <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{withCreditCount}</p>
+                <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{withCreditCount} customers</p>
+                {totalOutstandingDebtCents > 0 && (
+                  <p className="text-xs text-amber-700 dark:text-amber-500 mt-0.5 font-semibold">{formatKES(totalOutstandingDebtCents)} owed</p>
+                )}
               </div>
               <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-2">
@@ -377,6 +536,31 @@ export default function CustomersPage() {
                 <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{totalLoyaltyPoints.toLocaleString()}</p>
               </div>
             </div>
+
+            {/* Pending credit increase requests alert */}
+            {isManager && pendingCreditRequests.length > 0 && (
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                    {pendingCreditRequests.length} pending credit increase {pendingCreditRequests.length === 1 ? 'request' : 'requests'}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  {pendingCreditRequests.map((c) => (
+                    <div key={c.id} className="flex items-center gap-3 bg-white dark:bg-gray-800 rounded-lg px-3 py-2 border border-amber-200 dark:border-amber-800">
+                      <span className="text-sm font-semibold text-gray-900 dark:text-white flex-1">{c.name}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">Requested: <strong>{formatKES(c.creditLimitPendingCents ?? 0)}</strong></span>
+                      <span className="text-xs text-gray-400 dark:text-gray-500">Current: {formatKES(c.creditLimitCents)}</span>
+                      <div className="flex gap-1">
+                        <button onClick={() => approveCreditMutation.mutate(c.id)} disabled={approveCreditMutation.isPending} className="text-xs px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold disabled:opacity-50 transition-colors">Approve</button>
+                        <button onClick={() => rejectCreditMutation.mutate(c.id)} disabled={rejectCreditMutation.isPending} className="text-xs px-2 py-1 bg-red-500 hover:bg-red-600 text-white rounded-lg font-semibold disabled:opacity-50 transition-colors">Reject</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {showImport && (
               <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-5">
@@ -440,6 +624,7 @@ export default function CustomersPage() {
                   <input placeholder="Full Name *" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 p-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" />
                   <input placeholder="Phone (07xxxxxxxx)" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 p-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" />
                   <input placeholder="Email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 p-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" />
+                  <input placeholder="KRA PIN (e.g. A012345678Z)" value={formData.kraPin} onChange={(e) => setFormData({ ...formData, kraPin: e.target.value.toUpperCase() })} className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 p-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none font-mono" />
                   <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-xl overflow-hidden bg-white dark:bg-gray-700">
                     <span className="px-3 bg-gray-50 dark:bg-gray-600 text-gray-500 dark:text-gray-300 border-r border-gray-300 dark:border-gray-600 py-2.5 text-sm">KES</span>
                     <input type="number" placeholder="Credit Limit" min={0} value={formData.creditLimitCents / 100 || ''} onChange={(e) => setFormData({ ...formData, creditLimitCents: Math.round(Number(e.target.value) * 100) })} className="flex-1 p-2.5 outline-none bg-transparent text-gray-900 dark:text-white text-sm" />
@@ -505,32 +690,29 @@ export default function CustomersPage() {
                             </td>
                             <td className="px-4 py-3 text-right"><span className="inline-flex items-center gap-1 text-sm font-medium text-yellow-600 dark:text-yellow-400"><CreditCard className="w-3.5 h-3.5" />{c.loyaltyPoints.toLocaleString()}</span></td>
                             <td className="px-4 py-3 text-center hidden xl:table-cell" onClick={(e) => e.stopPropagation()}>
-                              {c.creditApprovalStatus === 'PENDING' && (
-                                <div className="flex flex-col items-center gap-1">
-                                  <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">
-                                    PENDING ({formatKES(c.creditLimitPendingCents ?? 0)})
-                                  </span>
-                                  {isManager && (
-                                    <div className="flex gap-1 mt-1">
-                                      <button onClick={() => approveCreditMutation.mutate(c.id)} disabled={approveCreditMutation.isPending} className="text-xs px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded font-semibold hover:bg-green-200 dark:hover:bg-green-900/50 disabled:opacity-50">Approve</button>
-                                      <button onClick={() => rejectCreditMutation.mutate(c.id)} disabled={rejectCreditMutation.isPending} className="text-xs px-2 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded font-semibold hover:bg-red-200 dark:hover:bg-red-900/50 disabled:opacity-50">Reject</button>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                              {c.creditApprovalStatus === 'APPROVED' && (
-                                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">APPROVED</span>
-                              )}
-                              {c.creditApprovalStatus === 'REJECTED' && (
-                                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">REJECTED</span>
-                              )}
-                              {(!c.creditApprovalStatus || c.creditApprovalStatus === 'NONE') && (
+                              {isManager ? (
                                 <button
-                                  onClick={() => { setCreditRequestCustomer(c); setCreditRequestAmount(''); setCreditRequestError(''); setShowCreditRequest(true); }}
-                                  className="text-xs text-indigo-600 dark:text-indigo-400 underline hover:text-indigo-800 dark:hover:text-indigo-300"
+                                  onClick={() => { setSetLimitCustomer(c); setSetLimitAmount(String(c.creditLimitCents / 100)); setSetLimitError(''); setShowSetLimit(true); }}
+                                  className="text-xs px-2.5 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-lg font-semibold hover:bg-indigo-200 dark:hover:bg-indigo-900/50 transition-colors"
                                 >
-                                  Request Increase
+                                  Set Limit
                                 </button>
+                              ) : (
+                                <>
+                                  {c.creditApprovalStatus === 'PENDING' && (
+                                    <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">
+                                      PENDING ({formatKES(c.creditLimitPendingCents ?? 0)})
+                                    </span>
+                                  )}
+                                  {c.creditApprovalStatus !== 'PENDING' && (
+                                    <button
+                                      onClick={() => { setCreditRequestCustomer(c); setCreditRequestAmount(''); setCreditRequestError(''); setShowCreditRequest(true); }}
+                                      className="text-xs text-indigo-600 dark:text-indigo-400 underline hover:text-indigo-800 dark:hover:text-indigo-300"
+                                    >
+                                      Request Increase
+                                    </button>
+                                  )}
+                                </>
                               )}
                             </td>
                             <td className="px-4 py-3 text-gray-400 dark:text-gray-500"><ChevronRight className="w-4 h-4" /></td>
@@ -554,43 +736,42 @@ export default function CustomersPage() {
                           <h2 className="font-bold text-gray-900 dark:text-white">{selected.name}</h2>
                           {selected.phone && <p className="text-sm text-gray-500 dark:text-gray-400">{selected.phone}</p>}
                           {selected.email && <p className="text-xs text-gray-400 dark:text-gray-500">{selected.email}</p>}
+                          {selected.kraPin && <p className="text-xs text-gray-400 dark:text-gray-500 font-mono">KRA PIN: {selected.kraPin}</p>}
                         </div>
                       </div>
-                      <button onClick={() => setSelected(null)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"><X className="w-4 h-4" /></button>
+                      <div className="flex gap-1">
+                        <button onClick={() => { setEditCustomer(selected); setEditForm({ name: selected.name, phone: selected.phone ?? '', email: selected.email ?? '', kraPin: selected.kraPin ?? '', creditLimitCents: selected.creditLimitCents }); }} className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" title="Edit customer"><Plus className="w-4 h-4 rotate-45" /></button>
+                        <button onClick={() => setSelected(null)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"><X className="w-4 h-4" /></button>
+                      </div>
                     </div>
                     <button onClick={() => openStatementModal(selected)} className="mt-3 w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 text-xs font-semibold rounded-xl transition-colors border border-gray-200 dark:border-gray-600">
                       <FileText className="w-3.5 h-3.5" /> Customer Statement
                     </button>
-                    {/* Credit approval status */}
-                    {selected.creditApprovalStatus === 'PENDING' && (
-                      <div className="mt-2 p-2.5 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl">
-                        <p className="text-xs font-semibold text-yellow-800 dark:text-yellow-300 mb-1">Credit Increase Request: PENDING</p>
-                        <p className="text-xs text-yellow-700 dark:text-yellow-400">Requested: {formatKES(selected.creditLimitPendingCents ?? 0)}</p>
-                        {isManager && (
-                          <div className="flex gap-2 mt-2">
-                            <button onClick={() => approveCreditMutation.mutate(selected.id)} disabled={approveCreditMutation.isPending} className="flex-1 py-1.5 text-xs font-semibold bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50">Approve</button>
-                            <button onClick={() => rejectCreditMutation.mutate(selected.id)} disabled={rejectCreditMutation.isPending} className="flex-1 py-1.5 text-xs font-semibold bg-red-500 hover:bg-red-600 text-white rounded-lg disabled:opacity-50">Reject</button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {selected.creditApprovalStatus === 'APPROVED' && (
-                      <div className="mt-2 p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl">
-                        <p className="text-xs font-semibold text-green-700 dark:text-green-400">Last credit request: APPROVED</p>
-                      </div>
-                    )}
-                    {selected.creditApprovalStatus === 'REJECTED' && (
-                      <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
-                        <p className="text-xs font-semibold text-red-700 dark:text-red-400">Last credit request: REJECTED</p>
-                      </div>
-                    )}
-                    {(!selected.creditApprovalStatus || selected.creditApprovalStatus === 'NONE') && (
+                    {/* Credit limit controls */}
+                    {isManager ? (
                       <button
-                        onClick={() => { setCreditRequestCustomer(selected); setCreditRequestAmount(''); setCreditRequestError(''); setShowCreditRequest(true); }}
+                        onClick={() => { setSetLimitCustomer(selected); setSetLimitAmount(String(selected.creditLimitCents / 100)); setSetLimitError(''); setShowSetLimit(true); }}
                         className="mt-2 w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 text-xs font-semibold rounded-xl transition-colors border border-indigo-200 dark:border-indigo-700"
                       >
-                        <CreditCard className="w-3.5 h-3.5" /> Request Credit Increase
+                        <CreditCard className="w-3.5 h-3.5" /> Set Credit Limit
                       </button>
+                    ) : (
+                      <>
+                        {selected.creditApprovalStatus === 'PENDING' && (
+                          <div className="mt-2 p-2.5 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl">
+                            <p className="text-xs font-semibold text-yellow-800 dark:text-yellow-300 mb-1">Credit Increase Request: PENDING</p>
+                            <p className="text-xs text-yellow-700 dark:text-yellow-400">Requested: {formatKES(selected.creditLimitPendingCents ?? 0)}</p>
+                          </div>
+                        )}
+                        {selected.creditApprovalStatus !== 'PENDING' && (
+                          <button
+                            onClick={() => { setCreditRequestCustomer(selected); setCreditRequestAmount(''); setCreditRequestError(''); setShowCreditRequest(true); }}
+                            className="mt-2 w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 text-xs font-semibold rounded-xl transition-colors border border-indigo-200 dark:border-indigo-700"
+                          >
+                            <CreditCard className="w-3.5 h-3.5" /> Request Credit Increase
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                   <div className="p-4 grid grid-cols-2 gap-3 border-b border-gray-100 dark:border-gray-700">
@@ -633,8 +814,21 @@ export default function CustomersPage() {
                         <div className="space-y-2">
                           {creditSales.map((sale) => (
                             <div key={sale.id} className="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/30 rounded-xl p-3">
-                              <div className="flex justify-between items-start"><span className="font-mono text-xs font-semibold text-gray-700 dark:text-gray-300">{sale.receiptNumber}</span><span className="font-bold text-red-600 dark:text-red-400 text-sm">{formatKES(sale.totalCents)}</span></div>
-                              <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">{formatDate(sale.createdAt)}</div>
+                              <div className="flex justify-between items-start">
+                                <span className="font-mono text-xs font-semibold text-gray-700 dark:text-gray-300">{sale.receiptNumber}</span>
+                                <span className="font-bold text-red-600 dark:text-red-400 text-sm">{formatKES(sale.totalCents)}</span>
+                              </div>
+                              <div className="flex items-center justify-between mt-1.5">
+                                <span className="text-xs text-gray-400 dark:text-gray-500">{formatDate(sale.createdAt)}</span>
+                                <button
+                                  onClick={() => markCreditPaidMutation.mutate(sale.id)}
+                                  disabled={markCreditPaidMutation.isPending}
+                                  className="flex items-center gap-1 px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
+                                >
+                                  <CheckCircle className="w-3 h-3" />
+                                  Mark Paid
+                                </button>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -719,6 +913,37 @@ export default function CustomersPage() {
         </div>
       )}
 
+      {/* Edit Customer modal */}
+      {editCustomer && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-gray-900 dark:text-white">Edit Customer</h3>
+              <button onClick={() => setEditCustomer(null)} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="space-y-3">
+              <input placeholder="Full Name *" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+              <input placeholder="Phone" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+              <input placeholder="Email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+              <div>
+                <input placeholder="KRA PIN (e.g. A012345678Z)" value={editForm.kraPin} onChange={(e) => setEditForm({ ...editForm, kraPin: e.target.value.toUpperCase() })} className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2.5 rounded-xl text-sm font-mono focus:ring-2 focus:ring-indigo-500 outline-none" />
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Required for B2B tax invoices. Will appear on KRA eTIMS submissions.</p>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={() => updateMutation.mutate({ id: editCustomer.id, data: editForm })}
+                disabled={!editForm.name || updateMutation.isPending}
+                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl disabled:opacity-50 transition-colors"
+              >
+                {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+              </button>
+              <button onClick={() => setEditCustomer(null)} className="px-4 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Credit Request modal */}
       {showCreditRequest && creditRequestCustomer && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -757,8 +982,8 @@ export default function CustomersPage() {
               <button
                 onClick={() => {
                   const cents = Math.round(Number(creditRequestAmount) * 100);
-                  if (!cents || cents <= creditRequestCustomer.creditLimitCents) {
-                    setCreditRequestError('Requested amount must be greater than current limit');
+                  if (!cents || cents <= 0) {
+                    setCreditRequestError('Please enter a valid requested amount');
                     return;
                   }
                   requestCreditMutation.mutate({ customerId: creditRequestCustomer.id, requestedLimitCents: cents });
@@ -770,6 +995,81 @@ export default function CustomersPage() {
               </button>
               <button onClick={() => setShowCreditRequest(false)} className="px-4 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">Cancel</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Set Credit Limit modal (manager/owner) */}
+      {showSetLimit && setLimitCustomer && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-bold text-gray-900 dark:text-white">Set Credit Limit</h2>
+              <button onClick={() => setShowSetLimit(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"><X className="w-4 h-4" /></button>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+              Customer: <strong className="text-gray-900 dark:text-white">{setLimitCustomer.name}</strong>
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+              Current Limit: <strong>{formatKES(setLimitCustomer.creditLimitCents)}</strong>
+              {setLimitCustomer.creditApprovalStatus === 'PENDING' && (
+                <span className="ml-2 text-yellow-600 dark:text-yellow-400 font-semibold">
+                  (Pending request: {formatKES(setLimitCustomer.creditLimitPendingCents ?? 0)})
+                </span>
+              )}
+            </p>
+            {setLimitError && (
+              <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-sm text-red-700 dark:text-red-400">{setLimitError}</div>
+            )}
+            <div className="mb-5">
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">New Credit Limit (KES) *</label>
+              <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-xl overflow-hidden bg-white dark:bg-gray-700">
+                <span className="px-3 bg-gray-50 dark:bg-gray-600 text-gray-500 dark:text-gray-300 border-r border-gray-300 dark:border-gray-600 py-2.5 text-sm">KES</span>
+                <input
+                  type="number" min={0} placeholder="e.g. 50000" value={setLimitAmount}
+                  onChange={(e) => setSetLimitAmount(e.target.value)}
+                  className="flex-1 p-2.5 text-sm outline-none bg-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+                  autoFocus
+                />
+              </div>
+              {setLimitAmount && Number(setLimitAmount) >= 0 && (
+                <p className={`text-xs mt-1 ${Math.round(Number(setLimitAmount) * 100) < setLimitCustomer.creditLimitCents ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>
+                  {Math.round(Number(setLimitAmount) * 100) < setLimitCustomer.creditLimitCents
+                    ? `Reduction of ${formatKES(setLimitCustomer.creditLimitCents - Math.round(Number(setLimitAmount) * 100))}`
+                    : Math.round(Number(setLimitAmount) * 100) > setLimitCustomer.creditLimitCents
+                    ? `Increase of ${formatKES(Math.round(Number(setLimitAmount) * 100) - setLimitCustomer.creditLimitCents)}`
+                    : 'No change'}
+                </p>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  const cents = Math.round(Number(setLimitAmount) * 100);
+                  if (isNaN(cents) || cents < 0) { setSetLimitError('Enter a valid amount (0 or more)'); return; }
+                  setCreditLimitMutation.mutate({ customerId: setLimitCustomer.id, newLimitCents: cents });
+                }}
+                disabled={setLimitAmount === '' || setCreditLimitMutation.isPending}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
+              >
+                {setCreditLimitMutation.isPending ? 'Saving...' : 'Save Limit'}
+              </button>
+              <button onClick={() => setShowSetLimit(false)} className="px-4 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">Cancel</button>
+            </div>
+            {/* If there's a pending request, also show approve/reject */}
+            {setLimitCustomer.creditApprovalStatus === 'PENDING' && (
+              <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+                <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">Or respond to the cashier's request:</p>
+                <div className="flex gap-2">
+                  <button onClick={() => { approveCreditMutation.mutate(setLimitCustomer.id); setShowSetLimit(false); }} disabled={approveCreditMutation.isPending} className="flex-1 py-2 text-xs font-semibold bg-green-600 hover:bg-green-700 text-white rounded-xl disabled:opacity-50">
+                    Approve Request ({formatKES(setLimitCustomer.creditLimitPendingCents ?? 0)})
+                  </button>
+                  <button onClick={() => { rejectCreditMutation.mutate(setLimitCustomer.id); setShowSetLimit(false); }} disabled={rejectCreditMutation.isPending} className="flex-1 py-2 text-xs font-semibold bg-red-500 hover:bg-red-600 text-white rounded-xl disabled:opacity-50">
+                    Reject
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

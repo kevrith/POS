@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { BatchService } from './batch.service';
+import { BatchExpiryCronService } from './batch-expiry-cron.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../auth/tenant.guard';
 import { RolesGuard, RequirePermission } from '../auth/roles.guard';
@@ -7,7 +8,10 @@ import { RolesGuard, RequirePermission } from '../auth/roles.guard';
 @Controller('businesses/:businessId/batch')
 @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class BatchController {
-  constructor(private batchService: BatchService) {}
+  constructor(
+    private batchService: BatchService,
+    private batchExpiryCronService: BatchExpiryCronService,
+  ) {}
 
   @Get()
   @RequirePermission('inventory.read')
@@ -46,5 +50,20 @@ export class BatchController {
   @RequirePermission('inventory.read')
   async getHistory(@Param('businessId') businessId: string, @Param('id') id: string) {
     return this.batchService.getBatchHistory(id, businessId);
+  }
+
+  @Post('expire-writeoff')
+  @RequirePermission('inventory.create')
+  async manualExpireWriteoff(@Query('businessId') businessId?: string) {
+    return this.batchExpiryCronService.triggerManual(businessId);
+  }
+
+  @Patch(':id/write-off')
+  @RequirePermission('inventory.create')
+  async writeOffBatch(
+    @Param('id') id: string,
+    @Body('authorizedBy') authorizedBy: string,
+  ) {
+    return this.batchExpiryCronService.writeOffSingleBatch(id, authorizedBy ?? 'MANAGER');
   }
 }

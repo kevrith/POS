@@ -23,6 +23,13 @@ if (import.meta.env.VITE_SENTRY_DSN) {
 
 // Restore dark mode before first render to avoid flash
 initTheme();
+// Apply saved font size preference
+const savedFontSize = localStorage.getItem('pos-font-size');
+if (savedFontSize) {
+  const sizeMap: Record<string, string> = { sm: '13px', md: '15px', lg: '17px', xl: '19px' };
+  const px = sizeMap[savedFontSize];
+  if (px) document.documentElement.style.fontSize = px;
+}
 // Start offline sync engine
 initSyncEngine();
 

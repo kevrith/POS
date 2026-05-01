@@ -42,10 +42,20 @@ export class HospitalityService {
     });
   }
 
-  async createTable(data: { storeId: string; number: string; capacity: number; floor?: string }) {
+  async createTable(data: { storeId?: string; businessId?: string; number: string; capacity: number; floor?: string }) {
+    let storeId = data.storeId;
+    if (!storeId && data.businessId) {
+      const store = await this.prisma.store.findFirst({
+        where: { businessId: data.businessId },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      });
+      if (!store) throw new Error('No store found for this business');
+      storeId = store.id;
+    }
     return this.prisma.table.create({
       data: {
-        storeId: data.storeId,
+        storeId: storeId!,
         number: data.number,
         capacity: data.capacity,
         floor: data.floor,

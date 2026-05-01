@@ -677,4 +677,135 @@ export class PdfService {
 
     return this.htmlWrapper(`P10A — ${monthName} ${year} — ${business?.name ?? businessId}`, content);
   }
+
+  // ─── B2B Field-Order Invoice ──────────────────────────────────────────────
+
+  async generateFieldOrderInvoice(orderId: string): Promise<string> {
+    const order = await (this.prisma as any).fieldOrder.findUnique({
+      where: { id: orderId },
+      include: {
+        items: true,
+        customer: true,
+        agent: { select: { name: true, phone: true } },
+        route: { select: { name: true } },
+      },
+    });
+    if (!order) throw new Error('Field order not found');
+
+    const business = await this.prisma.business.findUnique({
+      where: { id: order.businessId },
+      select: { name: true, bankName: true, bankAccountNumber: true, bankAccountName: true, bankBranch: true, shortCode: true },
+    });
+
+    const fmt = (c: number) => `KES ${(c / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
+    const date = new Date().toLocaleDateString('en-KE', { day: '2-digit', month: 'long', year: 'numeric' });
+    const dueDate = new Date(Date.now() + 30 * 86400000).toLocaleDateString('en-KE', { day: '2-digit', month: 'long', year: 'numeric' });
+
+    const itemRows = order.items
+      .filter((i: any) => !i.isSample)
+      .map((i: any, idx: number) => `
+        <tr>
+          <td style="text-align:center">${idx + 1}</td>
+          <td>${i.itemName}${i.itemSku ? ` <span style="color:#888;font-size:10px">[${i.itemSku}]</span>` : ''}</td>
+          <td style="text-align:center">${i.quantity}</td>
+          <td style="text-align:right">${fmt(i.unitPriceCents)}</td>
+          <td style="text-align:right">${fmt(i.totalCents)}</td>
+        </tr>
+      `).join('');
+
+    const hasBankDetails = business?.bankName || business?.bankAccountNumber;
+    const bankInfo = hasBankDetails
+      ? `<div style="margin-top:24px;padding:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;">
+           <p style="font-weight:bold;margin:0 0 6px">Payment Details</p>
+           ${business?.bankName ? `<div style="font-size:12px">Bank: <strong>${business.bankName}</strong></div>` : ''}
+           ${business?.bankAccountNumber ? `<div style="font-size:12px">Account No: <strong>${business.bankAccountNumber}</strong></div>` : ''}
+           ${business?.bankAccountName ? `<div style="font-size:12px">Account Name: <strong>${business.bankAccountName}</strong></div>` : ''}
+           ${business?.bankBranch ? `<div style="font-size:12px">Branch: ${business.bankBranch}</div>` : ''}
+           ${business?.shortCode ? `<div style="font-size:12px">Paybill/Till: <strong>${business.shortCode}</strong></div>` : ''}
+         </div>`
+      : '';
+
+    const content = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px">
+        <div>
+          <div style="font-size:26px;font-weight:bold;color:#1e3a5f">${business?.name ?? 'Business'}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:22px;font-weight:bold;color:#1e3a5f;letter-spacing:1px">TAX INVOICE</div>
+          <div style="color:#555;margin-top:6px">Invoice #: <strong>${order.invoiceNumber ?? `INV-${orderId.slice(-6).toUpperCase()}`}</strong></div>
+          <div style="color:#555">Order #: <strong>${order.orderNumber ?? orderId}</strong></div>
+          <div style="color:#555">Date: <strong>${date}</strong></div>
+          <div style="color:#555">Due Date: <strong>${dueDate}</strong></div>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;margin-bottom:24px;gap:24px">
+        <div style="flex:1;padding:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px">
+          <p style="font-weight:bold;margin:0 0 6px;color:#1e3a5f">Bill To</p>
+          <div style="font-size:14px;font-weight:bold">${order.customer?.name ?? '—'}</div>
+          ${order.customer?.phone ? `<div style="color:#555">${order.customer.phone}</div>` : ''}
+          ${order.customer?.kraPin ? `<div style="color:#555">KRA PIN: ${order.customer.kraPin}</div>` : ''}
+          ${order.customer?.shopCode ? `<div style="color:#888;font-size:11px">Code: ${order.customer.shopCode}</div>` : ''}
+        </div>
+        <div style="flex:1;padding:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px">
+          <p style="font-weight:bold;margin:0 0 6px;color:#1e3a5f">Sales Agent</p>
+          <div style="font-weight:bold">${order.agent?.name ?? '—'}</div>
+          ${order.agent?.phone ? `<div style="color:#555">${order.agent.phone}</div>` : ''}
+          ${order.route?.name ? `<div style="color:#555">Route: ${order.route.name}</div>` : ''}
+        </div>
+      </div>
+
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:#1e3a5f;color:white">
+            <th style="padding:10px;text-align:center;width:40px">#</th>
+            <th style="padding:10px;text-align:left">Description</th>
+            <th style="padding:10px;text-align:center;width:60px">Qty</th>
+            <th style="padding:10px;text-align:right;width:120px">Unit Price</th>
+            <th style="padding:10px;text-align:right;width:120px">Amount</th>
+          </tr>
+        </thead>
+        <tbody>${itemRows}</tbody>
+        <tfoot>
+          <tr style="border-top:2px solid #1e3a5f">
+            <td colspan="4" style="padding:8px 10px;text-align:right;font-weight:bold">Subtotal (ex-VAT)</td>
+            <td style="padding:8px 10px;text-align:right;font-weight:bold">${fmt(order.subtotalCents - order.vatCents)}</td>
+          </tr>
+          <tr>
+            <td colspan="4" style="padding:6px 10px;text-align:right;color:#555">VAT (16%)</td>
+            <td style="padding:6px 10px;text-align:right;color:#555">${fmt(order.vatCents)}</td>
+          </tr>
+          <tr style="background:#1e3a5f;color:white">
+            <td colspan="4" style="padding:10px;text-align:right;font-size:15px;font-weight:bold">TOTAL DUE</td>
+            <td style="padding:10px;text-align:right;font-size:15px;font-weight:bold">${fmt(order.totalCents)}</td>
+          </tr>
+          ${order.paidAmountCents > 0 ? `
+          <tr style="color:#16a34a">
+            <td colspan="4" style="padding:6px 10px;text-align:right">Amount Paid</td>
+            <td style="padding:6px 10px;text-align:right">− ${fmt(order.paidAmountCents)}</td>
+          </tr>
+          <tr style="background:#fef3c7">
+            <td colspan="4" style="padding:8px 10px;text-align:right;font-weight:bold;color:#92400e">Balance Due</td>
+            <td style="padding:8px 10px;text-align:right;font-weight:bold;color:#92400e">${fmt(Math.max(0, order.totalCents - order.paidAmountCents))}</td>
+          </tr>` : ''}
+        </tfoot>
+      </table>
+
+      ${bankInfo}
+
+      ${order.notes ? `<div style="margin-top:20px;padding:12px;background:#f8fafc;border-left:4px solid #1e3a5f;font-size:12px"><strong>Notes:</strong> ${order.notes}</div>` : ''}
+
+      <div style="margin-top:40px;display:flex;gap:80px;font-size:12px;color:#555">
+        <div>Authorized Signature: ___________________<br/><small>Date: ___________</small></div>
+        <div>Received By: ___________________<br/><small>Date: ___________</small></div>
+      </div>
+
+      <div style="margin-top:24px;text-align:center;font-size:11px;color:#888;border-top:1px solid #e2e8f0;padding-top:12px">
+        Payment is due within 30 days. Late payments attract interest at 2% per month.
+        Thank you for your business!
+      </div>
+    `;
+
+    return this.htmlWrapper(`Invoice ${order.invoiceNumber ?? orderId} — ${business?.name ?? ''}`, content);
+  }
 }

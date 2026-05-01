@@ -5,6 +5,7 @@ import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useAuthStore } from './stores/auth';
 import LoginPage from './pages/LoginPage';
 import Layout from './components/Layout';
+import { DialogProvider } from './components/Dialog';
 
 // Lazy load all pages for code-splitting
 const POSPage = lazy(() => import('./pages/POSRouterPage'));
@@ -63,6 +64,9 @@ const OnlineOrderPage = lazy(() => import('./pages/OnlineOrderPage'));
 const FuelPumpPage = lazy(() => import('./pages/FuelPumpPage'));
 const CybercafePage = lazy(() => import('./pages/CybercafePage'));
 const CyberKioskPage = lazy(() => import('./pages/CyberKioskPage'));
+const FieldOrdersPage = lazy(() => import('./pages/FieldOrdersPage'));
+const DeliveryRoutesPage = lazy(() => import('./pages/DeliveryRoutesPage'));
+const AgentPage = lazy(() => import('./pages/AgentPage'));
 
 function PageLoader() {
   return (
@@ -182,6 +186,7 @@ export default function App() {
   }
 
   return (
+    <DialogProvider>
     <>
     <Toaster position="top-right" richColors closeButton duration={4000} />
     <Layout>
@@ -252,11 +257,16 @@ export default function App() {
           <Route path="/fuel-pump" element={<FuelPumpPage />} />
           {/* Cybercafe */}
           <Route path="/cybercafe" element={<CybercafePage />} />
+          {/* Field Sales */}
+          <Route path="/field-orders" element={<FieldOrdersPage />} />
+          <Route path="/delivery-routes" element={<DeliveryRoutesPage />} />
+          <Route path="/agent" element={<AgentPage />} />
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/pos" replace />} />
         </Routes>
       </Suspense>
     </Layout>
     </>
+    </DialogProvider>
   );
 }

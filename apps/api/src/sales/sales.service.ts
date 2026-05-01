@@ -7,6 +7,7 @@ import { WebhooksService } from '../webhooks/webhooks.service';
 import { EtimsService } from '../etims/etims.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EventsGateway } from '../events/events.gateway';
+import { LoyaltyService } from '../loyalty/loyalty.service';
 import { SaleType, SaleStatus, InventoryMovementType, calculateVAT, calculateTOT, calculateServiceCharge } from '@pos/shared';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -24,9 +25,11 @@ interface FindAllOptions {
 
 interface CreateProformaDto {
   businessId: string;
+  storeId?: string;
   customerName: string;
   customerPhone?: string;
-  items: Array<{ name: string; quantity: number; unitPriceCents: number }>;
+  priceLevel?: string;
+  items: Array<{ name: string; quantity: number; unitPriceCents: number; discountPercent?: number }>;
   validUntil?: string;
   notes?: string;
 }
@@ -67,6 +70,7 @@ export class SalesService {
     private etims: EtimsService,
     private notifications: NotificationsService,
     private events: EventsGateway,
+    private loyalty: LoyaltyService,
   ) {}
 
   async createSale(businessId: string, dto: CreateSaleDto) {
@@ -108,6 +112,22 @@ export class SalesService {
         const stock = await this.inventory.getStockLevel(item.id, dto.storeId);
         if (stock < cartItem.quantity && store.business.negativePolicyDefault === 'BLOCK') {
           throw new BadRequestException(`Insufficient stock for ${item.name}`);
+        }
+      }
+    }
+
+    // ── Credit limit check ──────────────────────────────────────────────────
+    if (dto.type === SaleType.CREDIT && dto.customerId) {
+      const customer = await this.prisma.customer.findUnique({ where: { id: dto.customerId } });
+      if (customer && customer.creditLimitCents > 0) {
+        const outstanding = Math.max(0, -customer.balanceCents);
+        if (outstanding + subtotalCents > customer.creditLimitCents) {
+          throw new BadRequestException(
+            `Credit limit exceeded. Limit: KES ${(customer.creditLimitCents / 100).toFixed(2)}, ` +
+            `Outstanding: KES ${(outstanding / 100).toFixed(2)}, ` +
+            `This sale: KES ${(subtotalCents / 100).toFixed(2)}. ` +
+            `Available credit: KES ${(Math.max(0, customer.creditLimitCents - outstanding) / 100).toFixed(2)}.`
+          );
         }
       }
     }
@@ -164,6 +184,14 @@ export class SalesService {
         },
         include: { items: true, payments: true },
       });
+
+      // Debit customer balance on credit sale
+      if (dto.type === SaleType.CREDIT && dto.customerId) {
+        await tx.customer.update({
+          where: { id: dto.customerId },
+          data: { balanceCents: { decrement: totalCents } },
+        });
+      }
 
       for (const cartItem of dto.items) {
         const item = items.find(i => i.id === cartItem.itemId);
@@ -232,6 +260,15 @@ export class SalesService {
       this.sendSmsReceipt(businessId, dto.customerId, sale.receiptNumber, totalCents).catch(() => {});
     }
 
+    // Award loyalty points only on paid sales — not on credit (points earned when debt is settled)
+    let pointsEarned = 0;
+    let loyaltyBalance = 0;
+    if (dto.customerId && dto.type !== SaleType.CREDIT) {
+      const loyalty = await this.loyalty.earnPoints(dto.customerId, totalCents, sale.id).catch(() => ({ points: 0, balance: 0 }));
+      pointsEarned = loyalty.points;
+      loyaltyBalance = loyalty.balance;
+    }
+
     // Notify on credit sale overdue
     if (dto.type === SaleType.CREDIT && dto.customerId) {
       this.notifyCreditOverdue(businessId, dto.customerId).catch(() => {});
@@ -246,10 +283,8 @@ export class SalesService {
       itemIds: dto.items.map(i => i.itemId),
     });
 
-    return sale;
-  }
-
-  private async checkAndDispatchLowStock(businessId: string, storeId: string, itemIds: string[]): Promise<void> {
+    return { ...sale, pointsEarned, loyaltyBalance };
+  }  private async checkAndDispatchLowStock(businessId: string, storeId: string, itemIds: string[]): Promise<void> {
     const itemList = await this.prisma.item.findMany({ where: { id: { in: itemIds }, trackStock: true } });
     for (const item of itemList) {
       const stock = await this.inventory.getStockLevel(item.id, storeId);
@@ -290,11 +325,38 @@ export class SalesService {
   async getSale(id: string, businessId: string) {
     return this.prisma.sale.findFirst({
       where: { id, businessId },
-      include: { items: true, payments: true },
+      include: { items: true, payments: true, customer: true, cashier: true, voidRecords: true },
     });
   }
 
-  async voidSale(saleId: string, businessId: string, managerId: string, reason: string, voidedItemIds?: string[]) {
+  async getVoidedAndReturns(businessId: string, storeId?: string, startDate?: Date, endDate?: Date) {
+    const where: Record<string, unknown> = {
+      businessId,
+      status: { in: ['VOIDED', 'CANCELLED', 'AMENDED'] },
+    };
+    if (storeId) where['storeId'] = storeId;
+    if (startDate || endDate) {
+      where['createdAt'] = {
+        ...(startDate ? { gte: startDate } : {}),
+        ...(endDate ? { lte: endDate } : {}),
+      };
+    }
+    return this.prisma.sale.findMany({
+      where,
+      include: { items: true, payments: true, customer: true, cashier: true, voidRecords: true },
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+    });
+  }
+
+  async voidSale(
+    saleId: string,
+    businessId: string,
+    managerId: string,
+    reason: string,
+    voidedItemIds?: string[],
+    voidedItemQuantities?: Array<{ itemId: string; quantity: number }>,
+  ) {
     return this.prisma.$transaction(async (tx) => {
       const sale = await tx.sale.findFirst({
         where: { id: saleId, businessId },
@@ -305,13 +367,21 @@ export class SalesService {
         throw new BadRequestException('Can only void paid sales');
       }
 
-      const isLineItemVoid = voidedItemIds && voidedItemIds.length > 0;
+      const hasQuantityVoid = voidedItemQuantities && voidedItemQuantities.length > 0;
+      const isLineItemVoid = hasQuantityVoid || (voidedItemIds && voidedItemIds.length > 0);
       const itemsToVoid = isLineItemVoid
-        ? sale.items.filter(i => voidedItemIds.includes(i.id))
+        ? sale.items.filter(i => voidedItemIds?.includes(i.id) || voidedItemQuantities?.some(v => v.itemId === i.id))
         : sale.items;
 
-      // Reverse inventory
+      let refundAmount = 0;
+
+      // Reverse inventory (using explicit quantities if provided)
       for (const item of itemsToVoid) {
+        const qtyOverride = hasQuantityVoid
+          ? (voidedItemQuantities!.find(v => v.itemId === item.id)?.quantity ?? item.quantity)
+          : item.quantity;
+        const clampedQty = Math.min(qtyOverride, item.quantity);
+
         if (item.itemId) {
           await tx.inventoryMovement.create({
             data: {
@@ -320,16 +390,28 @@ export class SalesService {
               itemId: item.itemId,
               storeId: sale.storeId!,
               type: InventoryMovementType.VOID,
-              quantity: item.quantity,
+              quantity: clampedQty,
               saleId: sale.id,
               source: 'POS',
             },
           });
         }
+
+        const itemRefund = Math.round(item.unitPriceCents * clampedQty);
+        refundAmount += itemRefund;
+
+        // If partial quantity void: reduce item quantity on the sale
+        if (hasQuantityVoid && clampedQty < item.quantity) {
+          await tx.saleItem.update({
+            where: { id: item.id },
+            data: {
+              quantity: item.quantity - clampedQty,
+              totalCents: item.unitPriceCents * (item.quantity - clampedQty),
+            },
+          });
+        }
       }
 
-      // Create void record
-      const refundAmount = itemsToVoid.reduce((sum, i) => sum + i.totalCents, 0);
       await tx.voidRecord.create({
         data: {
           saleId: sale.id,
@@ -376,9 +458,11 @@ export class SalesService {
   async returnSale(
     saleId: string,
     businessId: string,
-    dto: { returnedItemIds?: string[]; reason: string; refundMethod: 'CASH' | 'STORE_CREDIT' },
+    dto: { returnedItemIds?: string[]; reason: string; refundMethod: 'CASH' | 'STORE_CREDIT'; processedBy?: string },
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    let returnId: string | null = null;
+
+    const result = await this.prisma.$transaction(async (tx) => {
       const sale = await tx.sale.findFirst({
         where: { id: saleId, businessId },
         include: { items: true, customer: true },
@@ -427,6 +511,21 @@ export class SalesService {
         data: { status: SaleStatus.CANCELLED },
       });
 
+      // Create Return record for audit trail and eTIMS credit note tracking
+      const returnRecord = await tx.return.create({
+        data: {
+          offlineId: uuidv4(),
+          businessId,
+          saleId,
+          refundAmountCents: refundAmount,
+          refundMethod: dto.refundMethod,
+          reason: dto.reason,
+          returnedItemIds: JSON.stringify(dto.returnedItemIds ?? []),
+          processedBy: dto.processedBy ?? sale.cashierId ?? 'system',
+        },
+      });
+      returnId = returnRecord.id;
+
       await this.audit.createEntry({
         businessId,
         actor: sale.cashierId ?? 'system',
@@ -434,12 +533,13 @@ export class SalesService {
         action: 'SALE_RETURNED',
         entity: 'Sale',
         entityId: saleId,
-        after: { reason: dto.reason, refundAmount, refundMethod: dto.refundMethod },
+        after: { reason: dto.reason, refundAmount, refundMethod: dto.refundMethod, returnId: returnRecord.id },
         source: 'POS',
       });
 
       return {
         success: true,
+        returnId: returnRecord.id,
         refundAmountCents: refundAmount,
         refundMethod: dto.refundMethod,
         storeCreditBalance: dto.refundMethod === 'STORE_CREDIT' && sale.customer
@@ -447,6 +547,15 @@ export class SalesService {
           : undefined,
       };
     });
+
+    // Submit eTIMS credit note non-blocking, after transaction commits
+    if (returnId) {
+      this.etims.submitCreditNote(returnId).catch(() => {
+        // Non-fatal — the Return record tracks submission status for retry
+      });
+    }
+
+    return result;
   }
 
   async findAll(opts: FindAllOptions) {
@@ -474,7 +583,7 @@ export class SalesService {
     const [data, total] = await this.prisma.$transaction([
       this.prisma.sale.findMany({
         where,
-        include: { items: true, payments: true },
+        include: { items: true, payments: true, customer: true, cashier: true },
         orderBy: { createdAt: 'desc' },
         take: opts.limit,
         skip: opts.offset,
@@ -494,35 +603,40 @@ export class SalesService {
   }
 
   async createProforma(dto: CreateProformaDto) {
-    const totalCents = dto.items.reduce(
-      (sum, i) => sum + i.unitPriceCents * i.quantity,
-      0,
-    );
+    const subtotalCents = dto.items.reduce((sum, i) => {
+      const disc = i.discountPercent ? i.discountPercent / 100 : 0;
+      return sum + Math.round(i.unitPriceCents * i.quantity * (1 - disc));
+    }, 0);
 
     return this.prisma.sale.create({
       data: {
         offlineId: uuidv4(),
         businessId: dto.businessId,
+        storeId: dto.storeId,
         receiptNumber: `PRO-${Date.now()}`,
         type: SaleType.PROFORMA,
         status: SaleStatus.PROFORMA,
-        priceLevel: 'RETAIL',
-        subtotalCents: totalCents,
+        priceLevel: (dto.priceLevel as any) ?? 'RETAIL',
+        subtotalCents,
         serviceChargeCents: 0,
         vatCents: 0,
         totCents: 0,
-        totalCents,
+        totalCents: subtotalCents,
         customerName: dto.customerName,
         customerPhone: dto.customerPhone,
         notes: dto.notes,
         proformaValidUntil: dto.validUntil ? new Date(dto.validUntil) : undefined,
         items: {
-          create: dto.items.map(i => ({
-            name: i.name,
-            quantity: i.quantity,
-            unitPriceCents: i.unitPriceCents,
-            totalCents: i.unitPriceCents * i.quantity,
-          })),
+          create: dto.items.map(i => {
+            const disc = i.discountPercent ? i.discountPercent / 100 : 0;
+            const lineCents = Math.round(i.unitPriceCents * i.quantity * (1 - disc));
+            return {
+              name: i.name,
+              quantity: i.quantity,
+              unitPriceCents: i.unitPriceCents,
+              totalCents: lineCents,
+            };
+          }),
         },
       },
       include: { items: true },
@@ -713,5 +827,45 @@ export class SalesService {
 
       return sale;
     });
+  }
+
+  async markCreditPaid(saleId: string, businessId: string, amountCents?: number) {
+    const sale = await this.prisma.sale.findFirst({
+      where: { id: saleId, businessId },
+    });
+    if (!sale) throw new Error('Sale not found');
+    if (sale.status !== SaleStatus.CREDIT) throw new Error('Sale is not a credit sale');
+
+    const paidAmount = amountCents ?? sale.totalCents;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.sale.update({
+        where: { id: saleId },
+        data: { status: SaleStatus.PAID },
+      });
+      // Reverse the balance deduction
+      if (sale.customerId) {
+        await tx.customer.update({
+          where: { id: sale.customerId },
+          data: { balanceCents: { increment: paidAmount } },
+        });
+      }
+      await tx.payment.create({
+        data: {
+          offlineId: require('uuid').v4(),
+          saleId,
+          method: 'CASH',
+          amountCents: paidAmount,
+          reference: 'Credit settlement',
+        },
+      });
+    });
+
+    // Award loyalty points now that debt is settled
+    if (sale.customerId) {
+      await this.loyalty.earnPoints(sale.customerId, paidAmount, saleId).catch(() => {});
+    }
+
+    return { success: true };
   }
 }

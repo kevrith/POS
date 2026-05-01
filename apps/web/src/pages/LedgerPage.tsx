@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { BookOpen, Plus, X, Loader2, RefreshCw, Check, RotateCcw } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
+import { useDialog } from '../components/Dialog';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -69,6 +70,7 @@ export default function LedgerPage() {
   const user = useAuthStore((s) => s.user);
   const businessId = user?.businessId ?? '';
   const qc = useQueryClient();
+  const { confirm } = useDialog();
 
   const [tab, setTab] = useState<'entries' | 'trial-balance'>('entries');
   const [startDate, setStartDate] = useState('');
@@ -294,8 +296,9 @@ export default function LedgerPage() {
                           )}
                           {entry.status === 'POSTED' && (
                             <button
-                              onClick={() => {
-                                if (window.confirm('Reverse this journal entry?')) reverseMut.mutate(entry.id);
+                              onClick={async () => {
+                                const ok = await confirm({ title: 'Reverse Journal Entry', message: 'This will create an offsetting reversal entry. This action cannot be undone.', variant: 'warning', confirmLabel: 'Reverse' });
+                                if (ok) reverseMut.mutate(entry.id);
                               }}
                               disabled={reverseMut.isPending}
                               className="flex items-center gap-1 px-2.5 py-1 bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 text-red-700 dark:text-red-400 text-xs font-medium rounded-lg transition-colors"

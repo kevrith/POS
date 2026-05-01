@@ -8,11 +8,12 @@ import {
   ShoppingCart, CreditCard, Smartphone, ChevronUp,
   RotateCcw, Package, Clock, CheckCircle2,
 } from 'lucide-react';
-import { BrowserMultiFormatReader } from '@zxing/browser';
+import { BrowserMultiFormatReader as _unused } from '@zxing/browser'; // camera logic moved to CameraModal
 import { api } from '../lib/api';
 import { usePOSStore, type ApiItem, type PriceLevel } from '../stores/pos';
 import { useAuthStore } from '../stores/auth';
 import PaymentModal from '../components/PaymentModal';
+import CameraModal from '../components/pos/CameraModal';
 import HeldSalesModal from '../components/HeldSalesModal';
 import CustomerSelectModal from '../components/CustomerSelectModal';
 import PrintModal from '../components/PrintModal';
@@ -24,7 +25,7 @@ interface SalePayload {
   storeId: string;
   businessId: string;
   cashierId: string;
-  type: 'NORMAL';
+  type: 'NORMAL' | 'CREDIT';
   priceLevel: PriceLevel;
   customerId?: string;
   items: Array<{ itemId: string; quantity: number }>;
@@ -49,6 +50,8 @@ interface SaleResult {
   id: string;
   receiptNumber: string;
   totalCents: number;
+  pointsEarned?: number;
+  loyaltyBalance?: number;
 }
 
 interface Category {
@@ -81,8 +84,9 @@ const DEPT_COLORS: Record<string, string> = {
   electronics: '#8b5cf6', default: '#6b7280',
 };
 
-function deptColor(name: string): string {
-  const key = name.toLowerCase().split(' ')[0];
+function deptColor(name: string | { id?: string; name?: string; color?: string } | null | undefined): string {
+  const str = typeof name === 'object' ? (name?.name ?? '') : (name ?? '');
+  const key = str.toLowerCase().split(' ')[0];
   return DEPT_COLORS[key] ?? DEPT_COLORS.default;
 }
 
@@ -94,7 +98,7 @@ export default function SupermarketPOSPage() {
   const user = useAuthStore((s) => s.user);
 
   const {
-    cart, addToCart, removeFromCart, updateQuantity, clearCart,
+    cart, addToCart, removeFromCart, updateQuantity, updateDiscount, clearCart,
     priceLevel, setPriceLevel,
     customerId, customerName, setCustomer,
     heldSales, holdCurrentSale, resumeHeldSale, discardHeldSale,
@@ -109,19 +113,20 @@ export default function SupermarketPOSPage() {
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
   const [_lastReceipt, setLastReceipt] = useState<SaleResult | null>(null);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [lastScanned, setLastScanned] = useState<ApiItem | null>(null);
   const [flashItem, setFlashItem] = useState<string | null>(null);   // itemId that just changed
   const [loyaltyDiscountApplied, setLoyaltyDiscountApplied] = useState(false);
   const [loyaltyDiscountCents, setLoyaltyDiscountCents] = useState(0);
+  const [manualDiscountCents, setManualDiscountCents] = useState(0);
   const [customerPhone, setCustomerPhone] = useState<string | null>(null);
+  const [customerKraPin, setCustomerKraPin] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [now, setNow] = useState(new Date());
 
   const scanRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null); // unused — camera logic in CameraModal
 
   const businessId = user?.businessId ?? '';
   const storeId = user?.storeId ?? '';
@@ -183,17 +188,18 @@ export default function SupermarketPOSPage() {
     select: (d: any) => ({ name: d.name, serviceChargeRate: d.serviceChargeRate ?? 10 }),
   });
 
-  const { data: loyaltyData } = useQuery<{ loyaltyPoints: number; program?: { redemptionRate: number; minRedemption: number } } | null>({
+  const { data: loyaltyData } = useQuery<{ loyaltyPoints: number; balanceCents: number; program?: { redemptionRate: number; minRedemption: number } } | null>({
     queryKey: ['loyalty-customer', customerId],
     queryFn: async () => {
       if (!customerId) return null;
       try {
         const [customer, program] = await Promise.all([
-          api.get<{ id: string; phone?: string; loyaltyPoints: number }>(`/businesses/${businessId}/customers/${customerId}`),
+          api.get<{ id: string; phone?: string; kraPin?: string; loyaltyPoints: number; balanceCents: number }>(`/businesses/${businessId}/customers/${customerId}`),
           api.get<{ pointsPerCent: number; redemptionRate: number; minRedemption: number } | null>(`/loyalty/program?businessId=${businessId}`).catch(() => null),
         ]);
         if (customer?.phone) setCustomerPhone(customer.phone);
-        return { loyaltyPoints: customer.loyaltyPoints ?? 0, program: program ?? undefined };
+        if (customer?.kraPin) setCustomerKraPin(customer.kraPin); else setCustomerKraPin(null);
+        return { loyaltyPoints: customer.loyaltyPoints ?? 0, balanceCents: customer.balanceCents ?? 0, program: program ?? undefined };
       } catch { return null; }
     },
     enabled: !!customerId && !!businessId,
@@ -218,7 +224,7 @@ export default function SupermarketPOSPage() {
     if (appliedPromotion.maxDiscountCents && d > appliedPromotion.maxDiscountCents) d = appliedPromotion.maxDiscountCents;
     return d;
   })();
-  const totalDiscountCents = promoDiscountCents + (loyaltyDiscountApplied ? loyaltyDiscountCents : 0);
+  const totalDiscountCents = promoDiscountCents + (loyaltyDiscountApplied ? loyaltyDiscountCents : 0) + manualDiscountCents;
   const taxBase = subtotalCents - totalDiscountCents;
   const vatApplicableTotal = cart.filter((i) => i.vatApplicable).reduce((s, i) => s + i.totalCents, 0);
   const vatApplicableAfterDiscount = vatApplicableTotal * (Math.max(taxBase, 0) / Math.max(subtotalCents, 1));
@@ -229,6 +235,11 @@ export default function SupermarketPOSPage() {
   // ─── Scan / Add item ─────────────────────────────────────────
 
   const addItemById = useCallback((item: ApiItem, qty = 1) => {
+    const isOos = item.trackStock && (item.currentStock ?? 0) <= 0;
+    const canOversell = !item.negativeStockPolicy || item.negativeStockPolicy !== 'BLOCK';
+    if (isOos && canOversell) {
+      toast.warning(`${item.name} is out of stock — added with negative stock`, { duration: 3000 });
+    }
     for (let i = 0; i < qty; i++) addToCart(item);
     setLastScanned(item);
     setFlashItem(item.id);
@@ -302,39 +313,18 @@ export default function SupermarketPOSPage() {
   };
 
   // Camera barcode scanner
-  const startCamera = useCallback(async () => {
-    setShowCamera(true);
-    setCameraError(null);
-    await new Promise<void>((resolve) => setTimeout(resolve, 100));
-    if (!videoRef.current) return;
-    try {
-      const reader = new BrowserMultiFormatReader();
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-      videoRef.current.srcObject = stream;
-      await videoRef.current.play();
-      reader.decodeFromStream(stream, videoRef.current, (result, err) => {
-        if (result) {
-          setScan(result.getText());
-          stream.getTracks().forEach((t) => t.stop());
-          if (videoRef.current) videoRef.current.srcObject = null;
-          setShowCamera(false);
-        }
-        if (err && !(err.message?.includes('No MultiFormat'))) { /* suppress continuous scan noise */ }
-      });
-    } catch (e: unknown) {
-      setCameraError(e instanceof Error ? e.message : 'Camera access denied');
-    }
-  }, []);
+  const startCamera = useCallback(() => setShowCamera(true), []);
 
   // ─── Checkout ────────────────────────────────────────────────
 
   const checkoutMutation = useMutation<SaleResult, Error, Array<{ method: string; amountCents: number; reference?: string }>>({
     mutationFn: (payments) => {
+      const isCredit = payments.some((p) => p.method === 'CREDIT');
       const payload: SalePayload = {
         storeId: effectiveStoreId,
         businessId,
         cashierId: user?.id ?? '',
-        type: 'NORMAL',
+        type: isCredit ? 'CREDIT' : 'NORMAL',
         priceLevel,
         customerId: customerId ?? undefined,
         items: cart.map((i) => ({ itemId: i.id, quantity: i.quantity })),
@@ -345,7 +335,6 @@ export default function SupermarketPOSPage() {
       return api.post<SaleResult>('/sales/checkout', payload);
     },
     onSuccess: (result) => {
-      setLastReceipt(result);
 
       // Broadcast sale complete to pole display
       try {
@@ -379,10 +368,11 @@ export default function SupermarketPOSPage() {
       }
 
       if (customerId) {
-        void api.post('/loyalty/earn', { customerId, saleCents: subtotalCents, saleId: result.id })
-          .then(() => void qc.invalidateQueries({ queryKey: ['loyalty-customer', customerId] }))
-          .catch(() => {});
+        void qc.invalidateQueries({ queryKey: ['loyalty-customer', customerId] });
       }
+
+      const pointsEarned = result.pointsEarned ?? 0;
+      const loyaltyBalance = result.loyaltyBalance ?? 0;
 
       const receipt: ReceiptData = {
         receiptNumber: result.receiptNumber,
@@ -392,6 +382,7 @@ export default function SupermarketPOSPage() {
         cashierName: user?.name ?? 'Cashier',
         customerName: customerName ?? undefined,
         customerPhone: customerPhone ?? undefined,
+        customerKraPin: customerKraPin ?? undefined,
         items: cart.map((item) => ({
           name: item.name,
           quantity: item.quantity,
@@ -406,18 +397,40 @@ export default function SupermarketPOSPage() {
         payments: checkoutMutation.variables ?? [],
         etimsSubmitted: false,
         saleId: result.id,
+        pointsEarned,
+        loyaltyBalance,
+        ...(checkoutMutation.variables?.some((p) => p.method === 'CREDIT') && {
+          isCreditSale: true,
+          previousBalanceCents: loyaltyData?.balanceCents ?? 0,
+          newBalanceCents: (loyaltyData?.balanceCents ?? 0) - result.totalCents,
+        }),
       };
       setReceiptData(receipt);
 
-      void api.post(`/etims/submit/${result.id}`).catch(() => {});
+      api.post<{ success: boolean; controlNumber?: string; intrlData?: string }>(`/etims/submit/${result.id}`)
+        .then((res) => {
+          setReceiptData((prev) => prev ? {
+            ...prev,
+            etimsSubmitted: res.success,
+            kraQRCode: res.intrlData ?? res.controlNumber,
+            etimsControlNumber: res.controlNumber,
+          } : prev);
+        })
+        .catch(() => {
+          setReceiptData((prev) => prev ? { ...prev, etimsSubmitted: false } : prev);
+        })
+        .finally(() => {
+          setLastReceipt(result);
+          setShowPrintModal(true);
+        });
 
       clearCart();
       setLastScanned(null);
       setCustomer(null, null);
       setLoyaltyDiscountApplied(false);
       setLoyaltyDiscountCents(0);
+      setManualDiscountCents(0);
       setShowPayment(false);
-      setShowPrintModal(true);
       qc.invalidateQueries({ queryKey: ['items', businessId] });
     },
   });
@@ -499,7 +512,10 @@ export default function SupermarketPOSPage() {
   const sessionNum = String(Date.now()).slice(-6);
 
   // Filtered items for department view
-  const filteredItems = activeCategory === 'all' ? items : items.filter((i) => i.category === activeCategory);
+  const filteredItems = activeCategory === 'all' ? items : items.filter((i) => {
+    const catId = typeof i.category === 'object' ? i.category?.id : i.category;
+    return catId === activeCategory;
+  });
 
   // ─── Render ──────────────────────────────────────────────────
 
@@ -898,10 +914,10 @@ export default function SupermarketPOSPage() {
               <div className="divide-y divide-slate-800/60">
                 {/* Column headers */}
                 <div className="grid grid-cols-12 px-4 py-1.5 text-xs font-semibold text-slate-600 uppercase tracking-wider bg-slate-900 sticky top-0 z-10">
-                  <div className="col-span-5">Item</div>
+                  <div className="col-span-3">Item</div>
                   <div className="col-span-2 text-center">Qty</div>
+                  <div className="col-span-4 text-center">Discount</div>
                   <div className="col-span-2 text-right">Unit</div>
-                  <div className="col-span-2 text-right">Total</div>
                   <div className="col-span-1" />
                 </div>
                 {cart.map((item, idx) => {
@@ -914,13 +930,10 @@ export default function SupermarketPOSPage() {
                       } hover:bg-slate-800/40 group`}
                     >
                       {/* Item name + SKU */}
-                      <div className="col-span-5 pr-2 min-w-0">
-                        <p className="text-sm text-slate-200 font-medium leading-tight truncate">{item.name}</p>
+                      <div className="col-span-3 pr-1 min-w-0">
+                        <p className="text-xs text-slate-200 font-medium leading-tight truncate">{item.name}</p>
                         {(item as any).sku && (
                           <p className="text-xs text-slate-600 font-mono truncate">{(item as any).sku}</p>
-                        )}
-                        {item.discountPercent && item.discountPercent > 0 && (
-                          <span className="text-xs text-emerald-400">-{item.discountPercent}%</span>
                         )}
                       </div>
                       {/* Qty controls */}
@@ -941,13 +954,44 @@ export default function SupermarketPOSPage() {
                           <Plus className="w-3 h-3" />
                         </button>
                       </div>
+                      {/* Item discount — bidirectional % ↔ KES */}
+                      <div className="col-span-4 flex items-center gap-0.5 px-0.5">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          value={item.discountPercent ? parseFloat(item.discountPercent.toFixed(1)) : ''}
+                          onChange={(e) => updateDiscount(item.id, Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))}
+                          placeholder="0"
+                          className="w-11 px-1 py-0.5 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-600 focus:ring-1 focus:ring-orange-500 outline-none text-right"
+                        />
+                        <span className="text-slate-600 text-[10px]">%</span>
+                        <span className="text-slate-700 text-[10px]">/</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={item.discountPercent && item.discountPercent > 0
+                            ? Math.round(item.unitPriceCents * item.quantity * item.discountPercent / 100 / 100)
+                            : ''}
+                          onChange={(e) => {
+                            const amt = Math.max(0, parseFloat(e.target.value) || 0);
+                            const base = item.unitPriceCents * item.quantity;
+                            const pct = base > 0 ? Math.min(100, (amt * 100 / base) * 100) : 0;
+                            updateDiscount(item.id, Math.round(pct * 10) / 10);
+                          }}
+                          placeholder="0"
+                          className="w-12 px-1 py-0.5 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-600 focus:ring-1 focus:ring-orange-500 outline-none text-right"
+                        />
+                        <span className="text-slate-600 text-[10px]">K</span>
+                      </div>
                       {/* Unit price */}
                       <div className="col-span-2 text-right">
                         <span className="text-xs text-slate-500 tabular-nums">{fmt(item.unitPriceCents)}</span>
-                      </div>
-                      {/* Line total */}
-                      <div className="col-span-2 text-right">
-                        <span className="text-sm font-semibold text-slate-200 tabular-nums">{fmt(item.totalCents)}</span>
+                        {item.discountPercent && item.discountPercent > 0 && (
+                          <div className="text-emerald-400 text-[10px]">-{item.discountPercent}%</div>
+                        )}
                       </div>
                       {/* Void */}
                       <div className="col-span-1 flex justify-end">
@@ -971,15 +1015,62 @@ export default function SupermarketPOSPage() {
               <span>Subtotal ({cart.length} line{cart.length !== 1 ? 's' : ''})</span>
               <span className="font-mono tabular-nums text-slate-400">KES {fmt(subtotalCents)}</span>
             </div>
-            {totalDiscountCents > 0 && (
+            {promoDiscountCents > 0 && (
               <div className="flex justify-between text-[13px] text-emerald-400">
                 <span className="flex items-center gap-1">
                   <ChevronUp className="w-3.5 h-3.5" />
-                  {appliedPromotion?.name ?? 'Discount'}
+                  {appliedPromotion?.name ?? 'Promo'}
                 </span>
-                <span className="font-mono tabular-nums">− KES {fmt(totalDiscountCents)}</span>
+                <span className="font-mono tabular-nums">− KES {fmt(promoDiscountCents)}</span>
               </div>
             )}
+            {/* Manual sale discount — bidirectional % ↔ KES */}
+            <div className="space-y-1 py-1 border-y border-slate-800/60">
+              <div className="flex items-center gap-1.5">
+                <span className="text-slate-500 text-xs whitespace-nowrap w-14">Discount</span>
+                <div className="flex items-center gap-1 flex-1">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    value={subtotalCents > 0 ? parseFloat(((manualDiscountCents / subtotalCents) * 100).toFixed(1)) || '' : ''}
+                    onChange={(e) => {
+                      const pct = Math.min(100, Math.max(0, parseFloat(e.target.value) || 0));
+                      setManualDiscountCents(Math.round(subtotalCents * pct / 100));
+                    }}
+                    placeholder="0"
+                    className="w-14 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-600 focus:ring-1 focus:ring-orange-500 focus:border-orange-500 outline-none text-right"
+                  />
+                  <span className="text-slate-600 text-xs">%</span>
+                  <span className="text-slate-700 text-xs">/</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={manualDiscountCents > 0 ? (manualDiscountCents / 100).toFixed(0) : ''}
+                    onChange={(e) => {
+                      const amt = Math.max(0, parseFloat(e.target.value) || 0);
+                      setManualDiscountCents(Math.min(Math.round(amt * 100), subtotalCents));
+                    }}
+                    placeholder="0"
+                    className="w-16 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-600 focus:ring-1 focus:ring-orange-500 focus:border-orange-500 outline-none text-right"
+                  />
+                  <span className="text-slate-600 text-xs">KES</span>
+                  {manualDiscountCents > 0 && (
+                    <button onClick={() => setManualDiscountCents(0)} className="text-slate-600 hover:text-red-400 ml-auto">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              {manualDiscountCents > 0 && (
+                <div className="flex justify-between text-orange-400 text-[12px] font-semibold">
+                  <span>Sale discount</span>
+                  <span>− KES {fmt(manualDiscountCents)}</span>
+                </div>
+              )}
+            </div>
             <div className="flex justify-between text-[12px] text-slate-600">
               <span>VAT (16% incl.)</span>
               <span className="font-mono tabular-nums">KES {fmt(vatCents)}</span>
@@ -1088,24 +1179,10 @@ export default function SupermarketPOSPage() {
 
       {/* ══════════════ CAMERA MODAL ══════════════ */}
       {showCamera && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-          <div className="bg-slate-800 rounded-2xl p-4 w-full max-w-md">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-slate-200">Scan Barcode</h3>
-              <button onClick={() => {
-                if (videoRef.current?.srcObject) {
-                  (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
-                  videoRef.current.srcObject = null;
-                }
-                setShowCamera(false);
-              }} className="text-slate-400 hover:text-slate-200">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <video ref={videoRef} className="w-full rounded-lg bg-black" style={{ height: 280 }} />
-            {cameraError && <p className="text-red-400 text-sm mt-2">{cameraError}</p>}
-          </div>
-        </div>
+        <CameraModal
+          onScan={(barcode) => { setScan(barcode); setShowCamera(false); }}
+          onClose={() => setShowCamera(false)}
+        />
       )}
 
       {/* ══════════════ MODALS ══════════════ */}
@@ -1116,6 +1193,8 @@ export default function SupermarketPOSPage() {
           onCancel={() => setShowPayment(false)}
           isProcessing={checkoutMutation.isPending}
           businessId={businessId}
+          customerName={customerName}
+          customerId={customerId}
         />
       )}
 

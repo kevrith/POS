@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useDialog } from '../components/Dialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   DollarSign, Plus, CheckCircle, CreditCard, Printer,
@@ -673,6 +674,7 @@ export default function PayrollPage() {
   const user = useAuthStore(s => s.user);
   const businessId = user?.businessId ?? '';
   const queryClient = useQueryClient();
+  const { confirm } = useDialog();
 
   const now = new Date();
   const [activeTab, setActiveTab] = useState<Tab>('overview');
@@ -835,7 +837,7 @@ export default function PayrollPage() {
             )}
             {canManage && selectedRun.status === 'PAID' && (
               <button
-                onClick={() => { if (confirm('Send M-Pesa B2C disbursements to all employees?')) b2cMutation.mutate(selectedRun.id); }}
+                onClick={async () => { const ok = await confirm({ title: 'Send M-Pesa Disbursements', message: 'Send M-Pesa B2C disbursements to all employees? This action will initiate real payments.', variant: 'warning', confirmLabel: 'Send Payments' }); if (ok) b2cMutation.mutate(selectedRun.id); }}
                 disabled={b2cMutation.isPending}
                 className="flex items-center gap-1 px-3 py-1.5 bg-green-700 text-white rounded hover:bg-green-800 text-sm disabled:opacity-50"
               >
@@ -845,10 +847,9 @@ export default function PayrollPage() {
             )}
             {canManage && selectedRun.status === 'DRAFT' && (
               <button
-                onClick={() => {
-                  if (confirm('Delete this draft payroll run?')) {
-                    deleteMutation.mutate(selectedRun.id);
-                  }
+                onClick={async () => {
+                  const ok = await confirm({ title: 'Delete Payroll Run', message: 'Delete this draft payroll run? This cannot be undone.', variant: 'danger', confirmLabel: 'Delete' });
+                  if (ok) deleteMutation.mutate(selectedRun.id);
                 }}
                 disabled={deleteMutation.isPending}
                 className="flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white rounded hover:bg-red-700 text-sm disabled:opacity-50"

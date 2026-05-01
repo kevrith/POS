@@ -534,11 +534,38 @@ export default function SecuritySettingsPage() {
                     {itaxSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                     Prepare VAT Return
                   </button>
-                  <a href={`/api/v1/reports/vat-return-itax?businessId=${businessId}&startDate=${new Date(new Date().setDate(1)).toISOString().split('T')[0]}&endDate=${new Date().toISOString().split('T')[0]}&format=csv`}
-                    target="_blank" rel="noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">
+                  <button
+                    onClick={async () => {
+                      try {
+                        const today = new Date().toISOString().split('T')[0];
+                        const monthStart = new Date(new Date().setDate(1)).toISOString().split('T')[0];
+                        const res = await api.get<any>(`/reports/vat-return-itax?businessId=${businessId}&startDate=${monthStart}&endDate=${today}`);
+                        const rows: string[][] = [
+                          ['Type', 'Receipt/Ref', 'Date', 'Gross (KES)', 'VAT (KES)'],
+                          ...(res.outputVat?.sales ?? []).map((s: any) => [
+                            'OUTPUT', s.receiptNumber ?? s.id, s.createdAt?.slice(0, 10) ?? '',
+                            ((s.totalCents ?? 0) / 100).toFixed(2), ((s.vatCents ?? 0) / 100).toFixed(2),
+                          ]),
+                          ...(res.inputVat?.expenses ?? []).map((e: any) => [
+                            'INPUT', e.description ?? e.id, e.createdAt?.slice(0, 10) ?? '',
+                            ((e.amountCents ?? 0) / 100).toFixed(2), ((e.vatCents ?? 0) / 100).toFixed(2),
+                          ]),
+                          ['', '', '', '', ''],
+                          ['OUTPUT VAT TOTAL', '', '', '', ((res.outputVat?.totalCents ?? 0) / 100).toFixed(2)],
+                          ['INPUT VAT TOTAL', '', '', '', ((res.inputVat?.totalCents ?? 0) / 100).toFixed(2)],
+                          ['NET VAT PAYABLE', '', '', '', ((res.netVatPayableCents ?? 0) / 100).toFixed(2)],
+                        ];
+                        const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+                        const a = document.createElement('a');
+                        a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+                        a.download = `vat-return-${monthStart}-to-${today}.csv`;
+                        a.click();
+                      } catch { toast.error('Failed to download CSV'); }
+                    }}
+                    className="inline-flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                  >
                     <Download className="w-4 h-4" /> Download CSV
-                  </a>
+                  </button>
                 </div>
               </div>
             </div>

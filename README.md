@@ -175,13 +175,26 @@ pos/
 - Full Kenya payroll: PAYE, NHIF, NSSF, AHL
 - Payslip generation
 
+### Field Sales & B2B Invoicing
+- Sales agents (SALES_AGENT role) create orders on the Agent Dashboard (`/agent`)
+- Office staff manage orders on the Field Orders Kanban (`/field-orders`)
+- **Invoice generation from field orders**: Generate Invoice (full) or Partial Invoice (delivered qty only)
+- **Bulk invoicing**: "Invoice All Delivered" button generates proformas for all DELIVERED orders at once
+- **Invoice link-back**: `FieldOrder.invoiceNumber` + `invoicedAt` saved on generation; shown in Agent Dashboard
+- **Record Payment** directly from the Field Orders detail panel (Cash / M-Pesa / Bank / Cheque)
+- **B2B Invoice PDF**: `GET /api/v1/reports/pdf/field-order-invoice/:orderId` — letterhead, itemized table, payment terms, bank details
+- **WhatsApp/SMS notification**: customer auto-notified on invoice generation (Africa's Talking)
+- **Invoice Ageing Report**: Reports → Field Sales → Invoice Ageing — outstanding invoices bucketed 0-30d / 31-60d / 61-90d / 90+d with CSV export
+- **Save as Invoice/Proforma from POS**: "Save as Invoice / Proforma" button in cart panel (retail/wholesale) saves cart as proforma at current price level
+
 ### Reports
 - X/Z-reports, VAT/TOT, P&L, commissions
 - CSV export on all report tabs
-- PDF generation (VAT report, sale receipt, PO)
+- PDF generation (VAT report, sale receipt, PO, B2B field invoice)
 - AI demand forecasting
 - KRA JSON/CSV export
 - Tamper-evident audit log export
+- Invoice Ageing (field sales outstanding invoices by bucket)
 - 20+ specialized report tabs
 
 ### Platform

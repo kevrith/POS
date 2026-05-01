@@ -9,8 +9,8 @@ export class LoyaltyController {
   async createProgram(@Body() data: {
     businessId: string;
     name: string;
-    pointsPerCent: number;
-    redemptionRate: number;
+    kesPerPoint: number;
+    pointValueCents: number;
     minRedemption: number;
   }) {
     return this.loyaltyService.createProgram(data);

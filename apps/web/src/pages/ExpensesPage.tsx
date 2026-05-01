@@ -501,12 +501,16 @@ export default function ExpensesPage() {
 
   const { start, end } = dateRangeForPeriod(period);
 
+  const isCashier = user?.role === 'CASHIER' || user?.role === 'WAITER';
+
   const { data: expenses = [], isLoading, refetch } = useQuery<Expense[]>({
-    queryKey: ['expenses', businessId, start, end, categoryFilter, statusFilter],
+    queryKey: ['expenses', businessId, start, end, categoryFilter, statusFilter, isCashier ? userId : ''],
     queryFn: () => {
       let url = `/expenses?businessId=${businessId}&startDate=${start}&endDate=${end}`;
       if (categoryFilter !== 'ALL') url += `&category=${categoryFilter}`;
       if (statusFilter !== 'ALL') url += `&approvalStatus=${statusFilter}`;
+      // Cashiers only see their own expenses
+      if (isCashier && userId) url += `&submittedBy=${encodeURIComponent(userId)}`;
       return api.get<Expense[]>(url);
     },
     enabled: !!businessId,

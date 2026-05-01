@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { api, getToken } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
+import { useDialog } from '../components/Dialog';
 
 const formatKES = (cents: number) =>
   'KES ' + (cents / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 });
@@ -47,6 +48,7 @@ export default function ReconciliationPage() {
   const user = useAuthStore(s => s.user);
   const businessId = user?.businessId ?? '';
   const storeId = user?.storeId;
+  const { confirm } = useDialog();
   const [tab, setTab] = useState<Tab>('statements');
 
   // Statements
@@ -110,7 +112,8 @@ export default function ReconciliationPage() {
   };
 
   const handleDeleteStatement = async (id: string, name: string) => {
-    if (!window.confirm(`Delete statement "${name}"?`)) return;
+    const ok = await confirm({ title: 'Delete Statement', message: `Delete "${name}"? All matched entries will be unmatched. This cannot be undone.`, variant: 'danger', confirmLabel: 'Delete' });
+    if (!ok) return;
     try {
       await api.delete(`/payments/reconciliation/statements/${id}`);
       await loadStatements();

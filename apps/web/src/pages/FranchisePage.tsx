@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
+import { useDialog } from '../components/Dialog';
 import {
   Building2, TrendingUp, DollarSign, Users, Link2, Unlink,
   Download, AlertTriangle, ChevronUp, ChevronDown, RefreshCw,
@@ -56,6 +57,7 @@ interface SettingsData {
 export default function FranchisePage() {
   const user = useAuthStore((s) => s.user);
   const businessId = user?.businessId ?? '';
+  const { confirm } = useDialog();
 
   const [activeTab, setActiveTab] = useState<Tab>('network');
 
@@ -164,7 +166,8 @@ export default function FranchisePage() {
 
   // Unlink franchisee
   const handleUnlink = async (franchiseeId: string, name: string) => {
-    if (!window.confirm(`Remove "${name}" from your franchise network? This will clear their fee and royalty settings.`)) return;
+    const ok = await confirm({ title: 'Remove Franchisee', message: `Remove "${name}" from your franchise network? This will clear their fee and royalty settings.`, variant: 'danger', confirmLabel: 'Remove' });
+    if (!ok) return;
     try {
       await api.delete(`/franchise/link/${franchiseeId}`);
       loadNetwork();

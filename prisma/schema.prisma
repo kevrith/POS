@@ -13,7 +13,7 @@ model Business {
   name                          String
   taxType                       String                @default("VAT")
   serviceChargeRate             Float                 @default(10)
-  negativePolicyDefault         String                @default("BLOCK")
+  negativePolicyDefault         String                @default("WARN")
   posMode                       String                @default("RETAIL")
   expiredItemPolicy             String                @default("BLOCK")
   expenseApprovalThresholdCents Int?                  @default(500000)
@@ -60,6 +60,7 @@ model Business {
   apiKeys                       ApiKey[]
   appointments                  Appointment[]
   auditLogs                     AuditLog[]
+  categories                    Category[]
   parentBusiness                Business?             @relation("FranchiseHierarchy", fields: [parentBusinessId], references: [id])
   franchisees                   Business[]            @relation("FranchiseHierarchy")
   deliveries                    DeliveryOrder[]
@@ -112,16 +113,37 @@ model User {
   lockedUntil        DateTime?
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
-  employee           Employee?
-  assignedKOTs       KOT[]         @relation("ChefKOTs")
-  orders             Order[]
-  sales              Sale[]
-  business           Business      @relation(fields: [businessId], references: [id])
-  sessions           UserSession[]
-  assignedStores     UserStore[]
-  timeEntries        TimeEntry[]
+  employee              Employee?
+  assignedKOTs          KOT[]                  @relation("ChefKOTs")
+  orders                Order[]
+  sales                 Sale[]
+  business              Business               @relation(fields: [businessId], references: [id])
+  sessions              UserSession[]
+  assignedStores        UserStore[]
+  timeEntries           TimeEntry[]
+  webAuthnCredentials   WebAuthnCredential[]
+  agentCustomers        Customer[]             @relation("AgentCustomers")
+  agentVisits           AgentVisit[]
+  agentFieldOrders      FieldOrder[]           @relation("AgentOrders")
+  driverRuns            DeliveryRun[]          @relation("DriverRuns")
+  creditRequestsBy      CreditApprovalRequest[] @relation("CreditRequestedBy")
+  creditRequestsReviewed CreditApprovalRequest[] @relation("CreditReviewedBy")
 
   @@index([businessId, role])
+}
+
+model WebAuthnCredential {
+  id           String   @id @default(uuid())
+  userId       String
+  credentialId String   @unique
+  publicKeyDer String   // base64url DER-encoded SubjectPublicKeyInfo
+  counter      Int      @default(0)
+  transports   String?  // JSON array e.g. ["internal"]
+  deviceName   String?
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
 }
 
 model UserSession {
@@ -214,13 +236,16 @@ model Item {
   dosageForm           String?
   strength             String?
   interactionWarnings  String    @default("[]")
+  categoryId          String?
   batches              Batch[]
   bundleComponents    BundleComponent[]    @relation("BundleItem")
   componentOf         BundleComponent[]    @relation("ComponentItem")
   damagedGoodsRecords DamagedGoodsRecord[]
   movements           InventoryMovement[]
   store               Store                @relation(fields: [storeId], references: [id])
+  itemCategory        Category?            @relation("CategoryItems", fields: [categoryId], references: [id], onDelete: SetNull)
   variants            ItemVariant[]
+  uoms                ItemUOM[]
   orderItems          OrderItem[]
   ingredientOf        RecipeIngredient[]   @relation("IngredientItem")
   recipeIngredients   RecipeIngredient[]   @relation("RecipeItem")
@@ -232,6 +257,7 @@ model Item {
   @@index([type])
   @@index([barcode])
   @@index([offlineId])
+  @@index([categoryId])
 }
 
 model ItemVariant {
@@ -383,8 +409,29 @@ model Employee {
   housekeepingAssignments    HousekeepingAssignment[]
   leaves                     Leave[]
   leaveBalances              LeaveBalance[]
+  salaryAdvances             SalaryAdvance[]
 
   @@index([businessId])
+}
+
+model SalaryAdvance {
+  id             String    @id @default(uuid())
+  businessId     String
+  employeeId     String
+  amountCents    Int
+  reason         String
+  status         String    @default("PENDING")  // PENDING | APPROVED | REJECTED | DEDUCTED
+  approvedBy     String?
+  rejectedBy     String?
+  rejectionNote  String?
+  deductedAt     DateTime?
+  payrollRunId   String?
+  requestedAt    DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  employee       Employee  @relation(fields: [employeeId], references: [id])
+
+  @@index([businessId])
+  @@index([employeeId])
 }
 
 model ExpenseClaim {
@@ -749,25 +796,46 @@ model Leave {
 }
 
 model Customer {
-  id                      String          @id @default(uuid())
+  id                      String                  @id @default(uuid())
   businessId              String
   name                    String
   phone                   String?
   email                   String?
-  creditLimitCents        Int             @default(0)
-  creditLimitPendingCents Int             @default(0)
-  creditApprovalStatus    String          @default("NONE")
-  balanceCents            Int             @default(0)
-  loyaltyPoints           Int             @default(0)
-  createdAt               DateTime        @default(now())
-  updatedAt               DateTime        @updatedAt
+  creditLimitCents        Int                     @default(0)
+  creditLimitPendingCents Int                     @default(0)
+  creditApprovalStatus    String                  @default("NONE")
+  balanceCents            Int                     @default(0)
+  loyaltyPoints           Int                     @default(0)
+  kraPin                  String?                 // KRA PIN for B2B tax invoice (e.g. A012345678Z)
+  // Field sales extensions
+  shopCode                String?                 @unique
+  shopType                String?                 // RETAIL | WHOLESALE | KIOSK | SUPERMARKET
+  salesAgentId            String?                 // owning User (SALES_AGENT role)
+  routeId                 String?                 // assigned delivery route
+  paymentTermsDays        Int                     @default(7)
+  creditApproved          Boolean                 @default(false)
+  creditApprovedBy        String?
+  creditApprovedAt        DateTime?
+  gpsLat                  Float?
+  gpsLng                  Float?
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
   appointments            Appointment[]
   deliveries              DeliveryOrder[]
+  fieldOrders             FieldOrder[]
   layaways                Layaway[]
+  portalSessions          CustomerPortalSession[]
+  agentVisits             AgentVisit[]
+  creditRequests          CreditApprovalRequest[]
   sales                   Sale[]
+  salesAgent              User?                   @relation("AgentCustomers", fields: [salesAgentId], references: [id])
+  route                   SalesRoute?             @relation(fields: [routeId], references: [id])
 
   @@index([businessId])
   @@index([phone])
+  @@index([shopCode])
+  @@index([salesAgentId])
+  @@index([routeId])
 }
 
 model Layaway {
@@ -990,17 +1058,15 @@ model Shift {
 }
 
 model LoyaltyProgram {
-  id             String   @id @default(uuid())
-  businessId     String
-  name           String
-  pointsPerCent  Float
-  redemptionRate Float
-  minRedemption  Int
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  @@index([businessId])
+  id              String   @id @default(uuid())
+  businessId      String   @unique
+  name            String
+  kesPerPoint     Int      @default(100)   // spend KES X to earn 1 point
+  pointValueCents Int      @default(50)    // 1 point = X cents discount
+  minRedemption   Int      @default(100)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 model LoyaltyTransaction {
@@ -1016,17 +1082,19 @@ model LoyaltyTransaction {
 }
 
 model Return {
-  id                String   @id @default(uuid())
-  offlineId         String   @unique
-  businessId        String
-  saleId            String
-  refundAmountCents Int
-  refundMethod      String
-  reason            String
-  returnedItemIds   String
-  processedBy       String
-  createdAt         DateTime @default(now())
-  sale              Sale     @relation(fields: [saleId], references: [id])
+  id                         String   @id @default(uuid())
+  offlineId                  String   @unique
+  businessId                 String
+  saleId                     String
+  refundAmountCents          Int
+  refundMethod               String
+  reason                     String
+  returnedItemIds            String
+  processedBy                String
+  etimsCreditNoteSubmitted   Boolean  @default(false)
+  etimsCreditNoteRef         String?
+  createdAt                  DateTime @default(now())
+  sale                       Sale     @relation(fields: [saleId], references: [id])
 
   @@index([businessId, saleId])
 }
@@ -1323,6 +1391,7 @@ model DeliveryOrder {
   lat                 Float?
   lng                 Float?
   proofPhotoUrl       String?
+  receivedBy          String?
   notes               String?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
@@ -2463,4 +2532,253 @@ model CyberRate {
   updatedAt   DateTime @updatedAt
 
   @@index([businessId, storeId])
+}
+
+model Category {
+  id         String   @id @default(uuid())
+  businessId String
+  name       String
+  color      String   @default("#6B7280")
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  business   Business @relation(fields: [businessId], references: [id])
+  items      Item[]   @relation("CategoryItems")
+
+  @@unique([businessId, name])
+  @@index([businessId])
+}
+
+model ItemUOM {
+  id               String   @id @default(uuid())
+  itemId           String
+  unitName         String
+  unitAbbrev       String
+  conversionFactor Float    @default(1)
+  isBaseUnit       Boolean  @default(false)
+  priceCents       Int?
+  barcode          String?
+  createdAt        DateTime @default(now())
+  item             Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, unitName])
+  @@index([itemId])
+  @@index([barcode])
+}
+
+// ─── Field Sales / Route-to-Market ──────────────────────────────────────────
+
+model SalesRoute {
+  id           String        @id @default(uuid())
+  businessId   String
+  branchId     String?       // Store id
+  name         String
+  deliveryDays String        @default("[]") // JSON array: ["MON","WED","FRI"]
+  driverUserId String?
+  color        String        @default("#6366F1")
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  customers    Customer[]
+  deliveryRuns DeliveryRun[]
+  fieldOrders  FieldOrder[]
+
+  @@index([businessId])
+  @@index([isActive])
+}
+
+model DeliveryRun {
+  id           String            @id @default(uuid())
+  businessId   String
+  routeId      String
+  date         DateTime          @db.Date
+  driverUserId String?
+  status       String            @default("PLANNED") // PLANNED | IN_PROGRESS | COMPLETED | CANCELLED
+  notes        String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  route        SalesRoute        @relation(fields: [routeId], references: [id])
+  driver       User?             @relation("DriverRuns", fields: [driverUserId], references: [id])
+  orders       DeliveryRunOrder[]
+  expenses     RouteExpense[]
+
+  @@index([businessId, date])
+  @@index([routeId])
+  @@index([status])
+}
+
+model DeliveryRunOrder {
+  id            String        @id @default(uuid())
+  deliveryRunId String
+  fieldOrderId  String
+  sortOrder     Int           @default(0)
+  status        String        @default("PENDING") // PENDING | DELIVERED | PARTIAL | FAILED
+  deliveredAt   DateTime?
+  failureReason String?
+  createdAt     DateTime      @default(now())
+  deliveryRun   DeliveryRun   @relation(fields: [deliveryRunId], references: [id], onDelete: Cascade)
+  fieldOrder    FieldOrder    @relation(fields: [fieldOrderId], references: [id])
+  proof         DeliveryProof?
+
+  @@unique([deliveryRunId, fieldOrderId])
+  @@index([deliveryRunId])
+  @@index([fieldOrderId])
+}
+
+model DeliveryProof {
+  id                 String           @id @default(uuid())
+  fieldOrderId       String
+  deliveryRunOrderId String           @unique
+  signatureBase64    String?          // base64 canvas signature
+  receivedByName     String
+  latitude           Float?
+  longitude          Float?
+  photoUrl           String?
+  notes              String?
+  capturedAt         DateTime         @default(now())
+  fieldOrder         FieldOrder       @relation(fields: [fieldOrderId], references: [id])
+  deliveryRunOrder   DeliveryRunOrder @relation(fields: [deliveryRunOrderId], references: [id])
+
+  @@index([fieldOrderId])
+}
+
+model RouteExpense {
+  id            String      @id @default(uuid())
+  businessId    String
+  deliveryRunId String
+  category      String      // FUEL | DRIVER_ALLOWANCE | FOOD | OTHER
+  amountCents   Int
+  description   String?
+  receiptUrl    String?
+  recordedBy    String      // User.id
+  createdAt     DateTime    @default(now())
+  deliveryRun   DeliveryRun @relation(fields: [deliveryRunId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([deliveryRunId])
+}
+
+model FieldOrder {
+  id                   String             @id @default(uuid())
+  offlineId            String             @unique
+  businessId           String
+  storeId              String?
+  orderNumber          String?            @unique
+  agentId              String             // User.id (SALES_AGENT)
+  customerId           String
+  routeId              String?
+  status               String             @default("DRAFT")
+  // DRAFT | SUBMITTED | CONFIRMED | PACKED | DISPATCHED | DELIVERED | INVOICED | CANCELLED
+  subtotalCents        Int                @default(0)
+  vatCents             Int                @default(0)
+  totalCents           Int                @default(0)
+  isSampleOrder        Boolean            @default(false)
+  notes                String?
+  rejectionReason      String?
+  expectedDeliveryDate DateTime?
+  paymentStatus        String             @default("UNPAID") // UNPAID | PARTIAL | PAID
+  paymentMethod        String?            // MPESA_STK | MPESA_PAYBILL
+  mpesaReference       String?
+  paidAmountCents      Int                @default(0)
+  confirmedAt          DateTime?
+  packedAt             DateTime?
+  dispatchedAt         DateTime?
+  deliveredAt          DateTime?
+  invoiceNumber        String?            // proforma receiptNumber after Generate Invoice
+  invoicedAt           DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  agent                User               @relation("AgentOrders", fields: [agentId], references: [id])
+  customer             Customer           @relation(fields: [customerId], references: [id])
+  route                SalesRoute?        @relation(fields: [routeId], references: [id])
+  items                FieldOrderItem[]
+  deliveryRunOrders    DeliveryRunOrder[]
+  proof                DeliveryProof[]
+  creditRequests       CreditApprovalRequest[]
+
+  @@index([businessId, status])
+  @@index([agentId])
+  @@index([customerId])
+  @@index([routeId])
+  @@index([orderNumber])
+  @@index([paymentStatus])
+}
+
+model FieldOrderItem {
+  id                  String     @id @default(uuid())
+  fieldOrderId        String
+  itemId              String?
+  itemName            String     // snapshot at time of order
+  itemSku             String?
+  quantity            Int
+  unitPriceCents      Int
+  totalCents          Int
+  isSample            Boolean    @default(false)
+  deliveredQuantity   Int        @default(0)
+  backOrderQuantity   Int        @default(0)
+  createdAt           DateTime   @default(now())
+  fieldOrder          FieldOrder @relation(fields: [fieldOrderId], references: [id], onDelete: Cascade)
+
+  @@index([fieldOrderId])
+  @@index([itemId])
+}
+
+model CreditApprovalRequest {
+  id                  String     @id @default(uuid())
+  businessId          String
+  customerId          String
+  fieldOrderId        String?
+  requestedBy         String     // User.id (agent)
+  currentLimitCents   Int
+  requestedLimitCents Int
+  orderTotalCents     Int        @default(0)
+  reason              String?
+  status              String     @default("PENDING") // PENDING | APPROVED | DECLINED
+  reviewedBy          String?    // User.id (manager/owner)
+  reviewedAt          DateTime?
+  reviewNote          String?
+  createdAt           DateTime   @default(now())
+  customer            Customer   @relation(fields: [customerId], references: [id])
+  fieldOrder          FieldOrder? @relation(fields: [fieldOrderId], references: [id])
+  requestedByUser     User       @relation("CreditRequestedBy", fields: [requestedBy], references: [id])
+  reviewedByUser      User?      @relation("CreditReviewedBy", fields: [reviewedBy], references: [id])
+
+  @@index([businessId, status])
+  @@index([customerId])
+  @@index([requestedBy])
+}
+
+model CustomerPortalSession {
+  id           String   @id @default(uuid())
+  customerId   String
+  phone        String
+  sessionToken String   @unique // hashed SHA-256
+  otpHash      String?  // hashed OTP for verification
+  otpExpiresAt DateTime?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@index([phone])
+}
+
+model AgentVisit {
+  id           String     @id @default(uuid())
+  agentId      String     // User.id
+  customerId   String
+  businessId   String
+  fieldOrderId String?
+  outcome      String     @default("VISITED") // VISITED | ORDERED | NO_ANSWER | DECLINED | FOLLOW_UP
+  notes        String?
+  gpsLat       Float?
+  gpsLng       Float?
+  visitedAt    DateTime   @default(now())
+  agent        User       @relation(fields: [agentId], references: [id])
+  customer     Customer   @relation(fields: [customerId], references: [id])
+
+  @@index([agentId])
+  @@index([customerId])
+  @@index([visitedAt])
 }

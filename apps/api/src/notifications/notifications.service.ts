@@ -71,11 +71,12 @@ export class NotificationsService {
     return notification;
   }
 
-  async getNotifications(businessId: string, unreadOnly?: boolean) {
+  async getNotifications(businessId: string, unreadOnly?: boolean, type?: string) {
     return this.prisma.notification.findMany({
       where: {
         businessId,
         ...(unreadOnly ? { isRead: false } : {}),
+        ...(type ? { type } : {}),
       },
       orderBy: { createdAt: 'desc' },
       take: 100,

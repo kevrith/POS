@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Receipt, Ban, Eye, RotateCcw, Printer, MessageSquare, TrendingUp, CheckCircle2, Clock, Calendar, X, Search } from 'lucide-react';
+import { Receipt, Ban, Eye, RotateCcw, Printer, MessageSquare, TrendingUp, CheckCircle2, Clock, Calendar, X, Search, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import VoidModal from '../components/VoidModal';
@@ -20,8 +20,19 @@ interface Sale {
   etimsControlNumber?: string;
 }
 
+interface VoidRecord {
+  id: string;
+  type: string;          // FULL_VOID | LINE_ITEM_VOID | RETURN
+  authorizedBy: string;
+  reason: string;
+  voidedItemIds: string; // comma-separated SaleItem IDs
+  refundAmountCents: number;
+  createdAt: string;
+}
+
 interface SaleDetail extends Sale {
   items: Array<{
+    id: string;
     name: string;
     quantity: number;
     unitPriceCents: number;
@@ -37,9 +48,11 @@ interface SaleDetail extends Sale {
   discountCents: number;
   vatCents: number;
   totCents: number;
+  voidRecords?: VoidRecord[];
 }
 
 type SalesRange = 'today' | 'week' | 'month' | 'custom';
+type StatusFilter = 'ALL' | 'PAID' | 'VOIDED' | 'CANCELLED' | 'AMENDED';
 
 function getSalesDateRange(range: SalesRange, from: string, to: string): { startDate: string; endDate: string } {
   const now = new Date();
@@ -232,6 +245,8 @@ export default function SalesListPage() {
   const [reprintData, setReprintData] = useState<ReceiptData | null>(null);
   const [reprintLoading, setReprintLoading] = useState<string | null>(null);
   const [sendingWhatsApp, setSendingWhatsApp] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
+  const [expandedVoid, setExpandedVoid] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<SalesRange>('month');
   const [searchQuery, setSearchQuery] = useState('');
   const [customFrom, setCustomFrom] = useState(() => {
@@ -248,25 +263,32 @@ export default function SalesListPage() {
     [dateRange, customFrom, customTo],
   );
 
-  const { data: sales = [], isLoading } = useQuery<Sale[]>({
+  const { data: allSales = [], isLoading } = useQuery<Sale[]>({
     queryKey: ['sales', businessId, storeId, startDate, endDate, searchQuery],
     queryFn: () => {
-      const params = new URLSearchParams({
-        businessId,
-        limit: '500',
-        startDate,
-        endDate,
-      });
-      // Only scope to a store if the user is assigned to one (cashiers/managers)
-      // Owners have no storeId and should see all stores
+      const params = new URLSearchParams({ businessId, limit: '500', startDate, endDate });
       if (storeId) params.append('storeId', storeId);
-      if (searchQuery.trim()) {
-        params.append('receiptNumber', searchQuery.trim());
-      }
+      if (searchQuery.trim()) params.append('receiptNumber', searchQuery.trim());
       return api.get<{ data: Sale[] }>(`/sales?${params.toString()}`).then(r => r.data);
     },
     enabled: !!businessId,
   });
+
+  const { data: voidedReturns = [], isLoading: voidedLoading } = useQuery<SaleDetail[]>({
+    queryKey: ['voided-returns', businessId, storeId, startDate, endDate],
+    queryFn: () => {
+      const params = new URLSearchParams({ businessId, startDate, endDate });
+      if (storeId) params.append('storeId', storeId);
+      return api.get<SaleDetail[]>(`/sales/voided-returns?${params.toString()}`);
+    },
+    enabled: !!businessId && statusFilter === 'VOIDED',
+  });
+
+  const sales = useMemo(() => {
+    if (statusFilter === 'VOIDED') return [];
+    if (statusFilter === 'ALL') return allSales;
+    return allSales.filter(s => s.status === statusFilter);
+  }, [allSales, statusFilter]);
 
   const formatKES = (cents: number) =>
     `KES ${(cents / 100).toLocaleString('en-KE', {
@@ -284,16 +306,25 @@ export default function SalesListPage() {
   const handleReprint = async (sale: Sale) => {
     setReprintLoading(sale.id);
     try {
-      const detail = await api.get<SaleDetail>(`/sales/${sale.id}?businessId=${businessId}`);
+      const [detail, biz] = await Promise.all([
+        api.get<SaleDetail>(`/sales/${sale.id}?businessId=${businessId}`),
+        api.get<{ name?: string; storeName?: string }>(`/business/${businessId}/settings`).catch(() => ({})),
+      ]);
+      // Use customerId FK field — always present without needing the relation include
+      const customerId = (detail as any).customerId ?? detail.customer?.id ?? sale.customer?.id;
+      const loyaltyData = customerId
+        ? await api.get<{ balance: number; transactions: Array<{ points: number; type: string; saleId?: string }> }>(`/loyalty/customer/${customerId}`).catch(() => null)
+        : null;
       const isVoided = sale.status === 'VOIDED';
+      const earnedTx = loyaltyData?.transactions.find(t => t.type === 'EARN' && t.saleId === sale.id);
       const receipt: ReceiptData = {
         receiptNumber: detail.receiptNumber,
-        businessName: user?.name ? `${user.name}'s Business` : 'Universal POS',
-        storeName: 'Main Store',
+        businessName: (biz as any)?.name ?? 'KASTRA POS',
+        storeName: (biz as any)?.storeName ?? '',
         date: detail.createdAt,
         cashierName: detail.cashier?.name ?? 'Cashier',
-        customerName: detail.customer?.name,
-        customerPhone: detail.customer?.phone,
+        customerName: detail.customer?.name ?? (detail as any).customerName ?? undefined,
+        customerPhone: detail.customer?.phone ?? (detail as any).customerPhone ?? undefined,
         items: detail.items.map(item => ({
           name: item.name,
           quantity: item.quantity,
@@ -302,7 +333,6 @@ export default function SalesListPage() {
         })),
         subtotalCents: detail.subtotalCents,
         serviceChargeCents: detail.serviceChargeCents,
-        // Recalculate tax using inclusive formula (fixes historical data stored with exclusive formula)
         vatCents: detail.totCents > 0 ? 0 : Math.round(Math.max(0, detail.subtotalCents - detail.discountCents) * 16 / 116),
         totCents: detail.totCents > 0 ? Math.round(Math.max(0, detail.subtotalCents - detail.discountCents) * 3 / 103) : 0,
         totalCents: detail.totalCents,
@@ -311,6 +341,8 @@ export default function SalesListPage() {
         etimsSubmitted: isVoided ? undefined : detail.etimsSubmitted,
         voided: isVoided,
         saleId: detail.id,
+        pointsEarned: earnedTx?.points ?? 0,
+        loyaltyBalance: loyaltyData?.balance ?? 0,
       };
       setReprintData(receipt);
       setShowPrintModal(true);
@@ -339,10 +371,14 @@ export default function SalesListPage() {
     }
   };
 
-  const totalRevenue = sales.reduce((s, sale) => s + (sale.status !== 'VOIDED' ? sale.totalCents : 0), 0);
-  const paidCount = sales.filter((s) => s.status === 'PAID').length;
-  const voidedCount = sales.filter((s) => s.status === 'VOIDED').length;
-  const pendingKraCount = sales.filter((s) => s.etimsSubmitted === false && s.status === 'PAID').length;
+  const totalRevenue = allSales.reduce((s, sale) => s + (sale.status === 'PAID' ? sale.totalCents : 0), 0);
+  const paidCount = allSales.filter((s) => s.status === 'PAID').length;
+  const voidedCount = allSales.filter((s) => s.status === 'VOIDED').length;
+  const returnedCount = allSales.filter((s) => s.status === 'CANCELLED').length;
+  const amendedCount = allSales.filter((s) => s.status === 'AMENDED').length;
+  const pendingKraCount = allSales.filter((s) => s.etimsSubmitted === false && s.status === 'PAID').length;
+  const totalVoidedAmount = allSales.filter(s => s.status === 'VOIDED').reduce((s, sale) => s + sale.totalCents, 0);
+  const totalReturnedAmount = allSales.filter(s => s.status === 'CANCELLED').reduce((s, sale) => s + sale.totalCents, 0);
 
   return (
     <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900">
@@ -411,55 +447,184 @@ export default function SalesListPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-5">
+
+        {/* Status filter tabs */}
+        <div className="flex gap-2 flex-wrap">
+          {([
+            { key: 'ALL',       label: 'All Sales',   count: allSales.length,  color: 'blue' },
+            { key: 'PAID',      label: 'Completed',   count: paidCount,        color: 'green' },
+            { key: 'VOIDED',    label: 'Voided',      count: voidedCount,      color: 'red' },
+            { key: 'CANCELLED', label: 'Returns',     count: returnedCount,    color: 'orange' },
+            { key: 'AMENDED',   label: 'Amended',     count: amendedCount,     color: 'yellow' },
+          ] as Array<{ key: StatusFilter; label: string; count: number; color: string }>).map(({ key, label, count, color }) => (
+            <button
+              key={key}
+              onClick={() => setStatusFilter(key)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
+                statusFilter === key
+                  ? color === 'blue'   ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                  : color === 'green'  ? 'bg-green-600 text-white border-green-600 shadow-sm'
+                  : color === 'red'    ? 'bg-red-600 text-white border-red-600 shadow-sm'
+                  : color === 'orange' ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
+                  :                     'bg-yellow-500 text-white border-yellow-500 shadow-sm'
+                  : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+              }`}
+            >
+              {label}
+              <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
+                statusFilter === key ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+              }`}>{count}</span>
+            </button>
+          ))}
+        </div>
+
         {/* Summary stat cards */}
-        {!isLoading && sales.length > 0 && (
+        {!isLoading && allSales.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
-              {
-                label: 'Total Revenue',
-                value: formatKES(totalRevenue),
-                icon: TrendingUp,
-                iconColor: 'text-green-600 dark:text-green-400',
-                bg: 'bg-green-50 dark:bg-green-900/20',
-                valueColor: 'text-green-700 dark:text-green-400',
-              },
-              {
-                label: 'Transactions',
-                value: sales.length.toLocaleString(),
-                icon: Receipt,
-                iconColor: 'text-blue-600 dark:text-blue-400',
-                bg: 'bg-blue-50 dark:bg-blue-900/20',
-                valueColor: 'text-blue-700 dark:text-blue-400',
-              },
-              {
-                label: 'Completed',
-                value: paidCount.toLocaleString(),
-                icon: CheckCircle2,
-                iconColor: 'text-indigo-600 dark:text-indigo-400',
-                bg: 'bg-indigo-50 dark:bg-indigo-900/20',
-                valueColor: 'text-indigo-700 dark:text-indigo-400',
-              },
-              {
-                label: 'Voided',
-                value: voidedCount.toLocaleString(),
-                icon: Ban,
-                iconColor: 'text-red-500 dark:text-red-400',
-                bg: 'bg-red-50 dark:bg-red-900/20',
-                valueColor: 'text-red-600 dark:text-red-400',
-              },
+              { label: 'Total Revenue', value: formatKES(totalRevenue), icon: TrendingUp, iconColor: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20', valueColor: 'text-green-700 dark:text-green-400' },
+              { label: 'Transactions', value: allSales.length.toLocaleString(), icon: Receipt, iconColor: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20', valueColor: 'text-blue-700 dark:text-blue-400' },
+              { label: 'Voided', value: `${voidedCount} · ${formatKES(totalVoidedAmount)}`, icon: Ban, iconColor: 'text-red-500 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20', valueColor: 'text-red-600 dark:text-red-400' },
+              { label: 'Returns', value: `${returnedCount} · ${formatKES(totalReturnedAmount)}`, icon: RotateCcw, iconColor: 'text-orange-500 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/20', valueColor: 'text-orange-600 dark:text-orange-400' },
             ].map(({ label, value, icon: Icon, iconColor, bg, valueColor }) => (
               <div key={label} className={`${bg} rounded-xl p-4`}>
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{label}</p>
                   <Icon className={`w-4 h-4 ${iconColor}`} />
                 </div>
-                <p className={`text-xl font-bold ${valueColor}`}>{value}</p>
+                <p className={`text-sm font-bold ${valueColor}`}>{value}</p>
               </div>
             ))}
           </div>
         )}
 
-        {isLoading ? (
+        {/* ── Voided / Returns detailed view ── */}
+        {statusFilter === 'VOIDED' && (
+          voidedLoading ? (
+            <div className="flex items-center justify-center py-20 gap-3">
+              <div className="w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+              <p className="text-sm text-gray-400">Loading voided & returns...</p>
+            </div>
+          ) : voidedReturns.length === 0 ? (
+            <div className="text-center py-20 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700">
+              <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-green-400" />
+              <p className="text-gray-600 dark:text-gray-300 font-semibold">No voided sales or returns</p>
+              <p className="text-sm text-gray-400 mt-1">All sales in this period are intact</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-red-600 dark:text-red-400">
+                <AlertTriangle className="w-4 h-4" />
+                {voidedReturns.length} voided/returned transactions — {formatKES(voidedReturns.reduce((s, v) => s + v.totalCents, 0))} total value
+              </div>
+              {voidedReturns.map((sale) => {
+                const isExpanded = expandedVoid === sale.id;
+                const vr = sale.voidRecords ?? [];
+                const voidedItemIdSet = new Set(vr.flatMap(r => r.voidedItemIds.split(',').filter(Boolean)));
+                return (
+                  <div key={sale.id} className="bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-900/40 shadow-sm overflow-hidden">
+                    <button
+                      className="w-full flex items-center gap-4 px-5 py-4 text-left hover:bg-red-50/40 dark:hover:bg-red-900/10 transition-colors"
+                      onClick={() => setExpandedVoid(isExpanded ? null : sale.id)}
+                    >
+                      {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono font-semibold text-sm text-gray-900 dark:text-white">{sale.receiptNumber}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
+                            sale.status === 'VOIDED'    ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                            sale.status === 'CANCELLED' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
+                            'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                          }`}>{sale.status === 'CANCELLED' ? 'RETURNED' : sale.status}</span>
+                          {sale.customer?.name && <span className="text-xs text-gray-500 dark:text-gray-400">{sale.customer.name}</span>}
+                        </div>
+                        <div className="flex items-center gap-4 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          <span>{new Date(sale.createdAt).toLocaleString('en-KE', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                          <span>{sale.cashier?.name ?? 'N/A'}</span>
+                          {vr[0] && <span className="text-red-500 dark:text-red-400">Reason: {vr[0].reason}</span>}
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="font-bold text-gray-900 dark:text-white">{formatKES(sale.totalCents)}</p>
+                        {vr[0] && <p className="text-xs text-red-500 dark:text-red-400">Refund: {formatKES(vr[0].refundAmountCents)}</p>}
+                      </div>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="border-t border-gray-100 dark:border-gray-700 px-5 pb-5 pt-4 space-y-4">
+                        {/* Items table */}
+                        <div>
+                          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Items</p>
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="text-xs text-gray-400 border-b border-gray-100 dark:border-gray-700">
+                                <th className="pb-1.5 text-left font-medium">Item</th>
+                                <th className="pb-1.5 text-center font-medium">Qty</th>
+                                <th className="pb-1.5 text-right font-medium">Amount</th>
+                                <th className="pb-1.5 text-center font-medium">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50 dark:divide-gray-700/50">
+                              {sale.items?.map(item => {
+                                const wasVoided = voidedItemIdSet.has(item.id) || sale.status === 'VOIDED';
+                                return (
+                                  <tr key={item.id} className={wasVoided ? 'opacity-60' : ''}>
+                                    <td className="py-2 text-gray-800 dark:text-gray-200">
+                                      <span className={wasVoided ? 'line-through' : ''}>{item.name}</span>
+                                    </td>
+                                    <td className="py-2 text-center text-gray-500 dark:text-gray-400">{item.quantity}</td>
+                                    <td className="py-2 text-right text-gray-700 dark:text-gray-300">{formatKES(item.totalCents)}</td>
+                                    <td className="py-2 text-center">
+                                      {wasVoided
+                                        ? <span className="text-xs bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-full font-medium">{sale.status === 'CANCELLED' ? 'Returned' : 'Voided'}</span>
+                                        : <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 px-2 py-0.5 rounded-full font-medium">Kept</span>
+                                      }
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Void records */}
+                        {vr.length > 0 && (
+                          <div className="bg-red-50 dark:bg-red-900/10 rounded-xl p-4 space-y-2">
+                            <p className="text-xs font-semibold text-red-700 dark:text-red-400 uppercase tracking-wide">Void / Return Record</p>
+                            {vr.map(record => (
+                              <div key={record.id} className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                                <div><span className="text-gray-500 dark:text-gray-400 text-xs">Type:</span> <span className="font-medium text-gray-800 dark:text-gray-200">{record.type.replace('_', ' ')}</span></div>
+                                <div><span className="text-gray-500 dark:text-gray-400 text-xs">Refund:</span> <span className="font-bold text-red-600 dark:text-red-400">{formatKES(record.refundAmountCents)}</span></div>
+                                <div className="col-span-2"><span className="text-gray-500 dark:text-gray-400 text-xs">Reason:</span> <span className="font-medium text-gray-800 dark:text-gray-200"> {record.reason}</span></div>
+                                <div><span className="text-gray-500 dark:text-gray-400 text-xs">Authorized by:</span> <span className="font-medium text-gray-800 dark:text-gray-200"> {record.authorizedBy}</span></div>
+                                <div><span className="text-gray-500 dark:text-gray-400 text-xs">Date:</span> <span className="text-gray-600 dark:text-gray-300"> {new Date(record.createdAt).toLocaleString('en-KE')}</span></div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Reprint button */}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => void handleReprint(sale as Sale)}
+                            disabled={reprintLoading === sale.id}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 rounded-lg transition-colors disabled:opacity-50"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                            {reprintLoading === sale.id ? 'Loading...' : 'Reprint Receipt'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )
+        )}
+
+        {/* ── Regular sales list ── */}
+        {statusFilter !== 'VOIDED' && (isLoading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
             <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
             <p className="text-sm text-gray-400 dark:text-gray-500">Loading sales...</p>
@@ -606,7 +771,7 @@ export default function SalesListPage() {
               </tbody>
             </table>
           </div>
-        )}
+        ))}
       </div>
 
       {/* View Sale Modal */}

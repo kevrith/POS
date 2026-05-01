@@ -1,10 +1,11 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { MessageSquare, X, ShoppingCart, Clock } from 'lucide-react';
-import { BrowserMultiFormatReader } from '@zxing/browser';
+import { BrowserMultiFormatReader as _BrowserMultiFormatReader } from '@zxing/browser'; // kept for HW scanner
 import { api } from '../lib/api';
-import { usePOSStore, type ApiItem, type PriceLevel, type CartItem } from '../stores/pos';
+import { usePOSStore, type ApiItem, type PriceLevel, type CartItem, type ItemUOM } from '../stores/pos';
 import { useAuthStore } from '../stores/auth';
 import PaymentModal from '../components/PaymentModal';
 import HeldSalesModal from '../components/HeldSalesModal';
@@ -25,7 +26,7 @@ interface SalePayload {
   storeId: string;
   businessId: string;
   cashierId: string;
-  type: 'NORMAL';
+  type: 'NORMAL' | 'CREDIT';
   priceLevel: PriceLevel;
   customerId?: string;
   items: Array<{ itemId: string; quantity: number }>;
@@ -51,6 +52,8 @@ interface SaleResult {
   id: string;
   receiptNumber: string;
   totalCents: number;
+  pointsEarned?: number;
+  loyaltyBalance?: number;
 }
 
 interface Category {
@@ -83,6 +86,7 @@ export default function POSPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
 
   const {
     cart, addToCart, addWeightedToCart, removeFromCart, updateQuantity, updateDiscount, updateUnitPrice, clearCart,
@@ -104,11 +108,12 @@ export default function POSPage() {
   const [serviceChargeEnabled, setServiceChargeEnabled] = useState(false);
   const [loyaltyDiscountApplied, setLoyaltyDiscountApplied] = useState(false);
   const [loyaltyDiscountCents, setLoyaltyDiscountCents] = useState(0);
+  const [manualDiscountCents, setManualDiscountCents] = useState(0);
   const [customerPhone, setCustomerPhone] = useState<string | null>(null);
   const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
   const [barcodeToast, setBarcodeToast] = useState<string | null>(null);
+  const [uomPickerItem, setUomPickerItem] = useState<ApiItem | null>(null);
   const [tipInput, setTipInput] = useState('');
   const [expiryWarnings, setExpiryWarnings] = useState<Array<{ itemId: string; name: string; status: string; expiryDate?: string }>>([]);
   const [showExpiryWarning, setShowExpiryWarning] = useState(false);
@@ -121,9 +126,16 @@ export default function POSPage() {
   // NPS
   const [showNPS, setShowNPS] = useState(false);
   const [lastSaleId, setLastSaleId] = useState('');
+  const [pendingAutoLogout, setPendingAutoLogout] = useState(false);
+  // Save as Invoice modal
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [invoiceCustomerName, setInvoiceCustomerName] = useState('');
+  const [invoiceCustomerPhone, setInvoiceCustomerPhone] = useState('');
+  const [invoiceValidUntil, setInvoiceValidUntil] = useState('');
+  const [invoiceNotes, setInvoiceNotes] = useState('');
 
   const searchRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null); // kept for HW scanner ref if needed
 
   const businessId = user?.businessId ?? '';
   const storeId = user?.storeId ?? '';
@@ -266,17 +278,17 @@ export default function POSPage() {
         try { return businessSettings?.displayCurrencies ? JSON.parse(businessSettings.displayCurrencies) : []; } catch { return []; }
       })();
 
-  const { data: loyaltyData } = useQuery<{ loyaltyPoints: number; program?: { redemptionRate: number; minRedemption: number } } | null>({
+  const { data: loyaltyData } = useQuery<{ loyaltyPoints: number; balanceCents: number; program?: { pointValueCents: number; minRedemption: number } } | null>({
     queryKey: ['loyalty-customer', customerId],
     queryFn: async () => {
       if (!customerId) return null;
       try {
         const [customer, program] = await Promise.all([
-          api.get<{ id: string; phone?: string; loyaltyPoints: number }>(`/businesses/${businessId}/customers/${customerId}`),
-          api.get<{ pointsPerCent: number; redemptionRate: number; minRedemption: number } | null>(`/loyalty/program?businessId=${businessId}`).catch(() => null),
+          api.get<{ id: string; phone?: string; loyaltyPoints: number; balanceCents: number }>(`/businesses/${businessId}/customers/${customerId}`),
+          api.get<{ kesPerPoint: number; pointValueCents: number; minRedemption: number } | null>(`/loyalty/program?businessId=${businessId}`).catch(() => null),
         ]);
         if (customer?.phone) setCustomerPhone(customer.phone);
-        return { loyaltyPoints: customer.loyaltyPoints ?? 0, program: program ?? undefined };
+        return { loyaltyPoints: customer.loyaltyPoints ?? 0, balanceCents: customer.balanceCents ?? 0, program: program ?? undefined };
       } catch {
         return null;
       }
@@ -298,7 +310,10 @@ export default function POSPage() {
         i.barcode?.toLowerCase().includes(search.toLowerCase()) ||
         (i as any).sku?.toLowerCase().includes(search.toLowerCase())
       )
-    : activeCategory === 'all' ? items : items.filter((i) => i.category === activeCategory);
+    : activeCategory === 'all' ? items : items.filter((i) => {
+        const catId = typeof i.category === 'object' ? i.category?.id : i.category;
+        return catId === activeCategory;
+      });
   const subtotalCents = cart.reduce((s, i) => s + i.totalCents, 0);
   const serviceChargeCents = serviceChargeEnabled ? Math.round(subtotalCents * serviceChargeRate / 100) : 0;
   const cartItemIds = cart.map((i) => i.id);
@@ -316,7 +331,7 @@ export default function POSPage() {
     if (appliedPromotion.maxDiscountCents && d > appliedPromotion.maxDiscountCents) d = appliedPromotion.maxDiscountCents;
     return d;
   })();
-  const totalDiscountCents = promoDiscountCents + (loyaltyDiscountApplied ? loyaltyDiscountCents : 0);
+  const totalDiscountCents = promoDiscountCents + (loyaltyDiscountApplied ? loyaltyDiscountCents : 0) + manualDiscountCents;
   const taxBase = subtotalCents - totalDiscountCents;
   const vatApplicableTotal = cart.filter((i) => i.vatApplicable).reduce((s, i) => s + i.totalCents, 0);
   const vatApplicableAfterDiscount = vatApplicableTotal * (Math.max(taxBase, 0) / Math.max(subtotalCents, 1));
@@ -374,15 +389,52 @@ export default function POSPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showPayment]);
 
+  // ─── Save as Invoice ──────────────────────────────────────────────────────
+
+  const saveAsInvoiceMutation = useMutation({
+    mutationFn: () =>
+      api.post('/sales/proformas', {
+        businessId,
+        storeId: effectiveStoreId,
+        customerName: invoiceCustomerName || 'Walk-in',
+        customerPhone: invoiceCustomerPhone || undefined,
+        priceLevel,
+        validUntil: invoiceValidUntil || undefined,
+        notes: invoiceNotes || undefined,
+        items: cart.map((i) => ({
+          name: i.name,
+          quantity: i.quantity,
+          unitPriceCents: i.unitPriceCents,
+          discountPercent: i.discountPercent ?? 0,
+        })),
+      }),
+    onSuccess: () => {
+      toast.success('Invoice saved as proforma — view it under Sales > Proformas');
+      setShowInvoiceModal(false);
+      setInvoiceCustomerName('');
+      setInvoiceCustomerPhone('');
+      setInvoiceValidUntil('');
+      setInvoiceNotes('');
+    },
+    onError: (e: Error) => toast.error(`Failed to save invoice: ${e.message}`),
+  });
+
+  const handleOpenInvoiceModal = () => {
+    setInvoiceCustomerName(customerName ?? '');
+    setInvoiceCustomerPhone(customerPhone ?? '');
+    setShowInvoiceModal(true);
+  };
+
   // ─── Checkout ─────────────────────────────────────────────────────────────
 
   const checkoutMutation = useMutation<SaleResult, Error, Array<{ method: string; amountCents: number; reference?: string }>>({
     mutationFn: (payments) => {
+      const isCredit = payments.some((p) => p.method === 'CREDIT');
       const payload: SalePayload = {
         storeId: effectiveStoreId,
         businessId,
         cashierId: user?.id ?? '',
-        type: 'NORMAL',
+        type: isCredit ? 'CREDIT' : 'NORMAL',
         priceLevel,
         customerId: customerId ?? undefined,
         items: cart.map((i) => ({ itemId: i.id, quantity: i.quantity })),
@@ -394,17 +446,18 @@ export default function POSPage() {
       return api.post<SaleResult>('/sales/checkout', payload);
     },
     onSuccess: (result) => {
-      setLastReceipt(result);
 
       const gcPayment = (checkoutMutation.variables ?? []).find((p) => p.method === 'GIFT_CARD');
       if (gcPayment?.reference) {
         void api.post(`/gift-cards/${gcPayment.reference}/redeem`, { amountCents: gcPayment.amountCents, saleId: result.id });
       }
       if (customerId) {
-        void api.post('/loyalty/earn', { customerId, saleCents: subtotalCents, saleId: result.id })
-          .then(() => { void qc.invalidateQueries({ queryKey: ['loyalty-customer', customerId] }); })
-          .catch(() => {});
+        void qc.invalidateQueries({ queryKey: ['loyalty-customer', customerId] });
       }
+
+      const pointsEarned = result.pointsEarned ?? 0;
+      const loyaltyBalance = result.loyaltyBalance ?? 0;
+      console.log('[POS onSuccess] pointsEarned:', pointsEarned, 'loyaltyBalance:', loyaltyBalance, 'raw result.pointsEarned:', result.pointsEarned);
 
       const receipt: ReceiptData = {
         receiptNumber: result.receiptNumber,
@@ -429,19 +482,32 @@ export default function POSPage() {
         saleId: result.id,
         receiptHeader: (businessSettings as any)?.receiptHeader ?? undefined,
         receiptFooter: (businessSettings as any)?.receiptFooter ?? undefined,
+        // Include loyalty data directly from API response — never depends on store state
+        pointsEarned,
+        loyaltyBalance,
+        ...(checkoutMutation.variables?.some((p) => p.method === 'CREDIT') && {
+          isCreditSale: true,
+          previousBalanceCents: loyaltyData?.balanceCents ?? 0,
+          newBalanceCents: (loyaltyData?.balanceCents ?? 0) - result.totalCents,
+        }),
       };
       setReceiptData(receipt);
 
-      void api.post<{ success: boolean; controlNumber?: string; intrlData?: string }>(`/etims/submit/${result.id}`).then((res) => {
-        if (res.success) setReceiptData((prev) => prev ? {
-          ...prev,
-          etimsSubmitted: true,
-          // intrlData is the KRA cryptographic receipt signature — encoded in the QR code
-          // controlNumber is the human-readable KRA reference printed on the receipt
-          kraQRCode: res.intrlData ?? res.controlNumber,
-          etimsControlNumber: res.controlNumber,
-        } : prev);
-      }).catch(() => {});
+      api.post<{ success: boolean; controlNumber?: string; intrlData?: string }>(`/etims/submit/${result.id}`)
+        .then((res) => {
+          setReceiptData((prev) => prev ? {
+            ...prev,
+            etimsSubmitted: res.success,
+            kraQRCode: res.intrlData ?? res.controlNumber,
+            etimsControlNumber: res.controlNumber,
+          } : prev);
+        })
+        .catch(() => {
+          setReceiptData((prev) => prev ? { ...prev, etimsSubmitted: false } : prev);
+        })
+        .finally(() => {
+          setLastReceipt(result);
+        });
 
       try {
         const bizName = businessSettings?.name ?? 'KASTRA POS';
@@ -461,9 +527,11 @@ export default function POSPage() {
       clearCart();
       setLoyaltyDiscountApplied(false);
       setLoyaltyDiscountCents(0);
+      setManualDiscountCents(0);
       setTipInput('');
       setAgeConfirmed(false);
       setShowPayment(false);
+      if (localStorage.getItem('pos-auto-logout-sale') === 'true') setPendingAutoLogout(true);
       setShowNPS(true);
       void qc.invalidateQueries({ queryKey: ['items'] });
     },
@@ -516,44 +584,32 @@ export default function POSPage() {
         setSearch(''); return;
       }
     }
-    // Case-insensitive barcode match
+    // Case-insensitive barcode match (item-level barcode)
     const item = items.find(i => i.barcode?.toLowerCase() === raw.toLowerCase());
-    if (item) { addToCart(item); setSearch(''); }
+    if (item) { addToCart(item); setSearch(''); return; }
+    // UOM-level barcode match (carton/bale/pack barcode)
+    for (const apiItem of items) {
+      if (apiItem.uoms) {
+        const uomMatch = apiItem.uoms.find(u => u.barcode?.toLowerCase() === raw.toLowerCase());
+        if (uomMatch) {
+          addToCart(apiItem, uomMatch);
+          setBarcodeToast(`Scanned: ${apiItem.name} (${uomMatch.unitName} — ${uomMatch.conversionFactor} units)`);
+          setTimeout(() => setBarcodeToast(null), 3000);
+          setSearch(''); return;
+        }
+      }
+    }
+    // No match — show the barcode in the search box so cashier can see what was scanned
+    setSearch(raw);
+    setBarcodeToast(`No item found for barcode: ${raw}`);
+    setTimeout(() => setBarcodeToast(null), 3000);
   }, [items, addToCart, addWeightedToCart]);
 
   // ─── Camera barcode scanner ───────────────────────────────────────────────
 
-  const startCamera = useCallback(async () => {
-    setCameraError(null);
-    setShowCamera(true);
-    await new Promise<void>((resolve) => setTimeout(resolve, 100));
-    if (!videoRef.current) return;
-    try {
-      const reader = new BrowserMultiFormatReader();
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-      videoRef.current.srcObject = stream;
-      await videoRef.current.play();
-      reader.decodeFromStream(stream, videoRef.current, (result, err) => {
-        if (result) {
-          handleBarcodeSearch(result.getText());
-          stream.getTracks().forEach((t) => t.stop());
-          setShowCamera(false);
-        }
-        if (err && !(err.message?.includes('No MultiFormat'))) { /* suppress continuous scan errors */ }
-      });
-    } catch (e: unknown) {
-      setCameraError(e instanceof Error ? e.message : 'Camera access denied');
-    }
-  }, [handleBarcodeSearch]);
-
-  const stopCamera = useCallback(() => {
-    if (videoRef.current?.srcObject) {
-      (videoRef.current.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
-      videoRef.current.srcObject = null;
-    }
-    setShowCamera(false);
-    setCameraError(null);
-  }, []);
+  const startCamera = useCallback(() => setShowCamera(true), []);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const stopCamera = useCallback(() => setShowCamera(false), []);
 
   // ─── Hardware barcode scanner (keyboard-wedge) ────────────────────────────
   // Scanners type very fast (<50ms between chars) then send Enter.
@@ -628,6 +684,14 @@ export default function POSPage() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
+
+  // ─── Auto-logout after sale (when NPS modal closes) ─────────────────────
+  useEffect(() => {
+    if (pendingAutoLogout && !showNPS) {
+      setPendingAutoLogout(false);
+      logout();
+    }
+  }, [showNPS, pendingAutoLogout, logout]);
 
   // ─── Store businessId + Pole display broadcast ───────────────────────────
 
@@ -716,7 +780,19 @@ export default function POSPage() {
         loyaltyData={loyaltyData}
         loyaltyDiscountApplied={loyaltyDiscountApplied}
         loyaltyDiscountCents={loyaltyDiscountCents}
-        onAddItem={addToCart}
+        onAddItem={(item) => {
+          const isOos = item.trackStock && (item.currentStock ?? 0) <= 0;
+          const canOversell = !item.negativeStockPolicy || item.negativeStockPolicy !== 'BLOCK';
+          if (isOos && canOversell) {
+            toast.success(`${item.name} added (stock: ${item.currentStock ?? 0})`, { duration: 2000 });
+          }
+          // If item has multiple UOM options, show picker
+          if (item.uoms && item.uoms.length > 1) {
+            setUomPickerItem(item);
+          } else {
+            addToCart(item);
+          }
+        }}
         onBarcodeSearch={handleBarcodeSearch}
         onOpenCamera={() => void startCamera()}
         enableBarcodeScanner={enableBarcodeScanner}
@@ -757,9 +833,12 @@ export default function POSPage() {
         totalCents={totalCents}
         fxRates={fxRates}
         activeCurrencies={activeCurrencies}
+        manualDiscountCents={manualDiscountCents}
+        setManualDiscountCents={setManualDiscountCents}
         isPaying={checkoutMutation.isPending}
         payError={checkoutMutation.error?.message}
         onPay={() => void handlePayClick()}
+        onSaveAsInvoice={handleOpenInvoiceModal}
       />
 
       {/* Mobile bottom bar — always visible on mobile so cashier knows cart state */}
@@ -807,6 +886,8 @@ export default function POSPage() {
           isProcessing={checkoutMutation.isPending}
           error={checkoutMutation.error?.message}
           businessId={businessId}
+          customerName={customerName}
+          customerId={customerId}
         />
       )}
 
@@ -833,6 +914,11 @@ export default function POSPage() {
           <div className="font-bold mb-1">Sale Complete!</div>
           <div className="text-sm opacity-90">Receipt #{lastReceipt.receiptNumber}</div>
           <div className="text-sm opacity-90">{formatKES(lastReceipt.totalCents)}</div>
+          {receiptData && (receiptData.pointsEarned ?? 0) > 0 && (
+            <div className="text-sm mt-1 font-medium text-yellow-200">
+              🌟 +{receiptData.pointsEarned} pts earned · Balance: {(receiptData.loyaltyBalance ?? 0).toLocaleString()} pts
+            </div>
+          )}
           <div className="flex gap-2 mt-3">
             <button
               onClick={() => setShowPrintModal(true)}
@@ -897,10 +983,60 @@ export default function POSPage() {
 
       {showCamera && (
         <CameraModal
-          videoRef={videoRef}
-          cameraError={cameraError}
-          onClose={stopCamera}
+          onScan={(barcode) => { handleBarcodeSearch(barcode); setShowCamera(false); }}
+          onClose={() => setShowCamera(false)}
         />
+      )}
+
+      {/* ── UOM / Packaging picker ─────────────────────────────────────────── */}
+      {uomPickerItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-6 max-w-sm w-full">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-bold text-gray-900 dark:text-white text-base">Select Packaging</h3>
+              <button onClick={() => setUomPickerItem(null)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{uomPickerItem.name}</p>
+            <div className="space-y-2">
+              {(uomPickerItem.uoms ?? []).sort((a, b) => a.conversionFactor - b.conversionFactor).map((uom: ItemUOM) => {
+                const basePrice = uomPickerItem.retailPriceCents;
+                const displayPrice = uom.priceCents ?? Math.round(basePrice * uom.conversionFactor);
+                const stock = uomPickerItem.currentStock ?? 0;
+                const availableQty = uom.isBaseUnit ? stock : Math.floor(stock / uom.conversionFactor);
+                return (
+                  <button
+                    key={uom.id}
+                    onClick={() => {
+                      addToCart(uomPickerItem, uom);
+                      setUomPickerItem(null);
+                    }}
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all group"
+                  >
+                    <div className="text-left">
+                      <p className="font-semibold text-gray-900 dark:text-white group-hover:text-blue-700 dark:group-hover:text-blue-300">
+                        {uom.unitName}
+                        {uom.isBaseUnit && <span className="ml-1.5 text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-medium">base</span>}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {uom.isBaseUnit ? '1 unit' : `= ${uom.conversionFactor} base units`}
+                        {uomPickerItem.trackStock && <span className={`ml-2 font-medium ${availableQty === 0 ? 'text-red-500' : 'text-green-600'}`}>{availableQty} in stock</span>}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-blue-600 dark:text-blue-400">KES {(displayPrice / 100).toLocaleString()}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => { addToCart(uomPickerItem); setUomPickerItem(null); }}
+              className="mt-3 w-full py-2 border border-gray-300 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
+            >
+              Add as single unit (base price)
+            </button>
+          </div>
+        </div>
       )}
 
       {showExpiryWarning && expiryWarnings.length > 0 && (
@@ -909,6 +1045,91 @@ export default function POSPage() {
           onClose={() => setShowExpiryWarning(false)}
           onProceed={() => { setShowExpiryWarning(false); setShowPayment(true); }}
         />
+      )}
+
+      {/* ── Save as Invoice Modal ─────────────────────────────────────────── */}
+      {showInvoiceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-6 max-w-md w-full">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-gray-900 dark:text-white text-lg">Save as Proforma Invoice</h3>
+              <button onClick={() => setShowInvoiceModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+
+            {/* Line items preview */}
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3 mb-4 max-h-40 overflow-y-auto">
+              {cart.map((item) => (
+                <div key={item.id} className="flex justify-between text-sm py-1">
+                  <span className="text-gray-700 dark:text-gray-300 truncate mr-2">{item.quantity}× {item.name}</span>
+                  <span className="text-gray-900 dark:text-white font-medium whitespace-nowrap">{formatKES(item.totalCents)}</span>
+                </div>
+              ))}
+              <div className="border-t border-gray-200 dark:border-gray-700 mt-2 pt-2 flex justify-between font-bold text-sm">
+                <span className="text-gray-900 dark:text-white">Total</span>
+                <span className="text-blue-600">{formatKES(totalCents)}</span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Customer Name *</label>
+                <input
+                  type="text"
+                  value={invoiceCustomerName}
+                  onChange={(e) => setInvoiceCustomerName(e.target.value)}
+                  placeholder="e.g. Acme Ltd"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Customer Phone</label>
+                <input
+                  type="tel"
+                  value={invoiceCustomerPhone}
+                  onChange={(e) => setInvoiceCustomerPhone(e.target.value)}
+                  placeholder="e.g. 0712345678"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Valid Until (optional)</label>
+                <input
+                  type="date"
+                  value={invoiceValidUntil}
+                  min={new Date().toISOString().slice(0, 10)}
+                  onChange={(e) => setInvoiceValidUntil(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Notes (optional)</label>
+                <textarea
+                  value={invoiceNotes}
+                  onChange={(e) => setInvoiceNotes(e.target.value)}
+                  rows={2}
+                  placeholder="e.g. Delivery included, 30-day payment terms..."
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={() => setShowInvoiceModal(false)}
+                className="flex-1 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => saveAsInvoiceMutation.mutate()}
+                disabled={!invoiceCustomerName.trim() || saveAsInvoiceMutation.isPending}
+                className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl text-sm disabled:opacity-40 transition-colors"
+              >
+                {saveAsInvoiceMutation.isPending ? 'Saving…' : 'Save Invoice'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showNPS && (

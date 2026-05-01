@@ -4,6 +4,7 @@
   "scripts": {
     "start": "node -r tsconfig-paths/register dist/main",
     "start:dev": "tsc --watch --preserveWatchOutput & sleep 4 && node --watch -r tsconfig-paths/register dist/main.js",
+    "prebuild": "cd ../../packages/shared && npm run build",
     "build": "tsc -p tsconfig.json",
     "test": "jest",
     "test:watch": "jest --watch",

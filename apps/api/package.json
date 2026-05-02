@@ -41,6 +41,7 @@
     "rxjs": "^7.8.1",
     "socket.io": "^4.8.3",
     "speakeasy": "^2.0.0",
+    "tsconfig-paths": "^4.2.0",
     "uuid": "^8.3.2"
   },
   "devDependencies": {
@@ -60,7 +61,6 @@
     "prisma": "^5.9.0",
     "supertest": "^7.2.2",
     "ts-jest": "^29.4.6",
-    "tsconfig-paths": "^4.2.0",
     "typescript": "^5.3.3"
   },
   "jest": {

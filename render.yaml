@@ -5,7 +5,7 @@ services:
     region: frankfurt        # Frankfurt is closest to Kenya (low latency)
     plan: free               # Free tier — sleeps after 15 min inactivity; upgrade to starter ($7/mo) for always-on
     buildCommand: npm ci && bash scripts/render-build.sh
-    startCommand: cd apps/api && npx prisma migrate deploy --schema ../../prisma/schema.prisma && node dist/main
+    startCommand: npx prisma migrate deploy --schema ../../prisma/schema.prisma && node dist/main
     healthCheckPath: /api/v1/health
     envVars:
       - key: NODE_ENV

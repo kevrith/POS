@@ -6,12 +6,14 @@ import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { createHash, randomBytes } from 'crypto';
 
-// Plan pricing (KES cents / month)
+// Plan pricing (KES cents / month) — 5-tier
 const PLAN_PRICE: Record<string, number> = {
-  STARTER: 149900,
-  PRO: 399900,
-  ENTERPRISE: 999900,
-  TRIAL: 0,
+  FREE:       0,
+  STARTER:    99900,
+  GROWTH:     249900,
+  PRO:        499900,
+  ENTERPRISE: 1499900,
+  TRIAL:      0,
 };
 
 @Injectable()
@@ -100,15 +102,21 @@ export class SuperAdminService {
       this.prisma.referral.count({ where: { status: 'CONVERTED' } }),
     ]);
 
-    // Plan breakdown counts
-    const [starterCount, proCount, enterpriseCount] = await Promise.all([
+    // Plan breakdown counts (all tiers including FREE)
+    const [freeCount, starterCount, growthCount, proCount, enterpriseCount] = await Promise.all([
+      this.prisma.business.count({ where: { subscriptionTier: 'FREE' } }),
       this.prisma.business.count({ where: { subscriptionStatus: 'ACTIVE', subscriptionTier: 'STARTER' } }),
+      this.prisma.business.count({ where: { subscriptionStatus: 'ACTIVE', subscriptionTier: 'GROWTH' } }),
       this.prisma.business.count({ where: { subscriptionStatus: 'ACTIVE', subscriptionTier: 'PRO' } }),
       this.prisma.business.count({ where: { subscriptionStatus: 'ACTIVE', subscriptionTier: 'ENTERPRISE' } }),
     ]);
 
-    // Accurate MRR based on actual plan mix
-    const estimatedMRRCents = starterCount * 149900 + proCount * 399900 + enterpriseCount * 999900;
+    // Accurate MRR based on actual plan mix (new prices)
+    const estimatedMRRCents =
+      starterCount * 99900 +
+      growthCount  * 249900 +
+      proCount     * 499900 +
+      enterpriseCount * 1499900;
 
     return {
       totalBusinesses,
@@ -122,7 +130,7 @@ export class SuperAdminService {
       referralsConverted,
       estimatedMRRCents,
       estimatedARRCents: estimatedMRRCents * 12,
-      planBreakdown: { STARTER: starterCount, PRO: proCount, ENTERPRISE: enterpriseCount },
+      planBreakdown: { FREE: freeCount, STARTER: starterCount, GROWTH: growthCount, PRO: proCount, ENTERPRISE: enterpriseCount },
     };
   }
 

@@ -1045,20 +1045,43 @@
       <button id="btn-lifetime" onclick="setBilling('lifetime')" class="billing-btn">Lifetime (Pay Once)</button>
     </div>
 
-    <div class="grid-3" style="align-items:stretch;">
+    <!-- Row 1: Free + Starter + Growth -->
+    <div class="grid-3" style="align-items:stretch;margin-bottom:24px;">
+
+      <!-- Free -->
+      <div class="pricing-card reveal">
+        <div class="pricing-tier" style="color:var(--green);">Free Forever</div>
+        <div class="pricing-price">
+          <span>KES 0 <span class="price-unit">/ forever</span></span>
+        </div>
+        <div class="pricing-desc">No credit card. No trial. Start instantly and upgrade when your business needs more.
+        </div>
+        <ul class="pricing-features">
+          <li><span class="pf-check">✓</span>1 store, 1 user</li>
+          <li><span class="pf-check">✓</span>Basic POS — cash payments</li>
+          <li><span class="pf-check">✓</span>Inventory management</li>
+          <li><span class="pf-check">✓</span>Customer records</li>
+          <li><span class="pf-check">✓</span>Sales history</li>
+          <li><span class="pf-check">✓</span>Cash drawer</li>
+          <li><span class="pf-check muted">—</span><span class="muted">M-Pesa &amp; KRA eTIMS</span></li>
+          <li><span class="pf-check muted">—</span><span class="muted">Reports suite</span></li>
+          <li><span class="pf-check muted">—</span><span class="muted">Offline mode + PWA</span></li>
+        </ul>
+        <a href="https://pos-web-eight-eosin.vercel.app/login?mode=register&plan=FREE" class="btn btn-ghost" style="width:100%;">Start Free — No Card</a>
+      </div>
 
       <!-- Starter -->
-      <div class="pricing-card reveal">
+      <div class="pricing-card reveal" style="transition-delay:.1s;">
         <div class="pricing-tier">Starter</div>
         <div class="pricing-price">
-          <span class="price-monthly">KES 1,499 <span class="price-unit">/ month</span></span>
-          <span class="price-annual"  style="display:none">KES 14,990 <span class="price-unit">/ year</span></span>
-          <span class="price-lifetime" style="display:none">KES 18,000 <span class="price-unit">once</span></span>
+          <span class="price-monthly">KES 999 <span class="price-unit">/ month</span></span>
+          <span class="price-annual"  style="display:none">KES 9,990 <span class="price-unit">/ year</span></span>
+          <span class="price-lifetime" style="display:none">KES 12,000 <span class="price-unit">once</span></span>
         </div>
         <div class="pricing-desc">
-          <span class="price-monthly">Perfect for a single shop or kiosk — full compliance from day one.</span>
-          <span class="price-annual"  style="display:none">Equivalent to 10 months — 2 months free. Billed as one payment.</span>
-          <span class="price-lifetime" style="display:none">Own it forever. 1 year of updates included. KES 3,000/yr maintenance after year 1.</span>
+          <span class="price-monthly">Full compliance from day one — M-Pesa, KRA eTIMS and offline mode for a single shop.</span>
+          <span class="price-annual"  style="display:none">2 months free. Billed as one annual payment.</span>
+          <span class="price-lifetime" style="display:none">Own it forever. 1 year of updates. KES 2,400/yr maintenance after year 1.</span>
         </div>
         <ul class="pricing-features">
           <li><span class="pf-check">✓</span>1 store, up to 5 users</li>
@@ -1070,83 +1093,110 @@
           <li><span class="pf-check">✓</span>Customer management</li>
           <li><span class="pf-check">✓</span>Cash drawer management</li>
           <li><span class="pf-check">✓</span>Offline mode + PWA + barcode scan</li>
-          <li><span class="pf-check muted">—</span><span class="muted">Hospitality, HR &amp; payroll</span></li>
-          <li><span class="pf-check muted">—</span><span class="muted">Multi-store &amp; stock transfers</span></li>
-          <li><span class="pf-check muted">—</span><span class="muted">Suppliers, POs &amp; reconciliation</span></li>
+          <li><span class="pf-check muted">—</span><span class="muted">Hospitality &amp; supplier modules</span></li>
+          <li><span class="pf-check muted">—</span><span class="muted">HR &amp; payroll</span></li>
         </ul>
-        <a href="https://pos-web-eight-eosin.vercel.app/login?mode=register&plan=STARTER" class="btn btn-outline-blue" style="width:100%;">Get Started Free</a>
+        <a href="https://pos-web-eight-eosin.vercel.app/login?mode=register&plan=STARTER" class="btn btn-outline-blue" style="width:100%;">Start 30-Day Trial</a>
       </div>
 
-      <!-- Pro -->
-      <div class="pricing-card featured reveal" style="transition-delay:.1s">
-        <div class="popular-badge">Most Popular</div>
-        <div class="pricing-tier">Pro</div>
+      <!-- Growth -->
+      <div class="pricing-card reveal" style="transition-delay:.2s;">
+        <div class="pricing-tier" style="color:var(--cyan);">Growth</div>
         <div class="pricing-price">
-          <span class="price-monthly">KES 3,999 <span class="price-unit">/ month</span></span>
-          <span class="price-annual"  style="display:none">KES 39,990 <span class="price-unit">/ year</span></span>
-          <span class="price-lifetime" style="display:none">KES 45,000 <span class="price-unit">once</span></span>
+          <span class="price-monthly">KES 2,499 <span class="price-unit">/ month</span></span>
+          <span class="price-annual"  style="display:none">KES 24,990 <span class="price-unit">/ year</span></span>
+          <span class="price-lifetime" style="display:none">KES 30,000 <span class="price-unit">once</span></span>
         </div>
         <div class="pricing-desc">
-          <span class="price-monthly">For growing businesses with multiple staff, stores, and advanced operational needs.</span>
-          <span class="price-annual"  style="display:none">Equivalent to 10 months — 2 months free. Ideal for established businesses.</span>
-          <span class="price-lifetime" style="display:none">Own it forever. 1 year of updates included. KES 6,000/yr maintenance after year 1.</span>
+          <span class="price-monthly">For restaurants, salons and multi-outlet businesses that need hospitality and supplier tools.</span>
+          <span class="price-annual"  style="display:none">2 months free. Best for growing outlets.</span>
+          <span class="price-lifetime" style="display:none">Own it forever. 1 year of updates. KES 5,000/yr maintenance after year 1.</span>
         </div>
         <ul class="pricing-features">
-          <li><span class="pf-check">✓</span>Up to 5 stores, 15 users</li>
+          <li><span class="pf-check">✓</span>2 stores, up to 8 users</li>
           <li><span class="pf-check">✓</span>Everything in Starter</li>
           <li><span class="pf-check">✓</span>Hospitality — tables, KOT, bar tabs, fast food</li>
           <li><span class="pf-check">✓</span>All payments — M-Pesa QR, Paystack card, split, layaway, gift cards</li>
-          <li><span class="pf-check">✓</span>Full HR — shifts, leave, commissions &amp; Kenya payroll (PAYE/NHIF/NSSF)</li>
           <li><span class="pf-check">✓</span>Suppliers, Purchase Orders &amp; RFQ</li>
-          <li><span class="pf-check">✓</span>Multi-store transfers, stocktake &amp; damaged goods</li>
-          <li><span class="pf-check">✓</span>Serials, recipes, bundles &amp; batch recall</li>
+          <li><span class="pf-check">✓</span>Serials, recipes, bundles &amp; stocktake</li>
           <li><span class="pf-check">✓</span>Promotions, loyalty tiers &amp; gift cards</li>
-          <li><span class="pf-check">✓</span>Budget management + expense approval workflow</li>
-          <li><span class="pf-check">✓</span>Bank reconciliation (KCB, Equity, NCBA, Co-op)</li>
           <li><span class="pf-check">✓</span>WhatsApp &amp; SMS receipts (Africa's Talking)</li>
-          <li><span class="pf-check">✓</span>Webhooks, API keys &amp; scheduled reports</li>
-          <li><span class="pf-check">✓</span>Full reports — commissions, layaway, proforma, serial registry, GRN, KRA export, audit log</li>
-          <li><span class="pf-check muted">—</span><span class="muted">Field sales &amp; agent dashboard</span></li>
-          <li><span class="pf-check muted">—</span><span class="muted">Hotel room management &amp; franchise network</span></li>
-          <li><span class="pf-check muted">—</span><span class="muted">AI demand forecasting</span></li>
+          <li><span class="pf-check">✓</span>Delivery management</li>
+          <li><span class="pf-check muted">—</span><span class="muted">HR, payroll &amp; reconciliation</span></li>
+          <li><span class="pf-check muted">—</span><span class="muted">Webhooks &amp; API keys</span></li>
         </ul>
-        <a href="https://pos-web-eight-eosin.vercel.app/login?mode=register&plan=PRO" class="btn btn-primary" style="width:100%;">Get Started Free</a>
+        <a href="https://pos-web-eight-eosin.vercel.app/login?mode=register&plan=GROWTH" class="btn btn-outline-blue" style="width:100%;">Start 30-Day Trial</a>
+      </div>
+
+    </div>
+
+    <!-- Row 2: Pro + Enterprise -->
+    <div class="grid-2" style="align-items:stretch;">
+
+      <!-- Pro -->
+      <div class="pricing-card featured reveal">
+        <div class="popular-badge">Most Popular</div>
+        <div class="pricing-tier">Pro</div>
+        <div class="pricing-price">
+          <span class="price-monthly">KES 4,999 <span class="price-unit">/ month</span></span>
+          <span class="price-annual"  style="display:none">KES 49,990 <span class="price-unit">/ year</span></span>
+          <span class="price-lifetime" style="display:none">KES 60,000 <span class="price-unit">once</span></span>
+        </div>
+        <div class="pricing-desc">
+          <span class="price-monthly">Full business operations — HR, payroll, multi-store transfers, reconciliation and API access.</span>
+          <span class="price-annual"  style="display:none">2 months free. Ideal for established multi-outlet businesses.</span>
+          <span class="price-lifetime" style="display:none">Own it forever. 1 year of updates. KES 8,000/yr maintenance after year 1.</span>
+        </div>
+        <ul class="pricing-features" style="columns:2;column-gap:24px;">
+          <li><span class="pf-check">✓</span>5 stores, 15 users</li>
+          <li><span class="pf-check">✓</span>Everything in Growth</li>
+          <li><span class="pf-check">✓</span>Full HR — shifts, leave &amp; commissions</li>
+          <li><span class="pf-check">✓</span>Kenya payroll (PAYE / NHIF / NSSF)</li>
+          <li><span class="pf-check">✓</span>Multi-store stock transfers</li>
+          <li><span class="pf-check">✓</span>Bank reconciliation (KCB, Equity, NCBA)</li>
+          <li><span class="pf-check">✓</span>Budget management + expense approvals</li>
+          <li><span class="pf-check">✓</span>Webhooks &amp; API keys</li>
+          <li><span class="pf-check">✓</span>Owner cross-store dashboard</li>
+          <li><span class="pf-check">✓</span>Full reports — audit log, KRA export, serial registry, GRN, proforma pipeline</li>
+          <li><span class="pf-check">✓</span>Cheques &amp; general ledger</li>
+          <li><span class="pf-check">✓</span>Scheduled email reports</li>
+        </ul>
+        <a href="https://pos-web-eight-eosin.vercel.app/login?mode=register&plan=PRO" class="btn btn-primary" style="width:100%;margin-top:auto;">Start 30-Day Trial</a>
       </div>
 
       <!-- Enterprise -->
-      <div class="pricing-card reveal" style="transition-delay:.2s">
-        <div class="pricing-tier">Enterprise</div>
+      <div class="pricing-card reveal" style="transition-delay:.1s">
+        <div class="pricing-tier" style="color:var(--purple);">Enterprise</div>
         <div class="pricing-price">
-          <span class="price-monthly">KES 9,999 <span class="price-unit">/ month</span></span>
-          <span class="price-annual"  style="display:none">KES 99,990 <span class="price-unit">/ year</span></span>
-          <span class="price-lifetime" style="display:none">KES 99,000 <span class="price-unit">once</span></span>
+          <span class="price-monthly">KES 14,999 <span class="price-unit">/ month</span></span>
+          <span class="price-annual"  style="display:none">KES 149,990 <span class="price-unit">/ year</span></span>
+          <span class="price-lifetime" style="display:none">KES 180,000 <span class="price-unit">once</span></span>
         </div>
         <div class="pricing-desc">
-          <span class="price-monthly">For chains, franchises and field operations that need unlimited scale and integrations.</span>
-          <span class="price-annual"  style="display:none">Best value for chains. Save KES 19,998 versus monthly billing.</span>
-          <span class="price-lifetime" style="display:none">Own it forever. 1 year of updates included. KES 12,000/yr maintenance after year 1.</span>
+          <span class="price-monthly">For chains, franchises and field-sales operations that need unlimited scale and deep integrations.</span>
+          <span class="price-annual"  style="display:none">Save KES 29,998 vs monthly. Best value for large chains.</span>
+          <span class="price-lifetime" style="display:none">Own it forever. 1 year of updates. KES 12,000/yr maintenance after year 1.</span>
         </div>
-        <ul class="pricing-features">
+        <ul class="pricing-features" style="columns:2;column-gap:24px;">
           <li><span class="pf-check">✓</span>Unlimited stores &amp; users</li>
           <li><span class="pf-check">✓</span>Everything in Pro</li>
-          <li><span class="pf-check">✓</span>Field Sales — agent dashboard, delivery routes, B2B invoicing &amp; customer portal</li>
-          <li><span class="pf-check">✓</span>Hotel Room Management — folio charges, housekeeping queue, hotel dashboard</li>
+          <li><span class="pf-check">✓</span>Field Sales — agent dashboard, delivery routes &amp; B2B invoicing</li>
+          <li><span class="pf-check">✓</span>Hotel Room Management — folio, housekeeping &amp; hotel dashboard</li>
           <li><span class="pf-check">✓</span>Franchise network — hierarchy, royalty rates &amp; consolidated reporting</li>
           <li><span class="pf-check">✓</span>AI demand forecasting &amp; top-mover analytics</li>
-          <li><span class="pf-check">✓</span>Accounting sync — QuickBooks Online, Xero, Shopify &amp; WooCommerce</li>
-          <li><span class="pf-check">✓</span>KDPA compliance — data deletion requests &amp; PII anonymisation</li>
+          <li><span class="pf-check">✓</span>QuickBooks Online, Xero, Shopify &amp; WooCommerce sync</li>
+          <li><span class="pf-check">✓</span>KDPA compliance — data deletion &amp; PII anonymisation</li>
           <li><span class="pf-check">✓</span>Multi-currency with live exchange rates</li>
           <li><span class="pf-check">✓</span>On-premise desktop (Tauri) deployment</li>
           <li><span class="pf-check">✓</span>Custom branding &amp; receipt footer</li>
-          <li><span class="pf-check">✓</span>SLA uptime guarantee</li>
-          <li><span class="pf-check">✓</span>Dedicated account manager &amp; staff onboarding</li>
+          <li><span class="pf-check">✓</span>SLA uptime guarantee + dedicated account manager</li>
         </ul>
-        <a href="mailto:hello@kastrapos.co.ke" class="btn btn-ghost" style="width:100%;">Contact Sales →</a>
+        <a href="mailto:hello@kastrapos.co.ke" class="btn btn-ghost" style="width:100%;margin-top:auto;">Contact Sales →</a>
       </div>
 
     </div>
     <p class="text-center mt-6" style="color:var(--text3);font-size:.875rem;line-height:1.7;">
-      All plans include a <strong style="color:var(--text2);">30-day free trial</strong> with full feature access. No credit card required.<br/>
+      All paid plans include a <strong style="color:var(--text2);">30-day free trial</strong> — no credit card required.<br/>
       Lifetime plans include the desktop (Tauri) offline app. Annual maintenance covers updates &amp; KRA compliance patches.
     </p>
   </div>

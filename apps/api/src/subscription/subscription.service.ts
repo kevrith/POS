@@ -4,9 +4,11 @@ import { EmailService } from '../email/email.service';
 import { createHmac, randomBytes } from 'node:crypto';
 
 export const PLANS = {
-  STARTER:    { name: 'Starter',    amountKES: 1499,  paystackPlanCode: process.env.PAYSTACK_STARTER_PLAN    ?? '' },
-  PRO:        { name: 'Pro',        amountKES: 3999,  paystackPlanCode: process.env.PAYSTACK_PRO_PLAN        ?? '' },
-  ENTERPRISE: { name: 'Enterprise', amountKES: 9999,  paystackPlanCode: process.env.PAYSTACK_ENTERPRISE_PLAN ?? '' },
+  FREE:       { name: 'Free',       amountKES: 0,     paystackPlanCode: '' },
+  STARTER:    { name: 'Starter',    amountKES: 999,   paystackPlanCode: process.env.PAYSTACK_STARTER_PLAN    ?? '' },
+  GROWTH:     { name: 'Growth',     amountKES: 2499,  paystackPlanCode: process.env.PAYSTACK_GROWTH_PLAN     ?? '' },
+  PRO:        { name: 'Pro',        amountKES: 4999,  paystackPlanCode: process.env.PAYSTACK_PRO_PLAN        ?? '' },
+  ENTERPRISE: { name: 'Enterprise', amountKES: 14999, paystackPlanCode: process.env.PAYSTACK_ENTERPRISE_PLAN ?? '' },
 };
 
 @Injectable()
@@ -30,17 +32,27 @@ export class SubscriptionService {
   }
 
   private getPlanFeatures(tier: string): string[] {
-    const base = ['POS Sales', 'Inventory Management', 'Basic Reports', 'M-Pesa Payments'];
-    const pro = [...base, 'Multi-Store', 'Advanced Reports', 'Scheduled Email Reports', 'Webhooks', 'API Access'];
-    const enterprise = [...pro, 'KRA eTIMS Integration', 'Hospitality Module', 'HR Management', 'Accounting Integrations', 'Priority Support'];
-    if (tier === 'STARTER') return base;
-    if (tier === 'PRO') return pro;
-    return enterprise;
+    const free     = ['Basic POS (cash)', 'Inventory', 'Customers', 'Sales history', 'Cash drawer'];
+    const starter  = [...free,    'Full POS + M-Pesa', 'KRA eTIMS', 'Batch & expiry tracking', 'Full reports suite', 'Offline + PWA'];
+    const growth   = [...starter, 'Hospitality (tables/KOT/bar)', 'Suppliers & POs', 'Promotions & gift cards', 'Serials, recipes & bundles', 'Stocktake & damaged goods', 'Delivery management', 'WhatsApp & SMS receipts'];
+    const pro      = [...growth,  'HR shifts & leave', 'Kenya payroll (PAYE/NHIF/NSSF)', 'Bank reconciliation', 'Multi-store (5) + transfers', 'Budget & expense approvals', 'Webhooks & API keys', 'Owner dashboard'];
+    const ent      = [...pro,     'Field sales & agent dashboard', 'Hotel room management', 'Franchise network', 'AI demand forecasting', 'QuickBooks/Xero/Shopify sync', 'KDPA compliance', 'Multi-currency', 'On-premise desktop', 'Dedicated account manager'];
+    if (tier === 'FREE')       return free;
+    if (tier === 'STARTER')    return starter;
+    if (tier === 'GROWTH')     return growth;
+    if (tier === 'PRO')        return pro;
+    return ent;
   }
 
   async initializeCheckout(businessId: string, tier: keyof typeof PLANS, email: string) {
     const plan = PLANS[tier];
     if (!plan) throw new BadRequestException(`Invalid plan tier: ${tier}`);
+
+    // FREE plan needs no payment — activate immediately
+    if (tier === 'FREE') {
+      await this.activateSubscription(businessId, 'FREE');
+      return { authorizationUrl: null, reference: null };
+    }
 
     const business = await this.prisma.business.findUnique({ where: { id: businessId } });
     if (!business) throw new BadRequestException('Business not found');

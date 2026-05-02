@@ -1,56 +1,88 @@
 /**
  * Feature gate definitions — maps each route/feature key to the minimum plan required.
- * Use hasFeature() in components and the Layout nav filter.
+ * Use hasFeature() in Layout nav filtering and any page-level gate.
  *
- * Plan hierarchy:  STARTER  <  PRO  <  ENTERPRISE
+ * Plan hierarchy:  FREE  <  STARTER  <  GROWTH  <  PRO  <  ENTERPRISE
  */
 
-export type Plan = 'STARTER' | 'PRO' | 'ENTERPRISE';
+export type Plan = 'FREE' | 'STARTER' | 'GROWTH' | 'PRO' | 'ENTERPRISE';
 
-const PLAN_RANK: Record<Plan, number> = {
-  STARTER: 0,
-  PRO: 1,
-  ENTERPRISE: 2,
+export const PLAN_RANK: Record<Plan, number> = {
+  FREE:       0,
+  STARTER:    1,
+  GROWTH:     2,
+  PRO:        3,
+  ENTERPRISE: 4,
+};
+
+export const PLAN_LABELS: Record<Plan, string> = {
+  FREE:       'Free',
+  STARTER:    'Starter',
+  GROWTH:     'Growth',
+  PRO:        'Pro',
+  ENTERPRISE: 'Enterprise',
+};
+
+export const PLAN_PRICES_KES: Record<Plan, number> = {
+  FREE:       0,
+  STARTER:    999,
+  GROWTH:     2499,
+  PRO:        4999,
+  ENTERPRISE: 14999,
+};
+
+export const PLAN_LIMITS: Record<Plan, { stores: number; users: number }> = {
+  FREE:       { stores: 1, users: 1 },
+  STARTER:    { stores: 1, users: 5 },
+  GROWTH:     { stores: 2, users: 8 },
+  PRO:        { stores: 5, users: 15 },
+  ENTERPRISE: { stores: Infinity, users: Infinity },
 };
 
 /**
- * Maps route segment (e.g. 'field-orders') → minimum plan.
- * Keys are derived from the nav item's `to` path by stripping the leading '/'.
- * Unlisted keys default to STARTER (always visible).
+ * Maps route segment → minimum plan.
+ * Keys are the nav item's `to` path with the leading '/' stripped.
+ * Unlisted keys default to FREE (always accessible).
  */
 export const FEATURE_PLANS: Record<string, Plan> = {
-  // ── STARTER ──────────────────────────────────────────────────────────────
-  'dashboard':    'STARTER',
-  'pos':          'STARTER',
-  'inventory':    'STARTER',
-  'customers':    'STARTER',
-  'reports':      'STARTER',
-  'sales-list':   'STARTER',
-  'cash-drawer':  'STARTER',
+  // ── FREE ─────────────────────────────────────────────────────────────────
+  'dashboard':    'FREE',
+  'pos':          'FREE',
+  'inventory':    'FREE',
+  'customers':    'FREE',
+  'sales-list':   'FREE',
+  'cash-drawer':  'FREE',
+
+  // ── STARTER (KES 999/mo) ─────────────────────────────────────────────────
   'batch':        'STARTER',
+  'reports':      'STARTER',
   'settings':     'STARTER',
 
-  // ── PRO ──────────────────────────────────────────────────────────────────
-  'hospitality':          'PRO',
-  'kds':                  'PRO',
-  'layaway':              'PRO',
-  'proforma':             'PRO',
-  'prescriptions':        'PRO',
-  'pharmacy':             'PRO',
-  'appointments':         'PRO',
-  'delivery':             'PRO',
-  'delivery-management':  'PRO',
-  'waitlist':             'PRO',
-  'fuel-pump':            'PRO',
-  'cybercafe':            'PRO',
-  'serial':               'PRO',
-  'recipe':               'PRO',
-  'bundle':               'PRO',
-  'suppliers':            'PRO',
-  'rfq':                  'PRO',
+  // ── GROWTH (KES 2,499/mo) ────────────────────────────────────────────────
+  'hospitality':          'GROWTH',
+  'kds':                  'GROWTH',
+  'layaway':              'GROWTH',
+  'proforma':             'GROWTH',
+  'prescriptions':        'GROWTH',
+  'pharmacy':             'GROWTH',
+  'appointments':         'GROWTH',
+  'delivery':             'GROWTH',
+  'delivery-management':  'GROWTH',
+  'waitlist':             'GROWTH',
+  'fuel-pump':            'GROWTH',
+  'cybercafe':            'GROWTH',
+  'serial':               'GROWTH',
+  'recipe':               'GROWTH',
+  'bundle':               'GROWTH',
+  'suppliers':            'GROWTH',
+  'rfq':                  'GROWTH',
+  'stocktake':            'GROWTH',
+  'damaged-goods':        'GROWTH',
+  'promotions':           'GROWTH',
+  'gift-cards':           'GROWTH',
+
+  // ── PRO (KES 4,999/mo) ───────────────────────────────────────────────────
   'transfers':            'PRO',
-  'stocktake':            'PRO',
-  'damaged-goods':        'PRO',
   'owner-dashboard':      'PRO',
   'expenses':             'PRO',
   'cheques':              'PRO',
@@ -59,11 +91,10 @@ export const FEATURE_PLANS: Record<string, Plan> = {
   'payment-links':        'PRO',
   'hr':                   'PRO',
   'payroll':              'PRO',
-  'promotions':           'PRO',
-  'gift-cards':           'PRO',
   'security-settings':    'PRO',
+  'api-keys':             'PRO',
 
-  // ── ENTERPRISE ────────────────────────────────────────────────────────────
+  // ── ENTERPRISE (KES 14,999/mo) ───────────────────────────────────────────
   'agent':            'ENTERPRISE',
   'field-orders':     'ENTERPRISE',
   'delivery-routes':  'ENTERPRISE',
@@ -71,7 +102,6 @@ export const FEATURE_PLANS: Record<string, Plan> = {
   'channel-manager':  'ENTERPRISE',
   'forecasting':      'ENTERPRISE',
   'franchise':        'ENTERPRISE',
-  'api-keys':         'ENTERPRISE',
 };
 
 export function planRank(plan: Plan | string | undefined): number {
@@ -85,5 +115,5 @@ export function planRank(plan: Plan | string | undefined): number {
 export function hasFeature(userPlan: Plan | string | undefined, featureKey: string): boolean {
   const required = FEATURE_PLANS[featureKey];
   if (!required) return true;
-  return planRank(userPlan ?? 'STARTER') >= planRank(required);
+  return planRank(userPlan ?? 'FREE') >= planRank(required);
 }

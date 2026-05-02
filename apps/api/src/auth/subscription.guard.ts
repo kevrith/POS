@@ -45,15 +45,23 @@ export class SubscriptionGuard implements CanActivate {
 
     if (!business) return true; // non-critical — let downstream handle it
 
+    // FREE tier and active subscriptions always pass through
+    if (business.subscriptionStatus === 'FREE' || business.subscriptionStatus === 'ACTIVE') {
+      return true;
+    }
+
+    // Trial expired → lazy-downgrade to FREE and let the request through.
+    // The frontend upgrade banner handles prompting the user; feature gates limit access.
     if (
       business.subscriptionStatus === 'TRIAL' &&
       business.trialEndsAt &&
       new Date() > business.trialEndsAt
     ) {
-      throw new HttpException(
-        'Trial period has expired. Please subscribe to continue using KASTRA POS.',
-        HttpStatus.PAYMENT_REQUIRED,
-      );
+      this.prisma.business.update({
+        where: { id: user.businessId },
+        data: { subscriptionStatus: 'FREE', subscriptionTier: 'FREE', planName: 'Free' },
+      }).catch(() => {});
+      return true;
     }
 
     return true;

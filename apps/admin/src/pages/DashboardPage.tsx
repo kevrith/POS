@@ -233,13 +233,16 @@ export default function DashboardPage() {
   const conversionRate = trialCount > 0 ? Math.round((activeCount / (activeCount + trialCount)) * 100) : 0;
 
   const planBreakdown = stats?.planBreakdown ?? {};
-  const starterCount = planBreakdown.STARTER ?? 0;
-  const proCount     = planBreakdown.PRO ?? 0;
+  const freeCount    = planBreakdown.FREE       ?? 0;
+  const starterCount = planBreakdown.STARTER    ?? 0;
+  const growthCount  = planBreakdown.GROWTH     ?? 0;
+  const proCount     = planBreakdown.PRO        ?? 0;
   const entCount     = planBreakdown.ENTERPRISE ?? 0;
   const mrrCents     = stats?.estimatedMRRCents ?? 0;
-  const starterShare = mrrCents > 0 ? (starterCount * 149900) / mrrCents * 100 : 0;
-  const proShare     = mrrCents > 0 ? (proCount * 399900)     / mrrCents * 100 : 0;
-  const entShare     = mrrCents > 0 ? (entCount * 999900)     / mrrCents * 100 : 0;
+  const starterShare = mrrCents > 0 ? (starterCount *  99900) / mrrCents * 100 : 0;
+  const growthShare  = mrrCents > 0 ? (growthCount  * 249900) / mrrCents * 100 : 0;
+  const proShare     = mrrCents > 0 ? (proCount     * 499900) / mrrCents * 100 : 0;
+  const entShare     = mrrCents > 0 ? (entCount     * 1499900) / mrrCents * 100 : 0;
 
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -326,16 +329,19 @@ export default function DashboardPage() {
 
           {/* Stacked bar */}
           <div style={{ height: '10px', borderRadius: '5px', overflow: 'hidden', display: 'flex', marginBottom: '1.25rem', background: C.surface }}>
-            <div style={{ width: `${starterShare}%`, background: C.textMuted, transition: 'width 0.6s ease' }} />
+            <div style={{ width: `${starterShare}%`, background: C.textMuted,  transition: 'width 0.6s ease' }} />
+            <div style={{ width: `${growthShare}%`,  background: C.cyan,       transition: 'width 0.6s ease' }} />
             <div style={{ width: `${proShare}%`,     background: C.blue,       transition: 'width 0.6s ease' }} />
             <div style={{ width: `${entShare}%`,     background: C.purple,     transition: 'width 0.6s ease' }} />
           </div>
 
           {/* Legend rows */}
           {[
-            { label: 'Enterprise', count: entCount,    price: 999900, color: C.purple },
-            { label: 'Pro',        count: proCount,    price: 399900, color: C.blue },
-            { label: 'Starter',    count: starterCount, price: 149900, color: C.textMuted },
+            { label: 'Enterprise', count: entCount,    price: 1499900, color: C.purple },
+            { label: 'Pro',        count: proCount,    price: 499900,  color: C.blue },
+            { label: 'Growth',     count: growthCount, price: 249900,  color: C.cyan },
+            { label: 'Starter',    count: starterCount, price: 99900,  color: C.textMuted },
+            { label: 'Free',       count: freeCount,   price: 0,       color: C.green },
           ].map(p => {
             const contribution = (p.count * p.price / 100);
             const pct = mrrCents > 0 ? Math.round(p.count * p.price / mrrCents * 100) : 0;

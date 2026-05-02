@@ -1682,7 +1682,7 @@ export default function SettingsPage() {
 
       {/* ── Users Tab ─────────────────────────────────────────────────────── */}
       {activeTab === 'users' && (() => {
-        const USER_LIMITS: Record<string, number> = { STARTER: 10, PRO: 20, ENTERPRISE: Infinity };
+        const USER_LIMITS: Record<string, number> = { FREE: 1, STARTER: 5, GROWTH: 8, PRO: 15, ENTERPRISE: Infinity };
         const currentTierU = settings?.subscriptionTier ?? 'STARTER';
         const userLimit = USER_LIMITS[currentTierU] ?? 3;
         const atLimitU = userLimit !== Infinity && users.length >= userLimit;
@@ -1855,7 +1855,7 @@ export default function SettingsPage() {
 
       {/* ── Stores Tab ────────────────────────────────────────────────────── */}
       {activeTab === 'stores' && (() => {
-        const STORE_LIMITS: Record<string, number> = { STARTER: 1, PRO: 5, ENTERPRISE: Infinity };
+        const STORE_LIMITS: Record<string, number> = { FREE: 1, STARTER: 1, GROWTH: 2, PRO: 5, ENTERPRISE: Infinity };
         const currentTierS = settings?.subscriptionTier ?? 'STARTER';
         const storeLimit = STORE_LIMITS[currentTierS] ?? 1;
         const storeCount = (settings?.stores ?? []).length;
@@ -2225,28 +2225,42 @@ export default function SettingsPage() {
       {/* ── Subscription Tab ──────────────────────────────────────────────── */}
       {activeTab === 'subscription' && (() => {
         const PLAN_LIMITS: Record<string, { stores: number; users: number }> = {
-          STARTER: { stores: 1, users: 10 },
-          PRO: { stores: 5, users: 20 },
+          FREE:       { stores: 1, users: 1 },
+          STARTER:    { stores: 1, users: 5 },
+          GROWTH:     { stores: 2, users: 8 },
+          PRO:        { stores: 5, users: 15 },
           ENTERPRISE: { stores: Infinity, users: Infinity },
         };
         const PLANS = [
           {
+            tier: 'FREE',
+            label: 'Free',
+            price: 'KES 0/mo',
+            features: ['1 store', '1 user', 'Basic POS (cash only)', 'Basic inventory', 'Sales history'],
+          },
+          {
             tier: 'STARTER',
             label: 'Starter',
-            price: 'KES 2,999/mo',
-            features: ['1 store', '10 users', 'Basic POS', 'Reports', 'eTIMS'],
+            price: 'KES 999/mo',
+            features: ['1 store', '5 users', 'Full POS + M-Pesa', 'KRA eTIMS', 'Full reports', 'Offline + PWA'],
+          },
+          {
+            tier: 'GROWTH',
+            label: 'Growth',
+            price: 'KES 2,499/mo',
+            features: ['2 stores', '8 users', 'Hospitality (tables/KOT)', 'Suppliers & POs', 'Promotions & gift cards', 'WhatsApp & SMS receipts'],
           },
           {
             tier: 'PRO',
             label: 'Pro',
-            price: 'KES 7,999/mo',
-            features: ['5 stores', '20 users', 'All features', 'M-Pesa STK', 'Loyalty', 'Webhooks'],
+            price: 'KES 4,999/mo',
+            features: ['5 stores', '15 users', 'Full HR + Kenya payroll', 'Bank reconciliation', 'Webhooks & API keys', 'Budget & expense approvals'],
           },
           {
             tier: 'ENTERPRISE',
             label: 'Enterprise',
-            price: 'KES 19,999/mo',
-            features: ['Unlimited stores', 'Unlimited users', 'API access', 'Priority support', 'Custom integrations'],
+            price: 'KES 14,999/mo',
+            features: ['Unlimited stores & users', 'Field sales & agents', 'Hotel management', 'Franchise network', 'AI forecasting', 'Accounting integrations'],
           },
         ];
         const currentTier = subscription?.subscriptionTier ?? 'STARTER';

@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -e  # exit on any error
 
-ROOT="$(pwd)"
-echo "=== Working directory: $ROOT ==="
+# Resolve repo root relative to this script's location, regardless of cwd
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+cd "$ROOT"
+echo "=== Repo root: $ROOT ==="
 
 echo "=== STEP 1: Build @pos/shared ==="
 npm run build --workspace=packages/shared

@@ -31,7 +31,7 @@ export function clearAdminToken() {
   sessionStorage.removeItem('admin-email');
 }
 
-async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
+async function request<T>(path: string, opts: RequestInit = {}, isLogin = false): Promise<T> {
   const token = getAdminToken();
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
@@ -43,6 +43,11 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   });
 
   if (res.status === 401) {
+    if (isLogin) {
+      // During login, 401 = wrong credentials — show the error, don't redirect
+      const body = await res.json().catch(() => ({})) as { message?: string };
+      throw new Error(body.message ?? 'Invalid email or password');
+    }
     clearAdminToken();
     window.location.href = '/';
     throw new Error('Session expired');
@@ -59,7 +64,7 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
 
 export const adminApi = {
   login: (email: string, password: string) =>
-    request<{ token: string }>('/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+    request<{ token: string }>('/login', { method: 'POST', body: JSON.stringify({ email, password }) }, true),
 
   getStats: () => request<any>('/stats'),
 

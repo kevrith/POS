@@ -30,7 +30,7 @@ export default function PharmacyPage() {
   const user = useAuthStore((s) => s.user);
   const businessId = user?.businessId ?? '';
   const qc = useQueryClient();
-  const { prompt, confirm } = useDialog();
+  const { prompt } = useDialog();
   const [tab, setTab] = useState<Tab>('drugs');
 
   // ── Drug Catalogue ──
@@ -835,6 +835,7 @@ ${opts.dose ? `<div class="dose">Sig: ${opts.dose}</div>` : ''}
 
 function FormularyTab({ businessId }: { businessId: string }) {
   const qc = useQueryClient();
+  const { confirm } = useDialog();
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({

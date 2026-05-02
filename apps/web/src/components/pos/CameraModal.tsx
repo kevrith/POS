@@ -8,7 +8,7 @@ interface Props {
   onClose: () => void;
 }
 
-const HINTS = new Map([
+const HINTS = new Map<DecodeHintType, any>([
   [DecodeHintType.POSSIBLE_FORMATS, [
     BarcodeFormat.EAN_13,
     BarcodeFormat.EAN_8,

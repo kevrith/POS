@@ -126,7 +126,6 @@ export default function SupermarketPOSPage() {
   const [now, setNow] = useState(new Date());
 
   const scanRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null); // unused — camera logic in CameraModal
 
   const businessId = user?.businessId ?? '';
   const storeId = user?.storeId ?? '';

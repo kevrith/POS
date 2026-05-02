@@ -135,7 +135,6 @@ export default function POSPage() {
   const [invoiceNotes, setInvoiceNotes] = useState('');
 
   const searchRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null); // kept for HW scanner ref if needed
 
   const businessId = user?.businessId ?? '';
   const storeId = user?.storeId ?? '';
@@ -608,8 +607,6 @@ export default function POSPage() {
   // ─── Camera barcode scanner ───────────────────────────────────────────────
 
   const startCamera = useCallback(() => setShowCamera(true), []);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const stopCamera = useCallback(() => setShowCamera(false), []);
 
   // ─── Hardware barcode scanner (keyboard-wedge) ────────────────────────────
   // Scanners type very fast (<50ms between chars) then send Enter.

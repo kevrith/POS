@@ -12,7 +12,7 @@
     "test:e2e": "jest --config jest-e2e.json --forceExit"
   },
   "dependencies": {
-    "@pos/shared": "workspace:*",
+    "@pos/shared": "*",
     "@nestjs/bullmq": "^11.0.4",
     "@nestjs/common": "^10.3.0",
     "@nestjs/config": "^3.1.1",

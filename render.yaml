@@ -4,11 +4,13 @@ services:
     runtime: node
     region: frankfurt        # Frankfurt is closest to Kenya (low latency)
     plan: free               # Free tier — sleeps after 15 min inactivity; upgrade to starter ($7/mo) for always-on
-    buildCommand: |
-      npm install &&
+    buildCommand: >-
+      npm install -g pnpm &&
+      pnpm install --frozen-lockfile &&
       npx prisma generate --schema prisma/schema.prisma &&
-      cd apps/api && npm run build
-    startCommand: cd apps/api && npx prisma migrate deploy --schema ../../prisma/schema.prisma && npm start
+      cd packages/shared && pnpm run build &&
+      cd ../apps/api && pnpm run build
+    startCommand: cd apps/api && npx prisma migrate deploy --schema ../../prisma/schema.prisma && node dist/main
     healthCheckPath: /api/v1/health
     envVars:
       - key: NODE_ENV

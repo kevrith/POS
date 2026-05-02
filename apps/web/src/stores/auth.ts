@@ -14,6 +14,7 @@ export interface AuthUser {
   businessId: string;
   storeId?: string;
   assignedStoreIds?: string[]; // populated for MANAGER: stores they are scoped to
+  planName?: string;           // STARTER | PRO | ENTERPRISE
 }
 
 interface AuthState {

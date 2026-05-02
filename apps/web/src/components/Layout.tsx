@@ -18,6 +18,7 @@ import { connectSocket, disconnectSocket, subscribeToEvent, SocketEvents } from 
 import { toast } from 'sonner';
 import SyncStatusBadge, { OfflineBanner } from './SyncStatusBadge';
 import MobileNav from './MobileNav';
+import { hasFeature } from '../lib/featureGates';
 
 interface NavItem {
   to: string;
@@ -458,11 +459,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const canSeeBusinessType = (businessTypes?: string[]) =>
     !businessTypes || businessTypes.includes(businessType);
 
+  const userPlan = user?.planName ?? 'STARTER';
+  const canSeePlan = (to: string) => hasFeature(userPlan, to.replace(/^\//, ''));
+
   const visibleGroups = NAV_GROUPS
     .filter((g) => canSee(g.roles) && canSeeBusinessType(g.businessTypes))
     .map((g) => ({
       ...g,
-      items: g.items.filter((item) => canSee(item.roles) && canSeeBusinessType(item.businessTypes)),
+      items: g.items.filter(
+        (item) => canSee(item.roles) && canSeeBusinessType(item.businessTypes) && canSeePlan(item.to),
+      ),
     }))
     .filter((g) => g.items.length > 0);
 

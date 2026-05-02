@@ -16,6 +16,7 @@ export interface JwtPayload {
   role: UserRole;
   storeId?: string;
   assignedStoreIds?: string[]; // for MANAGER: stores they are scoped to
+  planName?: string;
 }
 
 export interface AuthUser {
@@ -26,6 +27,7 @@ export interface AuthUser {
   businessId: string;
   storeId?: string;
   assignedStoreIds?: string[]; // populated for MANAGER role
+  planName?: string;
 }
 
 @Injectable()
@@ -138,6 +140,7 @@ export class AuthService {
       sub: user.id,
       businessId: user.businessId,
       role: user.role as UserRole,
+      planName: user.business.planName,
       ...(assignedStoreIds && { assignedStoreIds }),
     };
 
@@ -161,6 +164,7 @@ export class AuthService {
         email: user.email,
         role: user.role as UserRole,
         businessId: user.businessId,
+        planName: user.business.planName,
         ...(assignedStoreIds && { assignedStoreIds }),
       },
     };
@@ -205,11 +209,18 @@ export class AuthService {
 
     if (!matchedUser) throw new UnauthorizedException('Invalid PIN');
 
+    const biz = await this.prisma.business.findUnique({
+      where: { id: matchedUser.businessId },
+      select: { planName: true },
+    });
+    const pinPlanName = biz?.planName ?? 'STARTER';
+
     const payload: JwtPayload = {
       sub: matchedUser.id,
       businessId: matchedUser.businessId,
       role: matchedUser.role as UserRole,
       storeId,
+      planName: pinPlanName,
     };
 
     const accessToken = this.jwt.sign(payload, { expiresIn: '12h' });
@@ -223,6 +234,7 @@ export class AuthService {
         role: matchedUser.role as UserRole,
         businessId: matchedUser.businessId,
         storeId,
+        planName: pinPlanName,
       },
     };
   }
@@ -330,6 +342,7 @@ export class AuthService {
       sub: result.user.id,
       businessId: result.user.businessId,
       role: UserRole.OWNER,
+      planName: 'STARTER',
     };
 
     return {
@@ -340,6 +353,7 @@ export class AuthService {
         email: result.user.email,
         role: UserRole.OWNER,
         businessId: result.user.businessId,
+        planName: 'STARTER',
       },
     };
   }
@@ -382,10 +396,17 @@ export class AuthService {
         ? user.assignedStores.map((s) => s.storeId)
         : undefined;
 
+    const googleBiz = await this.prisma.business.findUnique({
+      where: { id: user.businessId },
+      select: { planName: true },
+    });
+    const googlePlanName = googleBiz?.planName ?? 'STARTER';
+
     const jwtPayload: JwtPayload = {
       sub: user.id,
       businessId: user.businessId,
       role: user.role as UserRole,
+      planName: googlePlanName,
       ...(assignedStoreIds && { assignedStoreIds }),
     };
 
@@ -397,6 +418,7 @@ export class AuthService {
         email: user.email,
         role: user.role as UserRole,
         businessId: user.businessId,
+        planName: googlePlanName,
         ...(assignedStoreIds && { assignedStoreIds }),
       },
     };
@@ -411,6 +433,7 @@ export class AuthService {
       email: user.email,
       role: user.role as UserRole,
       businessId: user.businessId,
+      planName: payload.planName,
     };
   }
 

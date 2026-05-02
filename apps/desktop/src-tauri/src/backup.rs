@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::process::Command;
 
 #[derive(Serialize, Deserialize)]
 pub struct BackupInfo {
@@ -10,54 +11,74 @@ pub struct BackupInfo {
     pub created_at: u64,
 }
 
-fn get_db_source() -> PathBuf {
-    // The NestJS API's SQLite DB lives at prisma/dev.db relative to the repo root.
-    // At runtime the desktop app's cwd is typically the repo root when launched via
-    // `npm run dev`, or the installed-app directory in production.
-    let mut path = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    path.push("prisma");
-    path.push("dev.db");
-    path
+/// Read DATABASE_URL from env, falling back to the default local connection.
+fn get_database_url() -> String {
+    std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgresql://kastra:kastra2026@localhost:5432/kastra_pos".to_string())
 }
 
+/// Backup the PostgreSQL database using pg_dump (custom binary format → .dump).
 #[tauri::command]
 pub async fn backup_database(dest_path: String) -> Result<bool, String> {
-    let source = get_db_source();
-    if !source.exists() {
-        return Err(format!("Database not found at: {}", source.display()));
-    }
-
+    let db_url = get_database_url();
     let dest = PathBuf::from(&dest_path);
+
     if let Some(parent) = dest.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
 
-    fs::copy(&source, &dest).map_err(|e| format!("Backup failed: {}", e))?;
-    Ok(true)
+    let output = Command::new("pg_dump")
+        .arg("--dbname")
+        .arg(&db_url)
+        .arg("--format=custom")
+        .arg("--file")
+        .arg(&dest_path)
+        .output()
+        .map_err(|e| format!("pg_dump not found or failed to start: {}", e))?;
+
+    if output.status.success() {
+        Ok(true)
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(format!("pg_dump failed: {}", stderr))
+    }
 }
 
+/// Restore the PostgreSQL database from a pg_dump backup file.
 #[tauri::command]
 pub async fn restore_database(src_path: String) -> Result<bool, String> {
+    let db_url = get_database_url();
     let source = PathBuf::from(&src_path);
+
     if !source.exists() {
         return Err(format!("Backup file not found: {}", src_path));
     }
 
-    let dest = get_db_source();
-    if let Some(parent) = dest.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
+    let output = Command::new("pg_restore")
+        .arg("--dbname")
+        .arg(&db_url)
+        .arg("--clean")        // drop objects before recreating
+        .arg("--if-exists")    // suppress errors on missing objects
+        .arg("--no-owner")     // skip ownership commands (avoids permission issues)
+        .arg(&src_path)
+        .output()
+        .map_err(|e| format!("pg_restore not found or failed to start: {}", e))?;
 
-    // Preserve the current DB as a .bak before overwriting
-    let bak = dest.with_extension("db.bak");
-    if dest.exists() {
-        fs::copy(&dest, &bak).ok();
+    if output.status.success() {
+        Ok(true)
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        // pg_restore exits non-zero for recoverable warnings (e.g. "does not exist, skipping").
+        // Only treat it as a real failure if the output contains a hard "error:" line.
+        if stderr.to_lowercase().contains("error:") {
+            Err(format!("pg_restore failed: {}", stderr))
+        } else {
+            Ok(true)
+        }
     }
-
-    fs::copy(&source, &dest).map_err(|e| format!("Restore failed: {}", e))?;
-    Ok(true)
 }
 
+/// List .dump and .sql backup files in a directory, most-recent first.
 #[tauri::command]
 pub async fn list_backups(backup_dir: String) -> Result<Vec<BackupInfo>, String> {
     let dir = PathBuf::from(&backup_dir);
@@ -70,7 +91,8 @@ pub async fn list_backups(backup_dir: String) -> Result<Vec<BackupInfo>, String>
 
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) == Some("db") {
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        if ext == "dump" || ext == "sql" {
             let metadata = fs::metadata(&path).ok();
             let size = metadata.as_ref().map(|m| m.len()).unwrap_or(0);
             let created = metadata
@@ -88,7 +110,6 @@ pub async fn list_backups(backup_dir: String) -> Result<Vec<BackupInfo>, String>
         }
     }
 
-    // Most-recent first
     backups.sort_by(|a, b| b.created_at.cmp(&a.created_at));
     Ok(backups)
 }

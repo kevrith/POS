@@ -1,7 +1,11 @@
-// Strip any trailing /api/v1 from VITE_API_URL so it works whether the env var
-// is set to the bare host (http://localhost:3010) or the full prefix (https://pos-bhe5.onrender.com/api/v1)
-const _base = (import.meta.env.VITE_API_URL ?? 'http://localhost:3010').replace(/\/api\/v1\/?$/, '');
-const API_BASE = `${_base}/api/v1/super-admin`;
+// When VITE_API_URL is set, strip any trailing path segments so we always end up
+// with just the origin (e.g. https://pos-bhe5.onrender.com).
+// When it is NOT set, use a relative base so the Vercel proxy handles routing.
+const _raw = import.meta.env.VITE_API_URL as string | undefined;
+const _origin = _raw
+  ? _raw.replace(/\/(api(\/v\d+)?(\/super-admin)?)\/?$/, '')
+  : '';
+const API_BASE = `${_origin}/api/v1/super-admin`;
 
 let _token = '';
 

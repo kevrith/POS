@@ -116,8 +116,8 @@ export const adminApi = {
   updateUser: (userId: string, data: { name?: string; role?: string; email?: string }) =>
     request<any>(`/users/${userId}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
-  listAllUsers: (page = 1, search?: string, role?: string) =>
-    request<any>(`/users?page=${page}&limit=30${search ? `&search=${encodeURIComponent(search)}` : ''}${role && role !== 'ALL' ? `&role=${role}` : ''}`),
+  listAllUsers: (page = 1, search?: string, role?: string, businessName?: string, sortBy?: string, sortDir?: string) =>
+    request<any>(`/users?page=${page}&limit=30${search ? `&search=${encodeURIComponent(search)}` : ''}${role && role !== 'ALL' ? `&role=${role}` : ''}${businessName ? `&businessName=${encodeURIComponent(businessName)}` : ''}${sortBy ? `&sortBy=${sortBy}&sortDir=${sortDir ?? 'asc'}` : ''}`),
 
   deleteUser: (userId: string) =>
     request<any>(`/users/${userId}`, { method: 'DELETE' }),

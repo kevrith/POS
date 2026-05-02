@@ -149,8 +149,11 @@ export class SuperAdminController implements OnModuleInit {
     @Query('limit') limit = '30',
     @Query('search') search?: string,
     @Query('role') role?: string,
+    @Query('businessName') businessName?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortDir') sortDir?: string,
   ) {
-    return this.service.listAllUsers(parseInt(page), parseInt(limit), search, role);
+    return this.service.listAllUsers(parseInt(page), parseInt(limit), search, role, businessName, sortBy, sortDir);
   }
 
   @UseGuards(SuperAdminAuthGuard)

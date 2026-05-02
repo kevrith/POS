@@ -326,7 +326,7 @@ export class SuperAdminService {
     return users;
   }
 
-  async listAllUsers(page = 1, limit = 30, search?: string, role?: string) {
+  async listAllUsers(page = 1, limit = 30, search?: string, role?: string, businessName?: string, sortBy?: string, sortDir?: string) {
     const skip = (page - 1) * limit;
     const where: any = {};
     if (role && role !== 'ALL') where.role = role;
@@ -336,16 +336,27 @@ export class SuperAdminService {
         { email: { contains: search, mode: 'insensitive' } },
       ];
     }
+    if (businessName) {
+      where.business = { name: { contains: businessName, mode: 'insensitive' } };
+    }
+
+    const dir = sortDir === 'asc' ? 'asc' : 'desc';
+    let orderBy: any = { createdAt: 'desc' };
+    if (sortBy === 'name')     orderBy = { name: dir };
+    if (sortBy === 'role')     orderBy = { role: dir };
+    if (sortBy === 'joined')   orderBy = { createdAt: dir };
+    if (sortBy === 'business') orderBy = { business: { name: dir } };
+
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         select: {
           id: true, name: true, email: true, role: true, createdAt: true,
           loginAttempts: true, lockedUntil: true,
-          business: { select: { id: true, name: true, subscriptionStatus: true } },
+          business: { select: { id: true, name: true, planName: true, subscriptionStatus: true } },
         },
       }),
       this.prisma.user.count({ where }),

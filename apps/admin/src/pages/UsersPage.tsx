@@ -102,11 +102,30 @@ function btn(bg: string, color: string): React.CSSProperties {
   };
 }
 
+const PLAN_META: Record<string, { label: string; bg: string; color: string }> = {
+  STARTER:    { label: 'Starter',    bg: 'rgba(100,116,139,0.12)', color: '#94a3b8' },
+  PRO:        { label: 'Pro',        bg: 'rgba(59,130,246,0.12)',  color: '#60a5fa' },
+  ENTERPRISE: { label: 'Enterprise', bg: 'rgba(139,92,246,0.12)', color: '#a78bfa' },
+};
+
+function PlanBadge({ plan }: { plan?: string }) {
+  const m = PLAN_META[plan ?? ''];
+  if (!m) return null;
+  return (
+    <span style={{ padding: '1px 6px', borderRadius: '4px', fontSize: '0.5625rem', fontWeight: 700, background: m.bg, color: m.color, marginLeft: '4px' }}>
+      {m.label}
+    </span>
+  );
+}
+
 export default function UsersPage() {
   const [data, setData] = useState<any>(null);
   const [search, setSearch] = useState('');
+  const [businessSearch, setBusinessSearch] = useState('');
   const [page, setPage] = useState(1);
   const [roleFilter, setRoleFilter] = useState('ALL');
+  const [sortBy, setSortBy] = useState('joined');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -119,18 +138,49 @@ export default function UsersPage() {
   const [tempPwModal, setTempPwModal] = useState<{ tempPassword: string; email: string | null } | null>(null);
   const [copied, setCopied] = useState(false);
 
+  const toggleSort = (col: string) => {
+    if (sortBy === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortBy(col); setSortDir('asc'); }
+    setPage(1);
+  };
+
+  const SortTh = ({ col, label }: { col: string; label: string }) => {
+    const active = sortBy === col;
+    return (
+      <th
+        onClick={() => toggleSort(col)}
+        style={{
+          padding: '0.75rem 1.25rem', textAlign: 'left', cursor: 'pointer',
+          fontSize: '0.6875rem', color: active ? C.blue : C.textMuted,
+          textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700,
+          whiteSpace: 'nowrap', borderBottom: `1px solid ${C.cardBorder}`,
+          userSelect: 'none',
+        }}
+      >
+        {label} {active ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+      </th>
+    );
+  };
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await adminApi.listAllUsers(page, search || undefined, roleFilter !== 'ALL' ? roleFilter : undefined);
+      const result = await adminApi.listAllUsers(
+        page,
+        search || undefined,
+        roleFilter !== 'ALL' ? roleFilter : undefined,
+        businessSearch || undefined,
+        sortBy,
+        sortDir,
+      );
       setData(result);
     } catch (e: any) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
-  }, [page, search, roleFilter]);
+  }, [page, search, roleFilter, businessSearch, sortBy, sortDir]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -231,7 +281,7 @@ export default function UsersPage() {
 
       {/* Search + filters */}
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
-        <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
           <div style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
             <Icon d={Icons.search} size={14} color={C.textMuted} />
           </div>
@@ -239,7 +289,21 @@ export default function UsersPage() {
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }}
             onKeyDown={e => e.key === 'Enter' && load()}
-            placeholder="Search by name or email…"
+            placeholder="Name or email…"
+            style={{ ...inputStyle, width: '100%', paddingLeft: '2.25rem', boxSizing: 'border-box' }}
+            onFocus={e => { e.target.style.borderColor = C.blue; }}
+            onBlur={e => { e.target.style.borderColor = C.inputBorder; }}
+          />
+        </div>
+        <div style={{ position: 'relative', flex: 1, minWidth: '180px' }}>
+          <div style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+            <Icon d={Icons.building} size={13} color={C.textMuted} />
+          </div>
+          <input
+            value={businessSearch}
+            onChange={e => { setBusinessSearch(e.target.value); setPage(1); }}
+            onKeyDown={e => e.key === 'Enter' && load()}
+            placeholder="Filter by business…"
             style={{ ...inputStyle, width: '100%', paddingLeft: '2.25rem', boxSizing: 'border-box' }}
             onFocus={e => { e.target.style.borderColor = C.blue; }}
             onBlur={e => { e.target.style.borderColor = C.inputBorder; }}
@@ -259,6 +323,10 @@ export default function UsersPage() {
         Showing <strong style={{ color: C.textSecondary }}>{users.length}</strong> of{' '}
         <strong style={{ color: C.textSecondary }}>{data?.total ?? 0}</strong> users
         {roleFilter !== 'ALL' && ` · Role: ${roleFilter}`}
+        {businessSearch && ` · Business: "${businessSearch}"`}
+        <span style={{ marginLeft: '0.5rem', fontSize: '0.6875rem', color: C.textMuted }}>
+          (click column headers to sort)
+        </span>
       </div>
 
       {/* Table */}
@@ -267,14 +335,13 @@ export default function UsersPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: C.surface }}>
-                {['User', 'Email', 'Role', 'Business', 'Status', 'Joined', 'Actions'].map(h => (
-                  <th key={h} style={{
-                    padding: '0.75rem 1.25rem', textAlign: 'left',
-                    fontSize: '0.6875rem', color: C.textMuted,
-                    textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700,
-                    whiteSpace: 'nowrap', borderBottom: `1px solid ${C.cardBorder}`,
-                  }}>{h}</th>
-                ))}
+                <SortTh col="name"     label="User" />
+                <th style={{ padding: '0.75rem 1.25rem', textAlign: 'left', fontSize: '0.6875rem', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, whiteSpace: 'nowrap', borderBottom: `1px solid ${C.cardBorder}` }}>Email</th>
+                <SortTh col="role"     label="Role" />
+                <SortTh col="business" label="Business" />
+                <th style={{ padding: '0.75rem 1.25rem', textAlign: 'left', fontSize: '0.6875rem', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, whiteSpace: 'nowrap', borderBottom: `1px solid ${C.cardBorder}` }}>Status</th>
+                <SortTh col="joined"   label="Joined" />
+                <th style={{ padding: '0.75rem 1.25rem', textAlign: 'left', fontSize: '0.6875rem', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, whiteSpace: 'nowrap', borderBottom: `1px solid ${C.cardBorder}` }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -355,12 +422,22 @@ export default function UsersPage() {
 
                       {/* Business */}
                       <td style={{ padding: '0.875rem 1.25rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                          <Icon d={Icons.building} size={11} color={C.textMuted} />
-                          <span style={{ fontSize: '0.8125rem', color: C.textSecondary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '150px', display: 'block' }}>
-                            {u.business?.name ?? '—'}
-                          </span>
-                        </div>
+                        {u.business ? (
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                              <Icon d={Icons.building} size={11} color={C.textMuted} />
+                              <span style={{ fontSize: '0.8125rem', color: C.textSecondary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px', display: 'block' }}>
+                                {u.business.name}
+                              </span>
+                              <PlanBadge plan={u.business.planName} />
+                            </div>
+                            <div style={{ fontSize: '0.625rem', color: C.textMuted, marginTop: '2px', marginLeft: '19px' }}>
+                              {u.business.subscriptionStatus}
+                            </div>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: '0.75rem', color: C.textMuted }}>—</span>
+                        )}
                       </td>
 
                       {/* Status */}

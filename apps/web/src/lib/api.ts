@@ -13,6 +13,7 @@ function resolveApiUrl(): string {
 }
 
 const API_URL = resolveApiUrl();
+export function getApiUrl(): string { return API_URL; }
 
 // Token stored in memory (module-level) — NOT localStorage per security rules.
 // sessionStorage is acceptable for tab-scoped persistence.

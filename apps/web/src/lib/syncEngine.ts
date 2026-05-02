@@ -4,7 +4,7 @@
  * - Caches server data to IndexedDB
  * - Processes the sync queue when back online
  */
-import { getToken } from './api';
+import { getToken, getApiUrl } from './api';
 import {
   db,
   cacheItems,
@@ -16,7 +16,7 @@ import {
 } from './db';
 import { useSyncStore } from '../stores/sync';
 
-const API_BASE = '/api/v1';
+const API_BASE = getApiUrl();
 
 // ─── Network check ────────────────────────────────────────────────────────────
 
@@ -27,11 +27,11 @@ export function isOnline(): boolean {
 /** Confirm online by pinging the API (navigator.onLine can be wrong) */
 async function pingOnline(): Promise<boolean> {
   try {
-    const res = await fetch(`${API_BASE}/auth/me`, {
-      headers: { Authorization: `Bearer ${getToken()}` },
+    // Use the public update-check endpoint — no auth required, lightweight
+    const res = await fetch(`${API_BASE}/super-admin/update-check`, {
       signal: AbortSignal.timeout(3000),
     });
-    return res.status !== 0;
+    return res.ok || res.status === 404; // any real HTTP response means we're online
   } catch {
     return false;
   }

@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { setToken, clearToken } from '../lib/api';
+import { setToken, clearToken, getApiUrl } from '../lib/api';
 
-const API_V1 = '/api/v1';
+const API_V1 = getApiUrl();
 
 export type UserRole = 'OWNER' | 'MANAGER' | 'ACCOUNTANT' | 'CASHIER' | 'WAITER' | 'KITCHEN';
 

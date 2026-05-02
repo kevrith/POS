@@ -22,6 +22,7 @@ import { UserRole } from '@pos/shared';
 export class BusinessController {
   constructor(private businessService: BusinessService) {}
 
+  @SkipSubscriptionCheck()
   @Get(':businessId/settings')
   async getSettings(@Param('businessId') businessId: string) {
     return this.businessService.getSettings(businessId);
@@ -48,6 +49,7 @@ export class BusinessController {
     return this.businessService.updateSettings(businessId, dto);
   }
 
+  @SkipSubscriptionCheck()
   @Get(':businessId/stores')
   async getStores(@Param('businessId') businessId: string) {
     return this.businessService.getStores(businessId);

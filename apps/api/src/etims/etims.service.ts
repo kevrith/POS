@@ -145,7 +145,7 @@ export class EtimsService {
 
       return { success: true, deviceId, message: 'Successfully onboarded to eTIMS production' };
     } catch (error) {
-      throw new BadRequestException(`eTIMS onboarding failed: ${error.message}`);
+      throw new BadRequestException(`eTIMS onboarding failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -222,7 +222,7 @@ export class EtimsService {
 
       return { success: true, referenceNumber: response.referenceNumber, message: 'VAT return submitted successfully' };
     } catch (error) {
-      throw new BadRequestException(`VAT return submission failed: ${error.message}`);
+      throw new BadRequestException(`VAT return submission failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

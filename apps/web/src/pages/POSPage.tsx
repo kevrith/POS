@@ -54,6 +54,8 @@ interface SaleResult {
   totalCents: number;
   pointsEarned?: number;
   loyaltyBalance?: number;
+  monthlyTxCount?: number | null;
+  freeTxLimit?: number | null;
 }
 
 interface Category {
@@ -104,6 +106,8 @@ export default function POSPage() {
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [showCartMobile, setShowCartMobile] = useState(false);
   const [lastReceipt, setLastReceipt] = useState<SaleResult | null>(null);
+  const [freeTxCount, setFreeTxCount] = useState<number | null>(null);
+  const [showFreeLimitModal, setShowFreeLimitModal] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [serviceChargeEnabled, setServiceChargeEnabled] = useState(false);
   const [loyaltyDiscountApplied, setLoyaltyDiscountApplied] = useState(false);
@@ -457,6 +461,12 @@ export default function POSPage() {
       const pointsEarned = result.pointsEarned ?? 0;
       const loyaltyBalance = result.loyaltyBalance ?? 0;
       console.log('[POS onSuccess] pointsEarned:', pointsEarned, 'loyaltyBalance:', loyaltyBalance, 'raw result.pointsEarned:', result.pointsEarned);
+      if (result.monthlyTxCount != null) {
+        setFreeTxCount(result.monthlyTxCount);
+        if (result.freeTxLimit != null && result.monthlyTxCount >= result.freeTxLimit) {
+          setShowFreeLimitModal(true);
+        }
+      }
 
       const receipt: ReceiptData = {
         receiptNumber: result.receiptNumber,
@@ -759,6 +769,54 @@ export default function POSPage() {
           )}
         </button>
       </div>
+
+      {/* Free tier transaction usage banner */}
+      {freeTxCount !== null && (
+        <div className={`fixed top-0 left-0 right-[320px] z-30 flex items-center justify-between gap-3 px-4 py-1.5 text-xs font-semibold ${
+          freeTxCount >= 200 ? 'bg-red-700 text-white' :
+          freeTxCount >= 160 ? 'bg-amber-600 text-white' :
+                               'bg-slate-700 text-slate-200'
+        }`}>
+          <span>
+            Free plan: {freeTxCount}/200 transactions used this month
+            {freeTxCount >= 160 && freeTxCount < 200 && ' — running low'}
+            {freeTxCount >= 200 && ' — limit reached, upgrade to continue'}
+          </span>
+          <button onClick={() => setShowFreeLimitModal(true)} className="underline underline-offset-2 whitespace-nowrap hover:opacity-80">
+            Upgrade to Starter →
+          </button>
+        </div>
+      )}
+
+      {/* Free tier limit reached modal */}
+      {showFreeLimitModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-8 max-w-md w-full shadow-2xl text-center">
+            <div className="text-5xl mb-4">🚀</div>
+            <h2 className="text-xl font-bold text-white mb-2">You've reached your free limit</h2>
+            <p className="text-slate-400 text-sm mb-2">
+              Your business has completed <span className="text-white font-semibold">200 transactions</span> this month — the maximum on the Free plan.
+            </p>
+            <p className="text-slate-400 text-sm mb-6">
+              Upgrade to <span className="text-white font-semibold">Starter at KES 999/month</span> for unlimited transactions, M-Pesa payments, KRA eTIMS compliance, full reports, and more.
+            </p>
+            <div className="flex flex-col gap-3">
+              <a
+                href="/settings?tab=subscription"
+                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm transition-colors"
+              >
+                Upgrade Now — KES 999/month
+              </a>
+              <button
+                onClick={() => setShowFreeLimitModal(false)}
+                className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm transition-colors"
+              >
+                Continue (this month's sales are saved)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Left: Item Grid */}
       <ItemGrid

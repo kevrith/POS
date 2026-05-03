@@ -19,9 +19,11 @@ function TierBadge({ tier }: { tier: string }) {
     LIFETIME:   { bg: 'rgba(245,158,11,0.15)',  color: '#f59e0b' },
     ENTERPRISE: { bg: 'rgba(139,92,246,0.12)', color: '#8b5cf6' },
     PRO:        { bg: 'rgba(59,130,246,0.12)',  color: '#3b82f6' },
+    GROWTH:     { bg: 'rgba(6,182,212,0.12)',   color: '#06b6d4' },
     STARTER:    { bg: 'rgba(100,116,139,0.12)', color: '#64748b' },
+    FREE:       { bg: 'rgba(16,185,129,0.12)',  color: '#10b981' },
   };
-  const c = m[tier] ?? m.STARTER;
+  const c = m[tier] ?? m.FREE;
   return (
     <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '0.6875rem', fontWeight: 700, background: c.bg, color: c.color }}>
       {tier}
@@ -137,7 +139,7 @@ export default function LicenseKeysPage() {
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', color: C.textMuted, marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tier</label>
               <select value={tier} onChange={e => setTier(e.target.value)} style={{ ...inputStyle, width: '100%', cursor: 'pointer' }}>
-                {['STARTER', 'PRO', 'ENTERPRISE', 'LIFETIME'].map(t => <option key={t} value={t}>{t}</option>)}
+                {['STARTER', 'GROWTH', 'PRO', 'ENTERPRISE', 'LIFETIME'].map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div>
@@ -201,7 +203,7 @@ export default function LicenseKeysPage() {
               <div style={{ flex: 1 }}>
                 <label style={{ display: 'block', fontSize: '0.75rem', color: C.textMuted, marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tier</label>
                 <select value={mbTier} onChange={e => setMbTier(e.target.value)} style={{ ...inputStyle, width: '100%', cursor: 'pointer' }}>
-                  {['STARTER', 'PRO', 'ENTERPRISE', 'LIFETIME'].map(t => <option key={t} value={t}>{t}</option>)}
+                  {['STARTER', 'GROWTH', 'PRO', 'ENTERPRISE', 'LIFETIME'].map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
               <div style={{ flex: 1 }}>

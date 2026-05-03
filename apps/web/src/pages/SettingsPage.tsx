@@ -549,6 +549,7 @@ export default function SettingsPage() {
   const [cancelConfirmText, setCancelConfirmText] = useState('');
   const [cancelSubmitting, setCancelSubmitting] = useState(false);
   const [cancelDone, setCancelDone] = useState(false);
+  const [upgradingTier, setUpgradingTier] = useState<string | null>(null);
 
   // ─── Queries ───────────────────────────────────────────────────────────────
   const { data: settings, isLoading } = useQuery<BusinessSettings>({
@@ -1682,7 +1683,7 @@ export default function SettingsPage() {
 
       {/* ── Users Tab ─────────────────────────────────────────────────────── */}
       {activeTab === 'users' && (() => {
-        const USER_LIMITS: Record<string, number> = { FREE: 1, STARTER: 5, GROWTH: 8, PRO: 15, ENTERPRISE: Infinity };
+        const USER_LIMITS: Record<string, number> = { FREE: 1, STARTER: 8, GROWTH: 15, PRO: 30, ENTERPRISE: Infinity };
         const currentTierU = settings?.subscriptionTier ?? 'STARTER';
         const userLimit = USER_LIMITS[currentTierU] ?? 3;
         const atLimitU = userLimit !== Infinity && users.length >= userLimit;
@@ -2224,11 +2225,31 @@ export default function SettingsPage() {
 
       {/* ── Subscription Tab ──────────────────────────────────────────────── */}
       {activeTab === 'subscription' && (() => {
+        const handleUpgrade = async (tier: string) => {
+          if (!businessId) return;
+          setUpgradingTier(tier);
+          try {
+            const res = await api.post<{ authorizationUrl: string | null; reference: string | null }>(
+              '/subscription/checkout',
+              { tier, email: user?.email ?? '' },
+            );
+            if (res.authorizationUrl) {
+              window.location.href = res.authorizationUrl;
+            } else {
+              toast.success('Plan activated!');
+              window.location.reload();
+            }
+          } catch (err: any) {
+            toast.error(err?.message ?? 'Could not initiate checkout. Please try again.');
+          } finally {
+            setUpgradingTier(null);
+          }
+        };
         const PLAN_LIMITS: Record<string, { stores: number; users: number }> = {
           FREE:       { stores: 1, users: 1 },
-          STARTER:    { stores: 1, users: 5 },
-          GROWTH:     { stores: 2, users: 8 },
-          PRO:        { stores: 5, users: 15 },
+          STARTER:    { stores: 1, users: 8 },
+          GROWTH:     { stores: 2, users: 15 },
+          PRO:        { stores: 5, users: 30 },
           ENTERPRISE: { stores: Infinity, users: Infinity },
         };
         const PLANS = [
@@ -2242,19 +2263,19 @@ export default function SettingsPage() {
             tier: 'STARTER',
             label: 'Starter',
             price: 'KES 999/mo',
-            features: ['1 store', '5 users', 'Full POS + M-Pesa', 'KRA eTIMS', 'Full reports', 'Offline + PWA'],
+            features: ['1 store', '8 users', 'Full POS + M-Pesa', 'KRA eTIMS', 'Full reports', 'Offline + PWA'],
           },
           {
             tier: 'GROWTH',
             label: 'Growth',
             price: 'KES 2,499/mo',
-            features: ['2 stores', '8 users', 'Hospitality (tables/KOT)', 'Suppliers & POs', 'Promotions & gift cards', 'WhatsApp & SMS receipts'],
+            features: ['2 stores', '15 users', 'Hospitality (tables/KOT)', 'Suppliers & POs', 'Promotions & gift cards', 'WhatsApp & SMS receipts'],
           },
           {
             tier: 'PRO',
             label: 'Pro',
             price: 'KES 4,999/mo',
-            features: ['5 stores', '15 users', 'Full HR + Kenya payroll', 'Bank reconciliation', 'Webhooks & API keys', 'Budget & expense approvals'],
+            features: ['5 stores', '30 users', 'Full HR + Kenya payroll', 'Bank reconciliation', 'Webhooks & API keys', 'Budget & expense approvals'],
           },
           {
             tier: 'ENTERPRISE',
@@ -2401,14 +2422,17 @@ export default function SettingsPage() {
                       ))}
                     </ul>
                     <button
-                      disabled={isCurrent}
+                      disabled={isCurrent || upgradingTier === plan.tier}
+                      onClick={() => !isCurrent && handleUpgrade(plan.tier)}
                       className={`w-full py-2 text-sm font-medium rounded-lg transition-colors ${
                         isCurrent
                           ? 'bg-blue-100 text-blue-700 cursor-default'
+                          : upgradingTier === plan.tier
+                          ? 'bg-blue-600 text-white opacity-70 cursor-wait'
                           : 'border border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white'
                       }`}
                     >
-                      {isCurrent ? 'Current Plan' : 'Upgrade'}
+                      {isCurrent ? 'Current Plan' : upgradingTier === plan.tier ? 'Redirecting…' : 'Upgrade'}
                     </button>
                   </div>
                 );

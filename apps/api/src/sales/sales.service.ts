@@ -84,6 +84,26 @@ export class SalesService {
       throw new BadRequestException('Invalid store');
     }
 
+    // FREE tier: count transactions this calendar month
+    let monthlyTxCount: number | null = null;
+    const FREE_TX_LIMIT = 200;
+    if (store.business.subscriptionTier === 'FREE' || store.business.planName === 'Free') {
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const existingCount = await this.prisma.sale.count({
+        where: {
+          businessId,
+          createdAt: { gte: monthStart, lt: monthEnd },
+          status: { not: 'VOIDED' },
+        },
+      });
+      // This sale will push the count to existingCount + 1
+      monthlyTxCount = existingCount + 1;
+      // At limit: allow the current sale to complete but signal the frontend to show upgrade modal
+      // (sale already in progress — hard blocking mid-transaction is bad UX)
+    }
+
     const items = await this.prisma.item.findMany({
       where: { id: { in: dto.items.map(i => i.itemId) } },
     });
@@ -283,7 +303,7 @@ export class SalesService {
       itemIds: dto.items.map(i => i.itemId),
     });
 
-    return { ...sale, pointsEarned, loyaltyBalance };
+    return { ...sale, pointsEarned, loyaltyBalance, monthlyTxCount, freeTxLimit: monthlyTxCount !== null ? FREE_TX_LIMIT : null };
   }  private async checkAndDispatchLowStock(businessId: string, storeId: string, itemIds: string[]): Promise<void> {
     const itemList = await this.prisma.item.findMany({ where: { id: { in: itemIds }, trackStock: true } });
     for (const item of itemList) {

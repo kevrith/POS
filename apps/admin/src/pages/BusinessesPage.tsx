@@ -61,9 +61,11 @@ function PlanBadge({ plan }: { plan: string }) {
   const m: Record<string, { bg: string; color: string }> = {
     ENTERPRISE: { bg: 'rgba(139,92,246,0.12)', color: '#8b5cf6' },
     PRO:        { bg: 'rgba(59,130,246,0.12)',  color: '#3b82f6' },
+    GROWTH:     { bg: 'rgba(6,182,212,0.12)',   color: '#06b6d4' },
     STARTER:    { bg: 'rgba(100,116,139,0.1)',  color: '#94a3b8' },
+    FREE:       { bg: 'rgba(16,185,129,0.12)',  color: '#10b981' },
   };
-  const c = m[plan ?? 'STARTER'] ?? m.STARTER;
+  const c = m[plan ?? 'FREE'] ?? m.FREE;
   return (
     <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '0.6875rem', fontWeight: 700, background: c.bg, color: c.color }}>
       {plan ?? 'STARTER'}
@@ -541,7 +543,9 @@ export default function BusinessesPage() {
         </div>
         <select value={planFilter} onChange={e => { setPlanFilter(e.target.value); setPage(1); }} style={selectStyle}>
           <option value="ALL">All Plans</option>
+          <option value="FREE">Free</option>
           <option value="STARTER">Starter</option>
+          <option value="GROWTH">Growth</option>
           <option value="PRO">Pro</option>
           <option value="ENTERPRISE">Enterprise</option>
         </select>
@@ -589,7 +593,7 @@ export default function BusinessesPage() {
           <select value={bulkTier} onChange={e => setBulkTier(e.target.value)}
             style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${C.cardBorder}`, background: C.surface, color: C.text, fontSize: '0.8125rem' }}>
             <option value="">Tier…</option>
-            {['STARTER','PRO','ENTERPRISE'].map(t => <option key={t} value={t}>{t}</option>)}
+            {['FREE','STARTER','GROWTH','PRO','ENTERPRISE'].map(t => <option key={t} value={t}>{t}</option>)}
           </select>
           <input type="number" value={bulkTrialDays} onChange={e => setBulkTrialDays(e.target.value)}
             placeholder="Extend trial (days)"
@@ -651,7 +655,7 @@ export default function BusinessesPage() {
                           <select value={editForm.subscriptionTier}
                             onChange={e => setEditForm(f => ({ ...f, subscriptionTier: e.target.value }))}
                             style={selectStyle}>
-                            {['STARTER', 'PRO', 'ENTERPRISE'].map(t => <option key={t} value={t}>{t}</option>)}
+                            {['FREE', 'STARTER', 'GROWTH', 'PRO', 'ENTERPRISE'].map(t => <option key={t} value={t}>{t}</option>)}
                           </select>
                           <input value={editForm.trialDays}
                             onChange={e => setEditForm(f => ({ ...f, trialDays: e.target.value }))}
@@ -708,7 +712,7 @@ export default function BusinessesPage() {
                       </td>
                       <td style={{ padding: '0.875rem 1.25rem' }}>
                         {(() => {
-                          const PLAN_PRICE: Record<string, number> = { STARTER: 1499, PRO: 3999, ENTERPRISE: 9999, TRIAL: 0 };
+                          const PLAN_PRICE: Record<string, number> = { FREE: 0, STARTER: 999, GROWTH: 2499, PRO: 4999, ENTERPRISE: 14999, TRIAL: 0 };
                           const tier = b.subscriptionTier ?? b.planName ?? 'TRIAL';
                           const months = Math.max(1, Math.round((Date.now() - new Date(b.createdAt).getTime()) / (30 * 86400000)));
                           const ltv = months * (PLAN_PRICE[tier] ?? 0);

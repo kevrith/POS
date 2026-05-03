@@ -10,8 +10,10 @@ import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 
 const PLAN_INFO: Record<string, { label: string; color: string; desc: string }> = {
-  STARTER:    { label: 'Starter',    color: 'bg-emerald-500', desc: '1 store · 10 users · Full compliance' },
-  PRO:        { label: 'Pro',        color: 'bg-blue-600',    desc: '5 stores · 20 users · AI forecasting' },
+  FREE:       { label: 'Free',       color: 'bg-green-500',   desc: '1 store · 1 user · Basic POS' },
+  STARTER:    { label: 'Starter',    color: 'bg-emerald-500', desc: '1 store · 8 users · Full compliance' },
+  GROWTH:     { label: 'Growth',     color: 'bg-cyan-500',    desc: '2 stores · 15 users · Hospitality & delivery' },
+  PRO:        { label: 'Pro',        color: 'bg-blue-600',    desc: '5 stores · 30 users · AI forecasting' },
   ENTERPRISE: { label: 'Enterprise', color: 'bg-purple-600',  desc: 'Unlimited · White-glove support' },
   LIFETIME:   { label: 'Lifetime',   color: 'bg-amber-500',   desc: 'One-time purchase · All features forever' },
 };

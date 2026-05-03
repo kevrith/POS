@@ -26,7 +26,7 @@ export class SubscriptionController {
   @Post('checkout')
   async initializeCheckout(
     @Req() req: Request & { user: AuthUser },
-    @Body() body: { tier: 'STARTER' | 'PRO' | 'ENTERPRISE'; email: string },
+    @Body() body: { tier: 'FREE' | 'STARTER' | 'GROWTH' | 'PRO' | 'ENTERPRISE'; email: string },
   ) {
     return this.subscription.initializeCheckout(req.user.businessId, body.tier, body.email);
   }

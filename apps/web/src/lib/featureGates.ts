@@ -33,9 +33,9 @@ export const PLAN_PRICES_KES: Record<Plan, number> = {
 
 export const PLAN_LIMITS: Record<Plan, { stores: number; users: number }> = {
   FREE:       { stores: 1, users: 1 },
-  STARTER:    { stores: 1, users: 5 },
-  GROWTH:     { stores: 2, users: 8 },
-  PRO:        { stores: 5, users: 15 },
+  STARTER:    { stores: 1, users: 8 },
+  GROWTH:     { stores: 2, users: 15 },
+  PRO:        { stores: 5, users: 30 },
   ENTERPRISE: { stores: Infinity, users: Infinity },
 };
 

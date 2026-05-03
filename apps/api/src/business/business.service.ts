@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
@@ -167,6 +168,23 @@ export class BusinessService {
   }
 
   async createUser(businessId: string, dto: CreateUserDto) {
+    const USER_LIMITS: Record<string, number> = {
+      FREE: 1, STARTER: 8, GROWTH: 15, PRO: 30, ENTERPRISE: Infinity,
+    };
+
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { subscriptionTier: true, _count: { select: { users: true } } },
+    });
+    if (!business) throw new NotFoundException('Business not found');
+
+    const limit = USER_LIMITS[business.subscriptionTier ?? 'FREE'] ?? 1;
+    if (business._count.users >= limit) {
+      throw new ForbiddenException(
+        `User limit reached for ${business.subscriptionTier ?? 'FREE'} plan (max ${limit}). Upgrade your subscription to add more staff.`,
+      );
+    }
+
     if (dto.email) {
       const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
       if (existing) throw new ConflictException('Email already in use');

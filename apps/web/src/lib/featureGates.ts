@@ -54,9 +54,10 @@ export const FEATURE_PLANS: Record<string, Plan> = {
   'cash-drawer':  'FREE',
 
   // ── STARTER (KES 999/mo) ─────────────────────────────────────────────────
-  'batch':        'STARTER',
-  'reports':      'STARTER',
-  'settings':     'STARTER',
+  'batch':                  'STARTER',
+  'reports':                'STARTER',
+  'settings':               'STARTER',
+  'receipt-customization':  'STARTER',
 
   // ── GROWTH (KES 2,499/mo) ────────────────────────────────────────────────
   'hospitality':          'GROWTH',
@@ -93,6 +94,7 @@ export const FEATURE_PLANS: Record<string, Plan> = {
   'payroll':              'PRO',
   'security-settings':    'PRO',
   'api-keys':             'PRO',
+  'scheduled-reports':    'PRO',
 
   // ── ENTERPRISE (KES 14,999/mo) ───────────────────────────────────────────
   'agent':            'ENTERPRISE',

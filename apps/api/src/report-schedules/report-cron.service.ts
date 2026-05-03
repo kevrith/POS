@@ -17,6 +17,44 @@ export class ReportCronService {
     private schedules: ReportSchedulesService,
   ) {}
 
+  /** Run once daily at 08:00 EAT — send trial expiry nudge emails */
+  @Cron('0 5 * * *') // 08:00 EAT = 05:00 UTC
+  async sendTrialNudges() {
+    const NUDGE_DAYS = [14, 7, 1];
+    const now = new Date();
+
+    for (const daysLeft of NUDGE_DAYS) {
+      const windowStart = new Date(now);
+      windowStart.setDate(windowStart.getDate() + daysLeft);
+      windowStart.setHours(0, 0, 0, 0);
+      const windowEnd = new Date(windowStart);
+      windowEnd.setHours(23, 59, 59, 999);
+
+      const businesses = await this.prisma.business.findMany({
+        where: {
+          subscriptionStatus: 'TRIAL',
+          trialEndsAt: { gte: windowStart, lte: windowEnd },
+        },
+        include: { users: { where: { role: 'OWNER' }, take: 1 } },
+      });
+
+      for (const biz of businesses) {
+        const ownerEmail = biz.users[0]?.email;
+        if (!ownerEmail) continue;
+        try {
+          await this.email.sendTrialExpiryWarning({
+            to: ownerEmail,
+            businessName: biz.name,
+            daysLeft,
+          });
+          this.logger.log(`Trial nudge (${daysLeft}d) sent to ${ownerEmail} for ${biz.name}`);
+        } catch (err: any) {
+          this.logger.error(`Failed to send trial nudge to ${ownerEmail}: ${err.message}`);
+        }
+      }
+    }
+  }
+
   /** Run every hour at minute 0 — check which schedules are due */
   @Cron(CronExpression.EVERY_HOUR)
   async runDueSchedules() {

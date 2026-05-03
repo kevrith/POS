@@ -70,6 +70,7 @@ import { CybercafeModule } from './cybercafe/cybercafe.module';
 import { FieldSalesModule } from './field-sales/field-sales.module';
 import { DeliveryRoutesModule } from './delivery-routes/delivery-routes.module';
 import { CustomerPortalModule } from './customer-portal/customer-portal.module';
+import { DbBackupModule } from './backup/db-backup.module';
 
 @Module({
   imports: [
@@ -117,6 +118,7 @@ import { CustomerPortalModule } from './customer-portal/customer-portal.module';
     ApiKeysModule,
     ReportSchedulesModule,
     WebhooksModule,
+    DbBackupModule,
     // New
     SubscriptionModule,
     SuperAdminModule,

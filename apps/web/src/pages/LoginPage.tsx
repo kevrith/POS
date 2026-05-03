@@ -8,9 +8,11 @@ import { isBiometricAvailable, authenticateBiometric } from '../lib/biometric';
 import { setToken } from '../lib/api';
 
 const PLAN_LABELS: Record<string, { label: string; color: string; price: string }> = {
-  STARTER:    { label: 'Starter',    color: 'bg-emerald-500', price: 'KES 1,499/mo' },
-  PRO:        { label: 'Pro',        color: 'bg-blue-600',    price: 'KES 3,999/mo' },
-  ENTERPRISE: { label: 'Enterprise', color: 'bg-purple-600',  price: 'KES 9,999/mo' },
+  FREE:       { label: 'Free',       color: 'bg-green-500',   price: 'KES 0/mo' },
+  STARTER:    { label: 'Starter',    color: 'bg-emerald-500', price: 'KES 999/mo' },
+  GROWTH:     { label: 'Growth',     color: 'bg-cyan-500',    price: 'KES 2,499/mo' },
+  PRO:        { label: 'Pro',        color: 'bg-blue-600',    price: 'KES 4,999/mo' },
+  ENTERPRISE: { label: 'Enterprise', color: 'bg-purple-600',  price: 'KES 14,999/mo' },
   LIFETIME:   { label: 'Lifetime',   color: 'bg-amber-500',   price: 'Pay once' },
 };
 

@@ -54,6 +54,34 @@ export class AuthService {
     }
   }
 
+  // ─── PIN login rate limiting (in-memory, per businessId) ────
+  private static readonly MAX_PIN_ATTEMPTS = 5;
+  private static readonly PIN_LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes
+  private readonly pinAttempts = new Map<string, { count: number; lockedUntil: number }>();
+
+  private checkPinRateLimit(businessId: string) {
+    const now = Date.now();
+    const entry = this.pinAttempts.get(businessId);
+    if (entry && entry.lockedUntil > now) {
+      const minsLeft = Math.ceil((entry.lockedUntil - now) / 60000);
+      throw new UnauthorizedException(`Too many failed PIN attempts. Try again in ${minsLeft} minute(s).`);
+    }
+  }
+
+  private recordPinFailure(businessId: string) {
+    const now = Date.now();
+    const entry = this.pinAttempts.get(businessId) ?? { count: 0, lockedUntil: 0 };
+    const newCount = entry.count + 1;
+    const lockedUntil = newCount >= AuthService.MAX_PIN_ATTEMPTS
+      ? now + AuthService.PIN_LOCKOUT_MS
+      : entry.lockedUntil;
+    this.pinAttempts.set(businessId, { count: newCount, lockedUntil });
+  }
+
+  private clearPinFailures(businessId: string) {
+    this.pinAttempts.delete(businessId);
+  }
+
   // ─── Email + Password login ──────────────────────────────────
   private static readonly MAX_LOGIN_ATTEMPTS = 5;
   private static readonly LOCKOUT_MINUTES = 15;
@@ -194,6 +222,8 @@ export class AuthService {
       businessId = biz.id;
     }
 
+    this.checkPinRateLimit(businessId);
+
     // If userId provided, only check that specific user's PIN
     const users = userId
       ? await this.prisma.user.findMany({ where: { id: userId, businessId, pinHash: { not: null } } })
@@ -207,7 +237,12 @@ export class AuthService {
       }
     }
 
-    if (!matchedUser) throw new UnauthorizedException('Invalid PIN');
+    if (!matchedUser) {
+      this.recordPinFailure(businessId);
+      throw new UnauthorizedException('Invalid PIN');
+    }
+
+    this.clearPinFailures(businessId);
 
     const biz = await this.prisma.business.findUnique({
       where: { id: matchedUser.businessId },

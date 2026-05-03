@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException, BadRequestException, Logger } from '
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
+import { DbBackupService } from '../backup/db-backup.service';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { createHash, randomBytes } from 'crypto';
@@ -24,6 +25,7 @@ export class SuperAdminService {
     private prisma: PrismaService,
     private jwt: JwtService,
     private email: EmailService,
+    private backup: DbBackupService,
   ) {}
 
   async login(email: string, password: string): Promise<{ token: string }> {
@@ -461,6 +463,8 @@ export class SuperAdminService {
       }),
     ]);
 
+    const recentBackups = this.backup.listBackups().slice(0, 5);
+
     return {
       totalBusinesses,
       activeBusinesses,
@@ -469,6 +473,8 @@ export class SuperAdminService {
         totalEtims24h > 0 ? Math.round((pendingEtims / totalEtims24h) * 100) : 0,
       webhookFailureCount: webhookFailures._sum.failureCount ?? 0,
       sales24h,
+      backups: recentBackups,
+      lastBackupAt: recentBackups[0]?.createdAt ?? null,
       timestamp: new Date().toISOString(),
     };
   }

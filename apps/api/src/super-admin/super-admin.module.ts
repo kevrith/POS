@@ -6,12 +6,14 @@ import { SuperAdminAuthGuard } from './super-admin-auth.guard';
 import { PrismaModule } from '../prisma/prisma.module';
 import { SecretsRotationService } from '../security/secrets-rotation.service';
 import { EmailModule } from '../email/email.module';
+import { DbBackupModule } from '../backup/db-backup.module';
 
 @Module({
   imports: [
     PrismaModule,
-    JwtModule.register({}), // options provided per-call via jwt.sign(payload, opts)
+    JwtModule.register({}),
     EmailModule,
+    DbBackupModule,
   ],
   providers: [SuperAdminService, SuperAdminAuthGuard, SecretsRotationService],
   controllers: [SuperAdminController],

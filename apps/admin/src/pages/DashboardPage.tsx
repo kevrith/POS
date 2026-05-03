@@ -181,6 +181,8 @@ export default function DashboardPage() {
   const [signupSearch, setSignupSearch] = useState('');
   const [extendingId, setExtendingId]   = useState<string | null>(null);
 
+  const fetchHealth = () => adminApi.getHealth().catch(() => null).then(setHealth);
+
   useEffect(() => {
     Promise.all([
       adminApi.getStats(),
@@ -192,6 +194,11 @@ export default function DashboardPage() {
     ]).then(([s, r, h, c, t, d]) => {
       setStats(s); setRecent(r); setHealth(h); setCollected(c); setTrials(t ?? []); setDunning(d);
     }).catch(console.error).finally(() => setLoading(false));
+
+    // Auto-refresh health panel every 30 seconds
+    const interval = setInterval(fetchHealth, 30_000);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const extendTrial = async (bizId: string) => {
@@ -400,10 +407,19 @@ export default function DashboardPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <HealthRow label="Active Businesses" value={health.activeBusinesses ?? '—'} ok={true}      icon={Icons.buildings} />
               <HealthRow label="Sales (24h)"        value={health.sales24h ?? '—'}         ok={true}      icon={Icons.activity} />
-              <HealthRow label="eTIMS Failures"     value={health.etimsFailureRate ?? 0}   ok={!(health.etimsFailureRate)} icon={Icons.alert} />
+              <HealthRow label="eTIMS Failures"     value={`${health.etimsFailureRate ?? 0}%`} ok={!(health.etimsFailureRate)} icon={Icons.alert} />
               <HealthRow label="Email Queue"        value={health.queueDepths?.email ?? 0}    ok={(health.queueDepths?.email ?? 0) === 0}    icon={Icons.activity} />
               <HealthRow label="Webhook Queue"      value={health.queueDepths?.webhooks ?? 0} ok={(health.queueDepths?.webhooks ?? 0) === 0} icon={Icons.link} />
               <HealthRow label="eTIMS Queue"        value={health.queueDepths?.etims ?? 0}    ok={(health.queueDepths?.etims ?? 0) === 0}    icon={Icons.check} />
+              <HealthRow
+                label="Last DB Backup"
+                value={health.lastBackupAt ? new Date(health.lastBackupAt).toLocaleString('en-KE', { dateStyle: 'short', timeStyle: 'short' }) : 'Never'}
+                ok={!!health.lastBackupAt && (Date.now() - new Date(health.lastBackupAt).getTime()) < 26 * 3600000}
+                icon={Icons.award}
+              />
+            </div>
+            <div style={{ fontSize: '0.6875rem', color: C.textMuted, marginTop: '0.75rem', textAlign: 'right' }}>
+              Auto-refreshes every 30s · Last updated {new Date(health.timestamp).toLocaleTimeString('en-KE')}
             </div>
           </div>
         )}

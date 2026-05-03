@@ -43,6 +43,7 @@ import {
   Fingerprint,
 } from 'lucide-react';
 import { UserRole } from '@pos/shared';
+import { hasFeature } from '../lib/featureGates';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -368,9 +369,31 @@ export default function SettingsPage() {
   const businessId = user?.businessId ?? '';
   const queryClient = useQueryClient();
   const [saved, setSaved] = useState(false);
+
+  // ─── Post-payment verification ────────────────────────────────────────────
+  const [verifyState, setVerifyState] = useState<'idle' | 'verifying' | 'success' | 'failed'>('idle');
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get('ref');
+    const tab = params.get('tab');
+    if (ref && tab === 'subscription') {
+      setVerifyState('verifying');
+      api.get<{ active: boolean; plan?: string }>(`/subscription/verify/${ref}`)
+        .then((res) => {
+          setVerifyState(res.active ? 'success' : 'failed');
+          if (res.active) {
+            queryClient.invalidateQueries({ queryKey: ['subscription', businessId] });
+            window.history.replaceState({}, '', '/settings?tab=subscription');
+          }
+        })
+        .catch(() => setVerifyState('failed'));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [activeTab, setActiveTab] = useState<
     'general' | 'users' | 'stores' | 'etims' | 'mpesa' | 'subscription' | 'messaging' | 'loyalty' | 'loyalty-tiers' | 'printers' | 'api-keys' | 'scale' | 'backup' | 'automation' | 'webhooks' | 'audit' | 'kdpa' | 'security'
-  >('general');
+  >(() => (new URLSearchParams(window.location.search).get('tab') as any) ?? 'general');
 
   // ─── General form state ────────────────────────────────────────────────────
   const [form, setForm] = useState({
@@ -1494,37 +1517,63 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* ── Receipt Customization ── */}
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Receipt Customization</h3>
-            <div className="space-y-3">
+          {/* ── Receipt Customization (STARTER+) ── */}
+          <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
               <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Receipt Header (shown above items)</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Thank you for choosing us! Follow us @mybusiness"
-                  value={form.receiptHeader}
-                  onChange={(e) => setForm((f) => ({ ...f, receiptHeader: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                />
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Receipt Customization</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Add your own message above and below the receipt items</p>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Receipt Footer (custom note below total)</label>
-                <input
-                  type="text"
-                  placeholder="e.g. No returns after 7 days. Visit us again!"
-                  value={form.receiptFooter}
-                  onChange={(e) => setForm((f) => ({ ...f, receiptFooter: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 text-center text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
-                {form.receiptHeader && <div className="font-medium text-gray-700 dark:text-gray-300">{form.receiptHeader}</div>}
-                <div>Thank you for your business!</div>
-                {form.receiptFooter && <div>{form.receiptFooter}</div>}
-                <div className="text-gray-400">Powered by: Kastra Systems</div>
-              </div>
+              {!hasFeature(user?.planName, 'receipt-customization') && (
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">Starter+</span>
+              )}
             </div>
+            {!hasFeature(user?.planName, 'receipt-customization') ? (
+              <div className="rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-dashed border-gray-300 dark:border-gray-600 p-6 text-center space-y-2">
+                <p className="text-sm text-gray-500 dark:text-gray-400">Upgrade to <strong className="text-gray-700 dark:text-gray-300">Starter</strong> to add custom header and footer text to your receipts.</p>
+                <a href="/settings?tab=subscription" className="inline-block mt-1 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline">View plans →</a>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Receipt Header</label>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mb-1.5">Shown at the top of the receipt, before items</p>
+                    <textarea
+                      rows={2}
+                      placeholder="e.g. Thank you for choosing us! Follow us @mybusiness"
+                      value={form.receiptHeader}
+                      onChange={(e) => setForm((f) => ({ ...f, receiptHeader: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 resize-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Receipt Footer</label>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mb-1.5">Shown at the bottom, after the total</p>
+                    <textarea
+                      rows={2}
+                      placeholder="e.g. No returns after 7 days. Goods once sold are not refundable."
+                      value={form.receiptFooter}
+                      onChange={(e) => setForm((f) => ({ ...f, receiptFooter: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 resize-none"
+                    />
+                  </div>
+                </div>
+                {/* Live preview */}
+                <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50 p-4 text-xs text-gray-500 dark:text-gray-400 font-mono space-y-1">
+                  <p className="text-gray-400 dark:text-gray-500 text-[10px] uppercase tracking-widest mb-2">Preview</p>
+                  {form.receiptHeader && (
+                    <div className="text-center font-medium text-gray-700 dark:text-gray-300 whitespace-pre-wrap border-b border-dashed border-gray-300 dark:border-gray-600 pb-2 mb-2">{form.receiptHeader}</div>
+                  )}
+                  <div className="text-center text-gray-400">· · · receipt items · · ·</div>
+                  <div className="text-center text-gray-400">Total: KES XXXX</div>
+                  {form.receiptFooter && (
+                    <div className="text-center text-gray-600 dark:text-gray-300 whitespace-pre-wrap border-t border-dashed border-gray-300 dark:border-gray-600 pt-2 mt-2">{form.receiptFooter}</div>
+                  )}
+                  <div className="text-center text-gray-400 text-[10px] mt-1">Powered by Kastra Systems</div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ── Display / Accessibility ───────────────────────────────────── */}
@@ -2300,6 +2349,25 @@ export default function SettingsPage() {
 
         return (
           <div className="space-y-5">
+            {/* Payment verification banner */}
+            {verifyState === 'verifying' && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-3 text-sm text-blue-700">
+                <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                Confirming your payment, please wait…
+              </div>
+            )}
+            {verifyState === 'success' && (
+              <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3 text-sm text-green-700">
+                <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                Payment confirmed — your plan has been upgraded!
+              </div>
+            )}
+            {verifyState === 'failed' && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-700">
+                We couldn't confirm your payment yet. If you were charged, it will activate within a few minutes — check back shortly or contact support.
+              </div>
+            )}
+
             {/* Header card */}
             <div className="bg-white rounded-xl shadow p-6">
               <div className="flex items-center justify-between mb-4">
@@ -3938,7 +4006,15 @@ export default function SettingsPage() {
       })()}
 
       {/* ── Automation Tab ────────────────────────────────────────────────── */}
-      {activeTab === 'automation' && (
+      {activeTab === 'automation' && !hasFeature(user?.planName, 'scheduled-reports') && (
+        <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+          <div className="text-5xl">⏰</div>
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Scheduled Reports</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm">Automatically email X/Z reports, VAT summaries and P&amp;L statements on a daily, weekly or monthly schedule. Available on the <strong className="text-gray-700 dark:text-gray-300">Pro plan</strong> and above.</p>
+          <a href="/settings?tab=subscription" className="mt-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors">Upgrade to Pro →</a>
+        </div>
+      )}
+      {activeTab === 'automation' && hasFeature(user?.planName, 'scheduled-reports') && (
         <div className="space-y-6">
           <div className="bg-white rounded-xl shadow p-6">
             <div className="flex items-center justify-between mb-4">

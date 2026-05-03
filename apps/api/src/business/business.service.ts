@@ -113,6 +113,23 @@ export class BusinessService {
   }
 
   async createStore(businessId: string, dto: CreateStoreDto) {
+    const STORE_LIMITS: Record<string, number> = {
+      FREE: 1, STARTER: 1, GROWTH: 2, PRO: 5, ENTERPRISE: Infinity,
+    };
+
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { subscriptionTier: true, _count: { select: { stores: true } } },
+    });
+    if (!business) throw new NotFoundException('Business not found');
+
+    const limit = STORE_LIMITS[business.subscriptionTier ?? 'FREE'] ?? 1;
+    if (business._count.stores >= limit) {
+      throw new ForbiddenException(
+        `Store limit reached for ${business.subscriptionTier ?? 'FREE'} plan (max ${limit}). Upgrade to add more stores.`,
+      );
+    }
+
     return this.prisma.store.create({
       data: {
         businessId,

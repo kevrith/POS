@@ -37,10 +37,14 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
       if (ctx && TENANT_MODELS.has(model) && SCOPED_OPS.has(params.action as string)) {
         const where = (params.args as { where?: Record<string, unknown> })?.where;
         if (!where?.businessId && !where?.id) {
-          this.logger.warn(
+          const msg =
             `[TenantMiddleware] ${model}.${params.action as string} ` +
-            `executed WITHOUT businessId filter (ctx=${ctx.businessId})`,
-          );
+            `executed WITHOUT businessId filter (ctx=${ctx.businessId})`;
+          if (process.env.NODE_ENV === 'production') {
+            throw new Error(msg);
+          } else {
+            this.logger.warn(msg);
+          }
         }
       }
 

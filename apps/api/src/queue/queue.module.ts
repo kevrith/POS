@@ -13,9 +13,16 @@ export class QueueModule {
     const logger = new Logger('QueueModule');
     const host = process.env.REDIS_HOST;
     const hasRedis = !!host;
+    const isProd = process.env.NODE_ENV === 'production';
 
     if (!hasRedis) {
-      logger.warn('REDIS_HOST not set — BullMQ queues disabled; jobs will run synchronously');
+      if (isProd) {
+        // Hard fail in production — eTIMS/webhook retries are not optional
+        throw new Error(
+          'REDIS_HOST is required in production. BullMQ is used for eTIMS and webhook retry queues. Set REDIS_HOST in your environment.',
+        );
+      }
+      logger.warn('REDIS_HOST not set — BullMQ queues disabled; jobs will run synchronously (dev/test only)');
       return {
         module: QueueModule,
         providers: [JobsService],

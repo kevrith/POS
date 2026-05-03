@@ -67,6 +67,7 @@ const CyberKioskPage = lazy(() => import('./pages/CyberKioskPage'));
 const FieldOrdersPage = lazy(() => import('./pages/FieldOrdersPage'));
 const DeliveryRoutesPage = lazy(() => import('./pages/DeliveryRoutesPage'));
 const AgentPage = lazy(() => import('./pages/AgentPage'));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 
 function PageLoader() {
   return (
@@ -143,6 +144,15 @@ export default function App() {
     return (
       <Suspense fallback={<div className="min-h-screen bg-indigo-50" />}>
         <CustomerPortalPage />
+      </Suspense>
+    );
+  }
+
+  // Password reset — public, no auth, no layout
+  if (window.location.pathname === '/reset-password') {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-slate-900" />}>
+        <ResetPasswordPage />
       </Suspense>
     );
   }

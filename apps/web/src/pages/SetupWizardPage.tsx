@@ -122,11 +122,13 @@ export default function SetupWizardPage() {
   }, [existingSettings]);
 
   const saveBizMutation = useMutation({
-    mutationFn: () =>
-      api.patch(`/business/${businessId}/settings`, {
-        ...bizForm,
-        taxType: bizForm.taxChoice === 'NONE' ? 'VAT' : bizForm.taxChoice,
-      }),
+    mutationFn: () => {
+      const { taxChoice, ...rest } = bizForm;
+      return api.patch(`/business/${businessId}/settings`, {
+        ...rest,
+        taxType: taxChoice === 'NONE' ? 'VAT' : taxChoice,
+      });
+    },
     onSuccess: () => setStep(2),
   });
 

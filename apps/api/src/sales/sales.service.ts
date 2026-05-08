@@ -377,7 +377,7 @@ export class SalesService {
     voidedItemIds?: string[],
     voidedItemQuantities?: Array<{ itemId: string; quantity: number }>,
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const sale = await tx.sale.findFirst({
         where: { id: saleId, businessId },
         include: { items: true },
@@ -450,25 +450,25 @@ export class SalesService {
         data: { status: newStatus },
       });
 
-      await this.audit.createEntry({
-        businessId,
-        actor: managerId,
-        actorType: 'USER',
-        action: isLineItemVoid ? 'SALE_LINE_ITEM_VOIDED' : 'SALE_VOIDED',
-        entity: 'Sale',
-        entityId: saleId,
-        after: { status: newStatus, reason },
-        source: 'POS',
-      });
+      return { success: true, refundAmountCents: refundAmount, newStatus, isLineItemVoid };
+    }, { timeout: 15000 });
 
-      return { success: true, refundAmountCents: refundAmount };
-    }, { timeout: 15000 }).then(async (result) => {
-      // Best-effort eTIMS void submission (non-blocking, outside transaction)
-      this.etims.voidSale(saleId, reason).catch(() => {
-        // eTIMS void failure is non-fatal — logged by eTIMS service
-      });
-      return result;
+    // Audit log after transaction commits
+    await this.audit.createEntry({
+      businessId,
+      actor: managerId,
+      actorType: 'USER',
+      action: result.isLineItemVoid ? 'SALE_LINE_ITEM_VOIDED' : 'SALE_VOIDED',
+      entity: 'Sale',
+      entityId: saleId,
+      after: { status: result.newStatus, reason },
+      source: 'POS',
     });
+
+    // Best-effort eTIMS void submission (non-blocking)
+    this.etims.voidSale(saleId, reason).catch(() => {});
+
+    return { success: result.success, refundAmountCents: result.refundAmountCents };
   }
 
   async verifyManagerPin(pin: string, businessId: string) {

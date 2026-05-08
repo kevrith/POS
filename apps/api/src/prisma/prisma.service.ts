@@ -7,7 +7,7 @@ import { tenantContext } from './tenant-context';
  * Queries on these models without a businessId filter trigger a warning.
  */
 const TENANT_MODELS = new Set([
-  'Item', 'Sale', 'Customer', 'Store', 'User', 'InventoryMovement',
+  'Item', 'Sale', 'Customer', 'Store', 'User',
   'Supplier', 'Expense', 'Employee', 'Promotion', 'GiftCard',
   'LoyaltyProgram', 'AuditLog', 'Notification', 'Budget', 'Shift',
   'Order', 'Table', 'Reservation', 'ItemBatch',

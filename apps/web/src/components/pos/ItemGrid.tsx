@@ -190,7 +190,7 @@ export default function ItemGrid({
       </div>
 
       {/* Item grid */}
-      <div className="flex-1 overflow-y-auto p-3 md:p-4 pb-24 md:pb-4">
+      <div className="flex-1 overflow-y-auto p-2 md:p-4 pb-32 md:pb-4">
         <div className="grid grid-cols-2 xs:grid-cols-3 md:grid-cols-3 xl:grid-cols-4 gap-2 md:gap-3">
           {items.map((item) => {
             const price =
@@ -200,10 +200,8 @@ export default function ItemGrid({
                   ? item.vipPriceCents
                   : item.retailPriceCents;
             const outOfStock = item.trackStock && (item.currentStock ?? 0) <= 0;
-            // Use real batch expiry data from API (not the defaultExpiryDays config field)
             const isExpired = !!(item as any).batchExpired;
             const isExpiringSoon = !!(item as any).batchExpiringSoon;
-            // null / ALLOW / WARN → allow selling when OOS; BLOCK → hard disable
             const canOversell = !item.negativeStockPolicy || item.negativeStockPolicy !== 'BLOCK';
             const hardDisabled = (outOfStock && !canOversell) || isExpired || !!item.soldOut;
 
@@ -221,12 +219,12 @@ export default function ItemGrid({
                 key={item.id}
                 onClick={handleClick}
                 disabled={hardDisabled}
-                className={`p-3 rounded-xl border-2 text-left transition-all relative ${
+                className={`p-3 rounded-xl border-2 text-left transition-all relative touch-manipulation ${
                   hardDisabled
                     ? 'border-slate-800 bg-slate-900/30 opacity-50 cursor-not-allowed'
                     : outOfStock && canOversell
                       ? 'border-orange-700/60 bg-orange-950/30 hover:bg-orange-900/30 hover:border-orange-600/70 active:scale-95'
-                      : 'border-slate-700 bg-slate-800/50 hover:bg-slate-700/60 hover:border-slate-500 active:scale-95'
+                      : 'border-slate-700 bg-slate-800/50 hover:bg-slate-700/60 hover:border-slate-500 active:scale-95 active:bg-slate-700'
                 }`}
               >
                 {item.ageRestricted && (
@@ -250,12 +248,12 @@ export default function ItemGrid({
                   </div>
                 )}
                 <div
-                  className="w-full h-12 rounded-lg mb-2 flex items-center justify-center text-xl font-bold text-white"
+                  className="w-full h-14 md:h-12 rounded-lg mb-2 flex items-center justify-center text-2xl md:text-xl font-bold text-white"
                   style={{ backgroundColor: categoryColor(typeof item.category === 'object' ? item.category?.name : item.category) }}
                 >
                   {item.name[0]?.toUpperCase() ?? '?'}
                 </div>
-                <p className="text-xs font-medium text-slate-200 leading-tight line-clamp-2">{item.name}</p>
+                <p className="text-xs font-semibold text-slate-200 leading-tight line-clamp-2">{item.name}</p>
                 <p className="text-sm font-bold text-blue-400 mt-1">{formatKES(price)}</p>
                 {item.trackStock && (
                   <p className={`text-xs mt-0.5 ${outOfStock ? 'text-orange-400' : 'text-slate-500'}`}>

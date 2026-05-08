@@ -896,37 +896,58 @@ export default function POSPage() {
         onSaveAsInvoice={handleOpenInvoiceModal}
       />
 
-      {/* Mobile bottom bar — always visible on mobile so cashier knows cart state */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex shadow-2xl border-t border-slate-800 bg-slate-900">
-        <button
-          onClick={() => setShowCartMobile(true)}
-          className="flex items-center gap-3 px-4 py-3.5 bg-slate-800 border-r border-slate-700"
-        >
-          <div className="relative">
-            <ShoppingCart className="w-5 h-5 text-slate-300" />
-            {cart.length > 0 && (
-              <span className="absolute -top-2 -right-2 bg-blue-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
-                {cart.length}
+      {/* Mobile bottom bar */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 shadow-2xl">
+        {/* Cart summary strip */}
+        {cart.length > 0 && (
+          <div
+            className="flex items-center justify-between px-4 py-2 bg-slate-800 border-t border-slate-700 cursor-pointer"
+            onClick={() => setShowCartMobile(true)}
+          >
+            <div className="flex items-center gap-2">
+              <span className="bg-blue-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{cart.length} item{cart.length !== 1 ? 's' : ''}</span>
+              <span className="text-slate-400 text-xs truncate max-w-[160px]">
+                {cart.slice(0, 2).map(i => i.name.split(' ')[0]).join(', ')}{cart.length > 2 ? ` +${cart.length - 2} more` : ''}
+              </span>
+            </div>
+            <span className="text-slate-400 text-xs">View cart ›</span>
+          </div>
+        )}
+        {/* Action bar */}
+        <div className="flex border-t border-slate-800 bg-slate-900">
+          <button
+            onClick={() => setShowCartMobile(true)}
+            className="flex items-center gap-2.5 px-4 py-4 bg-slate-800 border-r border-slate-700 min-w-[100px]"
+          >
+            <div className="relative">
+              <ShoppingCart className="w-6 h-6 text-slate-300" />
+              {cart.length > 0 && (
+                <span className="absolute -top-2 -right-2 bg-blue-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
+                  {cart.length}
+                </span>
+              )}
+            </div>
+            <div className="text-left">
+              <p className="text-[10px] text-slate-500 leading-none">Cart</p>
+              <p className="text-sm font-bold text-slate-100 leading-tight mt-0.5">{formatKES(totalCents)}</p>
+            </div>
+          </button>
+          <button
+            onClick={() => void handlePayClick()}
+            disabled={cart.length === 0 || checkoutMutation.isPending}
+            className="relative flex-1 py-4 font-bold text-base transition-colors disabled:opacity-40"
+            style={{ background: cart.length === 0 ? '#1e293b' : '#2563eb' }}
+          >
+            <span className="text-white">
+              {checkoutMutation.isPending ? 'Processing…' : cart.length > 0 ? `Charge ${formatKES(totalCents)}` : 'Add items to pay'}
+            </span>
+            {pendingC2BCount > 0 && (
+              <span className="absolute top-1 right-2 bg-green-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full animate-pulse">
+                {pendingC2BCount} M-Pesa
               </span>
             )}
-          </div>
-          <div className="text-left">
-            <p className="text-xs text-slate-400 leading-none">Cart</p>
-            <p className="text-sm font-bold text-slate-100 leading-tight">{formatKES(totalCents)}</p>
-          </div>
-        </button>
-        <button
-          onClick={() => void handlePayClick()}
-          disabled={cart.length === 0 || checkoutMutation.isPending}
-          className="relative flex-1 py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm disabled:opacity-40 transition-colors"
-        >
-          {checkoutMutation.isPending ? 'Processing…' : cart.length > 0 ? `Pay ${formatKES(totalCents)}` : 'Pay'}
-          {pendingC2BCount > 0 && (
-            <span className="absolute top-1 right-2 bg-green-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full animate-pulse">
-              {pendingC2BCount} M-Pesa
-            </span>
-          )}
-        </button>
+          </button>
+        </div>
       </div>
 
       {/* ── Modals ── */}

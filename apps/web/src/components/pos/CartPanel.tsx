@@ -86,10 +86,11 @@ export default function CartPanel({
 
     <div className={`
       ${showCartMobile
-        ? 'fixed bottom-0 left-0 right-0 z-40 rounded-t-2xl max-h-[88vh] flex flex-col'
+        ? 'fixed bottom-0 left-0 right-0 z-40 rounded-t-2xl flex flex-col'
         : 'hidden'}
-      md:relative md:flex md:rounded-none md:max-h-none md:w-80 lg:w-96
+      md:relative md:flex md:rounded-none md:w-80 lg:w-96
       bg-slate-900 border-t md:border-t-0 md:border-l border-slate-700 flex-col md:overflow-hidden
+      ${showCartMobile ? 'h-[92vh]' : 'md:h-full'}
     `}>
       {/* Mobile drag handle */}
       <div className="md:hidden flex justify-center pt-3 pb-1 flex-shrink-0">
@@ -295,11 +296,11 @@ export default function CartPanel({
           </div>
         </div>
 
-        <div className="px-4 pb-4 space-y-2">
+        <div className="px-4 pb-safe pb-4 space-y-2">
           <div className="flex gap-2">
             <button
               onClick={() => setServiceChargeEnabled(!serviceChargeEnabled)}
-              className={`flex-1 py-2 text-xs font-medium rounded-lg border transition-colors ${
+              className={`flex-1 py-2.5 text-xs font-medium rounded-lg border transition-colors ${
                 serviceChargeEnabled
                   ? 'bg-green-900/40 border-green-600 text-green-400'
                   : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
@@ -312,7 +313,7 @@ export default function CartPanel({
               onClick={() => { onHold(); }}
               disabled={cart.length === 0}
               title="Hold current sale and start next customer"
-              className="flex items-center gap-1 px-3 py-2 text-xs font-medium rounded-lg border border-orange-700/50 text-orange-400 hover:bg-orange-900/30 disabled:opacity-30 transition-colors"
+              className="flex items-center gap-1 px-3 py-2.5 text-xs font-medium rounded-lg border border-orange-700/50 text-orange-400 hover:bg-orange-900/30 disabled:opacity-30 transition-colors"
             >
               <UserPlus className="w-3.5 h-3.5" />
               Next
@@ -364,13 +365,13 @@ export default function CartPanel({
           <button
             onClick={onPay}
             disabled={cart.length === 0 || isPaying}
-            className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl disabled:opacity-40 transition-colors"
+            className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl disabled:opacity-40 transition-colors text-base"
           >
             {isPaying
               ? 'Processing…'
               : cart.length > 0
-                ? `Pay ${formatKES(totalCents)}  (F1)`
-                : 'Pay  (F1)'}
+                ? `Charge ${formatKES(totalCents)}`
+                : 'Add items to charge'}
           </button>
           {payError && (
             <p className="mt-2 text-xs text-red-400 text-center">{payError}</p>

@@ -15,6 +15,10 @@ echo "=== STEP 2: Prisma generate ==="
 "$ROOT/node_modules/.bin/prisma" generate --schema "$ROOT/prisma/schema.prisma"
 echo "=== prisma generate OK ==="
 
+echo "=== STEP 2b: Prisma migrate deploy ==="
+"$ROOT/node_modules/.bin/prisma" migrate deploy --schema "$ROOT/prisma/schema.prisma"
+echo "=== prisma migrate deploy OK ==="
+
 echo "=== STEP 3: NestJS build ==="
 cd "$ROOT/apps/api"
 NODE_OPTIONS="--max-old-space-size=4096" "$ROOT/node_modules/.bin/nest" build

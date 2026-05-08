@@ -20,7 +20,7 @@ export function useFeatureAccess(feature: Feature): FeatureAccess {
     // Find the minimum tier that grants access
     let requiredTier: SubscriptionTier | undefined;
     if (!hasAccess) {
-      const tiers = [SubscriptionTier.STARTER, SubscriptionTier.PRO, SubscriptionTier.ENTERPRISE];
+      const tiers = [SubscriptionTier.STARTER, SubscriptionTier.GROWTH, SubscriptionTier.PRO, SubscriptionTier.ENTERPRISE];
       for (const t of tiers) {
         if (hasFeatureAccess(t, feature)) {
           requiredTier = t;

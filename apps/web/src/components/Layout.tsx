@@ -802,7 +802,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* ── Content area ────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <MobileNav isOpen={mobileMenuOpen} onOpen={() => setMobileMenuOpen(true)} onClose={() => setMobileMenuOpen(false)} />
+        <MobileNav isOpen={mobileMenuOpen} onOpen={() => setMobileMenuOpen(true)} onClose={() => setMobileMenuOpen(false)} businessType={businessType} userPlan={userPlan} />
         <OfflineBanner />
 
         {/* ── Top header bar (desktop) ──────────────────────────────────── */}

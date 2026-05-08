@@ -2,107 +2,166 @@ import { useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Menu, X, ShoppingCart, BarChart3, Package, Settings, Users, Truck,
-  DollarSign, CreditCard, Coffee, Grid, Monitor, Layers, Pill, CalendarClock,
+  DollarSign, CreditCard, Monitor, Layers, Pill, CalendarClock,
   Hash, ChefHat, Box, ArrowRightLeft, Wallet, UserCheck, Tag, Gift,
   TrendingUp, Landmark, GitBranch, LayoutDashboard, LogOut, Bell,
-  Home, MoreHorizontal,
+  Home, MoreHorizontal, ClipboardList, MapPin, Fuel, BedDouble,
+  Radio, CheckCircle2, Trash2, Send, FileText, Shield, Wand2,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/auth';
 import { useThemeStore } from '../stores/theme';
+import { hasFeature } from '../lib/featureGates';
 
 /* ── Bottom tab bar items (always visible) ────────────────────────────────── */
 const BOTTOM_TABS = [
   { to: '/pos',       icon: ShoppingCart, label: 'POS'       },
   { to: '/inventory', icon: Package,      label: 'Items'     },
   { to: '/reports',   icon: BarChart3,    label: 'Reports'   },
-  { to: '/',          icon: Home,         label: 'Dashboard' },
+  { to: '/dashboard', icon: Home,         label: 'Home'      },
 ];
 
-/* ── Full navigation groups (overlay menu) ────────────────────────────────── */
-const MENU_GROUPS = [
+interface NavItem {
+  to: string;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  roles?: string[];
+  businessTypes?: string[];
+}
+
+interface NavGroup {
+  label: string;
+  roles?: string[];
+  businessTypes?: string[];
+  items: NavItem[];
+}
+
+/* ── Full navigation groups — mirrors Layout.tsx NAV_GROUPS ──────────────── */
+const MENU_GROUPS: NavGroup[] = [
   {
     label: 'Sales',
     items: [
-      { to: '/pos',           icon: ShoppingCart,  label: 'Point of Sale'   },
-      { to: '/sales-list',    icon: ShoppingCart,  label: 'Sales History'   },
-      { to: '/layaway',       icon: Layers,        label: 'Layaway'         },
-      { to: '/proforma',      icon: CreditCard,    label: 'Proformas'       },
-      { to: '/customers',     icon: Users,         label: 'Customers'       },
-      { to: '/promotions',    icon: Tag,           label: 'Promotions'      },
-      { to: '/gift-cards',    icon: Gift,          label: 'Gift Cards'      },
+      { to: '/pos',           icon: ShoppingCart,   label: 'Point of Sale',   roles: ['OWNER','MANAGER','CASHIER','WAITER'] },
+      { to: '/kds',           icon: Monitor,        label: 'Kitchen Display', roles: ['OWNER','MANAGER','WAITER','KITCHEN'], businessTypes: ['HOSPITALITY','FAST_FOOD','BAR_TAB'] },
+      { to: '/layaway',       icon: Layers,         label: 'Layaway',         roles: ['OWNER','MANAGER','CASHIER'], businessTypes: ['RETAIL','SUPERMARKET'] },
+      { to: '/proforma',      icon: CreditCard,     label: 'Proformas',       roles: ['OWNER','MANAGER','CASHIER'] },
+      { to: '/prescriptions', icon: Pill,           label: 'Prescriptions',   roles: ['OWNER','MANAGER','CASHIER'], businessTypes: ['CLINIC'] },
+      { to: '/appointments',  icon: CalendarClock,  label: 'Appointments',    roles: ['OWNER','MANAGER','CASHIER'], businessTypes: ['CLINIC','SALON'] },
     ],
   },
   {
-    label: 'Hospitality',
+    label: 'Operations',
+    roles: ['OWNER','MANAGER'],
     items: [
-      { to: '/hospitality',   icon: Coffee,        label: 'Hospitality'     },
-      { to: '/tables',        icon: Grid,          label: 'Tables'          },
-      { to: '/kds',           icon: Monitor,       label: 'Kitchen Display' },
-      { to: '/prescriptions', icon: Pill,          label: 'Prescriptions'   },
-      { to: '/appointments',  icon: CalendarClock, label: 'Appointments'    },
-      { to: '/delivery',      icon: Truck,         label: 'Delivery'        },
+      { to: '/delivery',            icon: Truck,         label: 'Delivery',         businessTypes: ['HOSPITALITY','FAST_FOOD','RETAIL','SUPERMARKET'] },
+      { to: '/delivery-management', icon: Truck,         label: 'Delivery Dispatch', businessTypes: ['HOSPITALITY','FAST_FOOD','RETAIL','SUPERMARKET'] },
+      { to: '/field-orders',        icon: ClipboardList, label: 'Field Orders' },
+      { to: '/delivery-routes',     icon: MapPin,        label: 'Delivery Routes' },
+      { to: '/hotel',               icon: BedDouble,     label: 'Hotel',            businessTypes: ['HOSPITALITY'] },
+      { to: '/channel-manager',     icon: Radio,         label: 'Channel Manager',  businessTypes: ['HOSPITALITY'] },
+      { to: '/fuel-pump',           icon: Fuel,          label: 'Fuel Pumps',       roles: ['OWNER','MANAGER','CASHIER'], businessTypes: ['FUEL_PUMP'] },
+      { to: '/cybercafe',           icon: Monitor,       label: 'Cybercafe',        roles: ['OWNER','MANAGER','CASHIER'], businessTypes: ['CYBERCAFE'] },
     ],
   },
   {
     label: 'Inventory',
+    roles: ['OWNER','MANAGER'],
     items: [
-      { to: '/inventory',     icon: Package,       label: 'Items & Stock'   },
-      { to: '/batch',         icon: Layers,        label: 'Batch & Expiry'  },
-      { to: '/serial',        icon: Hash,          label: 'Serial Tracking' },
-      { to: '/recipe',        icon: ChefHat,       label: 'Recipes / BOM'   },
-      { to: '/bundle',        icon: Box,           label: 'Bundles / Kits'  },
-      { to: '/suppliers',     icon: Truck,         label: 'Suppliers & POs' },
-      { to: '/transfers',     icon: ArrowRightLeft, label: 'Stock Transfers' },
+      { to: '/inventory',    icon: Package,        label: 'Items & Stock' },
+      { to: '/batch',        icon: Layers,         label: 'Batch & Expiry',  businessTypes: ['CLINIC','SUPERMARKET'] },
+      { to: '/serial',       icon: Hash,           label: 'Serial Tracking', businessTypes: ['RETAIL'] },
+      { to: '/recipe',       icon: ChefHat,        label: 'Recipes / BOM',   businessTypes: ['HOSPITALITY','FAST_FOOD'] },
+      { to: '/bundle',       icon: Box,            label: 'Bundles / Kits' },
+      { to: '/suppliers',    icon: Truck,          label: 'Suppliers & POs' },
+      { to: '/rfq',          icon: Send,           label: 'RFQ' },
+      { to: '/transfers',    icon: ArrowRightLeft, label: 'Stock Transfers' },
+      { to: '/stocktake',    icon: CheckCircle2,   label: 'Stocktake' },
+      { to: '/damaged-goods',icon: Trash2,         label: 'Damaged Goods' },
     ],
   },
   {
     label: 'Finance',
+    roles: ['OWNER','MANAGER','ACCOUNTANT','CASHIER'],
     items: [
-      { to: '/reports',       icon: BarChart3,     label: 'Reports'         },
-      { to: '/cash-drawer',   icon: Wallet,        label: 'Cash Drawer'     },
-      { to: '/expenses',      icon: DollarSign,    label: 'Expenses'        },
-      { to: '/reconciliation',icon: Landmark,      label: 'Reconciliation'  },
-      { to: '/payroll',       icon: DollarSign,    label: 'Payroll'         },
-      { to: '/forecasting',   icon: TrendingUp,    label: 'AI Forecasting'  },
+      { to: '/cash-drawer',    icon: Wallet,         label: 'Cash Drawer' },
+      { to: '/expenses',       icon: DollarSign,     label: 'Expenses',       roles: ['OWNER','MANAGER','ACCOUNTANT'] },
+      { to: '/cheques',        icon: FileText,       label: 'Cheques',        roles: ['OWNER','MANAGER','ACCOUNTANT'] },
+      { to: '/reconciliation', icon: Landmark,       label: 'Reconciliation', roles: ['OWNER','MANAGER','ACCOUNTANT'] },
+      { to: '/reports',        icon: BarChart3,      label: 'Reports',        roles: ['OWNER','MANAGER','ACCOUNTANT'] },
+      { to: '/sales-list',     icon: ShoppingCart,   label: 'Sales History',  roles: ['OWNER','MANAGER','ACCOUNTANT'] },
     ],
   },
   {
-    label: 'Management',
+    label: 'People',
+    roles: ['OWNER','MANAGER'],
     items: [
-      { to: '/hr',            icon: UserCheck,     label: 'Staff & HR'      },
-      { to: '/owner-dashboard',icon: LayoutDashboard,label:'Owner Dashboard'},
-      { to: '/franchise',     icon: GitBranch,     label: 'Franchise'       },
-      { to: '/notifications', icon: Bell,          label: 'Notifications'   },
-      { to: '/settings',      icon: Settings,      label: 'Settings'        },
+      { to: '/customers', icon: Users,     label: 'Customers' },
+      { to: '/hr',        icon: UserCheck, label: 'Staff & HR' },
+      { to: '/payroll',   icon: DollarSign,label: 'Payroll' },
+    ],
+  },
+  {
+    label: 'Marketing',
+    roles: ['OWNER','MANAGER'],
+    items: [
+      { to: '/promotions', icon: Tag,  label: 'Promotions' },
+      { to: '/gift-cards', icon: Gift, label: 'Gift Cards' },
+    ],
+  },
+  {
+    label: 'Analytics',
+    roles: ['OWNER','MANAGER'],
+    items: [
+      { to: '/forecasting',       icon: TrendingUp,    label: 'AI Forecasting',  roles: ['OWNER','MANAGER'] },
+      { to: '/owner-dashboard',   icon: LayoutDashboard,label:'Owner Dashboard', roles: ['OWNER'] },
+      { to: '/franchise',         icon: GitBranch,     label: 'Franchise',       roles: ['OWNER'] },
+      { to: '/security-settings', icon: Shield,        label: 'Security & Roles',roles: ['OWNER','MANAGER'] },
+    ],
+  },
+  {
+    label: 'Account',
+    items: [
+      { to: '/notifications', icon: Bell,     label: 'Notifications' },
+      { to: '/settings',      icon: Settings, label: 'Settings',     roles: ['OWNER','MANAGER'] },
+      { to: '/setup',         icon: Wand2,    label: 'Setup Wizard', roles: ['OWNER','MANAGER'] },
     ],
   },
 ];
-
-/* ─────────────────────────────────────────────────────────────────────────── */
 
 interface Props {
   isOpen: boolean;
   onOpen: () => void;
   onClose: () => void;
+  businessType?: string;
+  userPlan?: string;
 }
 
-export default function MobileNav({ isOpen, onOpen, onClose }: Props) {
-  const location  = useLocation();
-  const logout    = useAuthStore((s) => s.logout);
-  const user      = useAuthStore((s) => s.user);
-  const isDark    = useThemeStore((s) => s.isDark);
+export default function MobileNav({ isOpen, onOpen, onClose, businessType = 'RETAIL', userPlan = 'STARTER' }: Props) {
+  const location    = useLocation();
+  const logout      = useAuthStore((s) => s.logout);
+  const user        = useAuthStore((s) => s.user);
+  const isDark      = useThemeStore((s) => s.isDark);
   const toggleTheme = useThemeStore((s) => s.toggle);
+  const userRole    = user?.role ?? '';
 
-  /* Lock body scroll when menu is open */
   useEffect(() => {
     document.body.style.overflow = isOpen ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
   }, [isOpen]);
 
   const isActive = (to: string) =>
-    to === '/'
-      ? location.pathname === '/'
-      : location.pathname === to || location.pathname.startsWith(to + '/');
+    to === '/' ? location.pathname === '/' : location.pathname === to || location.pathname.startsWith(to + '/');
+
+  const canSee = (roles?: string[]) => !roles || roles.includes(userRole);
+  const canSeeType = (types?: string[]) => !types || types.includes(businessType);
+  const canSeePlan = (to: string) => hasFeature(userPlan, to.replace(/^\//, ''));
+
+  const visibleGroups = MENU_GROUPS
+    .filter((g) => canSee(g.roles) && canSeeType(g.businessTypes))
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((i) => canSee(i.roles) && canSeeType(i.businessTypes) && canSeePlan(i.to)),
+    }))
+    .filter((g) => g.items.length > 0);
 
   const initials = user?.name
     ? user.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
@@ -160,7 +219,7 @@ export default function MobileNav({ isOpen, onOpen, onClose }: Props) {
       {/* ── Slide-in drawer ───────────────────────────────────────────────── */}
       <div
         className={`md:hidden fixed top-0 bottom-0 right-0 z-50 w-[300px] flex flex-col
-          bg-white dark:bg-[#0d1117] shadow-[−24px_0_64px_rgba(0,0,0,0.25)]
+          bg-white dark:bg-[#0d1117] shadow-2xl
           border-l border-gray-100 dark:border-white/[0.06]
           transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]
           ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
@@ -173,20 +232,17 @@ export default function MobileNav({ isOpen, onOpen, onClose }: Props) {
             </div>
             <div>
               <div className="text-[13px] font-semibold text-gray-900 dark:text-white leading-none">{user?.name ?? 'User'}</div>
-              <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 capitalize">{user?.role?.toLowerCase() ?? ''}</div>
+              <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 capitalize">{user?.role?.toLowerCase() ?? ''} · {businessType}</div>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-white/[0.07] transition-colors"
-          >
+          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-white/[0.07] transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Nav groups */}
+        {/* Nav groups — filtered by role + business type + plan */}
         <nav className="flex-1 overflow-y-auto py-3">
-          {MENU_GROUPS.map((group) => (
+          {visibleGroups.map((group) => (
             <div key={group.label} className="mb-1">
               <div className="px-4 py-1.5 text-[10px] font-bold text-gray-400 dark:text-gray-600 uppercase tracking-[0.1em]">
                 {group.label}
@@ -200,7 +256,7 @@ export default function MobileNav({ isOpen, onOpen, onClose }: Props) {
                     onClick={onClose}
                     className={`flex items-center gap-3 mx-2 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-150 ${
                       active
-                        ? 'bg-blue-600/10 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 shadow-[inset_2px_0_0_#3b82f6] dark:shadow-[inset_2px_0_0_#60a5fa]'
+                        ? 'bg-blue-600/10 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 shadow-[inset_2px_0_0_#3b82f6]'
                         : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/[0.05] hover:text-gray-900 dark:hover:text-white'
                     }`}
                   >
@@ -236,7 +292,6 @@ export default function MobileNav({ isOpen, onOpen, onClose }: Props) {
                 to={tab.to}
                 className="flex-1 flex flex-col items-center justify-end pt-2 pb-2.5 gap-1 relative transition-colors duration-150"
               >
-                {/* Active indicator line at top */}
                 <span className={`absolute top-0 left-1/2 -translate-x-1/2 h-[2px] rounded-b-full transition-all duration-200 ${
                   active ? 'w-6 bg-blue-500' : 'w-0 bg-transparent'
                 }`} />
@@ -249,7 +304,6 @@ export default function MobileNav({ isOpen, onOpen, onClose }: Props) {
               </Link>
             );
           })}
-          {/* More button */}
           <button
             onClick={isOpen ? onClose : onOpen}
             className="flex-1 flex flex-col items-center justify-end pt-2 pb-2.5 gap-1 relative transition-colors duration-150"

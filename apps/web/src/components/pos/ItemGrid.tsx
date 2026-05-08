@@ -190,7 +190,7 @@ export default function ItemGrid({
       </div>
 
       {/* Item grid */}
-      <div className="flex-1 overflow-y-auto p-2 md:p-4 pb-32 md:pb-4">
+      <div className="flex-1 overflow-y-auto p-2 md:p-4" style={{ paddingBottom: 'calc(120px + env(safe-area-inset-bottom))' }}>
         <div className="grid grid-cols-2 xs:grid-cols-3 md:grid-cols-3 xl:grid-cols-4 gap-2 md:gap-3">
           {items.map((item) => {
             const price =

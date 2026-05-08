@@ -86,11 +86,11 @@ export default function CartPanel({
 
     <div className={`
       ${showCartMobile
-        ? 'fixed bottom-0 left-0 right-0 z-40 rounded-t-2xl flex flex-col'
+        ? 'fixed left-0 right-0 z-40 rounded-t-2xl flex flex-col'
         : 'hidden'}
       md:relative md:flex md:rounded-none md:w-80 lg:w-96
       bg-slate-900 border-t md:border-t-0 md:border-l border-slate-700 flex-col md:overflow-hidden
-      ${showCartMobile ? 'h-[92vh]' : 'md:h-full'}
+      ${showCartMobile ? 'bottom-[57px] top-[10vh]' : 'md:h-full'}
     `}>
       {/* Mobile drag handle */}
       <div className="md:hidden flex justify-center pt-3 pb-1 flex-shrink-0">
@@ -296,7 +296,7 @@ export default function CartPanel({
           </div>
         </div>
 
-        <div className="px-4 pb-safe pb-4 space-y-2">
+        <div className="px-4 pb-4 space-y-2" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
           <div className="flex gap-2">
             <button
               onClick={() => setServiceChargeEnabled(!serviceChargeEnabled)}

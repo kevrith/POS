@@ -925,12 +925,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        <main className={`flex-1 flex flex-col bg-gray-50 dark:bg-gray-950 pb-16 md:pb-0 relative ${
-          // POS-style pages manage their own internal scroll — prevent double-scroll
-          ['/pos', '/supermart', '/hospitality', '/kds', '/fuel-pump', '/cybercafe'].some(p => location.pathname.startsWith(p))
-            ? 'overflow-hidden'
-            : 'overflow-y-auto'
-        }`}>
+        <main
+          className={`flex-1 flex flex-col bg-gray-50 dark:bg-gray-950 relative ${
+            ['/pos', '/supermart', '/hospitality', '/kds', '/fuel-pump', '/cybercafe'].some(p => location.pathname.startsWith(p))
+              ? 'overflow-hidden'
+              : 'overflow-y-auto'
+          }`}
+          style={{
+            paddingBottom: ['/pos', '/supermart', '/hospitality', '/kds', '/fuel-pump', '/cybercafe'].some(p => location.pathname.startsWith(p))
+              ? undefined
+              : 'calc(57px + env(safe-area-inset-bottom))'
+          }}
+        >
           {/* Subtle background pattern */}
           <div className="absolute inset-0 opacity-[0.02] dark:opacity-[0.01]">
             <div className="absolute inset-0" style={{

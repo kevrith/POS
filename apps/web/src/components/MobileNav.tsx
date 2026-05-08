@@ -283,7 +283,7 @@ export default function MobileNav({ isOpen, onOpen, onClose, businessType = 'RET
 
       {/* ── Bottom tab bar ────────────────────────────────────────────────── */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 dark:bg-[#0d1117]/95 backdrop-blur-md border-t border-gray-200/80 dark:border-white/[0.06]" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <div className="flex items-stretch">
+        <div className="flex items-stretch h-[57px]">
           {BOTTOM_TABS.map((tab) => {
             const active = isActive(tab.to);
             return (

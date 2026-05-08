@@ -896,8 +896,8 @@ export default function POSPage() {
         onSaveAsInvoice={handleOpenInvoiceModal}
       />
 
-      {/* Mobile bottom bar */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 shadow-2xl">
+      {/* Mobile bottom bar — sits above the MobileNav bottom tab bar */}
+      <div className="md:hidden fixed left-0 right-0 z-40 shadow-2xl" style={{ bottom: 'calc(57px + env(safe-area-inset-bottom))' }}>
         {/* Cart summary strip */}
         {cart.length > 0 && (
           <div

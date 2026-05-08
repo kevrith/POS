@@ -386,8 +386,60 @@ export class SuperAdminService {
   async deleteBusiness(businessId: string): Promise<{ success: boolean }> {
     const business = await this.prisma.business.findUnique({ where: { id: businessId } });
     if (!business) throw new BadRequestException('Business not found');
-    await this.prisma.business.delete({ where: { id: businessId } });
-    this.logger.log(`Super-admin deleted business ${businessId} (${business.name})`);
+
+    const id = businessId;
+
+    // Delete leaf tables first, then parents, to satisfy FK constraints
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "SaleItem" WHERE "saleId" IN (SELECT id FROM "Sale" WHERE "businessId" = '${id}')`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "Payment" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "VoidRecord" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "KOT" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "Return" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "Sale" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "OrderItem" WHERE "orderId" IN (SELECT id FROM "Order" WHERE "businessId" = '${id}')`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "Order" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "LoyaltyTransaction" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "GiftCardTransaction" WHERE "giftCardId" IN (SELECT id FROM "GiftCard" WHERE "businessId" = '${id}')`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "GiftCard" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "InventoryMovement" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "StocktakeCount" WHERE "sessionId" IN (SELECT id FROM "StocktakeSession" WHERE "businessId" = '${id}')`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "StocktakeSession" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "GRNItem" WHERE "grnId" IN (SELECT id FROM "GRN" WHERE "businessId" = '${id}')`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "GRN" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "POItem" WHERE "poId" IN (SELECT id FROM "PurchaseOrder" WHERE "businessId" = '${id}')`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "PurchaseOrder" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "FieldOrderItem" WHERE "fieldOrderId" IN (SELECT id FROM "FieldOrder" WHERE "businessId" = '${id}')`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "FieldOrder" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "ItemVariant" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "RecipeIngredient" WHERE "itemId" IN (SELECT id FROM "Item" WHERE "businessId" = '${id}')`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "BundleComponent" WHERE "bundleId" IN (SELECT id FROM "Item" WHERE "businessId" = '${id}')`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "Batch" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "SerialRecord" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "Item" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "Customer" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "Supplier" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "Employee" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "Payslip" WHERE "payrollRunId" IN (SELECT id FROM "PayrollRun" WHERE "businessId" = '${id}')`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "PayrollRun" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "Shift" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "Leave" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "Expense" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "Promotion" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "LoyaltyProgram" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "Table" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "HotelRoom" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "Notification" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "AuditLog" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "ApiKey" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "Webhook" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "Integration" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "UserSession" WHERE "userId" IN (SELECT id FROM "User" WHERE "businessId" = '${id}')`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "UserStore" WHERE "userId" IN (SELECT id FROM "User" WHERE "businessId" = '${id}')`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "User" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "Store" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "Business" WHERE id = '${id}'`);
+
+    this.logger.log(`Super-admin deleted business ${id} (${business.name})`);
     return { success: true };
   }
 

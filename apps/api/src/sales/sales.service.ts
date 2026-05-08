@@ -462,7 +462,7 @@ export class SalesService {
       });
 
       return { success: true, refundAmountCents: refundAmount };
-    }).then(async (result) => {
+    }, { timeout: 15000 }).then(async (result) => {
       // Best-effort eTIMS void submission (non-blocking, outside transaction)
       this.etims.voidSale(saleId, reason).catch(() => {
         // eTIMS void failure is non-fatal — logged by eTIMS service
@@ -566,7 +566,7 @@ export class SalesService {
           ? sale.customer.balanceCents + refundAmount
           : undefined,
       };
-    });
+    }, { timeout: 15000 });
 
     // Submit eTIMS credit note non-blocking, after transaction commits
     if (returnId) {

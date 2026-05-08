@@ -739,7 +739,7 @@ export default function SalesListPage() {
                       className="flex items-center justify-center gap-1.5 py-2.5 text-sm font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-xl transition-colors">
                       <Eye className="w-4 h-4" />View Details
                     </button>
-                    {sale.status === 'PAID' ? (
+                    {sale.status === 'PAID' && (
                       <>
                         <button onClick={() => void handleReprint(sale)} disabled={reprintLoading === sale.id}
                           className="flex items-center justify-center gap-1.5 py-2.5 text-sm font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl transition-colors disabled:opacity-50">
@@ -760,10 +760,6 @@ export default function SalesListPage() {
                           </button>
                         )}
                       </>
-                    ) : (
-                      <div className="flex items-center justify-center py-2.5 text-xs text-gray-400 dark:text-gray-500">
-                        No actions available
-                      </div>
                     )}
                   </div>
                 </div>

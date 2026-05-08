@@ -736,6 +736,18 @@ export default function BusinessesPage() {
                             <Icon d={Icons.key} size={11} color="#c4b5fd" />
                             Login As
                           </button>
+                          <button
+                            onClick={async () => {
+                              if (!confirm(`Permanently delete "${b.name}" and ALL its data? This cannot be undone.`)) return;
+                              try {
+                                await adminApi.deleteBusiness(b.id);
+                                load();
+                              } catch (e: any) { alert(e.message); }
+                            }}
+                            style={btn('rgba(239,68,68,0.12)', '#fca5a5')}>
+                            <Icon d={Icons.x} size={11} color="#fca5a5" />
+                            Delete
+                          </button>
                         </div>
                       </td>
                     </tr>

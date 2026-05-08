@@ -122,6 +122,9 @@ export const adminApi = {
   deleteUser: (userId: string) =>
     request<any>(`/users/${userId}`, { method: 'DELETE' }),
 
+  deleteBusiness: (id: string) =>
+    request<any>(`/businesses/${id}`, { method: 'DELETE' }),
+
   // ── Analytics ──────────────────────────────────────────────────────────
   getChurnAnalytics:      (from?: string, to?: string) => request<any>(`/analytics/churn${from ? `?from=${from}${to ? `&to=${to}` : ''}` : ''}`),
   getCohortAnalysis:      () => request<any>('/analytics/cohort'),

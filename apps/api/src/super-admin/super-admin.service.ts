@@ -383,6 +383,14 @@ export class SuperAdminService {
     return { success: true };
   }
 
+  async deleteBusiness(businessId: string): Promise<{ success: boolean }> {
+    const business = await this.prisma.business.findUnique({ where: { id: businessId } });
+    if (!business) throw new BadRequestException('Business not found');
+    await this.prisma.business.delete({ where: { id: businessId } });
+    this.logger.log(`Super-admin deleted business ${businessId} (${business.name})`);
+    return { success: true };
+  }
+
   async resetUserPassword(userId: string): Promise<{ tempPassword: string; email: string | null }> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new BadRequestException('User not found');

@@ -163,6 +163,12 @@ export class SuperAdminController implements OnModuleInit {
   }
 
   @UseGuards(SuperAdminAuthGuard)
+  @Delete('businesses/:id')
+  deleteBusiness(@Param('id') id: string) {
+    return this.service.deleteBusiness(id);
+  }
+
+  @UseGuards(SuperAdminAuthGuard)
   @Post('users/:userId/reset-password')
   resetUserPassword(@Param('userId') userId: string) {
     return this.service.resetUserPassword(userId);

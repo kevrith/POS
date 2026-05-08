@@ -1,10 +1,25 @@
 import * as Sentry from '@sentry/node';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { Logger, VersioningType } from '@nestjs/common';
+import { Logger, VersioningType, Catch, ArgumentsHost, HttpException, ExceptionFilter } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import helmet from 'helmet';
+
+@Catch()
+class AllExceptionsFilter implements ExceptionFilter {
+  private readonly logger = new Logger('ExceptionFilter');
+  catch(exception: unknown, host: ArgumentsHost) {
+    const ctx = host.switchToHttp();
+    const res = ctx.getResponse();
+    const status = exception instanceof HttpException ? exception.getStatus() : 500;
+    const message = exception instanceof HttpException
+      ? exception.message
+      : exception instanceof Error ? exception.message : 'Internal server error';
+    this.logger.error(`[${status}] ${message}`, exception instanceof Error ? exception.stack : '');
+    res.status(status).json({ statusCode: status, message });
+  }
+}
 
 // Initialize Sentry before anything else so all errors are captured
 if (process.env.SENTRY_DSN) {
@@ -37,6 +52,7 @@ async function bootstrap() {
 
     // Enable Socket.IO adapter for WebSocket/LAN sync support
     app.useWebSocketAdapter(new IoAdapter(app));
+    app.useGlobalFilters(new AllExceptionsFilter());
 
     // Security headers (HSTS, XSS protection, content-type sniff prevention, etc.)
     app.use(helmet({

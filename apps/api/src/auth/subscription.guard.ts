@@ -1,9 +1,10 @@
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, ForbiddenException, SetMetadata } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../prisma/prisma.service';
 import { Feature, hasFeatureAccess, getFeatureLimit, SubscriptionTier } from '@pos/shared';
 
 export const REQUIRES_FEATURE = 'requires_feature';
+export const SKIP_SUBSCRIPTION_CHECK = 'skip_subscription_check';
 
 /**
  * Decorator to mark routes that require specific subscription features
@@ -18,6 +19,12 @@ export const RequiresFeature = (feature: Feature) => {
   };
 };
 
+/**
+ * Decorator to skip subscription checks for public/auth routes
+ * Usage: @SkipSubscriptionCheck()
+ */
+export const SkipSubscriptionCheck = () => SetMetadata(SKIP_SUBSCRIPTION_CHECK, true);
+
 @Injectable()
 export class SubscriptionGuard implements CanActivate {
   constructor(
@@ -26,6 +33,16 @@ export class SubscriptionGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    // Check if route is marked to skip subscription check
+    const skipCheck = this.reflector.get<boolean>(
+      SKIP_SUBSCRIPTION_CHECK,
+      context.getHandler(),
+    );
+
+    if (skipCheck) {
+      return true;
+    }
+
     const requiredFeature = this.reflector.get<Feature>(
       REQUIRES_FEATURE,
       context.getHandler(),

@@ -170,17 +170,21 @@ body {
   /* ── Modal ───────────────────────────────────────────────────────────── */
   .modal-overlay {
     @apply fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
   .modal-panel {
     @apply bg-white dark:bg-gray-800 rounded-2xl shadow-modal w-full border border-gray-200/50 dark:border-gray-700/50 animate-scale-in overflow-hidden;
+    max-height: calc(100vh - 80px);
+    display: flex;
+    flex-direction: column;
   }
   .modal-header {
-    @apply flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700/60;
+    @apply flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700/60 flex-shrink-0;
   }
   .modal-title { @apply text-base font-bold text-gray-900 dark:text-white; }
-  .modal-body  { @apply p-6; }
+  .modal-body  { @apply p-6 overflow-y-auto flex-1; }
   .modal-footer {
-    @apply flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 dark:border-gray-700/60 bg-gray-50/50 dark:bg-gray-900/20;
+    @apply flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 dark:border-gray-700/60 bg-gray-50/50 dark:bg-gray-900/20 flex-shrink-0;
   }
 }
 

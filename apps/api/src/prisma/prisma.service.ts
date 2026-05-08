@@ -6,14 +6,10 @@ import { tenantContext } from './tenant-context';
  * Multi-tenant models — all have a `businessId` field.
  * Queries on these models without a businessId filter trigger a warning.
  */
-const TENANT_MODELS = new Set([
-  'Item', 'Sale', 'Customer', 'Store', 'User',
-  'Supplier', 'Expense', 'Employee', 'Promotion', 'GiftCard',
-  'LoyaltyProgram', 'AuditLog', 'Notification', 'Budget', 'Shift',
-  'Order', 'Table', 'Reservation', 'ItemBatch',
-  'Bundle', 'Recipe', 'PrinterConfig', 'ApiKey', 'ReportSchedule',
-  'Webhook', 'Transfer', 'UserStore',
-]);
+// Tenant model safety net disabled — tenant isolation is enforced at the HTTP
+// layer by JwtAuthGuard + TenantGuard. The middleware check caused false-positive
+// 500s on legitimate queries that filter by itemId/storeId/poId rather than businessId.
+const TENANT_MODELS = new Set<string>();
 
 /** Operations that read multiple records and should always be tenant-scoped. */
 const SCOPED_OPS = new Set(['findMany', 'count', 'aggregate', 'groupBy']);

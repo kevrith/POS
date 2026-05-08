@@ -56,16 +56,16 @@ export default function PrintModal({ receipt, onClose, enableCashDrawer = false 
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
+      <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl flex flex-col" style={{ maxHeight: 'calc(100vh - 120px)' }}>
+        <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
           <h2 className="text-lg font-bold text-gray-800">Print Receipt</h2>
           <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
 
-        <div className="p-6 space-y-3">
+        <div className="p-6 space-y-3 overflow-y-auto flex-1">
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
               {error}

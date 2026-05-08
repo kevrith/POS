@@ -536,8 +536,8 @@ export default function PaymentModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col" style={{ maxHeight: 'calc(100vh - 80px)' }}>
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <div>
             <h2 className="text-lg font-bold text-gray-800">Payment</h2>

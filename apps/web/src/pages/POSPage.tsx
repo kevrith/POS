@@ -986,21 +986,33 @@ export default function POSPage() {
 
       {/* Sale complete toast */}
       {lastReceipt && receiptData && (
-        <div className="fixed bottom-4 right-4 bg-green-600 text-white px-6 py-4 rounded-xl shadow-xl z-50 max-w-xs">
-          <div className="font-bold mb-1">Sale Complete!</div>
-          <div className="text-sm opacity-90">Receipt #{lastReceipt.receiptNumber}</div>
-          <div className="text-sm opacity-90">{formatKES(lastReceipt.totalCents)}</div>
+        <div className="fixed inset-x-4 z-50 bg-green-600 text-white px-5 py-4 rounded-2xl shadow-2xl"
+          style={{ bottom: 'calc(130px + env(safe-area-inset-bottom))' }}
+        >
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <div>
+              <div className="font-bold text-base">✅ Sale Complete!</div>
+              <div className="text-sm opacity-90 mt-0.5">Receipt #{lastReceipt.receiptNumber}</div>
+              <div className="text-sm font-bold mt-0.5">{formatKES(lastReceipt.totalCents)}</div>
+            </div>
+            <button
+              onClick={() => { setLastReceipt(null); setReceiptData(null); }}
+              className="p-1.5 bg-green-700 rounded-lg hover:bg-green-800 flex-shrink-0"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
           {receiptData && (receiptData.pointsEarned ?? 0) > 0 && (
-            <div className="text-sm mt-1 font-medium text-yellow-200">
+            <div className="text-sm font-medium text-yellow-200 mb-2">
               🌟 +{receiptData.pointsEarned} pts earned · Balance: {(receiptData.loyaltyBalance ?? 0).toLocaleString()} pts
             </div>
           )}
-          <div className="flex gap-2 mt-3">
+          <div className="flex gap-2">
             <button
               onClick={() => setShowPrintModal(true)}
-              className="flex-1 py-1.5 bg-white text-green-600 rounded-lg text-sm font-medium hover:bg-green-50"
+              className="flex-1 py-2.5 bg-white text-green-600 rounded-xl text-sm font-bold hover:bg-green-50"
             >
-              Print
+              🖨️ Print Receipt
             </button>
             {customerPhone && (
               <button
@@ -1015,18 +1027,12 @@ export default function POSPage() {
                   } finally { setSendingWhatsApp(false); }
                 }}
                 disabled={sendingWhatsApp}
-                className="px-3 py-1.5 bg-teal-500 rounded-lg hover:bg-teal-400 disabled:opacity-50"
+                className="px-4 py-2.5 bg-teal-500 rounded-xl hover:bg-teal-400 disabled:opacity-50 text-sm font-bold"
                 title="Send WhatsApp receipt"
               >
                 <MessageSquare className="w-4 h-4" />
               </button>
             )}
-            <button
-              onClick={() => { setLastReceipt(null); setReceiptData(null); }}
-              className="px-3 py-1.5 bg-green-700 rounded-lg hover:bg-green-800"
-            >
-              <X className="w-4 h-4" />
-            </button>
           </div>
         </div>
       )}

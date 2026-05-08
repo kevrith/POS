@@ -383,70 +383,58 @@ export default function SalesListPage() {
   return (
     <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900">
       {/* Page Header */}
-      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-5">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
-              <Receipt className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white">Sales History</h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400">{sales.length} transactions</p>
-            </div>
+      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 md:px-6 py-4">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+            <Receipt className="w-5 h-5 text-blue-600 dark:text-blue-400" />
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Calendar className="w-4 h-4 text-gray-400" />
-            {(['today', 'week', 'month', 'custom'] as SalesRange[]).map((r) => (
-              <button
-                key={r}
-                onClick={() => setDateRange(r)}
-                className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${
-                  dateRange === r ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {r === 'today' ? 'Today' : r === 'week' ? 'This Week' : r === 'month' ? 'This Month' : 'Custom'}
-              </button>
-            ))}
-            {dateRange === 'custom' && (
-              <>
-                <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="border px-2 py-1.5 rounded-lg text-xs dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
-                <span className="text-gray-400 text-xs">to</span>
-                <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="border px-2 py-1.5 rounded-lg text-xs dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
-              </>
-            )}
-            {pendingKraCount > 0 && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-semibold rounded-full">
-                <Clock className="w-3.5 h-3.5" />
-                {pendingKraCount} pending KRA
-              </span>
-            )}
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg font-bold text-gray-900 dark:text-white">Sales History</h1>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{sales.length} transactions</p>
           </div>
+          {pendingKraCount > 0 && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-semibold rounded-full flex-shrink-0">
+              <Clock className="w-3 h-3" />{pendingKraCount} KRA
+            </span>
+          )}
         </div>
-        
-        {/* Search Bar */}
-        <div className="mt-4">
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search by receipt number..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-full transition-colors"
-              >
-                <X className="w-3 h-3 text-gray-400" />
-              </button>
-            )}
-          </div>
+        {/* Date range + search */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+          <Calendar className="w-4 h-4 text-gray-400 flex-shrink-0" />
+          {(['today', 'week', 'month', 'custom'] as SalesRange[]).map((r) => (
+            <button key={r} onClick={() => setDateRange(r)}
+              className={`px-3 py-1.5 text-xs rounded-lg font-medium whitespace-nowrap transition-colors flex-shrink-0 ${
+                dateRange === r ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+              }`}>
+              {r === 'today' ? 'Today' : r === 'week' ? 'Week' : r === 'month' ? 'Month' : 'Custom'}
+            </button>
+          ))}
+          {dateRange === 'custom' && (
+            <>
+              <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)}
+                className="border px-2 py-1.5 rounded-lg text-xs dark:bg-gray-700 dark:border-gray-600 dark:text-white flex-shrink-0" />
+              <span className="text-gray-400 text-xs flex-shrink-0">to</span>
+              <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)}
+                className="border px-2 py-1.5 rounded-lg text-xs dark:bg-gray-700 dark:border-gray-600 dark:text-white flex-shrink-0" />
+            </>
+          )}
+        </div>
+        {/* Search */}
+        <div className="mt-3 relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input type="text" placeholder="Search by receipt number..."
+            value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm" />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-full">
+              <X className="w-3 h-3 text-gray-400" />
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-5">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
 
         {/* Status filter tabs */}
         <div className="flex gap-2 flex-wrap">
@@ -639,30 +627,18 @@ export default function SalesListPage() {
           </div>
         ) : (
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
                 <tr>
-                  <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                    Receipt
-                  </th>
-                  <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                    Date
-                  </th>
-                  <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden sm:table-cell">
-                    Cashier
-                  </th>
-                  <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden md:table-cell">
-                    Customer
-                  </th>
-                  <th className="px-6 py-3.5 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                    Amount
-                  </th>
-                  <th className="px-6 py-3.5 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                    Status
-                  </th>
-                  <th className="px-6 py-3.5 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                    Actions
-                  </th>
+                  <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Receipt</th>
+                  <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Date</th>
+                  <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Cashier</th>
+                  <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Customer</th>
+                  <th className="px-6 py-3.5 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Amount</th>
+                  <th className="px-6 py-3.5 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Status</th>
+                  <th className="px-6 py-3.5 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -672,95 +648,52 @@ export default function SalesListPage() {
                       <p className="text-sm font-mono font-semibold text-gray-900 dark:text-white">{sale.receiptNumber}</p>
                       {sale.etimsSubmitted === false && (
                         <span className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-medium mt-0.5">
-                          <Clock className="w-3 h-3" />
-                          Pending KRA
+                          <Clock className="w-3 h-3" />Pending KRA
                         </span>
                       )}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                      {new Date(sale.createdAt).toLocaleString('en-KE', {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                      {new Date(sale.createdAt).toLocaleString('en-KE', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300 hidden sm:table-cell">
-                      {sale.cashier?.name ?? 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 text-sm hidden md:table-cell">
-                      {sale.customer?.name ? (
-                        <span className="font-medium text-gray-800 dark:text-gray-200">{sale.customer.name}</span>
-                      ) : (
-                        <span className="text-gray-400 dark:text-gray-500">Walk-in</span>
-                      )}
+                    <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">{sale.cashier?.name ?? 'N/A'}</td>
+                    <td className="px-6 py-4 text-sm">
+                      {sale.customer?.name
+                        ? <span className="font-medium text-gray-800 dark:text-gray-200">{sale.customer.name}</span>
+                        : <span className="text-gray-400 dark:text-gray-500">Walk-in</span>}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <span className="text-sm font-bold text-gray-900 dark:text-white">{formatKES(sale.totalCents)}</span>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <span
-                        className={`inline-flex px-2.5 py-1 text-xs font-semibold rounded-full ${
-                          STATUS_COLORS[sale.status] ?? 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
-                        }`}
-                      >
-                        {sale.status}
-                      </span>
+                      <span className={`inline-flex px-2.5 py-1 text-xs font-semibold rounded-full ${
+                        STATUS_COLORS[sale.status] ?? 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+                      }`}>{sale.status}</span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-1 flex-wrap">
-                        <button
-                          onClick={() => {
-                            setSelectedSale(sale);
-                            setShowViewModal(true);
-                          }}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                          title="View"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          View
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => { setSelectedSale(sale); setShowViewModal(true); }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors">
+                          <Eye className="w-3.5 h-3.5" />View
                         </button>
                         {sale.status === 'PAID' && (
                           <>
-                            <button
-                              onClick={() => void handleReprint(sale)}
-                              disabled={reprintLoading === sale.id}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors disabled:opacity-50"
-                              title="Reprint receipt"
-                            >
-                              <Printer className="w-3.5 h-3.5" />
-                              {reprintLoading === sale.id ? '...' : 'Print'}
+                            <button onClick={() => void handleReprint(sale)} disabled={reprintLoading === sale.id}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors disabled:opacity-50">
+                              <Printer className="w-3.5 h-3.5" />{reprintLoading === sale.id ? '...' : 'Print'}
                             </button>
                             {sale.customer?.phone && (
-                              <button
-                                onClick={() => void handleSendWhatsApp(sale)}
-                                disabled={sendingWhatsApp === sale.id}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-teal-600 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20 rounded-lg transition-colors disabled:opacity-50"
-                                title="Send WhatsApp receipt"
-                              >
-                                <MessageSquare className="w-3.5 h-3.5" />
-                                {sendingWhatsApp === sale.id ? '...' : 'WhatsApp'}
+                              <button onClick={() => void handleSendWhatsApp(sale)} disabled={sendingWhatsApp === sale.id}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-teal-600 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20 rounded-lg transition-colors disabled:opacity-50">
+                                <MessageSquare className="w-3.5 h-3.5" />{sendingWhatsApp === sale.id ? '...' : 'WA'}
                               </button>
                             )}
-                            <button
-                              onClick={() => {
-                                setSelectedSale(sale);
-                                setShowReturnModal(true);
-                              }}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-lg transition-colors"
-                            >
-                              <RotateCcw className="w-3.5 h-3.5" />
-                              Return
+                            <button onClick={() => { setSelectedSale(sale); setShowReturnModal(true); }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-lg transition-colors">
+                              <RotateCcw className="w-3.5 h-3.5" />Return
                             </button>
-                            <button
-                              onClick={() => {
-                                setSelectedSale(sale);
-                                setShowVoidModal(true);
-                              }}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                            >
-                              <Ban className="w-3.5 h-3.5" />
-                              Void
+                            <button onClick={() => { setSelectedSale(sale); setShowVoidModal(true); }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors">
+                              <Ban className="w-3.5 h-3.5" />Void
                             </button>
                           </>
                         )}
@@ -770,6 +703,72 @@ export default function SalesListPage() {
                 ))}
               </tbody>
             </table>
+            </div>
+
+            {/* Mobile card list */}
+            <div className="md:hidden divide-y divide-gray-100 dark:divide-gray-700">
+              {sales.map((sale) => (
+                <div key={sale.id} className="p-4 space-y-3">
+                  {/* Top row: receipt + amount + status */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-mono font-bold text-sm text-gray-900 dark:text-white truncate">{sale.receiptNumber}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        {new Date(sale.createdAt).toLocaleString('en-KE', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        {sale.cashier?.name ? ` · ${sale.cashier.name}` : ''}
+                      </p>
+                      {sale.customer?.name && (
+                        <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">{sale.customer.name}</p>
+                      )}
+                      {sale.etimsSubmitted === false && (
+                        <span className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-medium mt-0.5">
+                          <Clock className="w-3 h-3" />Pending KRA
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="font-bold text-base text-gray-900 dark:text-white">{formatKES(sale.totalCents)}</p>
+                      <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full mt-1 ${
+                        STATUS_COLORS[sale.status] ?? 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+                      }`}>{sale.status}</span>
+                    </div>
+                  </div>
+                  {/* Action buttons — full width, easy to tap */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => { setSelectedSale(sale); setShowViewModal(true); }}
+                      className="flex items-center justify-center gap-1.5 py-2.5 text-sm font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-xl transition-colors">
+                      <Eye className="w-4 h-4" />View Details
+                    </button>
+                    {sale.status === 'PAID' ? (
+                      <>
+                        <button onClick={() => void handleReprint(sale)} disabled={reprintLoading === sale.id}
+                          className="flex items-center justify-center gap-1.5 py-2.5 text-sm font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl transition-colors disabled:opacity-50">
+                          <Printer className="w-4 h-4" />{reprintLoading === sale.id ? 'Loading...' : 'Print'}
+                        </button>
+                        <button onClick={() => { setSelectedSale(sale); setShowReturnModal(true); }}
+                          className="flex items-center justify-center gap-1.5 py-2.5 text-sm font-semibold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 rounded-xl transition-colors">
+                          <RotateCcw className="w-4 h-4" />Return
+                        </button>
+                        <button onClick={() => { setSelectedSale(sale); setShowVoidModal(true); }}
+                          className="flex items-center justify-center gap-1.5 py-2.5 text-sm font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-xl transition-colors">
+                          <Ban className="w-4 h-4" />Void Sale
+                        </button>
+                        {sale.customer?.phone && (
+                          <button onClick={() => void handleSendWhatsApp(sale)} disabled={sendingWhatsApp === sale.id}
+                            className="flex items-center justify-center gap-1.5 py-2.5 text-sm font-semibold text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/20 rounded-xl transition-colors disabled:opacity-50">
+                            <MessageSquare className="w-4 h-4" />{sendingWhatsApp === sale.id ? 'Sending...' : 'WhatsApp'}
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-center py-2.5 text-xs text-gray-400 dark:text-gray-500">
+                        No actions available
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         ))}
       </div>

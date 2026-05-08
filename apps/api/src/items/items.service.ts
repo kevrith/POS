@@ -89,7 +89,7 @@ export class ItemsService {
 
     const itemIds = items.map((i) => i.id);
     const stockMap = storeId
-      ? await this.inventory.getStockLevels(itemIds, storeId)
+      ? await this.inventory.getStockLevels(itemIds, storeId, businessId)
       : await this.inventory.getStockLevelsByBusiness(itemIds, businessId);
 
     // Bulk expiry check: get earliest non-null expiry batch per item
@@ -419,7 +419,7 @@ export class ItemsService {
     });
     const itemIds = items.map((i) => i.id);
     const stockMap = storeId
-      ? await this.inventory.getStockLevels(itemIds, storeId)
+      ? await this.inventory.getStockLevels(itemIds, storeId, businessId)
       : await this.inventory.getStockLevelsByBusiness(itemIds, businessId);
     return items
       .map((item) => ({

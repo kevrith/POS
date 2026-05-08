@@ -11,9 +11,9 @@ export class InventoryService {
   constructor(private prisma: PrismaService) {}
 
   /** Compute current stock from movement ledger. Never reads a direct count field. */
-  async getStockLevel(itemId: string, storeId: string): Promise<number> {
+  async getStockLevel(itemId: string, storeId: string, businessId?: string): Promise<number> {
     const result = await this.prisma.inventoryMovement.aggregate({
-      where: { itemId, storeId },
+      where: { itemId, storeId, ...(businessId ? { businessId } : {}) },
       _sum: { quantity: true },
     });
     return result._sum.quantity ?? 0;
@@ -22,10 +22,11 @@ export class InventoryService {
   async getStockLevels(
     itemIds: string[],
     storeId: string,
+    businessId?: string,
   ): Promise<Map<string, number>> {
     const movements = await this.prisma.inventoryMovement.groupBy({
       by: ['itemId'],
-      where: { itemId: { in: itemIds }, storeId },
+      where: { itemId: { in: itemIds }, storeId, ...(businessId ? { businessId } : {}) },
       _sum: { quantity: true },
     });
     const map = new Map<string, number>();

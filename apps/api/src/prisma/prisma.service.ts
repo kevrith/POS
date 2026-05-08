@@ -8,9 +8,9 @@ import { tenantContext } from './tenant-context';
  */
 const TENANT_MODELS = new Set([
   'Item', 'Sale', 'Customer', 'Store', 'User', 'InventoryMovement',
-  'GRN', 'Supplier', 'Expense', 'Employee', 'Promotion', 'GiftCard',
+  'Supplier', 'Expense', 'Employee', 'Promotion', 'GiftCard',
   'LoyaltyProgram', 'AuditLog', 'Notification', 'Budget', 'Shift',
-  'Order', 'Table', 'Reservation', 'SerialRecord', 'ItemBatch',
+  'Order', 'Table', 'Reservation', 'ItemBatch',
   'Bundle', 'Recipe', 'PrinterConfig', 'ApiKey', 'ReportSchedule',
   'Webhook', 'Transfer', 'UserStore',
 ]);

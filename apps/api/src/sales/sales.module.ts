@@ -10,9 +10,10 @@ import { EtimsModule } from '../etims/etims.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { EventsModule } from '../events/events.module';
 import { LoyaltyModule } from '../loyalty/loyalty.module';
+import { SubscriptionModule } from '../subscription/subscription.module';
 
 @Module({
-  imports: [PrismaModule, InventoryModule, AuditModule, AuthModule, WebhooksModule, EtimsModule, NotificationsModule, EventsModule, LoyaltyModule],
+  imports: [PrismaModule, InventoryModule, AuditModule, AuthModule, WebhooksModule, EtimsModule, NotificationsModule, EventsModule, LoyaltyModule, SubscriptionModule],
   providers: [SalesService],
   controllers: [SalesController],
   exports: [SalesService],

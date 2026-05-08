@@ -8,6 +8,7 @@ import { EtimsService } from '../etims/etims.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EventsGateway } from '../events/events.gateway';
 import { LoyaltyService } from '../loyalty/loyalty.service';
+import { SubscriptionLimitsService } from '../subscription/subscription-limits.service';
 import { SaleType, SaleStatus, InventoryMovementType, calculateVAT, calculateTOT, calculateServiceCharge } from '@pos/shared';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -71,9 +72,16 @@ export class SalesService {
     private notifications: NotificationsService,
     private events: EventsGateway,
     private loyalty: LoyaltyService,
+    private subscriptionLimits: SubscriptionLimitsService,
   ) {}
 
   async createSale(businessId: string, dto: CreateSaleDto) {
+    // ── Check transaction limit (FREE tier only) ──
+    const txLimitCheck = await this.subscriptionLimits.checkMonthlyTransactionLimit(businessId);
+    if (!txLimitCheck.allowed) {
+      throw new BadRequestException(txLimitCheck.message);
+    }
+
     // ── Pre-flight checks (outside transaction to avoid SQLite lock contention) ──
     const store = await this.prisma.store.findUnique({
       where: { id: dto.storeId },

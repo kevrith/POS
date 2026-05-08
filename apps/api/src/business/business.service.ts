@@ -6,6 +6,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { SubscriptionLimitsService } from '../subscription/subscription-limits.service';
 import * as bcrypt from 'bcrypt';
 import { createCipheriv, randomBytes } from 'crypto';
 import { UserRole } from '@pos/shared';
@@ -62,7 +63,10 @@ interface UpdateUserDto {
 
 @Injectable()
 export class BusinessService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private subscriptionLimits: SubscriptionLimitsService,
+  ) {}
 
   private encrypt(data: object): string {
     const algorithm = 'aes-256-cbc';
@@ -114,21 +118,9 @@ export class BusinessService {
   }
 
   async createStore(businessId: string, dto: CreateStoreDto) {
-    const STORE_LIMITS: Record<string, number> = {
-      FREE: 1, STARTER: 1, GROWTH: 2, PRO: 5, ENTERPRISE: Infinity,
-    };
-
-    const business = await this.prisma.business.findUnique({
-      where: { id: businessId },
-      select: { subscriptionTier: true, _count: { select: { stores: true } } },
-    });
-    if (!business) throw new NotFoundException('Business not found');
-
-    const limit = STORE_LIMITS[business.subscriptionTier ?? 'FREE'] ?? 1;
-    if (business._count.stores >= limit) {
-      throw new ForbiddenException(
-        `Store limit reached for ${business.subscriptionTier ?? 'FREE'} plan (max ${limit}). Upgrade to add more stores.`,
-      );
+    const check = await this.subscriptionLimits.canCreateStore(businessId);
+    if (!check.allowed) {
+      throw new ForbiddenException(check.message);
     }
 
     return this.prisma.store.create({
@@ -186,21 +178,9 @@ export class BusinessService {
   }
 
   async createUser(businessId: string, dto: CreateUserDto) {
-    const USER_LIMITS: Record<string, number> = {
-      FREE: 1, STARTER: 8, GROWTH: 15, PRO: 30, ENTERPRISE: Infinity,
-    };
-
-    const business = await this.prisma.business.findUnique({
-      where: { id: businessId },
-      select: { subscriptionTier: true, _count: { select: { users: true } } },
-    });
-    if (!business) throw new NotFoundException('Business not found');
-
-    const limit = USER_LIMITS[business.subscriptionTier ?? 'FREE'] ?? 1;
-    if (business._count.users >= limit) {
-      throw new ForbiddenException(
-        `User limit reached for ${business.subscriptionTier ?? 'FREE'} plan (max ${limit}). Upgrade your subscription to add more staff.`,
-      );
+    const check = await this.subscriptionLimits.canCreateUser(businessId);
+    if (!check.allowed) {
+      throw new ForbiddenException(check.message);
     }
 
     if (dto.email) {

@@ -1,17 +1,23 @@
-import { Controller, Post, Get, Patch, Delete, Body, Param, Query, Req, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Body, Param, Query, Req, BadRequestException, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import type { AuthUser } from '../auth/auth.service';
 import { HospitalityService } from './hospitality.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { SubscriptionGuard, RequiresFeature } from '../auth/subscription.guard';
+import { Feature } from '@pos/shared';
 
+@UseGuards(JwtAuthGuard, SubscriptionGuard)
 @Controller('hospitality')
 export class HospitalityController {
   constructor(private hospitalityService: HospitalityService) {}
 
+  @RequiresFeature(Feature.HOSPITALITY)
   @Get('tables')
   async getTables(@Query('storeId') storeId: string, @Query('status') status?: string) {
     return this.hospitalityService.getTables(storeId, status);
   }
 
+  @RequiresFeature(Feature.HOSPITALITY)
   @Post('tables')
   async createTable(@Body() data: { storeId: string; number: string; capacity: number; floor?: string }) {
     return this.hospitalityService.createTable(data);

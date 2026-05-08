@@ -1,69 +1,79 @@
-import {
-  Injectable,
-  CanActivate,
-  ExecutionContext,
-  HttpException,
-  HttpStatus,
-  SetMetadata,
-} from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../prisma/prisma.service';
-import type { Request } from 'express';
-import type { AuthUser } from './auth.service';
+import { Feature, hasFeatureAccess, getFeatureLimit, SubscriptionTier } from '@pos/shared';
 
-export const SKIP_SUBSCRIPTION_CHECK = 'skipSubscriptionCheck';
-/** Decorator to bypass subscription check on specific endpoints. */
-export const SkipSubscriptionCheck = () => SetMetadata(SKIP_SUBSCRIPTION_CHECK, true);
+export const REQUIRES_FEATURE = 'requires_feature';
 
 /**
- * Enforces subscription / trial status. Apply globally or per-controller after JwtAuthGuard.
- * Returns 402 Payment Required when trial has expired and no active subscription exists.
+ * Decorator to mark routes that require specific subscription features
+ * Usage: @RequiresFeature(Feature.HOSPITALITY)
  */
+export const RequiresFeature = (feature: Feature) => {
+  return (target: any, propertyKey?: string, descriptor?: PropertyDescriptor) => {
+    if (descriptor) {
+      Reflect.defineMetadata(REQUIRES_FEATURE, feature, descriptor.value);
+    }
+    return descriptor;
+  };
+};
+
 @Injectable()
 export class SubscriptionGuard implements CanActivate {
   constructor(
-    private prisma: PrismaService,
     private reflector: Reflector,
+    private prisma: PrismaService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    // Allow routes that explicitly opt out (e.g. /auth/login, /subscription)
-    const skip = this.reflector.getAllAndOverride<boolean>(SKIP_SUBSCRIPTION_CHECK, [
+    const requiredFeature = this.reflector.get<Feature>(
+      REQUIRES_FEATURE,
       context.getHandler(),
-      context.getClass(),
-    ]);
-    if (skip) return true;
+    );
 
-    const req = context.switchToHttp().getRequest<Request & { user?: AuthUser }>();
-    const user = req.user;
-    if (!user) return true; // unauthenticated — let JwtAuthGuard handle it
-
-    const business = await this.prisma.business.findUnique({
-      where: { id: user.businessId },
-      select: { subscriptionStatus: true, trialEndsAt: true },
-    });
-
-    if (!business) return true; // non-critical — let downstream handle it
-
-    // FREE tier and active subscriptions always pass through
-    if (business.subscriptionStatus === 'FREE' || business.subscriptionStatus === 'ACTIVE') {
+    if (!requiredFeature) {
+      // No feature requirement, allow access
       return true;
     }
 
-    // Trial expired → lazy-downgrade to FREE and let the request through.
-    // The frontend upgrade banner handles prompting the user; feature gates limit access.
-    if (
-      business.subscriptionStatus === 'TRIAL' &&
-      business.trialEndsAt &&
-      new Date() > business.trialEndsAt
-    ) {
-      this.prisma.business.update({
-        where: { id: user.businessId },
-        data: { subscriptionStatus: 'FREE', subscriptionTier: 'FREE', planName: 'Free' },
-      }).catch(() => {});
-      return true;
+    const request = context.switchToHttp().getRequest();
+    const user = request.user;
+
+    if (!user?.businessId) {
+      throw new ForbiddenException('Business context required');
+    }
+
+    // Fetch business subscription tier
+    const business = await this.prisma.business.findUnique({
+      where: { id: user.businessId },
+      select: { subscriptionTier: true, planName: true },
+    });
+
+    if (!business) {
+      throw new ForbiddenException('Business not found');
+    }
+
+    const tier = (business.subscriptionTier ?? 'FREE') as SubscriptionTier;
+
+    // Check if tier has access to the feature
+    if (!hasFeatureAccess(tier, requiredFeature)) {
+      const requiredTiers = this.getRequiredTiers(requiredFeature);
+      throw new ForbiddenException(
+        `This feature requires ${requiredTiers.join(' or ')} plan. You are currently on ${tier}. Please upgrade at /settings/subscription`,
+      );
     }
 
     return true;
+  }
+
+  private getRequiredTiers(feature: Feature): string[] {
+    const tiers = [
+      SubscriptionTier.STARTER,
+      SubscriptionTier.GROWTH,
+      SubscriptionTier.PRO,
+      SubscriptionTier.ENTERPRISE,
+    ];
+
+    return tiers.filter((tier) => hasFeatureAccess(tier, feature));
   }
 }

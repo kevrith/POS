@@ -23,6 +23,9 @@ interface VoidModalProps {
   receiptNumber: string;
   totalCents: number;
   businessId: string;
+  userRole?: string;
+  userId?: string;
+  userName?: string;
   onSuccess: () => void;
   onClose: () => void;
 }
@@ -35,9 +38,13 @@ export default function VoidModal({
   receiptNumber,
   totalCents,
   businessId,
+  userRole,
+  userId,
+  userName,
   onSuccess,
   onClose,
 }: VoidModalProps) {
+  const isSelfAuthorized = userRole === 'OWNER' || userRole === 'MANAGER';
   const [managerPin, setManagerPin] = useState('');
   const [reason, setReason] = useState('');
   const [voidType, setVoidType] = useState<'FULL_VOID' | 'LINE_ITEM_VOID'>('FULL_VOID');
@@ -65,40 +72,35 @@ export default function VoidModal({
 
   const voidMutation = useMutation({
     mutationFn: async () => {
-      const { userId } = await api.post<{ userId: string; name: string }>(
-        '/sales/verify-manager-pin',
-        { pin: managerPin, businessId },
-      );
+      let managerId: string;
 
-      if (voidType === 'FULL_VOID') {
-        return api.post(`/sales/${saleId}/void?businessId=${businessId}`, {
-          managerId: userId,
-          reason,
-        });
+      if (isSelfAuthorized && userId) {
+        managerId = userId;
+      } else {
+        const result = await api.post<{ userId: string; name: string }>(
+          '/sales/verify-manager-pin',
+          { pin: managerPin, businessId },
+        );
+        managerId = result.userId;
       }
 
-      // Build voidedItemQuantities for partial/line-item void
-      const voidedItemQuantities = selectedItems.map(i => ({
-        itemId: i.id,
-        quantity: voidQuantities[i.id]!,
-      }));
-      const voidedItemIds = selectedItems.map(i => i.id);
+      if (voidType === 'FULL_VOID') {
+        return api.post(`/sales/${saleId}/void?businessId=${businessId}`, { managerId, reason });
+      }
 
+      const voidedItemQuantities = selectedItems.map(i => ({ itemId: i.id, quantity: voidQuantities[i.id]! }));
+      const voidedItemIds = selectedItems.map(i => i.id);
       return api.post(`/sales/${saleId}/void?businessId=${businessId}`, {
-        managerId: userId,
-        reason,
-        voidedItemIds,
-        voidedItemQuantities,
+        managerId, reason, voidedItemIds, voidedItemQuantities,
       });
     },
-    onSuccess: () => {
-      onSuccess();
-      onClose();
-    },
+    onSuccess: () => { onSuccess(); onClose(); },
   });
 
   const canSubmit =
-    managerPin.length >= 4 &&
+    (isSelfAuthorized || managerPin.length >= 4) &&
+    reason.trim().length > 0 &&
+    (voidType === 'FULL_VOID' || selectedCount > 0);
     reason.trim().length > 0 &&
     (voidType === 'FULL_VOID' || selectedCount > 0);
 
@@ -120,7 +122,12 @@ export default function VoidModal({
           {/* Warning */}
           <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4 text-sm text-yellow-800 dark:text-yellow-300">
             <p className="font-semibold mb-1">Warning: This action cannot be undone</p>
-            <p className="text-xs">Inventory will be reversed and an audit trail created. Manager PIN required.</p>
+            <p className="text-xs">
+              Inventory will be reversed and an audit trail created.
+              {isSelfAuthorized
+                ? ` Voiding as ${userName ?? 'Manager'} (${userRole?.toLowerCase()}).`
+                : ' Manager PIN required to authorize.'}
+            </p>
           </div>
 
           {/* Receipt info */}
@@ -236,24 +243,37 @@ export default function VoidModal({
             </div>
           )}
 
-          {/* Manager PIN */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-              Manager PIN <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
-              <input
-                type="password"
-                value={managerPin}
-                onChange={(e) => setManagerPin(e.target.value)}
-                placeholder="Enter 4–6 digit PIN"
-                maxLength={6}
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
-                autoFocus
-              />
+          {/* Manager PIN — only required for non-manager roles */}
+          {isSelfAuthorized ? (
+            <div className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl">
+              <div className="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/40 flex items-center justify-center flex-shrink-0">
+                <Lock className="w-4 h-4 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-green-800 dark:text-green-300">Authorized as {userRole?.charAt(0) + (userRole?.slice(1).toLowerCase() ?? '')}</p>
+                <p className="text-xs text-green-600 dark:text-green-400">{userName} — no PIN required</p>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                Manager PIN <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
+                <input
+                  type="password"
+                  value={managerPin}
+                  onChange={(e) => setManagerPin(e.target.value)}
+                  placeholder="Enter manager's 4–6 digit PIN"
+                  maxLength={6}
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+                  autoFocus
+                />
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Ask your manager or owner to enter their PIN</p>
+            </div>
+          )}
 
           {/* Reason */}
           <div>

@@ -91,6 +91,7 @@ export class BusinessService {
     const { etimsCredentialsEncrypted, mpesaCredentialsEncrypted, atCredentialsEncrypted, ...safe } = business;
     return {
       ...safe,
+      subscriptionTier: business.subscriptionTier ?? 'FREE',
       hasEtimsCredentials: !!etimsCredentialsEncrypted,
       hasMpesaCredentials: !!mpesaCredentialsEncrypted,
       hasAtCredentials: !!atCredentialsEncrypted,

@@ -383,6 +383,7 @@ export default function SettingsPage() {
           setVerifyState(res.active ? 'success' : 'failed');
           if (res.active) {
             queryClient.invalidateQueries({ queryKey: ['subscription', businessId] });
+            queryClient.invalidateQueries({ queryKey: ['business-settings', businessId] });
             window.history.replaceState({}, '', '/settings?tab=subscription');
           }
         })

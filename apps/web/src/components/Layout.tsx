@@ -201,7 +201,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     retry: false,
   });
 
-  const { data: businessSettings } = useQuery<{ posMode: string; name: string; stores?: { id: string; name: string; storeCode: string }[] }>({
+  const { data: businessSettings } = useQuery<{ posMode: string; name: string; subscriptionTier: string; stores?: { id: string; name: string; storeCode: string }[] }>({
     queryKey: ['business-settings', user?.businessId],
     queryFn: () => api.get(`/business/${user!.businessId}/settings`),
     enabled: !!user?.businessId,
@@ -460,7 +460,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     !businessTypes || businessTypes.includes(businessType);
 
   const userPlan = user?.planName ?? 'STARTER';
-  const canSeePlan = (to: string) => hasFeature(userPlan, to.replace(/^\//, ''));
+  const subStatus = subscription?.subscriptionStatus;
+  const subTier = businessSettings?.subscriptionTier ?? 'FREE';
+  const canSeePlan = (to: string) => hasFeature(userPlan, to.replace(/^\//, ''), subStatus, subTier);
 
   const visibleGroups = NAV_GROUPS
     .filter((g) => canSee(g.roles) && canSeeBusinessType(g.businessTypes))
@@ -802,7 +804,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* ── Content area ────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <MobileNav isOpen={mobileMenuOpen} onOpen={() => setMobileMenuOpen(true)} onClose={() => setMobileMenuOpen(false)} businessType={businessType} userPlan={userPlan} />
+        <MobileNav isOpen={mobileMenuOpen} onOpen={() => setMobileMenuOpen(true)} onClose={() => setMobileMenuOpen(false)} businessType={businessType} userPlan={userPlan} subscriptionStatus={subStatus} subscriptionTier={subTier} />
         <OfflineBanner />
 
         {/* ── Top header bar (desktop) ──────────────────────────────────── */}

@@ -133,9 +133,11 @@ interface Props {
   onClose: () => void;
   businessType?: string;
   userPlan?: string;
+  subscriptionStatus?: string;
+  subscriptionTier?: string;
 }
 
-export default function MobileNav({ isOpen, onOpen, onClose, businessType = 'RETAIL', userPlan = 'STARTER' }: Props) {
+export default function MobileNav({ isOpen, onOpen, onClose, businessType = 'RETAIL', userPlan = 'STARTER', subscriptionStatus, subscriptionTier }: Props) {
   const location    = useLocation();
   const logout      = useAuthStore((s) => s.logout);
   const user        = useAuthStore((s) => s.user);
@@ -153,7 +155,7 @@ export default function MobileNav({ isOpen, onOpen, onClose, businessType = 'RET
 
   const canSee = (roles?: string[]) => !roles || roles.includes(userRole);
   const canSeeType = (types?: string[]) => !types || types.includes(businessType);
-  const canSeePlan = (to: string) => hasFeature(userPlan, to.replace(/^\//, ''));
+  const canSeePlan = (to: string) => hasFeature(userPlan, to.replace(/^\//, ''), subscriptionStatus, subscriptionTier);
 
   const visibleGroups = MENU_GROUPS
     .filter((g) => canSee(g.roles) && canSeeType(g.businessTypes))

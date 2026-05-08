@@ -113,9 +113,22 @@ export function planRank(plan: Plan | string | undefined): number {
 /**
  * Returns true if the user's plan meets or exceeds the minimum required for a feature.
  * Features not listed in FEATURE_PLANS are always accessible.
+ * During TRIAL, grant full access. After trial expires or on ACTIVE subscription,
+ * enforce the subscriptionTier.
  */
-export function hasFeature(userPlan: Plan | string | undefined, featureKey: string): boolean {
+export function hasFeature(
+  userPlan: Plan | string | undefined,
+  featureKey: string,
+  subscriptionStatus?: string,
+  subscriptionTier?: string,
+): boolean {
   const required = FEATURE_PLANS[featureKey];
   if (!required) return true;
-  return planRank(userPlan ?? 'FREE') >= planRank(required);
+
+  // Trial accounts get full access to evaluate all features
+  if (subscriptionStatus === 'TRIAL') return true;
+
+  // Use subscriptionTier from business settings (most accurate)
+  const effectivePlan = subscriptionTier ?? userPlan ?? 'FREE';
+  return planRank(effectivePlan) >= planRank(required);
 }

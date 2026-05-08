@@ -791,6 +791,9 @@ export default function SalesListPage() {
           receiptNumber={selectedSale.receiptNumber}
           totalCents={selectedSale.totalCents}
           businessId={businessId}
+          userRole={user?.role}
+          userId={user?.id}
+          userName={user?.name}
           onSuccess={() => {
             void qc.invalidateQueries({ queryKey: ['sales'] });
           }}

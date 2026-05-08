@@ -103,7 +103,6 @@ export class AuthController {
   @SkipThrottle()
   @Post('google/token')
   async googleToken(@Body() body: { accessToken: string }) {
-    // Fetch user profile from Google using the access token
     const res = await fetch(
       `https://www.googleapis.com/oauth2/v3/userinfo?access_token=${body.accessToken}`,
     );
@@ -119,6 +118,30 @@ export class AuthController {
       email: profile.email ?? null,
       name: profile.name ?? 'Google User',
       avatarUrl: profile.picture ?? null,
+    });
+  }
+
+  @Public()
+  @SkipThrottle()
+  @Post('google/register')
+  async googleRegister(@Body() body: { accessToken: string; businessName: string }) {
+    if (!body.businessName?.trim()) throw new UnauthorizedException('Business name is required');
+    const res = await fetch(
+      `https://www.googleapis.com/oauth2/v3/userinfo?access_token=${body.accessToken}`,
+    );
+    if (!res.ok) throw new UnauthorizedException('Invalid Google access token');
+    const profile = await res.json() as {
+      sub: string;
+      email?: string;
+      name?: string;
+      picture?: string;
+    };
+    return this.authService.registerWithGoogle({
+      googleId: profile.sub,
+      email: profile.email ?? null,
+      name: profile.name ?? 'Google User',
+      avatarUrl: profile.picture ?? null,
+      businessName: body.businessName.trim(),
     });
   }
 

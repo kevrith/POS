@@ -356,7 +356,7 @@ export class AuthService {
         data: {
           businessId: business.id,
           name: `${data.businessName} - Main`,
-          storeCode: 'NRB01',
+          storeCode: `${shortCode}-01`,
         },
       });
 
@@ -394,6 +394,70 @@ export class AuthService {
   }
 
   // ─── Google OAuth ────────────────────────────────────────────
+  async registerWithGoogle(profile: {
+    googleId: string;
+    email: string | null;
+    name: string;
+    avatarUrl: string | null;
+    businessName: string;
+  }): Promise<{ accessToken: string; user: AuthUser }> {
+    if (!profile.email) throw new BadRequestException('Google account has no email address');
+
+    const existing = await this.prisma.user.findFirst({
+      where: { OR: [{ googleId: profile.googleId }, { email: profile.email }] },
+    });
+    if (existing) throw new BadRequestException('An account with this Google identity already exists. Please sign in instead.');
+
+    const shortCode = await this.generateUniqueShortCode(profile.businessName);
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const business = await tx.business.create({
+        data: {
+          name: profile.businessName,
+          shortCode,
+          trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        },
+      });
+      await tx.store.create({
+        data: {
+          businessId: business.id,
+          name: `${profile.businessName} - Main`,
+          storeCode: `${shortCode}-01`,
+        },
+      });
+      const user = await tx.user.create({
+        data: {
+          name: profile.name,
+          email: profile.email,
+          googleId: profile.googleId,
+          avatarUrl: profile.avatarUrl,
+          role: UserRole.OWNER,
+          businessId: business.id,
+        },
+      });
+      return { business, user };
+    });
+
+    const payload: JwtPayload = {
+      sub: result.user.id,
+      businessId: result.user.businessId,
+      role: UserRole.OWNER,
+      planName: 'STARTER',
+    };
+
+    return {
+      accessToken: this.jwt.sign(payload, { expiresIn: '15m' }),
+      user: {
+        id: result.user.id,
+        name: result.user.name,
+        email: result.user.email,
+        role: UserRole.OWNER,
+        businessId: result.user.businessId,
+        planName: 'STARTER',
+      },
+    };
+  }
+
   async loginWithGoogle(profile: {
     googleId: string;
     email: string | null;

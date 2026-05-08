@@ -1,14 +1,16 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   ShoppingCart, DollarSign, TrendingUp, TrendingDown, Package,
   AlertTriangle, CreditCard, Users, BarChart3, ChevronRight,
-  RefreshCw, Coffee, Wallet, Zap, Clock, CheckCircle2, MessageSquare, Check,
+  RefreshCw, Coffee, Wallet, Zap, Clock, CheckCircle2, MessageSquare, Check, Lock,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
-import { formatKES } from '@pos/shared';
+import { formatKES, Feature } from '@pos/shared';
+import { useFeatureAccess } from '../hooks/useFeatureAccess';
+import UpgradeModal from '../components/UpgradeModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -127,16 +129,30 @@ function KpiCard({
 
 // ─── Quick Action ─────────────────────────────────────────────────────────────
 
-function QuickAction({ icon: Icon, label, desc, onClick, color }: {
+function QuickAction({ icon: Icon, label, desc, onClick, color, locked, badge }: {
   icon: React.ElementType; label: string; desc: string; onClick: () => void; color: string;
+  locked?: boolean; badge?: string;
 }) {
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700/60 rounded-xl hover:shadow-card-hover hover:border-blue-100 dark:hover:border-gray-600 transition-all duration-200 text-left group active:scale-[0.98]"
+      disabled={locked}
+      className={`flex items-center gap-3 p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700/60 rounded-xl hover:shadow-card-hover hover:border-blue-100 dark:hover:border-gray-600 transition-all duration-200 text-left group active:scale-[0.98] relative ${
+        locked ? 'opacity-60 cursor-not-allowed' : ''
+      }`}
     >
-      <div className={`w-10 h-10 rounded-xl ${color} flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-200`}>
+      {badge && (
+        <span className="absolute -top-2 -right-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg">
+          {badge}
+        </span>
+      )}
+      <div className={`w-10 h-10 rounded-xl ${color} flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-200 relative`}>
         <Icon className="w-5 h-5" />
+        {locked && (
+          <div className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center">
+            <Lock className="w-4 h-4 text-white" />
+          </div>
+        )}
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-gray-900 dark:text-white">{label}</p>
@@ -172,6 +188,31 @@ export default function DashboardPage() {
   const businessId = user?.businessId ?? '';
   const storeId = user?.storeId ?? '';
   const role = user?.role ?? '';
+  
+  const [upgradeModal, setUpgradeModal] = useState<{
+    isOpen: boolean;
+    featureName: string;
+    requiredTier: any;
+  }>({ isOpen: false, featureName: '', requiredTier: null });
+
+  // Feature access checks
+  const hospitalityAccess = useFeatureAccess(Feature.HOSPITALITY);
+  const inventoryAccess = useFeatureAccess(Feature.INVENTORY);
+  const reportsAccess = useFeatureAccess(Feature.REPORTS_ADVANCED);
+  const stocktakeAccess = useFeatureAccess(Feature.STOCKTAKE);
+  const ownerDashboardAccess = useFeatureAccess(Feature.OWNER_DASHBOARD);
+
+  const handleFeatureClick = (feature: { hasAccess: boolean; requiredTier?: any }, featureName: string, navigateTo: string) => {
+    if (feature.hasAccess) {
+      navigate(navigateTo);
+    } else if (feature.requiredTier) {
+      setUpgradeModal({
+        isOpen: true,
+        featureName,
+        requiredTier: feature.requiredTier,
+      });
+    }
+  };
 
   const { start: monthStart, end: monthEnd } = thisMonthRange();
   const { start: prevMonthStart, end: prevMonthEnd } = lastMonthRange();
@@ -600,18 +641,21 @@ export default function DashboardPage() {
               <QuickAction
                 icon={Coffee}
                 label="Hospitality"
-                desc="Tables & orders"
-                onClick={() => navigate('/hospitality')}
+                desc={hospitalityAccess.hasAccess ? 'Tables & orders' : 'Upgrade to unlock'}
+                onClick={() => handleFeatureClick(hospitalityAccess, 'Hospitality Mode', '/hospitality')}
                 color="bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400"
+                locked={!hospitalityAccess.hasAccess}
+                badge={!hospitalityAccess.hasAccess ? hospitalityAccess.requiredTier : undefined}
               />
             )}
             {['OWNER', 'MANAGER'].includes(role) && (
               <QuickAction
                 icon={Package}
                 label="Inventory"
-                desc="Stock & items"
-                onClick={() => navigate('/inventory')}
+                desc={inventoryAccess.hasAccess ? 'Stock & items' : 'Upgrade to unlock'}
+                onClick={() => handleFeatureClick(inventoryAccess, 'Inventory Management', '/inventory')}
                 color="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
+                locked={!inventoryAccess.hasAccess}
               />
             )}
             <QuickAction
@@ -625,8 +669,8 @@ export default function DashboardPage() {
               <QuickAction
                 icon={BarChart3}
                 label="Reports"
-                desc="Revenue, VAT, P&L"
-                onClick={() => navigate('/reports')}
+                desc={reportsAccess.hasAccess ? 'Revenue, VAT, P&L' : 'Basic reports only'}
+                onClick={() => handleFeatureClick(reportsAccess, 'Advanced Reports', '/reports')}
                 color="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400"
               />
             )}
@@ -643,23 +687,36 @@ export default function DashboardPage() {
               <QuickAction
                 icon={AlertTriangle}
                 label="Stocktake"
-                desc="Cycle count & variance"
-                onClick={() => navigate('/stocktake')}
+                desc={stocktakeAccess.hasAccess ? 'Cycle count & variance' : 'Upgrade to unlock'}
+                onClick={() => handleFeatureClick(stocktakeAccess, 'Stocktake', '/stocktake')}
                 color="bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400"
+                locked={!stocktakeAccess.hasAccess}
+                badge={!stocktakeAccess.hasAccess ? stocktakeAccess.requiredTier : undefined}
               />
             )}
             {role === 'OWNER' && (
               <QuickAction
                 icon={TrendingUp}
                 label="Owner Dashboard"
-                desc="Multi-store analytics"
-                onClick={() => navigate('/owner-dashboard')}
+                desc={ownerDashboardAccess.hasAccess ? 'Multi-store analytics' : 'Upgrade to unlock'}
+                onClick={() => handleFeatureClick(ownerDashboardAccess, 'Owner Dashboard', '/owner-dashboard')}
                 color="bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
+                locked={!ownerDashboardAccess.hasAccess}
+                badge={!ownerDashboardAccess.hasAccess ? ownerDashboardAccess.requiredTier : undefined}
               />
             )}
           </div>
         </div>
       </div>
+      
+      {/* Upgrade Modal */}
+      <UpgradeModal
+        isOpen={upgradeModal.isOpen}
+        onClose={() => setUpgradeModal({ isOpen: false, featureName: '', requiredTier: null })}
+        featureName={upgradeModal.featureName}
+        requiredTier={upgradeModal.requiredTier}
+        currentTier={user?.business?.subscriptionTier ?? 'FREE'}
+      />
     </div>
   );
 }

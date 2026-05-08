@@ -162,6 +162,10 @@ export enum NegativeStockPolicy {
   ALLOW = 'ALLOW',
 }
 
+// ─── SUBSCRIPTION FEATURES ──────────────────────────────────
+
+export * from './src/permissions/subscription-features';
+
 // ─── PERMISSIONS ─────────────────────────────────────────────
 
 export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {

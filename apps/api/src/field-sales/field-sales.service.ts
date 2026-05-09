@@ -125,7 +125,8 @@ export class FieldSalesService {
   // ─── Customers ───────────────────────────────────────────────────────────
 
   async getAgentCustomers(agentId: string, businessId: string, search?: string) {
-    const where: Record<string, unknown> = { salesAgentId: agentId, businessId };
+    const where: Record<string, unknown> = { businessId };
+    if (agentId) where.salesAgentId = agentId;
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
@@ -207,9 +208,9 @@ export class FieldSalesService {
     businessId: string,
     dto: CreateFieldOrderDto,
   ) {
-    // Get agent's default store
-    const agent = await this.prisma.user.findUnique({
-      where: { id: agentId },
+    // Get agent's default store via UserStore junction
+    const userStore = await this.prisma.userStore.findFirst({
+      where: { userId: agentId },
       select: { storeId: true },
     });
 
@@ -268,7 +269,7 @@ export class FieldSalesService {
       data: {
         offlineId: uuidv4(),
         businessId,
-        storeId: agent?.storeId ?? undefined,
+        storeId: userStore?.storeId ?? undefined,
         agentId,
         customerId: dto.customerId,
         routeId: dto.routeId,

@@ -45,7 +45,7 @@ pnpm install
 ```bash
 sudo -u postgres psql << 'EOF'
 CREATE DATABASE kastra_pos;
-CREATE USER kastra WITH PASSWORD 'kastra2026';
+CREATE USER kastra WITH PASSWORD '<your_secure_password>';
 GRANT ALL PRIVILEGES ON DATABASE kastra_pos TO kastra;
 ALTER DATABASE kastra_pos OWNER TO kastra;
 \c kastra_pos
@@ -68,7 +68,7 @@ The only required change for local dev is `DATABASE_URL` — it defaults to the 
 cd apps/api
 npx prisma migrate deploy --schema ../../prisma/schema.prisma
 cd ../..
-DATABASE_URL="postgresql://kastra:kastra2026@localhost:5432/kastra_pos" npx ts-node prisma/seed.ts
+DATABASE_URL="postgresql://kastra:<your_password>@localhost:5432/kastra_pos" npx ts-node prisma/seed.ts
 ```
 
 ### 5. Start all servers
@@ -102,12 +102,12 @@ cd apps/admin && pnpm dev
 
 | Role | Email | Password | PIN |
 |---|---|---|---|
-| Owner | owner@premiercafe.co.ke | password123 | 1234 |
-| Manager | manager@premiercafe.co.ke | manager123 | 5678 |
-| Cashier | cashier@premiercafe.co.ke | cashier123 | 0000 |
-| Waiter | waiter@premiercafe.co.ke | waiter123 | 9999 |
+| Owner | owner@premiercafe.co.ke | <see_seed_file> | <see_seed_file> |
+| Manager | manager@premiercafe.co.ke | <see_seed_file> | <see_seed_file> |
+| Cashier | cashier@premiercafe.co.ke | <see_seed_file> | <see_seed_file> |
+| Waiter | waiter@premiercafe.co.ke | <see_seed_file> | <see_seed_file> |
 
-**Super Admin Console** (http://localhost:3002): `admin@kastrapos.co.ke` / `kastra-admin-2026`
+**Super Admin Console** (http://localhost:3002): Check `prisma/seed.ts` for credentials
 
 ---
 
@@ -227,9 +227,9 @@ All endpoints require `Authorization: Bearer <JWT>` except auth and public route
 See `apps/api/.env` for the full list. Critical ones:
 
 ```env
-DATABASE_URL="postgresql://kastra:kastra2026@localhost:5432/kastra_pos"
-JWT_SECRET="min-32-chars"
-ENCRYPTION_KEY="64-hex-chars"   # AES-256-CBC for M-Pesa + eTIMS credentials
+DATABASE_URL="postgresql://username:password@localhost:5432/kastra_pos"
+JWT_SECRET="<generate-secure-32-char-secret>"
+ENCRYPTION_KEY="<generate-64-hex-chars>"   # AES-256-CBC for M-Pesa + eTIMS credentials
 ```
 
 Optional integrations (leave blank to disable):

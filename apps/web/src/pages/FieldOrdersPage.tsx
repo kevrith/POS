@@ -595,7 +595,7 @@ function OrderDetailPanel({
 
   const statusMutation = useMutation({
     mutationFn: (payload: { status: OrderStatus; expectedDeliveryDate?: string; rejectionReason?: string }) =>
-      api.patch(`/field-sales/orders/${order.id}/status`, payload),
+      api.patch(`/field-sales/orders/${order.id}/status`, { ...payload, businessId }),
     onSuccess: () => {
       toast.success('Order status updated');
       qc.invalidateQueries({ queryKey: ['field-orders'] });

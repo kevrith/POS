@@ -207,6 +207,12 @@ export class FieldSalesService {
     businessId: string,
     dto: CreateFieldOrderDto,
   ) {
+    // Get agent's default store
+    const agent = await this.prisma.user.findUnique({
+      where: { id: agentId },
+      select: { storeId: true },
+    });
+
     // Check customer credit limit
     const customer = await this.prisma.customer.findFirst({
       where: { id: dto.customerId, businessId },
@@ -262,6 +268,7 @@ export class FieldSalesService {
       data: {
         offlineId: uuidv4(),
         businessId,
+        storeId: agent?.storeId ?? undefined,
         agentId,
         customerId: dto.customerId,
         routeId: dto.routeId,
@@ -323,11 +330,11 @@ export class FieldSalesService {
     if (filters.startDate || filters.endDate) {
       where.createdAt = {
         ...(filters.startDate ? { gte: new Date(filters.startDate) } : {}),
-        ...(filters.endDate ? { lte: new Date(filters.endDate) } : {}),
+        ...(filters.endDate ? { lte: new Date(filters.endDate + 'T23:59:59.999Z') } : {}),
       };
     }
 
-    return this.prisma.fieldOrder.findMany({
+    const orders = await this.prisma.fieldOrder.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       include: {
@@ -337,6 +344,15 @@ export class FieldSalesService {
         route: { select: { id: true, name: true } },
       },
     });
+
+    // Transform to match frontend expectations
+    return orders.map(order => ({
+      ...order,
+      customerName: order.customer?.name,
+      shopCode: order.customer?.shopCode,
+      agentName: order.agent?.name,
+      routeName: order.route?.name,
+    }));
   }
 
   async getFieldOrder(id: string, businessId: string) {

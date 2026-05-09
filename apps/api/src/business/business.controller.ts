@@ -43,6 +43,10 @@ export class BusinessController {
       expiredItemPolicy?: string;
       expenseApprovalThresholdCents?: number;
       expiryAlertDays?: number;
+      receiptFormatSale?: 'THERMAL' | 'A4' | 'A5';
+      receiptFormatInvoice?: 'THERMAL' | 'A4' | 'A5';
+      receiptFormatDelivery?: 'THERMAL' | 'A4' | 'A5';
+      receiptFormatEmail?: 'THERMAL' | 'A4' | 'A5';
       [key: string]: unknown;
     },
   ) {

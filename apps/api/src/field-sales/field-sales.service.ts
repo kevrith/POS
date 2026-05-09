@@ -284,7 +284,12 @@ export class FieldSalesService {
           })),
         },
       },
-      include: { items: true, customer: { select: { name: true } } },
+      include: { 
+        items: true, 
+        customer: { select: { name: true, shopCode: true, phone: true } },
+        agent: { select: { name: true } },
+        route: { select: { name: true } }
+      },
     });
 
     // Record agent visit

@@ -12,6 +12,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import * as Print from 'expo-print';
 import { driverApi, formatKES } from '../../lib/api';
 import { Colors, STATUS_COLORS } from '../../constants/theme';
 
@@ -126,6 +127,102 @@ export default function DeliveryDetailScreen() {
           },
         ]
       );
+    }
+  }
+
+  async function handlePrintReceipt() {
+    if (!data) return;
+    
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; font-size: 14px; }
+            h1 { font-size: 20px; margin: 0 0 10px; text-align: center; }
+            h2 { font-size: 16px; margin: 10px 0 5px; border-bottom: 2px solid #000; padding-bottom: 5px; }
+            .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
+            .info-row { display: flex; justify-content: space-between; margin: 5px 0; }
+            .label { font-weight: bold; }
+            table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #f5f5f5; font-weight: bold; }
+            .total-row { font-weight: bold; background-color: #f9f9f9; }
+            .footer { margin-top: 30px; text-align: center; font-size: 12px; border-top: 1px solid #ddd; padding-top: 10px; }
+            .status-badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+            .status-delivered { background-color: #d4edda; color: #155724; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>DELIVERY RECEIPT</h1>
+            <p style="margin: 5px 0;">Order #${data.orderNumber}</p>
+            <p style="margin: 5px 0;">${new Date().toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+          </div>
+
+          <h2>Customer Information</h2>
+          <div class="info-row"><span class="label">Name:</span><span>${data.customerName || '—'}</span></div>
+          <div class="info-row"><span class="label">Phone:</span><span>${data.customerPhone || '—'}</span></div>
+          <div class="info-row"><span class="label">Address:</span><span>${data.deliveryAddress || '—'}</span></div>
+
+          <h2>Order Items</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th style="text-align: center;">Qty</th>
+                <th style="text-align: right;">Unit Price</th>
+                <th style="text-align: right;">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(data.items || []).map(item => `
+                <tr>
+                  <td>${item.name}</td>
+                  <td style="text-align: center;">${item.quantity}</td>
+                  <td style="text-align: right;">${formatKES(item.unitPriceCents)}</td>
+                  <td style="text-align: right;">${formatKES(item.unitPriceCents * item.quantity)}</td>
+                </tr>
+              `).join('')}
+              ${data.deliveryFeeCents ? `
+                <tr>
+                  <td colspan="3" style="text-align: right; font-weight: bold;">Delivery Fee:</td>
+                  <td style="text-align: right; font-weight: bold;">${formatKES(data.deliveryFeeCents)}</td>
+                </tr>
+              ` : ''}
+              <tr class="total-row">
+                <td colspan="3" style="text-align: right;">TOTAL:</td>
+                <td style="text-align: right;">${formatKES(data.totalCents || 0)}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h2>Delivery Status</h2>
+          <div class="info-row">
+            <span class="label">Status:</span>
+            <span class="status-badge status-delivered">${data.status.replace('_', ' ')}</span>
+          </div>
+          <div class="info-row"><span class="label">Delivered:</span><span>${new Date().toLocaleDateString('en-KE')}</span></div>
+
+          ${data.notes ? `
+            <h2>Notes</h2>
+            <p>${data.notes}</p>
+          ` : ''}
+
+          <div class="footer">
+            <p>Thank you for your business!</p>
+            <p style="margin-top: 10px;">Customer Signature: _______________________</p>
+          </div>
+        </body>
+      </html>
+    `;
+
+    try {
+      await Print.printAsync({ html });
+      Alert.alert('Success', 'Receipt printed successfully');
+    } catch (error) {
+      Alert.alert('Print Error', 'Could not print receipt. Please try again.');
     }
   }
 
@@ -357,6 +454,19 @@ export default function DeliveryDetailScreen() {
                 <Text style={styles.actionBtnText}>Cancel</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        )}
+
+        {data.status === 'DELIVERED' && (
+          <View style={styles.actionsSection}>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnPrimary]}
+              onPress={handlePrintReceipt}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="print" size={20} color="#FFFFFF" />
+              <Text style={styles.actionBtnText}>Print Receipt</Text>
+            </TouchableOpacity>
           </View>
         )}
 

@@ -240,10 +240,139 @@ export class PdfService {
   }
 
   /**
-   * KRA P9A Form — Annual PAYE Return for individual employee.
-   * Lists monthly earnings + deductions for all payslips in the given year.
+   * A4 Delivery Receipt with signature block.
+   * Professional format for driver delivery confirmation.
    */
-  async generateCustomerStatement(customerId: string, startDate: Date, endDate: Date): Promise<string> {
+  async generateDeliveryReceipt(deliveryId: string): Promise<string> {
+    const delivery = await this.prisma.deliveryOrder.findUnique({
+      where: { id: deliveryId },
+      include: {
+        sale: { include: { items: true, payments: true } },
+        customer: true,
+        business: true,
+      },
+    });
+    if (!delivery) throw new Error('Delivery not found');
+
+    const business = delivery.business;
+    const sale = delivery.sale;
+    const fmt = (c: number) => `KES ${(c / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
+    const date = new Date(delivery.createdAt).toLocaleDateString('en-KE', { day: '2-digit', month: 'long', year: 'numeric' });
+
+    const itemRows = sale?.items
+      .map((item, idx) => `
+        <tr>
+          <td style="text-align:center">${idx + 1}</td>
+          <td>${item.name}</td>
+          <td style="text-align:center">${item.quantity}</td>
+          <td style="text-align:right">${fmt(item.unitPriceCents)}</td>
+          <td style="text-align:right">${fmt(item.totalCents)}</td>
+        </tr>
+      `).join('') ?? '';
+
+    const content = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px">
+        <div>
+          <div style="font-size:26px;font-weight:bold;color:#1e3a5f">${business?.name ?? 'Business'}</div>
+          ${business?.receiptHeader ? `<div style="color:#555;margin-top:4px">${business.receiptHeader}</div>` : ''}
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:22px;font-weight:bold;color:#1e3a5f;letter-spacing:1px">DELIVERY RECEIPT</div>
+          <div style="color:#555;margin-top:6px">Order #: <strong>${delivery.orderNumber}</strong></div>
+          <div style="color:#555">Date: <strong>${date}</strong></div>
+          ${delivery.deliveredAt ? `<div style="color:#16a34a;font-weight:bold">Delivered: ${new Date(delivery.deliveredAt).toLocaleString('en-KE')}</div>` : ''}
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;margin-bottom:24px;gap:24px">
+        <div style="flex:1;padding:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px">
+          <p style="font-weight:bold;margin:0 0 6px;color:#1e3a5f">Deliver To</p>
+          <div style="font-size:14px;font-weight:bold">${delivery.customerName}</div>
+          ${delivery.customerPhone ? `<div style="color:#555">${delivery.customerPhone}</div>` : ''}
+          <div style="color:#555;margin-top:4px">${delivery.deliveryAddress}</div>
+        </div>
+        <div style="flex:1;padding:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px">
+          <p style="font-weight:bold;margin:0 0 6px;color:#1e3a5f">Delivery Status</p>
+          <div style="font-weight:bold;color:${delivery.status === 'DELIVERED' ? '#16a34a' : '#f59e0b'}">${delivery.status}</div>
+          ${delivery.receivedBy ? `<div style="color:#555">Received by: ${delivery.receivedBy}</div>` : ''}
+          ${delivery.notes ? `<div style="color:#555;font-size:12px;margin-top:4px">${delivery.notes}</div>` : ''}
+        </div>
+      </div>
+
+      ${sale ? `
+      <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
+        <thead>
+          <tr style="background:#1e3a5f;color:white">
+            <th style="padding:10px;text-align:center;width:40px">#</th>
+            <th style="padding:10px;text-align:left">Description</th>
+            <th style="padding:10px;text-align:center;width:60px">Qty</th>
+            <th style="padding:10px;text-align:right;width:120px">Unit Price</th>
+            <th style="padding:10px;text-align:right;width:120px">Amount</th>
+          </tr>
+        </thead>
+        <tbody>${itemRows}</tbody>
+        <tfoot>
+          <tr style="border-top:2px solid #1e3a5f">
+            <td colspan="4" style="padding:8px 10px;text-align:right;font-weight:bold">Subtotal</td>
+            <td style="padding:8px 10px;text-align:right;font-weight:bold">${fmt(sale.subtotalCents)}</td>
+          </tr>
+          ${sale.vatCents > 0 ? `
+          <tr>
+            <td colspan="4" style="padding:6px 10px;text-align:right;color:#555">VAT (16%)</td>
+            <td style="padding:6px 10px;text-align:right;color:#555">${fmt(sale.vatCents)}</td>
+          </tr>` : ''}
+          ${delivery.deliveryFeeCents > 0 ? `
+          <tr>
+            <td colspan="4" style="padding:6px 10px;text-align:right;color:#555">Delivery Fee</td>
+            <td style="padding:6px 10px;text-align:right;color:#555">${fmt(delivery.deliveryFeeCents)}</td>
+          </tr>` : ''}
+          <tr style="background:#1e3a5f;color:white">
+            <td colspan="4" style="padding:10px;text-align:right;font-size:15px;font-weight:bold">TOTAL</td>
+            <td style="padding:10px;text-align:right;font-size:15px;font-weight:bold">${fmt(sale.totalCents + delivery.deliveryFeeCents)}</td>
+          </tr>
+        </tfoot>
+      </table>` : ''}
+
+      <div style="margin-top:40px;padding:20px;border:2px solid #1e3a5f;border-radius:8px;background:#f8fafc">
+        <p style="font-weight:bold;margin:0 0 16px;color:#1e3a5f;font-size:14px">DELIVERY CONFIRMATION</p>
+        <div style="display:flex;gap:60px;margin-bottom:20px">
+          <div style="flex:1">
+            <div style="margin-bottom:8px;color:#555;font-size:12px">Delivered By (Driver)</div>
+            <div style="border-bottom:2px solid #333;padding-bottom:4px;min-height:24px"></div>
+            <div style="margin-top:4px;color:#888;font-size:11px">Name & Signature</div>
+          </div>
+          <div style="flex:1">
+            <div style="margin-bottom:8px;color:#555;font-size:12px">Received By (Customer)</div>
+            <div style="border-bottom:2px solid #333;padding-bottom:4px;min-height:24px">${delivery.receivedBy ?? ''}</div>
+            <div style="margin-top:4px;color:#888;font-size:11px">Name & Signature</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:60px">
+          <div style="flex:1">
+            <div style="margin-bottom:8px;color:#555;font-size:12px">Date & Time</div>
+            <div style="border-bottom:2px solid #333;padding-bottom:4px;min-height:24px">${delivery.deliveredAt ? new Date(delivery.deliveredAt).toLocaleString('en-KE') : '_______________'}</div>
+          </div>
+          <div style="flex:1">
+            <div style="margin-bottom:8px;color:#555;font-size:12px">ID Number (Optional)</div>
+            <div style="border-bottom:2px solid #333;padding-bottom:4px;min-height:24px"></div>
+          </div>
+        </div>
+      </div>
+
+      ${business?.receiptFooter ? `
+      <div style="margin-top:24px;text-align:center;font-size:11px;color:#888;border-top:1px solid #e2e8f0;padding-top:12px">
+        ${business.receiptFooter}
+      </div>` : ''}
+
+      <div style="margin-top:16px;text-align:center;font-size:10px;color:#aaa">
+        This is a computer-generated delivery receipt. Goods once delivered are not returnable.
+      </div>
+    `;
+
+    return this.htmlWrapper(`Delivery Receipt ${delivery.orderNumber}`, content);
+  }
+}
+
     const customer = await this.prisma.customer.findUnique({ where: { id: customerId } });
     if (!customer) throw new Error('Customer not found');
 

@@ -420,6 +420,10 @@ export default function SettingsPage() {
     tablePrefix: 'T',
     receiptHeader: '',
     receiptFooter: '',
+    receiptFormatSale: 'THERMAL',
+    receiptFormatInvoice: 'A4',
+    receiptFormatDelivery: 'A4',
+    receiptFormatEmail: 'A4',
   });
 
   // ─── Font size (localStorage, applied to html root) ──────────────────────
@@ -753,6 +757,10 @@ export default function SettingsPage() {
         enableCashDrawer: (settings as any).enableCashDrawer ?? false,
         enableBarcodeScanner: (settings as any).enableBarcodeScanner ?? true,
         enablePoleDisplay: (settings as any).enablePoleDisplay ?? false,
+        receiptFormatSale: (settings as any).receiptFormatSale ?? 'THERMAL',
+        receiptFormatInvoice: (settings as any).receiptFormatInvoice ?? 'A4',
+        receiptFormatDelivery: (settings as any).receiptFormatDelivery ?? 'A4',
+        receiptFormatEmail: (settings as any).receiptFormatEmail ?? 'A4',
       });
       // Populate selected display currencies
       if ((settings as any).displayCurrencies) {
@@ -1621,6 +1629,62 @@ export default function SettingsPage() {
               >
                 <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform ${autoLogoutAfterSale ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
+            </div>
+          </div>
+
+          {/* ── Receipt Format Preferences ──────────────────────────────────── */}
+          <div className="border rounded-xl p-4 space-y-4 bg-gray-50 dark:bg-gray-800/50">
+            <div>
+              <h3 className="font-semibold text-gray-800 dark:text-white">Receipt Format Preferences</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Choose receipt format per transaction type. THERMAL for fast counter sales, A4 PDF for professional invoices and delivery receipts.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Counter Sale Receipts</label>
+                <select
+                  value={(form as any).receiptFormatSale || 'THERMAL'}
+                  onChange={(e) => setForm((f) => ({ ...f, receiptFormatSale: e.target.value } as any))}
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="THERMAL">Thermal (80mm) — Fast printing</option>
+                  <option value="A4">A4 PDF — Professional format</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">B2B Invoices</label>
+                <select
+                  value={(form as any).receiptFormatInvoice || 'A4'}
+                  onChange={(e) => setForm((f) => ({ ...f, receiptFormatInvoice: e.target.value } as any))}
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="A4">A4 PDF — Professional letterhead</option>
+                  <option value="THERMAL">Thermal (80mm)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Delivery Receipts</label>
+                <select
+                  value={(form as any).receiptFormatDelivery || 'A4'}
+                  onChange={(e) => setForm((f) => ({ ...f, receiptFormatDelivery: e.target.value } as any))}
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="A4">A4 PDF — With signature blocks</option>
+                  <option value="THERMAL">Thermal (80mm)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email Attachments</label>
+                <select
+                  value={(form as any).receiptFormatEmail || 'A4'}
+                  onChange={(e) => setForm((f) => ({ ...f, receiptFormatEmail: e.target.value } as any))}
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="A4">A4 PDF — Professional attachment</option>
+                  <option value="THERMAL">Thermal (80mm)</option>
+                </select>
+              </div>
             </div>
           </div>
 

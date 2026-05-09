@@ -461,6 +461,13 @@ export class ReportsController {
     res.send(html);
   }
 
+  @Get('pdf/delivery-receipt/:deliveryId')
+  async deliveryReceiptPdf(@Param('deliveryId') deliveryId: string, @Res() res: Response) {
+    const html = await this.pdf.generateDeliveryReceipt(deliveryId);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  }
+
   @Get('pdf/debit-note/:returnId')
   async debitNotePdf(@Param('returnId') returnId: string, @Res() res: Response) {
     const html = await this.pdf.generateDebitNote(returnId);

@@ -57,6 +57,10 @@ model Business {
   enableBarcodeScanner          Boolean               @default(true)
   enablePoleDisplay             Boolean               @default(false)
   totRate                       Float                 @default(3.0)
+  receiptFormatSale             String                @default("THERMAL")
+  receiptFormatInvoice          String                @default("A4")
+  receiptFormatDelivery         String                @default("A4")
+  receiptFormatEmail            String                @default("A4")
   apiKeys                       ApiKey[]
   appointments                  Appointment[]
   auditLogs                     AuditLog[]

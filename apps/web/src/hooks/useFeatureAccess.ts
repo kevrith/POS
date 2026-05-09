@@ -13,7 +13,7 @@ export function useFeatureAccess(feature: Feature): FeatureAccess {
   const user = useAuthStore((s) => s.user);
   
   return useMemo(() => {
-    const tier = (user?.business?.subscriptionTier ?? 'FREE') as SubscriptionTier;
+    const tier = (user?.planName ?? 'FREE') as SubscriptionTier;
     const hasAccess = hasFeatureAccess(tier, feature);
     const limit = getFeatureLimit(tier, feature);
     
@@ -35,5 +35,5 @@ export function useFeatureAccess(feature: Feature): FeatureAccess {
       currentTier: tier,
       requiredTier,
     };
-  }, [user?.business?.subscriptionTier, feature]);
+  }, [user?.planName, feature]);
 }

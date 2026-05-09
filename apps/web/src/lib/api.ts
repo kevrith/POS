@@ -18,10 +18,21 @@ export function getApiUrl(): string { return API_URL; }
 // Token stored in memory (module-level) — NOT localStorage per security rules.
 // sessionStorage is acceptable for tab-scoped persistence.
 let _accessToken = '';
+let _tokenExpiry = 0; // timestamp when token expires
+let _refreshPromise: Promise<void> | null = null; // prevent concurrent refresh calls
 
 export function setToken(token: string): void {
   _accessToken = token;
   sessionStorage.setItem('pos-access-token', token);
+  
+  // Decode JWT to get expiry time (JWT format: header.payload.signature)
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    _tokenExpiry = payload.exp * 1000; // convert to milliseconds
+  } catch {
+    // If decode fails, assume 15 min expiry
+    _tokenExpiry = Date.now() + 15 * 60 * 1000;
+  }
 }
 
 export function getToken(): string {
@@ -41,7 +52,58 @@ export function getToken(): string {
 
 export function clearToken(): void {
   _accessToken = '';
+  _tokenExpiry = 0;
+  _refreshPromise = null;
   sessionStorage.removeItem('pos-access-token');
+}
+
+/**
+ * Auto-refresh token if it's expiring soon (within 2 minutes)
+ * Returns true if refresh was needed and succeeded
+ */
+async function maybeRefreshToken(): Promise<boolean> {
+  const token = getToken();
+  if (!token) return false;
+  
+  const now = Date.now();
+  const timeUntilExpiry = _tokenExpiry - now;
+  
+  // If token expires in less than 2 minutes, refresh it
+  if (timeUntilExpiry < 2 * 60 * 1000) {
+    // Prevent concurrent refresh calls
+    if (_refreshPromise) {
+      await _refreshPromise;
+      return true;
+    }
+    
+    _refreshPromise = (async () => {
+      try {
+        const res = await fetch(`${API_URL}/auth/refresh`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        
+        if (res.ok) {
+          const data = await res.json() as { accessToken: string };
+          setToken(data.accessToken);
+        } else {
+          // Refresh failed - token is invalid, log out
+          clearToken();
+          sessionStorage.removeItem('pos-auth');
+          window.location.href = '/';
+        }
+      } catch (err) {
+        console.error('Token refresh failed:', err);
+      } finally {
+        _refreshPromise = null;
+      }
+    })();
+    
+    await _refreshPromise;
+    return true;
+  }
+  
+  return false;
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
@@ -75,6 +137,7 @@ function authHeaders(includeContentType = true): HeadersInit {
 
 export const api = {
   async get<T>(endpoint: string): Promise<T> {
+    await maybeRefreshToken();
     const res = await fetch(`${API_URL}${endpoint}`, {
       headers: authHeaders(false),
     });
@@ -82,6 +145,7 @@ export const api = {
   },
 
   async post<T>(endpoint: string, data?: unknown): Promise<T> {
+    await maybeRefreshToken();
     const res = await fetch(`${API_URL}${endpoint}`, {
       method: 'POST',
       headers: authHeaders(),
@@ -91,6 +155,7 @@ export const api = {
   },
 
   async patch<T>(endpoint: string, data: unknown): Promise<T> {
+    await maybeRefreshToken();
     const res = await fetch(`${API_URL}${endpoint}`, {
       method: 'PATCH',
       headers: authHeaders(),
@@ -100,6 +165,7 @@ export const api = {
   },
 
   async put<T>(endpoint: string, data: unknown): Promise<T> {
+    await maybeRefreshToken();
     const res = await fetch(`${API_URL}${endpoint}`, {
       method: 'PUT',
       headers: authHeaders(),
@@ -109,6 +175,7 @@ export const api = {
   },
 
   async delete<T>(endpoint: string): Promise<T> {
+    await maybeRefreshToken();
     const res = await fetch(`${API_URL}${endpoint}`, {
       method: 'DELETE',
       headers: authHeaders(false),

@@ -27,22 +27,35 @@ export class LoyaltyService {
 
   async earnPoints(customerId: string, saleCents: number, saleId: string) {
     const customer = await this.prisma.customer.findUnique({ where: { id: customerId } });
-    if (!customer) return { points: 0, balance: 0 };
+    if (!customer) {
+      console.log('[Loyalty] Customer not found:', customerId);
+      return { points: 0, balance: 0, reason: 'CUSTOMER_NOT_FOUND' };
+    }
 
     const program = await this.prisma.loyaltyProgram.findFirst({
       where: { businessId: customer.businessId, isActive: true },
     });
-    if (!program) return { points: 0, balance: customer.loyaltyPoints };
+    if (!program) {
+      console.log('[Loyalty] No active program for business:', customer.businessId);
+      return { points: 0, balance: customer.loyaltyPoints, reason: 'NO_PROGRAM' };
+    }
 
     // Guard: never award twice for the same sale
     const existing = await this.prisma.loyaltyTransaction.findFirst({
       where: { saleId, type: 'EARN' },
     });
-    if (existing) return { points: 0, balance: customer.loyaltyPoints };
+    if (existing) {
+      console.log('[Loyalty] Points already awarded for sale:', saleId);
+      return { points: 0, balance: customer.loyaltyPoints, reason: 'ALREADY_AWARDED' };
+    }
 
     // 1 point per kesPerPoint shillings spent
     const points = Math.floor(saleCents / 100 / program.kesPerPoint);
-    if (points <= 0) return { points: 0, balance: customer.loyaltyPoints };
+    console.log(`[Loyalty] Calculating points: ${saleCents / 100} KES / ${program.kesPerPoint} = ${points} points`);
+    
+    if (points <= 0) {
+      return { points: 0, balance: customer.loyaltyPoints, reason: 'BELOW_THRESHOLD' };
+    }
 
     const newBalance = customer.loyaltyPoints + points;
 
@@ -55,7 +68,8 @@ export class LoyaltyService {
       data: { customerId, saleId, type: 'EARN', points, balanceAfter: newBalance },
     });
 
-    return { points, balance: newBalance };
+    console.log(`[Loyalty] Awarded ${points} points to customer ${customer.name}. New balance: ${newBalance}`);
+    return { points, balance: newBalance, reason: 'SUCCESS' };
   }
 
   async redeemPoints(customerId: string, points: number, saleId: string) {

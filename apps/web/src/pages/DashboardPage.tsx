@@ -226,6 +226,12 @@ export default function DashboardPage() {
     refetchInterval: 60000,
   });
 
+  const { data: businessSettings } = useQuery<{ taxType: string }>({
+    queryKey: ['business-settings', businessId],
+    queryFn: () => api.get(`/business/${businessId}/settings`),
+    enabled: !!businessId,
+  });
+
   const { data: yesterday } = useQuery<SalesReport>({
     queryKey: ['dashboard-prev-month', businessId, storeId, prevMonthStart],
     queryFn: () =>
@@ -348,7 +354,9 @@ export default function DashboardPage() {
               { label: 'Month Revenue', value: formatKES(todayRev), trend: pct(todayRev, prevRev), icon: DollarSign, color: 'text-emerald-300' },
               { label: 'Transactions', value: todayTx.toString(), trend: pct(todayTx, prevTx), icon: ShoppingCart, color: 'text-blue-200' },
               { label: 'Avg Ticket', value: formatKES(avgTicket), trend: pct(avgTicket, prevAvg), icon: CreditCard, color: 'text-purple-300' },
-              { label: 'VAT Collected', value: formatKES(todayVat), trend: undefined as number | undefined, icon: BarChart3, color: 'text-amber-300' },
+              ...(businessSettings?.taxType !== 'NONE' ? [
+                { label: businessSettings?.taxType === 'VAT' ? 'VAT Collected' : 'TOT Collected', value: formatKES(todayVat), trend: undefined as number | undefined, icon: BarChart3, color: 'text-amber-300' },
+              ] : []),
             ].map(({ label, value, trend, icon: Icon, color }) => (
               <div key={label} className="bg-white/5 backdrop-blur border border-white/10 rounded-xl px-4 py-3">
                 <div className="flex items-center justify-between mb-1">

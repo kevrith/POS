@@ -1020,20 +1020,35 @@ export default function FieldOrdersPage() {
   const [showNewOrder, setShowNewOrder] = useState(false);
 
   const today = new Date();
-  const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+  // Show orders from last 3 months by default to avoid missing recent orders
+  const threeMonthsAgo = new Date(today);
+  threeMonthsAgo.setMonth(today.getMonth() - 3);
+  const defaultStartDate = threeMonthsAgo.toISOString().split('T')[0];
   const todayStr = today.toISOString().split('T')[0];
-  const [dateFrom, setDateFrom] = useState(firstOfMonth);
+  const [dateFrom, setDateFrom] = useState(defaultStartDate);
   const [dateTo, setDateTo] = useState(todayStr);
 
-  const { data: orders = [], refetch } = useQuery<FieldOrder[]>({
+  const { data: orders = [], refetch, isLoading, error } = useQuery<FieldOrder[]>({
     queryKey: ['field-orders', businessId, statusFilter, routeFilter, dateFrom, dateTo],
-    queryFn: () => {
+    queryFn: async () => {
       const params = new URLSearchParams({ businessId });
       if (statusFilter !== 'ALL') params.set('status', statusFilter);
       if (routeFilter) params.set('routeId', routeFilter);
       if (dateFrom) params.set('startDate', dateFrom);
       if (dateTo) params.set('endDate', dateTo);
-      return api.get<FieldOrder[]>(`/field-sales/orders?${params}`);
+      
+      console.log('🔍 Field Orders Query:', {
+        businessId,
+        statusFilter,
+        routeFilter,
+        dateFrom,
+        dateTo,
+        url: `/field-sales/orders?${params}`
+      });
+      
+      const result = await api.get<FieldOrder[]>(`/field-sales/orders?${params}`);
+      console.log('✅ Field Orders Response:', result.length, 'orders');
+      return result;
     },
     enabled: !!businessId,
   });
@@ -1143,16 +1158,41 @@ export default function FieldOrdersPage() {
 
       {/* Kanban board */}
       <div className="flex-1 overflow-x-auto p-6">
-        <div className="flex gap-4 h-full" style={{ minWidth: `${STATUS_ORDER.length * 272}px` }}>
-          {STATUS_ORDER.map((s) => (
-            <KanbanColumn
-              key={s}
-              status={s}
-              orders={byStatus(s)}
-              onSelect={handleSelectOrder}
-            />
-          ))}
-        </div>
+        {isLoading && (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center">
+              <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4" />
+              <p className="text-gray-500 dark:text-gray-400">Loading orders...</p>
+            </div>
+          </div>
+        )}
+        {error && (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center max-w-md">
+              <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+              <p className="text-gray-900 dark:text-white font-semibold mb-2">Failed to load orders</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{(error as Error).message}</p>
+              <button
+                onClick={() => refetch()}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700"
+              >
+                Try Again
+              </button>
+            </div>
+          </div>
+        )}
+        {!isLoading && !error && (
+          <div className="flex gap-4 h-full" style={{ minWidth: `${STATUS_ORDER.length * 272}px` }}>
+            {STATUS_ORDER.map((s) => (
+              <KanbanColumn
+                key={s}
+                status={s}
+                orders={byStatus(s)}
+                onSelect={handleSelectOrder}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Detail side panel */}

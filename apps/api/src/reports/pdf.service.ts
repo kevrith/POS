@@ -371,8 +371,8 @@ export class PdfService {
 
     return this.htmlWrapper(`Delivery Receipt ${delivery.orderNumber}`, content);
   }
-}
 
+  async generateCustomerStatement(customerId: string, startDate: Date, endDate: Date): Promise<string> {
     const customer = await this.prisma.customer.findUnique({ where: { id: customerId } });
     if (!customer) throw new Error('Customer not found');
 

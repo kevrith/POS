@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
-import { formatKES, Feature } from '@pos/shared';
+import { formatKES, Feature, SubscriptionTier } from '@pos/shared';
 import { useFeatureAccess } from '../hooks/useFeatureAccess';
 import UpgradeModal from '../components/UpgradeModal';
 
@@ -715,7 +715,7 @@ export default function DashboardPage() {
         onClose={() => setUpgradeModal({ isOpen: false, featureName: '', requiredTier: null })}
         featureName={upgradeModal.featureName}
         requiredTier={upgradeModal.requiredTier}
-        currentTier={user?.planName ?? 'FREE'}
+        currentTier={(user?.planName ?? 'FREE') as SubscriptionTier}
       />
     </div>
   );

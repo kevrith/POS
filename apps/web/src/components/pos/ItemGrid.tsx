@@ -72,7 +72,7 @@ export default function ItemGrid({
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-slate-950">
       {/* Search + Price Level bar */}
-      <div className="bg-slate-900 border-b border-slate-800 px-3 md:px-4 py-2 md:py-3 flex flex-col xs:flex-row items-stretch xs:items-center gap-2 md:gap-3">
+      <div className="bg-slate-900 border-b border-slate-800 px-3 md:px-4 py-2 md:py-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 md:gap-3">
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
           <input
@@ -95,7 +95,7 @@ export default function ItemGrid({
           )}
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap xs:flex-nowrap">
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
           {/* Price Level pill buttons */}
           <div className="flex items-center border border-slate-700 rounded-lg overflow-hidden flex-shrink-0" title="Price Level">
             {(Object.entries(PRICE_LEVEL_LABELS) as [PriceLevel, string][]).map(([val, label]) => (
@@ -120,7 +120,7 @@ export default function ItemGrid({
             <div className="flex items-center gap-1.5 min-w-0">
               <div className="flex items-center gap-1.5 px-2 py-1.5 bg-blue-900/40 border border-blue-700/50 rounded-lg text-sm min-w-0">
                 <User className="w-4 h-4 text-blue-400 flex-shrink-0" />
-                <span className="text-blue-300 font-medium truncate max-w-[80px] xs:max-w-[120px]">{customerName}</span>
+                <span className="text-blue-300 font-medium truncate max-w-[120px]">{customerName}</span>
                 <button onClick={onClearCustomer} className="text-blue-500 hover:text-blue-200 flex-shrink-0">
                   <X className="w-3 h-3" />
                 </button>
@@ -147,7 +147,7 @@ export default function ItemGrid({
               title="Select customer (F2)"
             >
               <User className="w-4 h-4" />
-              <span className="hidden xs:inline">Customer</span>
+              <span className="hidden sm:inline">Customer</span>
             </button>
           )}
 

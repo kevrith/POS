@@ -77,6 +77,7 @@ export default function App() {
   const [alerts, setAlerts] = useState<any[]>([]);
   const [alertOpen, setAlertOpen]   = useState(false);
   const [alertSeen, setAlertSeen]   = useState(0);
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
   const alertRef = useRef<HTMLDivElement>(null);
 
   // Poll health + alerts every 30s
@@ -117,17 +118,38 @@ export default function App() {
   const unseenAlerts = alerts.length - alertSeen;
   const criticalAlerts = alerts.filter(a => a.severity === 'critical').length;
 
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+
+  const navigate = (id: Page) => {
+    setPage(id);
+    if (window.innerWidth < 768) setSidebarOpen(false);
+  };
+
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: C.bg }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: C.bg, position: 'relative' }}>
+
+      {/* ── Mobile overlay backdrop ───────────────────────────────────────── */}
+      {sidebarOpen && isMobile && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 40,
+            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(2px)',
+          }}
+        />
+      )}
 
       {/* ── Sidebar ───────────────────────────────────────────────────────── */}
       <aside style={{
         width: '240px',
         background: C.sidebar,
         flexShrink: 0,
-        display: 'flex',
+        display: sidebarOpen ? 'flex' : 'none',
         flexDirection: 'column',
         borderRight: `1px solid ${C.sidebarBorder}`,
+        position: window.innerWidth < 768 ? 'fixed' : 'relative',
+        top: 0, left: 0, bottom: 0,
+        zIndex: 50,
       }}>
 
         {/* Brand */}
@@ -167,7 +189,7 @@ export default function App() {
             return (
               <button
                 key={item.id}
-                onClick={() => setPage(item.id)}
+                onClick={() => navigate(item.id)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -304,6 +326,25 @@ export default function App() {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+
+            {/* Sidebar toggle */}
+            <button
+              onClick={() => setSidebarOpen(o => !o)}
+              title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+              style={{
+                background: 'rgba(255,255,255,0.05)',
+                border: `1px solid ${C.sidebarBorder}`,
+                borderRadius: '10px', width: '36px', height: '36px',
+                cursor: 'pointer', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', transition: 'all 0.15s', flexShrink: 0,
+              }}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={C.textMuted} strokeWidth="2" strokeLinecap="round">
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            </button>
 
             {/* Alert bell */}
             <div ref={alertRef} style={{ position: 'relative' }}>

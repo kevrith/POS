@@ -411,11 +411,13 @@ export class SuperAdminService {
     await this.prisma.$executeRawUnsafe(`DELETE FROM "FieldOrderItem" WHERE "fieldOrderId" IN (SELECT id FROM "FieldOrder" WHERE "businessId" = '${id}')`);
     await this.prisma.$executeRawUnsafe(`DELETE FROM "FieldOrder" WHERE "businessId" = '${id}'`);
     await this.prisma.$executeRawUnsafe(`DELETE FROM "ItemVariant" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "ItemUOM" WHERE "itemId" IN (SELECT id FROM "Item" WHERE "businessId" = '${id}')`);
     await this.prisma.$executeRawUnsafe(`DELETE FROM "RecipeIngredient" WHERE "itemId" IN (SELECT id FROM "Item" WHERE "businessId" = '${id}')`);
     await this.prisma.$executeRawUnsafe(`DELETE FROM "BundleComponent" WHERE "bundleId" IN (SELECT id FROM "Item" WHERE "businessId" = '${id}')`);
     await this.prisma.$executeRawUnsafe(`DELETE FROM "Batch" WHERE "businessId" = '${id}'`);
     await this.prisma.$executeRawUnsafe(`DELETE FROM "SerialRecord" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "Item" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "Category" WHERE "businessId" = '${id}'`);
+    await this.prisma.$executeRawUnsafe(`DELETE FROM "Item" WHERE "businessId" = '${id}'`);;
     await this.prisma.$executeRawUnsafe(`DELETE FROM "Customer" WHERE "businessId" = '${id}'`);
     await this.prisma.$executeRawUnsafe(`DELETE FROM "Supplier" WHERE "businessId" = '${id}'`);
     await this.prisma.$executeRawUnsafe(`DELETE FROM "Employee" WHERE "businessId" = '${id}'`);

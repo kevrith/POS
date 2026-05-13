@@ -266,6 +266,7 @@ function AddItemModal({ businessId, storeId, categories, posMode, existingItems 
     blockOversell: false, // false = allow selling when OOS (ALLOW policy); true = hard block (BLOCK policy)
   });
   const [error, setError] = useState('');
+  const [barcodeError, setBarcodeError] = useState('');
   const [priceWarningShown, setPriceWarningShown] = useState(false);
   const addItemVideoRef = useRef<HTMLVideoElement>(null);
   const addItemControlsRef = useRef<{ stop: () => void } | null>(null);
@@ -309,10 +310,30 @@ function AddItemModal({ businessId, storeId, categories, posMode, existingItems 
     mutationFn: (payload: CreateItemPayload) => api.post<InventoryItem>('/items', payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['items'] });
+      toast.success('Item added successfully');
       onClose();
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => {
+      setError(err.message);
+      toast.error(err.message);
+    },
   });
+
+  // Real-time barcode validation
+  function checkBarcodeExists(barcode: string) {
+    if (!barcode.trim()) {
+      setBarcodeError('');
+      return;
+    }
+    const duplicate = existingItems.find(i => i.barcode && i.barcode === barcode.trim());
+    if (duplicate) {
+      const errorMsg = `⚠️ Barcode "${barcode.trim()}" is already used by "${duplicate.name}"`;
+      setBarcodeError(errorMsg);
+      toast.error(errorMsg, { duration: 5000 });
+    } else {
+      setBarcodeError('');
+    }
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -321,13 +342,10 @@ function AddItemModal({ businessId, storeId, categories, posMode, existingItems 
     if (!retailPriceCents || retailPriceCents <= 0) { setError('Valid retail price required'); return; }
 
     // Duplicate barcode check
-    const barcode = form.barcode.trim();
-    if (barcode) {
-      const duplicate = existingItems.find(i => i.barcode && i.barcode === barcode);
-      if (duplicate) {
-        setError(`Barcode "${barcode}" is already assigned to "${duplicate.name}". Use a different barcode.`);
-        return;
-      }
+    if (barcodeError) {
+      setError(barcodeError);
+      toast.error(barcodeError);
+      return;
     }
 
     // Selling price below cost price warning
@@ -384,16 +402,31 @@ function AddItemModal({ businessId, storeId, categories, posMode, existingItems 
           <div className="grid grid-cols-2 gap-4">
             {field('Name *', <input type="text" value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} className={inputCls} placeholder="Item name" required />)}
             {field('Barcode', (
-              <div className="flex gap-2">
-                <input type="text" value={form.barcode} onChange={(e) => setForm(f => ({ ...f, barcode: e.target.value }))} className={inputCls} placeholder="Scan or type barcode" />
-                <button
-                  type="button"
-                  onClick={() => void startAddItemCamera(v => setForm(f => ({ ...f, barcode: v })))}
-                  className="px-2 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg flex-shrink-0"
-                  title="Scan barcode with camera"
-                >
-                  <Camera className="w-4 h-4 text-gray-600" />
-                </button>
+              <div>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={form.barcode} 
+                    onChange={(e) => {
+                      setForm(f => ({ ...f, barcode: e.target.value }));
+                      checkBarcodeExists(e.target.value);
+                    }} 
+                    className={`${inputCls} ${barcodeError ? 'border-red-500' : ''}`} 
+                    placeholder="Scan or type barcode" 
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void startAddItemCamera(v => {
+                      setForm(f => ({ ...f, barcode: v }));
+                      checkBarcodeExists(v);
+                    })}
+                    className="px-2 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg flex-shrink-0"
+                    title="Scan barcode with camera"
+                  >
+                    <Camera className="w-4 h-4 text-gray-600" />
+                  </button>
+                </div>
+                {barcodeError && <p className="text-xs text-red-600 mt-1 font-medium">{barcodeError}</p>}
               </div>
             ))}
           </div>

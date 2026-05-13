@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { getAdminToken, getAdminEmail, clearAdminToken, adminApi } from './lib/api';
+import { DialogProvider } from './components/Dialog';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import BusinessesPage from './pages/BusinessesPage';
@@ -126,6 +127,7 @@ export default function App() {
   };
 
   return (
+    <DialogProvider>
     <div style={{ display: 'flex', minHeight: '100vh', background: C.bg, position: 'relative' }}>
 
       {/* ── Mobile overlay backdrop ───────────────────────────────────────── */}
@@ -436,5 +438,6 @@ export default function App() {
         </div>
       </main>
     </div>
+    </DialogProvider>
   );
 }

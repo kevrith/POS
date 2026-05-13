@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { adminApi } from '../lib/api';
+import { useDialog } from '../components/Dialog';
 
 const C = {
   bg:            '#030712',
@@ -115,6 +116,7 @@ function btn(bg: string, color: string): React.CSSProperties {
 const ROLES = ['OWNER', 'MANAGER', 'CASHIER', 'ACCOUNTANT', 'WAITER', 'KITCHEN'];
 
 function UserManagementPanel({ businessId, businessName }: { businessId: string; businessName: string }) {
+  const { confirm } = useDialog();
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -134,7 +136,13 @@ function UserManagementPanel({ businessId, businessName }: { businessId: string;
   useEffect(() => { reload(); }, [reload]);
 
   const handleResetPassword = async (u: any) => {
-    if (!confirm(`Reset password for ${u.name}? A temporary password will be generated.`)) return;
+    const ok = await confirm({
+      title: 'Reset Password',
+      message: `Reset password for ${u.name}? A temporary password will be generated and displayed.`,
+      variant: 'warning',
+      confirmLabel: 'Reset Password',
+    });
+    if (!ok) return;
     setActionLoading(u.id + '_reset');
     setError(null);
     try {
@@ -383,6 +391,7 @@ const UserDrawer = UserManagementPanel;
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function BusinessesPage() {
+  const { confirm } = useDialog();
   const [data, setData] = useState<any>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -738,7 +747,13 @@ export default function BusinessesPage() {
                           </button>
                           <button
                             onClick={async () => {
-                              if (!confirm(`Permanently delete "${b.name}" and ALL its data? This cannot be undone.`)) return;
+                              const ok = await confirm({
+                                title: 'Delete Business',
+                                message: `Permanently delete "${b.name}" and ALL its data? This action cannot be undone. All users, sales, inventory, and settings will be permanently removed.`,
+                                variant: 'danger',
+                                confirmLabel: 'Delete Permanently',
+                              });
+                              if (!ok) return;
                               try {
                                 await adminApi.deleteBusiness(b.id);
                                 load();

@@ -235,6 +235,50 @@ export class ItemsService {
     if (!item) throw new NotFoundException('Item not found');
     if (dto.conversionFactor <= 0) throw new BadRequestException('Conversion factor must be > 0');
 
+    // Check for duplicate barcode if provided
+    if (dto.barcode?.trim()) {
+      // Check against other items
+      const existingItem = await this.prisma.item.findFirst({
+        where: {
+          businessId,
+          barcode: dto.barcode.trim(),
+          deletedAt: null,
+        },
+        select: { id: true, name: true, barcode: true },
+      });
+      if (existingItem) {
+        throw new BadRequestException(
+          `Barcode "${dto.barcode.trim()}" is already used by item: ${existingItem.name} (ID: ${existingItem.id})`
+        );
+      }
+
+      // Check against other UOMs
+      const existingUOM = await this.prisma.itemUOM.findFirst({
+        where: {
+          barcode: dto.barcode.trim(),
+        },
+        include: { item: { select: { name: true, businessId: true } } },
+      });
+      if (existingUOM && existingUOM.item.businessId === businessId) {
+        throw new BadRequestException(
+          `Barcode "${dto.barcode.trim()}" is already used by UOM "${existingUOM.unitName}" of item: ${existingUOM.item.name}`
+        );
+      }
+
+      // Check against variants
+      const existingVariant = await this.prisma.itemVariant.findFirst({
+        where: {
+          barcode: dto.barcode.trim(),
+        },
+        include: { item: { select: { name: true, businessId: true } } },
+      });
+      if (existingVariant && existingVariant.item.businessId === businessId) {
+        throw new BadRequestException(
+          `Barcode "${dto.barcode.trim()}" is already used by variant "${existingVariant.name}" of item: ${existingVariant.item.name}`
+        );
+      }
+    }
+
     // If setting as base unit, clear previous base unit
     if (dto.isBaseUnit) {
       await this.prisma.itemUOM.updateMany({ where: { itemId }, data: { isBaseUnit: false } });
@@ -258,6 +302,51 @@ export class ItemsService {
     if (!item) throw new NotFoundException('Item not found');
     const uom = await this.prisma.itemUOM.findFirst({ where: { id: uomId, itemId } });
     if (!uom) throw new NotFoundException('UOM not found');
+
+    // Check for duplicate barcode if being updated
+    if (dto.barcode !== undefined && dto.barcode?.trim()) {
+      // Check against other items
+      const existingItem = await this.prisma.item.findFirst({
+        where: {
+          businessId,
+          barcode: dto.barcode.trim(),
+          deletedAt: null,
+        },
+        select: { id: true, name: true, barcode: true },
+      });
+      if (existingItem) {
+        throw new BadRequestException(
+          `Barcode "${dto.barcode.trim()}" is already used by item: ${existingItem.name} (ID: ${existingItem.id})`
+        );
+      }
+
+      // Check against other UOMs
+      const existingUOM = await this.prisma.itemUOM.findFirst({
+        where: {
+          barcode: dto.barcode.trim(),
+          id: { not: uomId }, // Exclude current UOM
+        },
+        include: { item: { select: { name: true, businessId: true } } },
+      });
+      if (existingUOM && existingUOM.item.businessId === businessId) {
+        throw new BadRequestException(
+          `Barcode "${dto.barcode.trim()}" is already used by UOM "${existingUOM.unitName}" of item: ${existingUOM.item.name}`
+        );
+      }
+
+      // Check against variants
+      const existingVariant = await this.prisma.itemVariant.findFirst({
+        where: {
+          barcode: dto.barcode.trim(),
+        },
+        include: { item: { select: { name: true, businessId: true } } },
+      });
+      if (existingVariant && existingVariant.item.businessId === businessId) {
+        throw new BadRequestException(
+          `Barcode "${dto.barcode.trim()}" is already used by variant "${existingVariant.name}" of item: ${existingVariant.item.name}`
+        );
+      }
+    }
 
     if (dto.isBaseUnit) {
       await this.prisma.itemUOM.updateMany({ where: { itemId, id: { not: uomId } }, data: { isBaseUnit: false } });
@@ -287,6 +376,23 @@ export class ItemsService {
   // ─── Item CRUD ──────────────────────────────────────────────────────────────
 
   async create(dto: CreateItemDto) {
+    // Check for duplicate barcode
+    if (dto.barcode?.trim()) {
+      const existing = await this.prisma.item.findFirst({
+        where: {
+          businessId: dto.businessId,
+          barcode: dto.barcode.trim(),
+          deletedAt: null,
+        },
+        select: { id: true, name: true, barcode: true },
+      });
+      if (existing) {
+        throw new BadRequestException(
+          `Barcode "${dto.barcode.trim()}" is already used by item: ${existing.name} (ID: ${existing.id})`
+        );
+      }
+    }
+
     // Resolve storeId — owners have no storeId in JWT, fall back to first store
     let storeId = dto.storeId;
     if (!storeId) {
@@ -348,6 +454,24 @@ export class ItemsService {
   async update(id: string, businessId: string, dto: UpdateItemDto) {
     const item = await this.prisma.item.findFirst({ where: { id, businessId, deletedAt: null } });
     if (!item) throw new NotFoundException('Item not found');
+
+    // Check for duplicate barcode if barcode is being updated
+    if (dto.barcode !== undefined && dto.barcode?.trim()) {
+      const existing = await this.prisma.item.findFirst({
+        where: {
+          businessId,
+          barcode: dto.barcode.trim(),
+          deletedAt: null,
+          id: { not: id }, // Exclude current item
+        },
+        select: { id: true, name: true, barcode: true },
+      });
+      if (existing) {
+        throw new BadRequestException(
+          `Barcode "${dto.barcode.trim()}" is already used by item: ${existing.name} (ID: ${existing.id})`
+        );
+      }
+    }
 
     // Resolve categoryId from name if needed
     let resolvedCategoryId: string | null | undefined = dto.categoryId ?? undefined;
@@ -445,6 +569,51 @@ export class ItemsService {
   async createVariant(itemId: string, businessId: string, dto: CreateVariantDto) {
     const item = await this.prisma.item.findFirst({ where: { id: itemId, businessId, deletedAt: null } });
     if (!item) throw new NotFoundException('Item not found');
+
+    // Check for duplicate barcode if provided
+    if (dto.barcode?.trim()) {
+      // Check against other items
+      const existingItem = await this.prisma.item.findFirst({
+        where: {
+          businessId,
+          barcode: dto.barcode.trim(),
+          deletedAt: null,
+        },
+        select: { id: true, name: true, barcode: true },
+      });
+      if (existingItem) {
+        throw new BadRequestException(
+          `Barcode "${dto.barcode.trim()}" is already used by item: ${existingItem.name} (ID: ${existingItem.id})`
+        );
+      }
+
+      // Check against other UOMs
+      const existingUOM = await this.prisma.itemUOM.findFirst({
+        where: {
+          barcode: dto.barcode.trim(),
+        },
+        include: { item: { select: { name: true, businessId: true } } },
+      });
+      if (existingUOM && existingUOM.item.businessId === businessId) {
+        throw new BadRequestException(
+          `Barcode "${dto.barcode.trim()}" is already used by UOM "${existingUOM.unitName}" of item: ${existingUOM.item.name}`
+        );
+      }
+
+      // Check against other variants
+      const existingVariant = await this.prisma.itemVariant.findFirst({
+        where: {
+          barcode: dto.barcode.trim(),
+        },
+        include: { item: { select: { name: true, businessId: true } } },
+      });
+      if (existingVariant && existingVariant.item.businessId === businessId) {
+        throw new BadRequestException(
+          `Barcode "${dto.barcode.trim()}" is already used by variant "${existingVariant.name}" of item: ${existingVariant.item.name}`
+        );
+      }
+    }
+
     return this.prisma.itemVariant.create({
       data: {
         itemId,
@@ -465,6 +634,52 @@ export class ItemsService {
     if (!item) throw new NotFoundException('Item not found');
     const variant = await this.prisma.itemVariant.findFirst({ where: { id: variantId, itemId } });
     if (!variant) throw new NotFoundException('Variant not found');
+
+    // Check for duplicate barcode if being updated
+    if (dto.barcode !== undefined && dto.barcode?.trim()) {
+      // Check against other items
+      const existingItem = await this.prisma.item.findFirst({
+        where: {
+          businessId,
+          barcode: dto.barcode.trim(),
+          deletedAt: null,
+        },
+        select: { id: true, name: true, barcode: true },
+      });
+      if (existingItem) {
+        throw new BadRequestException(
+          `Barcode "${dto.barcode.trim()}" is already used by item: ${existingItem.name} (ID: ${existingItem.id})`
+        );
+      }
+
+      // Check against other UOMs
+      const existingUOM = await this.prisma.itemUOM.findFirst({
+        where: {
+          barcode: dto.barcode.trim(),
+        },
+        include: { item: { select: { name: true, businessId: true } } },
+      });
+      if (existingUOM && existingUOM.item.businessId === businessId) {
+        throw new BadRequestException(
+          `Barcode "${dto.barcode.trim()}" is already used by UOM "${existingUOM.unitName}" of item: ${existingUOM.item.name}`
+        );
+      }
+
+      // Check against other variants
+      const existingVariant = await this.prisma.itemVariant.findFirst({
+        where: {
+          barcode: dto.barcode.trim(),
+          id: { not: variantId }, // Exclude current variant
+        },
+        include: { item: { select: { name: true, businessId: true } } },
+      });
+      if (existingVariant && existingVariant.item.businessId === businessId) {
+        throw new BadRequestException(
+          `Barcode "${dto.barcode.trim()}" is already used by variant "${existingVariant.name}" of item: ${existingVariant.item.name}`
+        );
+      }
+    }
+
     return this.prisma.itemVariant.update({
       where: { id: variantId },
       data: {
@@ -510,6 +725,23 @@ export class ItemsService {
     const results: Array<{ success: boolean; name: string; id?: string; error?: string }> = [];
     for (const row of rows) {
       try {
+        // Check for duplicate barcode if provided
+        if (row.barcode?.trim()) {
+          const existing = await this.prisma.item.findFirst({
+            where: {
+              businessId,
+              barcode: row.barcode.trim(),
+              deletedAt: null,
+            },
+            select: { id: true, name: true, barcode: true },
+          });
+          if (existing) {
+            throw new Error(
+              `Barcode "${row.barcode.trim()}" is already used by item: ${existing.name} (ID: ${existing.id})`
+            );
+          }
+        }
+
         const item = await this.prisma.item.create({
           data: {
             offlineId: uuidv4(),

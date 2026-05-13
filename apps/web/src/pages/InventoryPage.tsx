@@ -1130,7 +1130,24 @@ function CsvImportModal({ businessId, storeId, onClose, onSuccess }: {
     if (lines.length < 2) return [];
     const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
     return lines.slice(1).map(line => {
-      const vals = line.split(',').map(v => v.trim().replace(/"/g, ''));
+      // Handle quoted fields and commas within quotes
+      const vals: string[] = [];
+      let current = '';
+      let inQuotes = false;
+      
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+          vals.push(current.trim());
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      vals.push(current.trim()); // Push last value
+      
       const obj: Record<string, string> = {};
       headers.forEach((h, i) => { obj[h] = vals[i] ?? ''; });
       return obj;
@@ -1156,6 +1173,8 @@ function CsvImportModal({ businessId, storeId, onClose, onSuccess }: {
         name: r.name ?? r.Name ?? '',
         category: r.category ?? r.Category ?? undefined,
         retailPrice: parseFloat(r.retailPrice ?? r.retail_price ?? r['Retail Price'] ?? r.base_price ?? r.price ?? '0'),
+        wholesalePrice: r.wholesalePrice ?? r.wholesale_price ?? r['Wholesale Price'] ? parseFloat(r.wholesalePrice ?? r.wholesale_price ?? r['Wholesale Price']) : undefined,
+        vipPrice: r.vipPrice ?? r.vip_price ?? r['VIP Price'] ? parseFloat(r.vipPrice ?? r.vip_price ?? r['VIP Price']) : undefined,
         costPrice: r.costPrice ?? r.cost_price ? parseFloat(r.costPrice ?? r.cost_price) : undefined,
         barcode: r.barcode ?? r.Barcode ?? undefined,
         currentStock: r.currentStock ?? r.stock_quantity ?? r.quantity ?? r.qty
@@ -1172,11 +1191,12 @@ function CsvImportModal({ businessId, storeId, onClose, onSuccess }: {
     },
   });
 
-  const sampleCsv = `name,category,retailPrice,costPrice,barcode,currentStock,expiryDate,lotNumber
-Bread,Food,50,30,1234567890,100,,
-Milk 500ml,Drinks,65,45,0987654321,50,,
-Sugar 1kg,Food,130,90,,200,,
-Yoghurt 400g,Dairy,85,60,1122334455,30,2026-06-01,LOT-001`;
+  const sampleCsv = `name,category,retailPrice,wholesalePrice,vipPrice,costPrice,barcode,currentStock,expiryDate,lotNumber
+Bread,Food,50,45,40,30,1234567890,100,"",""
+Milk 500ml,Drinks,65,60,55,45,0987654321,50,"",""
+Sugar 1kg,Food,130,120,110,90,"",200,"",""
+Yoghurt 400g,Dairy,85,80,75,60,1122334455,30,2026-06-01,LOT-001
+Cola 300ml,Drinks,40,35,30,25,9988776655,150,2025-12-31,""`;
 
   function downloadSampleCsv() {
     const blob = new Blob([sampleCsv], { type: 'text/csv' });
@@ -1202,12 +1222,27 @@ Yoghurt 400g,Dairy,85,60,1122334455,30,2026-06-01,LOT-001`;
           {step === 'upload' && (
             <div className="space-y-4">
               <div className="bg-blue-50 rounded-lg p-4 text-sm text-blue-800">
-                <p className="font-semibold mb-2">CSV Column Names</p>
-                <p className="mb-1">Required: <strong>name</strong>, <strong>retailPrice</strong> (or <strong>base_price</strong>)</p>
-                <p className="mb-2">Optional: category, costPrice, barcode, <strong>currentStock</strong> (or <strong>stock_quantity</strong>), expiryDate (YYYY-MM-DD), lotNumber</p>
+                <p className="font-semibold mb-2">📋 CSV Format Requirements</p>
+                <p className="mb-1"><strong>Required columns:</strong></p>
+                <ul className="list-disc list-inside mb-2 ml-2">
+                  <li><code className="bg-blue-100 px-1 rounded">name</code> - Item name</li>
+                  <li><code className="bg-blue-100 px-1 rounded">retailPrice</code> - Retail selling price in KES (can also use: retail_price, base_price, price)</li>
+                </ul>
+                <p className="mb-1"><strong>Optional columns:</strong></p>
+                <ul className="list-disc list-inside mb-2 ml-2 text-xs">
+                  <li><code className="bg-blue-100 px-1 rounded">category</code> - Category name</li>
+                  <li><code className="bg-blue-100 px-1 rounded">wholesalePrice</code> - Wholesale price in KES (for bulk buyers)</li>
+                  <li><code className="bg-blue-100 px-1 rounded">vipPrice</code> - VIP/loyalty customer price in KES</li>
+                  <li><code className="bg-blue-100 px-1 rounded">costPrice</code> - Your purchase/cost price in KES</li>
+                  <li><code className="bg-blue-100 px-1 rounded">barcode</code> - Barcode number (must be unique)</li>
+                  <li><code className="bg-blue-100 px-1 rounded">currentStock</code> - Initial stock quantity (can also use: stock_quantity, quantity, qty)</li>
+                  <li><code className="bg-blue-100 px-1 rounded">expiryDate</code> - Format: YYYY-MM-DD (e.g., 2026-06-01) - for perishable items</li>
+                  <li><code className="bg-blue-100 px-1 rounded">lotNumber</code> - Batch/lot number (optional, auto-generated if expiry date provided)</li>
+                </ul>
+                <p className="text-xs mt-2 text-blue-700">💡 Tip: Use empty quotes "" for empty fields. LOT number is optional - system auto-generates if you provide expiry date.</p>
                 <button
                   onClick={downloadSampleCsv}
-                  className="mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700"
+                  className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700"
                 >
                   <Download className="w-3.5 h-3.5" /> Download Sample CSV
                 </button>
@@ -1249,7 +1284,12 @@ Yoghurt 400g,Dairy,85,60,1122334455,30,2026-06-01,LOT-001`;
           {step === 'preview' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-gray-700">{preview.length} rows to import</p>
+                <div>
+                  <p className="text-sm font-medium text-gray-700">{preview.length} rows to import</p>
+                  {preview.some(r => !r.name || !r.retailPrice) && (
+                    <p className="text-xs text-red-600 mt-1">⚠️ Some rows are missing required fields (name, retailPrice) and will be skipped</p>
+                  )}
+                </div>
                 <button onClick={() => setStep('upload')} className="text-sm text-blue-600">← Back</button>
               </div>
               <div className="overflow-x-auto border rounded-lg">
@@ -1262,13 +1302,16 @@ Yoghurt 400g,Dairy,85,60,1122334455,30,2026-06-01,LOT-001`;
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {preview.slice(0, 10).map((row, i) => (
-                      <tr key={i} className={!row.name ? 'bg-red-50' : ''}>
-                        {Object.values(row).map((v, j) => (
-                          <td key={j} className="px-3 py-2 text-gray-700">{v}</td>
-                        ))}
-                      </tr>
-                    ))}
+                    {preview.slice(0, 10).map((row, i) => {
+                      const hasIssue = !row.name || !row.retailPrice;
+                      return (
+                        <tr key={i} className={hasIssue ? 'bg-red-50' : ''}>
+                          {Object.values(row).map((v, j) => (
+                            <td key={j} className={`px-3 py-2 text-gray-700 ${hasIssue ? 'text-red-700' : ''}`}>{v || <span className="text-gray-400 italic">empty</span>}</td>
+                          ))}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
                 {preview.length > 10 && (

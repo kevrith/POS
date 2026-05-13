@@ -716,6 +716,8 @@ export class ItemsService {
     name: string;
     category?: string;
     retailPrice: number;
+    wholesalePrice?: number;
+    vipPrice?: number;
     costPrice?: number;
     barcode?: string;
     currentStock?: number;
@@ -750,6 +752,8 @@ export class ItemsService {
             name: row.name,
             category: row.category,
             retailPriceCents: Math.round((row.retailPrice ?? 0) * 100),
+            wholesalePriceCents: row.wholesalePrice ? Math.round(row.wholesalePrice * 100) : undefined,
+            vipPriceCents: row.vipPrice ? Math.round(row.vipPrice * 100) : undefined,
             costPriceCents: row.costPrice ? Math.round(row.costPrice * 100) : undefined,
             barcode: row.barcode || undefined,
             type: 'PRODUCT',

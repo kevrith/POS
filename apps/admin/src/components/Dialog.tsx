@@ -1,5 +1,6 @@
 /**
  * Enterprise-grade dialog system — replaces window.confirm / window.prompt.
+ * Uses inline styles only (no Tailwind — admin app does not use Tailwind CSS).
  *
  * Usage:
  *   const { confirm, prompt } = useDialog();
@@ -16,7 +17,6 @@
  */
 
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
-import { AlertTriangle, Info, X, Trash2 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -58,6 +58,140 @@ export function useDialog(): DialogContextValue {
 type ConfirmState = ConfirmOptions & { resolve: (v: boolean) => void };
 type PromptState  = PromptOptions  & { resolve: (v: string | null) => void };
 
+// ─── Shared styles ────────────────────────────────────────────────────────────
+
+const S = {
+  overlay: {
+    position: 'fixed' as const,
+    inset: 0,
+    zIndex: 9999,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '1rem',
+    background: 'rgba(0,0,0,0.65)',
+    backdropFilter: 'blur(3px)',
+  },
+  card: {
+    position: 'relative' as const,
+    background: '#0f172a',
+    border: '1px solid #1e293b',
+    borderRadius: '16px',
+    boxShadow: '0 24px 64px rgba(0,0,0,0.6)',
+    width: '100%',
+    maxWidth: '440px',
+    animation: 'dialogIn 0.15s ease-out',
+  },
+  header: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '1rem',
+    padding: '1.5rem 1.5rem 1rem',
+  },
+  iconWrap: (variant: string) => ({
+    flexShrink: 0,
+    width: '40px',
+    height: '40px',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: variant === 'danger' ? 'rgba(239,68,68,0.15)' : variant === 'warning' ? 'rgba(245,158,11,0.15)' : 'rgba(59,130,246,0.15)',
+  }),
+  title: {
+    fontSize: '0.9375rem',
+    fontWeight: 700,
+    color: '#f1f5f9',
+    margin: 0,
+    lineHeight: 1.3,
+  },
+  message: {
+    marginTop: '0.375rem',
+    fontSize: '0.875rem',
+    color: '#94a3b8',
+    lineHeight: 1.6,
+  },
+  closeBtn: {
+    flexShrink: 0,
+    background: 'none',
+    border: 'none',
+    color: '#475569',
+    cursor: 'pointer',
+    padding: '4px',
+    borderRadius: '6px',
+    fontSize: '1.25rem',
+    lineHeight: 1,
+    marginLeft: 'auto',
+  },
+  actions: {
+    display: 'flex',
+    gap: '0.75rem',
+    padding: '0 1.5rem 1.5rem',
+    justifyContent: 'flex-end',
+  },
+  btnCancel: {
+    padding: '0.5rem 1rem',
+    fontSize: '0.875rem',
+    fontWeight: 500,
+    color: '#94a3b8',
+    background: 'rgba(255,255,255,0.05)',
+    border: '1px solid #1e293b',
+    borderRadius: '10px',
+    cursor: 'pointer',
+  },
+  btnConfirm: (variant: string) => ({
+    padding: '0.5rem 1.25rem',
+    fontSize: '0.875rem',
+    fontWeight: 600,
+    color: '#fff',
+    background: variant === 'danger' ? '#dc2626' : variant === 'warning' ? '#d97706' : '#2563eb',
+    border: 'none',
+    borderRadius: '10px',
+    cursor: 'pointer',
+  }),
+  divider: {
+    borderTop: '1px solid #1e293b',
+    margin: '0 1.5rem 1rem',
+  },
+  input: {
+    width: '100%',
+    boxSizing: 'border-box' as const,
+    padding: '0.625rem 0.75rem',
+    fontSize: '0.875rem',
+    background: '#060c1a',
+    border: '1px solid #1e293b',
+    borderRadius: '8px',
+    color: '#f1f5f9',
+    outline: 'none',
+  },
+  inputWrap: {
+    padding: '0 1.5rem 1rem',
+  },
+};
+
+// SVG icons (inline, no lucide dependency needed here)
+function IconTrash() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4h6v2" />
+    </svg>
+  );
+}
+function IconWarn() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  );
+}
+function IconInfo() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+    </svg>
+  );
+}
+
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function DialogProvider({ children }: { children: React.ReactNode }) {
@@ -66,7 +200,6 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
   const [inputValue, setInputValue] = useState('');
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
 
-  // Focus input when prompt opens
   useEffect(() => {
     if (promptState && inputRef.current) {
       setTimeout(() => inputRef.current?.focus(), 50);
@@ -81,68 +214,47 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
     return new Promise(resolve => setPromptState({ ...opts, resolve }));
   }, []);
 
-  const resolveConfirm = (result: boolean) => {
-    confirmState?.resolve(result);
-    setConfirmState(null);
-  };
+  const resolveConfirm = (result: boolean) => { confirmState?.resolve(result); setConfirmState(null); };
+  const resolvePrompt  = (result: string | null) => { promptState?.resolve(result); setPromptState(null); setInputValue(''); };
 
-  const resolvePrompt = (result: string | null) => {
-    promptState?.resolve(result);
-    setPromptState(null);
-    setInputValue('');
-  };
+  const variant = confirmState?.variant ?? 'info';
 
   return (
     <DialogContext.Provider value={{ confirm, prompt }}>
       {children}
 
+      {/* Keyframe injection */}
+      <style>{`
+        @keyframes dialogIn {
+          from { opacity: 0; transform: scale(0.95) translateY(8px); }
+          to   { opacity: 1; transform: scale(1)    translateY(0);    }
+        }
+      `}</style>
+
       {/* ── Confirm Dialog ── */}
       {confirmState && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => resolveConfirm(false)}
-          />
-          <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md border border-gray-200 dark:border-gray-700 animate-in fade-in zoom-in-95 duration-150">
-            {/* Header */}
-            <div className="flex items-start gap-4 p-6 pb-4">
-              <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
-                confirmState.variant === 'danger'  ? 'bg-red-100 dark:bg-red-900/30' :
-                confirmState.variant === 'warning' ? 'bg-amber-100 dark:bg-amber-900/30' :
-                'bg-blue-100 dark:bg-blue-900/30'
-              }`}>
-                {confirmState.variant === 'danger'  ? <Trash2        className="w-5 h-5 text-red-600 dark:text-red-400" /> :
-                 confirmState.variant === 'warning' ? <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" /> :
-                                                      <Info          className="w-5 h-5 text-blue-600 dark:text-blue-400" />}
+        <div style={S.overlay} onClick={() => resolveConfirm(false)}>
+          <div style={S.card} onClick={e => e.stopPropagation()}>
+            <div style={S.header}>
+              <div style={S.iconWrap(variant)}>
+                {variant === 'danger' ? <IconTrash /> : variant === 'warning' ? <IconWarn /> : <IconInfo />}
               </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-base font-semibold text-gray-900 dark:text-white">{confirmState.title}</h3>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 leading-relaxed">{confirmState.message}</p>
+              <div style={{ flex: 1 }}>
+                <p style={S.title}>{confirmState.title}</p>
+                <p style={S.message}>{confirmState.message}</p>
               </div>
-              <button
-                onClick={() => resolveConfirm(false)}
-                className="flex-shrink-0 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              >
-                <X className="w-4 h-4 text-gray-400" />
-              </button>
+              <button style={S.closeBtn} onClick={() => resolveConfirm(false)}>×</button>
             </div>
-
-            {/* Actions */}
-            <div className="flex gap-3 px-6 pb-6 justify-end">
-              <button
-                onClick={() => resolveConfirm(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                {confirmState.cancelLabel ?? 'Cancel'}
-              </button>
+            <div style={S.actions}>
+              {confirmState.cancelLabel !== '' && (
+                <button style={S.btnCancel} onClick={() => resolveConfirm(false)}>
+                  {confirmState.cancelLabel ?? 'Cancel'}
+                </button>
+              )}
               <button
                 autoFocus
+                style={S.btnConfirm(variant)}
                 onClick={() => resolveConfirm(true)}
-                className={`px-4 py-2 text-sm font-semibold text-white rounded-xl transition-colors ${
-                  confirmState.variant === 'danger'  ? 'bg-red-600 hover:bg-red-700' :
-                  confirmState.variant === 'warning' ? 'bg-amber-500 hover:bg-amber-600' :
-                  'bg-blue-600 hover:bg-blue-700'
-                }`}
               >
                 {confirmState.confirmLabel ?? 'Confirm'}
               </button>
@@ -153,28 +265,17 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
 
       {/* ── Prompt Dialog ── */}
       {promptState && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => resolvePrompt(null)}
-          />
-          <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md border border-gray-200 dark:border-gray-700 animate-in fade-in zoom-in-95 duration-150">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
-              <h3 className="text-base font-semibold text-gray-900 dark:text-white">{promptState.title}</h3>
-              <button
-                onClick={() => resolvePrompt(null)}
-                className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              >
-                <X className="w-4 h-4 text-gray-400" />
-              </button>
+        <div style={S.overlay} onClick={() => resolvePrompt(null)}>
+          <div style={S.card} onClick={e => e.stopPropagation()}>
+            <div style={S.header}>
+              <div style={{ flex: 1 }}>
+                <p style={S.title}>{promptState.title}</p>
+                {promptState.message && <p style={S.message}>{promptState.message}</p>}
+              </div>
+              <button style={S.closeBtn} onClick={() => resolvePrompt(null)}>×</button>
             </div>
-
-            {/* Body */}
-            <div className="px-6 py-4 space-y-3">
-              {promptState.message && (
-                <p className="text-sm text-gray-500 dark:text-gray-400">{promptState.message}</p>
-              )}
+            <div style={S.divider} />
+            <div style={S.inputWrap}>
               {promptState.inputType === 'textarea' ? (
                 <textarea
                   ref={inputRef as React.RefObject<HTMLTextAreaElement>}
@@ -182,7 +283,7 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
                   value={inputValue}
                   onChange={e => setInputValue(e.target.value)}
                   placeholder={promptState.placeholder ?? ''}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  style={{ ...S.input, resize: 'vertical', minHeight: '80px' }}
                 />
               ) : (
                 <input
@@ -192,23 +293,15 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
                   onChange={e => setInputValue(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') resolvePrompt(inputValue || null); if (e.key === 'Escape') resolvePrompt(null); }}
                   placeholder={promptState.placeholder ?? ''}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style={S.input}
                 />
               )}
             </div>
-
-            {/* Actions */}
-            <div className="flex gap-3 px-6 pb-6 justify-end">
-              <button
-                onClick={() => resolvePrompt(null)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
+            <div style={S.actions}>
+              <button style={S.btnCancel} onClick={() => resolvePrompt(null)}>
                 {promptState.cancelLabel ?? 'Cancel'}
               </button>
-              <button
-                onClick={() => resolvePrompt(inputValue || null)}
-                className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors"
-              >
+              <button style={S.btnConfirm('info')} onClick={() => resolvePrompt(inputValue || null)}>
                 {promptState.confirmLabel ?? 'OK'}
               </button>
             </div>

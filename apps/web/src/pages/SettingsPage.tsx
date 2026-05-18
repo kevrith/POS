@@ -1169,21 +1169,21 @@ export default function SettingsPage() {
       <div className="p-4 md:p-6 max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-4 md:mb-6">Settings</h1>
 
-      {/* Tabs — scrollable horizontally on small screens */}
-      <div className="overflow-x-auto -mx-4 md:mx-0 px-4 md:px-0">
-        <div className="flex border-b mb-6 min-w-max md:flex-wrap md:min-w-0">
+      {/* Tabs — scrollable horizontally on small screens, wrap on large */}
+      <div className="overflow-x-auto -mx-4 md:mx-0">
+        <div className="flex border-b border-gray-200 dark:border-gray-700 mb-6 px-4 md:px-0 min-w-max md:flex-wrap md:min-w-0">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-3 md:px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
+            className={`flex items-center gap-1.5 px-2.5 md:px-3 py-2.5 text-xs sm:text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
               activeTab === tab.id
                 ? 'text-blue-600 border-blue-600'
-                : 'text-gray-500 border-transparent hover:text-gray-700'
+                : 'text-gray-500 border-transparent hover:text-gray-700 dark:hover:text-gray-300'
             }`}
           >
-            <tab.icon className="w-4 h-4" />
-            {tab.label}
+            <tab.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
+            <span>{tab.label}</span>
           </button>
         ))}
         </div>

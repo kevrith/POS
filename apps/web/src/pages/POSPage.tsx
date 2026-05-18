@@ -906,7 +906,7 @@ export default function POSPage() {
           >
             <div className="flex items-center gap-2">
               <span className="bg-blue-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{cart.length} item{cart.length !== 1 ? 's' : ''}</span>
-              <span className="text-slate-400 text-xs truncate max-w-[160px]">
+              <span className="text-slate-400 text-xs truncate" style={{ maxWidth: 'calc(100vw - 200px)' }}>
                 {cart.slice(0, 2).map(i => i.name.split(' ')[0]).join(', ')}{cart.length > 2 ? ` +${cart.length - 2} more` : ''}
               </span>
             </div>
@@ -917,7 +917,7 @@ export default function POSPage() {
         <div className="flex border-t border-slate-800 bg-slate-900">
           <button
             onClick={() => setShowCartMobile(true)}
-            className="flex items-center gap-2.5 px-4 py-4 bg-slate-800 border-r border-slate-700 min-w-[100px]"
+            className="flex items-center gap-2 px-3 py-3 bg-slate-800 border-r border-slate-700 min-w-[84px]"
           >
             <div className="relative">
               <ShoppingCart className="w-6 h-6 text-slate-300" />
@@ -935,7 +935,7 @@ export default function POSPage() {
           <button
             onClick={() => void handlePayClick()}
             disabled={cart.length === 0 || checkoutMutation.isPending}
-            className="relative flex-1 py-4 font-bold text-base transition-colors disabled:opacity-40"
+            className="relative flex-1 py-3 font-bold text-sm xs:text-base transition-colors disabled:opacity-40"
             style={{ background: cart.length === 0 ? '#1e293b' : '#2563eb' }}
           >
             <span className="text-white">

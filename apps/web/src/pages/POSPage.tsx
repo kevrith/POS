@@ -750,7 +750,7 @@ export default function POSPage() {
       )}
 
       {/* Clock In/Out widget — top-right corner of item grid area */}
-      <div className="fixed top-2 right-[320px] z-40 hidden md:flex">
+      <div className="fixed top-2 right-[224px] lg:right-[256px] xl:right-[288px] 2xl:right-[320px] z-40 hidden md:flex">
         <button
           onClick={() => clockMut.mutate()}
           disabled={clockMut.isPending}
@@ -772,7 +772,7 @@ export default function POSPage() {
 
       {/* Free tier transaction usage banner */}
       {freeTxCount !== null && (
-        <div className={`fixed top-0 left-0 right-[320px] z-30 flex items-center justify-between gap-3 px-4 py-1.5 text-xs font-semibold ${
+        <div className={`fixed top-0 left-0 right-[224px] lg:right-[256px] xl:right-[288px] 2xl:right-[320px] z-30 flex items-center justify-between gap-3 px-4 py-1.5 text-xs font-semibold ${
           freeTxCount >= 200 ? 'bg-red-700 text-white' :
           freeTxCount >= 160 ? 'bg-amber-600 text-white' :
                                'bg-slate-700 text-slate-200'

@@ -176,9 +176,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [trialBannerDismissed, setTrialBannerDismissed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(
-    () => localStorage.getItem('sidebar-collapsed') === 'true',
-  );
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    const stored = localStorage.getItem('sidebar-collapsed');
+    if (stored !== null) return stored === 'true';
+    // Default: collapsed on fold/tablet screens narrower than 1024px
+    return window.innerWidth < 1024;
+  });
 
   const toggleSidebar = useCallback(() => {
     setSidebarCollapsed((v) => {

@@ -757,7 +757,15 @@ export default function BusinessesPage() {
                               try {
                                 await adminApi.deleteBusiness(b.id);
                                 load();
-                              } catch (e: any) { alert(e.message); }
+                              } catch (e: any) {
+                                await confirm({
+                                  title: 'Delete Failed',
+                                  message: e.message ?? 'An unexpected error occurred while deleting the business.',
+                                  variant: 'warning',
+                                  confirmLabel: 'OK',
+                                  cancelLabel: '',
+                                });
+                              }
                             }}
                             style={btn('rgba(239,68,68,0.12)', '#fca5a5')}>
                             <Icon d={Icons.x} size={11} color="#fca5a5" />

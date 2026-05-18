@@ -1884,29 +1884,29 @@ export default function SettingsPage() {
                         <Fingerprint className="w-4 h-4" />
                       </button>
                     )}
+                    {/* PIN edit — available for all users including owner */}
+                    <button
+                      onClick={() => setEditingUser(u)}
+                      className="text-gray-400 hover:text-blue-600 p-1"
+                      title="Set / update PIN"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    {/* Delete — owner cannot be deleted */}
                     {u.role !== 'OWNER' && (
-                      <>
-                        <button
-                          onClick={() => setEditingUser(u)}
-                          className="text-gray-400 hover:text-blue-600 p-1"
-                          title="Update PIN"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() =>
-                            showConfirm(
-                              'Remove Team Member',
-                              `Remove ${u.name} from your team? This action cannot be undone.`,
-                              () => deleteUserMutation.mutate(u.id),
-                            )
-                          }
-                          className="text-gray-400 hover:text-red-600 p-1"
-                          title="Delete user"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </>
+                      <button
+                        onClick={() =>
+                          showConfirm(
+                            'Remove Team Member',
+                            `Remove ${u.name} from your team? This action cannot be undone.`,
+                            () => deleteUserMutation.mutate(u.id),
+                          )
+                        }
+                        className="text-gray-400 hover:text-red-600 p-1"
+                        title="Delete user"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     )}
                   </div>
                 </div>

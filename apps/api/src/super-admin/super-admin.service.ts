@@ -389,57 +389,96 @@ export class SuperAdminService {
 
     const id = businessId;
 
-    // Delete leaf tables first, then parents, to satisfy FK constraints
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "SaleItem" WHERE "saleId" IN (SELECT id FROM "Sale" WHERE "businessId" = '${id}')`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "Payment" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "VoidRecord" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "KOT" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "Return" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "Sale" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "OrderItem" WHERE "orderId" IN (SELECT id FROM "Order" WHERE "businessId" = '${id}')`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "Order" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "LoyaltyTransaction" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "GiftCardTransaction" WHERE "giftCardId" IN (SELECT id FROM "GiftCard" WHERE "businessId" = '${id}')`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "GiftCard" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "InventoryMovement" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "StocktakeCount" WHERE "sessionId" IN (SELECT id FROM "StocktakeSession" WHERE "businessId" = '${id}')`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "StocktakeSession" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "GRNItem" WHERE "grnId" IN (SELECT id FROM "GRN" WHERE "businessId" = '${id}')`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "GRN" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "POItem" WHERE "poId" IN (SELECT id FROM "PurchaseOrder" WHERE "businessId" = '${id}')`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "PurchaseOrder" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "FieldOrderItem" WHERE "fieldOrderId" IN (SELECT id FROM "FieldOrder" WHERE "businessId" = '${id}')`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "FieldOrder" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "ItemVariant" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "ItemUOM" WHERE "itemId" IN (SELECT id FROM "Item" WHERE "businessId" = '${id}')`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "RecipeIngredient" WHERE "itemId" IN (SELECT id FROM "Item" WHERE "businessId" = '${id}')`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "BundleComponent" WHERE "bundleId" IN (SELECT id FROM "Item" WHERE "businessId" = '${id}')`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "Batch" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "SerialRecord" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "Category" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "Item" WHERE "businessId" = '${id}'`);;
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "Customer" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "Supplier" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "Employee" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "Payslip" WHERE "payrollRunId" IN (SELECT id FROM "PayrollRun" WHERE "businessId" = '${id}')`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "PayrollRun" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "Shift" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "Leave" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "Expense" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "Promotion" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "LoyaltyProgram" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "Table" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "HotelRoom" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "Notification" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "AuditLog" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "ApiKey" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "Webhook" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "Integration" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "UserSession" WHERE "userId" IN (SELECT id FROM "User" WHERE "businessId" = '${id}')`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "UserStore" WHERE "userId" IN (SELECT id FROM "User" WHERE "businessId" = '${id}')`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "User" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "Store" WHERE "businessId" = '${id}'`);
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "Business" WHERE id = '${id}'`);
+    // Pass 1 — IDs of records with a direct businessId
+    const ids = (q: Promise<{ id: string }[]>) => q.then(r => r.map(x => x.id));
+    const [saleIds, orderIds, itemIds, customerIds, giftCardIds,
+           employeeIds, poIds, fieldOrderIds, storeIds, userIds,
+           payrollRunIds, stocktakeSessionIds, transferIds, hotelRoomIds] = await Promise.all([
+      ids(this.prisma.sale.findMany({ where: { businessId: id }, select: { id: true } })),
+      ids(this.prisma.order.findMany({ where: { businessId: id }, select: { id: true } })),
+      ids(this.prisma.item.findMany({ where: { businessId: id }, select: { id: true } })),
+      ids(this.prisma.customer.findMany({ where: { businessId: id }, select: { id: true } })),
+      ids(this.prisma.giftCard.findMany({ where: { businessId: id }, select: { id: true } })),
+      ids(this.prisma.employee.findMany({ where: { businessId: id }, select: { id: true } })),
+      ids(this.prisma.purchaseOrder.findMany({ where: { businessId: id }, select: { id: true } })),
+      ids(this.prisma.fieldOrder.findMany({ where: { businessId: id }, select: { id: true } })),
+      ids(this.prisma.store.findMany({ where: { businessId: id }, select: { id: true } })),
+      ids(this.prisma.user.findMany({ where: { businessId: id }, select: { id: true } })),
+      ids(this.prisma.payrollRun.findMany({ where: { businessId: id }, select: { id: true } })),
+      ids(this.prisma.stocktakeSession.findMany({ where: { businessId: id }, select: { id: true } })),
+      ids(this.prisma.storeTransfer.findMany({ where: { businessId: id }, select: { id: true } })),
+      ids(this.prisma.hotelRoom.findMany({ where: { businessId: id }, select: { id: true } })),
+    ]);
+    // Pass 2 — IDs derived from pass-1 results
+    const [grnIds, tableIds] = await Promise.all([
+      ids(this.prisma.gRN.findMany({ where: { poId: { in: poIds } }, select: { id: true } })),
+      ids(this.prisma.table.findMany({ where: { storeId: { in: storeIds } }, select: { id: true } })),
+    ]);
+
+    // ── Deepest leaves first ──────────────────────────────────────────────────
+    await this.prisma.saleItem.deleteMany({ where: { saleId: { in: saleIds } } });
+    await this.prisma.payment.deleteMany({ where: { saleId: { in: saleIds } } });
+    await this.prisma.voidRecord.deleteMany({ where: { saleId: { in: saleIds } } });
+    await this.prisma.loyaltyTransaction.deleteMany({ where: { customerId: { in: customerIds } } });
+    await this.prisma.giftCardTransaction.deleteMany({ where: { giftCardId: { in: giftCardIds } } });
+    await this.prisma.kOT.deleteMany({ where: { orderId: { in: orderIds } } });
+    await this.prisma.orderItem.deleteMany({ where: { orderId: { in: orderIds } } });
+    await this.prisma.stocktakeCount.deleteMany({ where: { sessionId: { in: stocktakeSessionIds } } });
+    await this.prisma.gRNItem.deleteMany({ where: { grnId: { in: grnIds } } });
+    await this.prisma.pOItem.deleteMany({ where: { poId: { in: poIds } } });
+    await this.prisma.fieldOrderItem.deleteMany({ where: { fieldOrderId: { in: fieldOrderIds } } });
+    await this.prisma.itemVariant.deleteMany({ where: { itemId: { in: itemIds } } });
+    await this.prisma.itemUOM.deleteMany({ where: { itemId: { in: itemIds } } });
+    await this.prisma.recipeIngredient.deleteMany({ where: { recipeItemId: { in: itemIds } } });
+    await this.prisma.bundleComponent.deleteMany({ where: { bundleItemId: { in: itemIds } } });
+    await this.prisma.batch.deleteMany({ where: { itemId: { in: itemIds } } });
+    await this.prisma.serialRecord.deleteMany({ where: { itemId: { in: itemIds } } });
+    await this.prisma.payslip.deleteMany({ where: { payrollRunId: { in: payrollRunIds } } });
+    await this.prisma.attendanceRecord.deleteMany({ where: { employeeId: { in: employeeIds } } });
+    await this.prisma.leave.deleteMany({ where: { employeeId: { in: employeeIds } } });
+    await this.prisma.leaveBalance.deleteMany({ where: { employeeId: { in: employeeIds } } });
+    await this.prisma.transferItem.deleteMany({ where: { transferId: { in: transferIds } } });
+    await this.prisma.tableReservation.deleteMany({ where: { tableId: { in: tableIds } } });
+    await this.prisma.roomBooking.deleteMany({ where: { businessId: id } });
+    await this.prisma.userSession.deleteMany({ where: { userId: { in: userIds } } });
+    await this.prisma.userStore.deleteMany({ where: { userId: { in: userIds } } });
+
+    // ── Mid-tier (children deleted above) ────────────────────────────────────
+    await this.prisma.return.deleteMany({ where: { businessId: id } });
+    await this.prisma.sale.deleteMany({ where: { businessId: id } });
+    await this.prisma.order.deleteMany({ where: { businessId: id } });
+    await this.prisma.giftCard.deleteMany({ where: { businessId: id } });
+    await this.prisma.inventoryMovement.deleteMany({ where: { businessId: id } });
+    await this.prisma.stocktakeSession.deleteMany({ where: { businessId: id } });
+    await this.prisma.gRN.deleteMany({ where: { id: { in: grnIds } } });
+    await this.prisma.purchaseOrder.deleteMany({ where: { businessId: id } });
+    await this.prisma.fieldOrder.deleteMany({ where: { businessId: id } });
+    await this.prisma.item.deleteMany({ where: { businessId: id } });
+    await this.prisma.category.deleteMany({ where: { businessId: id } });
+    await this.prisma.customer.deleteMany({ where: { businessId: id } });
+    await this.prisma.supplier.deleteMany({ where: { businessId: id } });
+    await this.prisma.employee.deleteMany({ where: { businessId: id } });
+    await this.prisma.payrollRun.deleteMany({ where: { businessId: id } });
+    await this.prisma.shift.deleteMany({ where: { businessId: id } });
+    await this.prisma.expense.deleteMany({ where: { businessId: id } });
+    await this.prisma.promotion.deleteMany({ where: { businessId: id } });
+    await this.prisma.loyaltyProgram.deleteMany({ where: { businessId: id } });
+    await this.prisma.table.deleteMany({ where: { id: { in: tableIds } } });
+    await this.prisma.hotelRoom.deleteMany({ where: { businessId: id } });
+    await this.prisma.storeTransfer.deleteMany({ where: { businessId: id } });
+    await this.prisma.notification.deleteMany({ where: { businessId: id } });
+    await this.prisma.auditLog.deleteMany({ where: { businessId: id } });
+    await this.prisma.apiKey.deleteMany({ where: { businessId: id } });
+    await this.prisma.webhook.deleteMany({ where: { businessId: id } });
+    await this.prisma.integration.deleteMany({ where: { businessId: id } });
+    await this.prisma.budget.deleteMany({ where: { businessId: id } });
+    await this.prisma.reportSchedule.deleteMany({ where: { businessId: id } });
+    await this.prisma.printer.deleteMany({ where: { storeId: { in: storeIds } } });
+
+    // ── Users & stores, then the business itself ──────────────────────────────
+    await this.prisma.user.deleteMany({ where: { businessId: id } });
+    await this.prisma.store.deleteMany({ where: { businessId: id } });
+    await this.prisma.business.delete({ where: { id } });
 
     this.logger.log(`Super-admin deleted business ${id} (${business.name})`);
     return { success: true };

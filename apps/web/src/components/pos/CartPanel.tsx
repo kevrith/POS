@@ -88,7 +88,7 @@ export default function CartPanel({
       ${showCartMobile
         ? 'fixed left-0 right-0 z-40 rounded-t-2xl flex flex-col'
         : 'hidden'}
-      md:relative md:flex md:rounded-none md:w-64 lg:w-72 xl:w-80
+      md:relative md:flex md:rounded-none md:w-56 lg:w-64 xl:w-72 2xl:w-80
       bg-slate-900 border-t md:border-t-0 md:border-l border-slate-700 flex-col md:overflow-hidden
       ${showCartMobile ? 'bottom-[57px] top-[max(8vh,56px)]' : 'md:h-full'}
     `}>

@@ -11,7 +11,7 @@ function makeProgram(overrides: Record<string, any> = {}) {
 function makePrisma() {
   return {
     loyaltyProgram: { create: jest.fn(), findFirst: jest.fn(), update: jest.fn(), upsert: jest.fn() },
-    loyaltyTransaction: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
+    loyaltyTransaction: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn() },
     loyaltyTier: { findMany: jest.fn().mockResolvedValue([]) },
     customer: { findUnique: jest.fn(), update: jest.fn() },
     $transaction: jest.fn(),

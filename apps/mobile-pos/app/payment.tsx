@@ -165,7 +165,7 @@ export default function PaymentScreen() {
         throw err;
       }
     },
-    onSuccess: (result) => {
+    onSuccess: (result: SaleResult) => {
       qc.invalidateQueries({ queryKey: ['sales'] });
       clearCart();
       setCompletedSale(result);
@@ -177,7 +177,7 @@ export default function PaymentScreen() {
         err.message?.includes('fetch')
           ? 'No internet connection. Sale saved to offline queue and will sync when online.'
           : `Sale queued. Error: ${err.message ?? 'Unknown'}`,
-        [{ text: 'OK', onPress: () => { clearCart(); router.replace('/(tabs)/pos'); } }]
+        [{ text: 'OK', onPress: () => { clearCart(); router.replace('/(tabs)/pos' as any); } }]
       );
     },
   });
@@ -208,7 +208,7 @@ export default function PaymentScreen() {
   function handleNewSale() {
     setShowSuccess(false);
     setCompletedSale(null);
-    router.replace('/(tabs)/pos');
+    router.replace('/(tabs)/pos' as any);
   }
 
   const splitTotal =

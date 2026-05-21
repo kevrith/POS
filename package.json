@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "workspaces": [
-    "apps/*",
+    "apps/api",
+    "apps/web",
+    "apps/admin",
+    "apps/desktop",
     "packages/*"
   ],
   "scripts": {
@@ -18,7 +21,7 @@
     "build:api": "bash scripts/render-build.sh"
   },
   "engines": {
-    "node": "20.x"
+    "node": ">=20.x"
   },
   "dependencies": {
     "@nestjs/cli": "^10.3.0",

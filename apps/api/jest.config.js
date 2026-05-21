@@ -10,7 +10,7 @@ module.exports = {
   testEnvironment: 'node',
   watchman: false,
   moduleNameMapper: {
-    '^@pos/shared$': '<rootDir>/../../packages/shared/index.ts',
+    '^@pos/shared$': '<rootDir>/../../../packages/shared/index.ts',
   },
   modulePaths: ['<rootDir>'],
   globals: {

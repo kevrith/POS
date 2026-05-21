@@ -9,11 +9,12 @@ function makePrisma() {
   return {
     item: { findMany: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
     inventoryMovement: { aggregate: jest.fn().mockResolvedValue({ _sum: { quantity: 10 } }), groupBy: jest.fn().mockResolvedValue([]) },
+    batch: { findMany: jest.fn().mockResolvedValue([]) },
   };
 }
 
 function makeInventory() {
-  return { createMovement: jest.fn().mockResolvedValue(undefined), getStockLevels: jest.fn().mockResolvedValue(new Map()) };
+  return { createMovement: jest.fn().mockResolvedValue(undefined), getStockLevels: jest.fn().mockResolvedValue(new Map()), getStockLevelsByBusiness: jest.fn().mockResolvedValue(new Map()) };
 }
 
 function makeService(prismaOverrides = {}) {

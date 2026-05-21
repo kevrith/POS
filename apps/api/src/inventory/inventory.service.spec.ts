@@ -74,11 +74,11 @@ describe('InventoryService', () => {
   describe('checkAndDeductStock', () => {
     it('throws BadRequestException when stock insufficient and policy is BLOCK', async () => {
       const { svc, prisma } = makeService();
-      prisma.item.findUnique.mockResolvedValue({ id: 'item-1', trackStock: true });
-      prisma.inventoryMovement.aggregate.mockResolvedValue({ _sum: { quantity: 2 } });
-      prisma.inventoryMovement.create.mockResolvedValue({});
-      const tx: any = { item: { findUnique: jest.fn().mockResolvedValue({ id: 'item-1', trackStock: true, name: 'Test' }) }, inventoryMovement: { create: jest.fn() } };
-      // Mock getStockLevel via aggregate on the tx object — use the real prisma stub
+      const item = { id: 'item-1', businessId: 'biz-1', trackStock: true, name: 'Test Item', negativeStockPolicy: 'BLOCK' };
+      const tx: any = { 
+        item: { findUnique: jest.fn().mockResolvedValue(item) }, 
+        inventoryMovement: { create: jest.fn() } 
+      };
       jest.spyOn(svc, 'getStockLevel').mockResolvedValue(2);
       await expect(svc.checkAndDeductStock('item-1', 'store-1', 5, 'sale-1', tx)).rejects.toThrow(BadRequestException);
     });

@@ -45,6 +45,10 @@ jobs:
       - name: Install root dependencies
         run: npm ci
 
+      - name: Install shared package dependencies
+        working-directory: packages/shared
+        run: npm install
+
       - name: Install API dependencies
         working-directory: apps/api
         run: npm ci

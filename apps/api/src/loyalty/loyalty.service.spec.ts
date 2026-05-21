@@ -5,7 +5,7 @@ function makeCustomer(overrides: Record<string, any> = {}) {
 }
 
 function makeProgram(overrides: Record<string, any> = {}) {
-  return { id: 'prog-1', businessId: 'biz-1', pointsPerCent: 0.01, redemptionRate: 1, minRedemption: 50, isActive: true, ...overrides };
+  return { id: 'prog-1', businessId: 'biz-1', kesPerPoint: 100, pointValueCents: 1, minRedemption: 50, isActive: true, ...overrides };
 }
 
 function makePrisma() {
@@ -45,13 +45,14 @@ describe('LoyaltyService', () => {
   describe('earnPoints', () => {
     it('calculates points from saleCents and creates transaction', async () => {
       const customer = makeCustomer({ loyaltyPoints: 0 });
-      const program = makeProgram({ pointsPerCent: 0.01 }); // 1 point per KES 1 (100 cents)
+      const program = makeProgram({ kesPerPoint: 100 }); // 1 point per KES 100
       const { svc, prisma } = makeService();
       prisma.customer.findUnique.mockResolvedValue(customer);
       prisma.loyaltyProgram.findFirst.mockResolvedValue(program);
+      prisma.loyaltyTransaction.findFirst.mockResolvedValue(null);
       prisma.customer.update.mockResolvedValue({ ...customer, loyaltyPoints: 10 });
-      const result = await svc.earnPoints('cust-1', 1000, 'sale-1');
-      expect(result.points).toBe(10); // 1000 cents * 0.01
+      const result = await svc.earnPoints('cust-1', 100000, 'sale-1');
+      expect(result.points).toBe(10); // 100000 cents = 1000 KES / 100 = 10 points
       expect(prisma.loyaltyTransaction.create).toHaveBeenCalledWith(expect.objectContaining({
         data: expect.objectContaining({ type: 'EARN', points: 10 }),
       }));
@@ -69,7 +70,7 @@ describe('LoyaltyService', () => {
   describe('redeemPoints', () => {
     it('deducts points and returns discount cents', async () => {
       const customer = makeCustomer({ loyaltyPoints: 200 });
-      const program = makeProgram({ redemptionRate: 1, minRedemption: 50 });
+      const program = makeProgram({ pointValueCents: 1, minRedemption: 50 });
       const { svc, prisma } = makeService();
       prisma.$transaction.mockImplementation(async (fn: any) => {
         const tx = {

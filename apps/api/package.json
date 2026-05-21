@@ -82,6 +82,9 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
-    "watchman": false
+    "watchman": false,
+    "moduleNameMapper": {
+      "^@pos/shared$": "<rootDir>/../../packages/shared/index.ts"
+    }
   }
 }

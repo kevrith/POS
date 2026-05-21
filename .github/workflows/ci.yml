@@ -92,6 +92,38 @@ jobs:
           VITE_API_URL: /api/v1
         run: npm run build
 
+  # ─── Mobile Apps — Type-check (matrix across all 3 apps) ──────────────────
+  mobile:
+    name: Mobile — Type-check (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: mobile-pos
+            name: KASTRA POS (Cashier)
+          - app: mobile-customer
+            name: KASTRA Order (Customer)
+          - app: mobile-driver
+            name: KASTRA Driver
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install app dependencies
+        working-directory: apps/${{ matrix.app }}
+        run: npm install --legacy-peer-deps
+
+      - name: Type-check
+        working-directory: apps/${{ matrix.app }}
+        run: npm run typecheck
+
   # ─── Prisma schema validation ──────────────────────────────────────────────
   schema:
     name: Prisma Schema Validation

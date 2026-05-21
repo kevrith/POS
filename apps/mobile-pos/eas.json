@@ -12,10 +12,7 @@
     },
     "preview": {
       "distribution": "internal",
-      "android": {
-        "buildType": "apk",
-        "image": "sdk-51"
-      },
+      "android": { "buildType": "apk" },
       "channel": "preview"
     },
     "production": {

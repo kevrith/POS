@@ -55,9 +55,10 @@ function makeDeps(prismaOverrides: Partial<ReturnType<typeof makePrisma>> = {}) 
   const etims = { submitSale: jest.fn().mockResolvedValue(undefined) };
   const notifications = { createNotification: jest.fn().mockResolvedValue(undefined) };
   const events = { emitToStore: jest.fn(), emitSaleCreated: jest.fn() };
+  const loyalty = { earnPoints: jest.fn().mockResolvedValue({ points: 0, balance: 0 }) };
   const subscriptionLimits = { checkMonthlyTransactionLimit: jest.fn().mockResolvedValue({ allowed: true }) };
 
-  return { prisma, inventory, audit, auth, webhooks, etims, notifications, events, subscriptionLimits };
+  return { prisma, inventory, audit, auth, webhooks, etims, notifications, events, loyalty, subscriptionLimits };
 }
 
 function makeService(overrides: Partial<ReturnType<typeof makeDeps>> = {}) {
@@ -71,6 +72,7 @@ function makeService(overrides: Partial<ReturnType<typeof makeDeps>> = {}) {
     deps.etims,
     deps.notifications,
     deps.events,
+    deps.loyalty,
     deps.subscriptionLimits,
   ) as SalesService & { _deps: typeof deps };
 }

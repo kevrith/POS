@@ -2,7 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { ItemsService } from './items.service';
 
 function makeItem(overrides: Record<string, any> = {}) {
-  return { id: 'item-1', businessId: 'biz-1', name: 'Cappuccino', barcode: 'CAP001', category: 'Coffee', retailPriceCents: 50000, trackStock: true, soldOut: false, isActive: true, deletedAt: null, offlineId: 'uuid-1', ...overrides };
+  return { id: 'item-1', businessId: 'biz-1', name: 'Cappuccino', barcode: 'CAP001', category: 'Coffee', retailPriceCents: 50000, trackStock: true, soldOut: false, isActive: true, deletedAt: null, offlineId: 'uuid-1', uoms: [], ...overrides };
 }
 
 function makePrisma() {

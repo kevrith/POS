@@ -22,9 +22,6 @@ on:
 permissions:
   contents: write  # needed to create/update GitHub releases
 
-# ─── Reusable build steps via a shared template ────────────────────────────────
-# Each job is nearly identical — only the app directory and artifact name differ.
-
 jobs:
 
   # ── KASTRA POS Cashier App ────────────────────────────────────────────────────
@@ -39,12 +36,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js 20
+      - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: apps/mobile-pos/package-lock.json
+          node-version: '22'
 
       - name: Setup JDK 17
         uses: actions/setup-java@v4
@@ -103,12 +98,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js 20
+      - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: apps/mobile-customer/package-lock.json
+          node-version: '22'
 
       - name: Setup JDK 17
         uses: actions/setup-java@v4
@@ -164,12 +157,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js 20
+      - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: apps/mobile-driver/package-lock.json
+          node-version: '22'
 
       - name: Setup JDK 17
         uses: actions/setup-java@v4
@@ -214,17 +205,9 @@ jobs:
           echo "Download the APK from the **Artifacts** section of this workflow run." >> $GITHUB_STEP_SUMMARY
 
   # ── Publish: create/update rolling mobile-latest GitHub Release ───────────────
-  # Runs after ALL build jobs complete. Downloads every APK artifact produced
-  # in this workflow run and uploads them to a permanent, fixed-URL release.
-  #
-  # Direct download URLs (usable in landing page buttons):
-  #   https://github.com/kevrith/POS/releases/download/mobile-latest/kastra-pos-cashier.apk
-  #   https://github.com/kevrith/POS/releases/download/mobile-latest/kastra-order-customer.apk
-  #   https://github.com/kevrith/POS/releases/download/mobile-latest/kastra-driver.apk
   publish:
     name: Publish mobile-latest GitHub Release
     needs: [build-pos, build-customer, build-driver]
-    # Only publish on tags or full 'all' dispatch — not single-app builds
     if: >
       always() &&
       (startsWith(github.ref, 'refs/tags/') || github.event.inputs.app == 'all') &&
@@ -234,19 +217,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Download all APKs uploaded by the build jobs above
       - name: Download all APK artifacts
         uses: actions/download-artifact@v4
         with:
           path: downloaded-apks
-          # merge-multiple: true flattens the directory structure
           merge-multiple: true
 
       - name: List downloaded artifacts
         run: find downloaded-apks -name '*.apk' | sort
 
-      # Delete the old mobile-latest release + tag so we can recreate it fresh.
-      # Using 'gh' CLI which is pre-installed on GitHub-hosted runners.
       - name: Delete existing mobile-latest release (if any)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -254,8 +233,6 @@ jobs:
           gh release delete mobile-latest --repo kevrith/POS --yes 2>/dev/null || true
           git push origin :refs/tags/mobile-latest 2>/dev/null || true
 
-      # Recreate the rolling release with the fresh APKs.
-      # The tag 'mobile-latest' will always point here, giving stable download URLs.
       - name: Create mobile-latest GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -2,12 +2,6 @@ use std::io::Write;
 use std::net::TcpStream;
 use std::time::Duration;
 
-#[derive(serde::Deserialize)]
-pub struct PrinterConfig {
-    pub host: String,
-    pub port: u16,
-}
-
 /// Connect to a network printer and test connectivity
 #[tauri::command]
 pub async fn connect_printer(host: String, port: u16) -> Result<bool, String> {

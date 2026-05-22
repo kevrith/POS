@@ -97,22 +97,22 @@ pub async fn vscu_process_queue(
     let conn = open_db()?;
 
     // Fetch up to 50 pending items with fewer than 3 attempts
-    let pending: Vec<(String, String, String, String)> = {
-        let mut stmt = conn
-            .prepare(
-                "SELECT id, sale_id, receipt_number, payload \
-                 FROM vscu_queue \
-                 WHERE status='PENDING' AND attempts < 3 \
-                 LIMIT 50",
-            )
-            .map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, sale_id, receipt_number, payload \
+             FROM vscu_queue \
+             WHERE status='PENDING' AND attempts < 3 \
+             LIMIT 50",
+        )
+        .map_err(|e| e.to_string())?;
 
-        stmt
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
-            .map_err(|e| e.to_string())?
-            .filter_map(|r| r.ok())
-            .collect()
-    };
+    let pending: Vec<(String, String, String, String)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    
+    drop(stmt);
 
     let total = pending.len();
     let mut submitted = 0u32;

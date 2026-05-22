@@ -26,6 +26,27 @@ fn compute_machine_id(hostname: &str) -> String {
         }
     }
 
+    // --- Windows: MachineGuid from registry ---
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(output) = std::process::Command::new("reg")
+            .args(["query", "HKLM\\SOFTWARE\\Microsoft\\Cryptography", "/v", "MachineGuid"])
+            .output()
+        {
+            let text = String::from_utf8_lossy(&output.stdout);
+            for line in text.lines() {
+                if line.contains("MachineGuid") {
+                    if let Some(guid) = line.split_whitespace().last() {
+                        let trimmed = guid.trim().to_string();
+                        if !trimmed.is_empty() {
+                            return trimmed;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // --- macOS: IOPlatformUUID via ioreg ---
     #[cfg(target_os = "macos")]
     {
@@ -113,7 +134,7 @@ pub async fn validate_license_key(key: String, machine_id: String) -> Result<boo
     // key[4..20] spans the first two segments: "XXXXXXXX-XXXXXXXX"
     // (indices 4 to 20 inclusive — 16 data chars + 1 separator = positions 4..21,
     //  but the task spec says key[4..20], so we use that exact slice)
-    let key_slice = &key[4..20]; // "XXXXXXXX-XXXXXXX" (first segment + separator + first 7 of second)
+    let key_slice = &key[4..21]; // "XXXXXXXX-XXXXXXXX" (first segment + separator + full second segment)
 
     // Compute HMAC-style digest
     let input = format!("{}:{}", machine_id, key_slice);

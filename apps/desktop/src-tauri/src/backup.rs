@@ -11,16 +11,18 @@ pub struct BackupInfo {
     pub created_at: u64,
 }
 
-/// Read DATABASE_URL from env, falling back to the default local connection.
-fn get_database_url() -> String {
+/// Read DATABASE_URL from env — required for backup/restore to work.
+/// Returns an error if not set so the user gets a clear message instead of
+/// silently connecting to a non-existent dev database.
+fn get_database_url() -> Result<String, String> {
     std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgresql://kastra:kastra2026@localhost:5432/kastra_pos".to_string())
+        .map_err(|_| "DATABASE_URL environment variable is not set. Configure it in the app settings.".to_string())
 }
 
 /// Backup the PostgreSQL database using pg_dump (custom binary format → .dump).
 #[tauri::command]
 pub async fn backup_database(dest_path: String) -> Result<bool, String> {
-    let db_url = get_database_url();
+    let db_url = get_database_url()?;
     let dest = PathBuf::from(&dest_path);
 
     if let Some(parent) = dest.parent() {
@@ -47,7 +49,7 @@ pub async fn backup_database(dest_path: String) -> Result<bool, String> {
 /// Restore the PostgreSQL database from a pg_dump backup file.
 #[tauri::command]
 pub async fn restore_database(src_path: String) -> Result<bool, String> {
-    let db_url = get_database_url();
+    let db_url = get_database_url()?;
     let source = PathBuf::from(&src_path);
 
     if !source.exists() {

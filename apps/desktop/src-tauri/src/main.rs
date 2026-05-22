@@ -46,8 +46,7 @@ fn main() {
             println!("KASTRA POS Desktop v{} starting...", version);
 
             // Start LAN discovery responder if this machine is a server/standalone
-            let rt = tokio::runtime::Handle::current();
-            rt.spawn(async {
+            tauri::async_runtime::spawn(async {
                 if let Ok(cfg) = setup::get_setup_mode().await {
                     if cfg.mode == "SERVER" || cfg.mode == "STANDALONE" {
                         discovery::start_discovery_responder(3010);

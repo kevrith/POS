@@ -201,14 +201,25 @@ pub async fn vscu_process_queue(
     }))
 }
 
-/// Stub HTTPS submission — actual KRA submission is handled by the NestJS API.
-/// In a production standalone build, add:
-///   reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
-/// and replace this function with a real reqwest call.
+/// Submit sale data to KRA eTIMS API.
 async fn submit_to_kra(
-    _url: &str,
-    _cmc_key: &str,
-    _payload: &serde_json::Value,
+    url: &str,
+    cmc_key: &str,
+    payload: &serde_json::Value,
 ) -> Result<bool, String> {
-    Ok(true)
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client
+        .post(url)
+        .header("cmcKey", cmc_key)
+        .header("Content-Type", "application/json")
+        .json(payload)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(resp.status().is_success())
 }

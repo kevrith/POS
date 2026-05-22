@@ -6,13 +6,6 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "core:window:allow-start-dragging",
-    "core:fs:allow-read-file",
-    "core:fs:allow-write-file",
-    "core:fs:allow-read-dir",
-    "core:fs:allow-create-dir",
-    "core:fs:allow-remove-file",
-    "core:dialog:allow-open",
-    "core:dialog:allow-save"
+    "core:window:allow-start-dragging"
   ]
 }

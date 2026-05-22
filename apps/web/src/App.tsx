@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { GoogleOAuthProvider } from '@react-oauth/google';
@@ -69,6 +69,12 @@ const DeliveryRoutesPage = lazy(() => import('./pages/DeliveryRoutesPage'));
 const AgentPage = lazy(() => import('./pages/AgentPage'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 
+declare global {
+  interface Window {
+    __TAURI__?: { invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T> };
+  }
+}
+
 function PageLoader() {
   return (
     <div className="flex items-center justify-center h-full">
@@ -77,16 +83,52 @@ function PageLoader() {
   );
 }
 
-// Extend window type for Tauri (matches DesktopSetupPage declaration)
-declare global { interface Window { __TAURI__?: { invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T> } } }
+/**
+ * In Tauri v2, window.__TAURI__ is injected by the runtime AFTER the first
+ * synchronous JS execution. We must poll briefly before deciding whether we
+ * are inside Tauri or a regular browser, otherwise the check always returns
+ * false on first render and the login page is shown instead of the wizard.
+ *
+ * Polls every 20 ms for up to 300 ms (15 attempts), then resolves to false.
+ */
+function useTauriReady(): { ready: boolean; isTauri: boolean } {
+  const [state, setState] = useState<{ ready: boolean; isTauri: boolean }>(() => {
+    if (window.__TAURI__) return { ready: true, isTauri: true };
+    return { ready: false, isTauri: false };
+  });
+
+  useEffect(() => {
+    if (state.ready) return;
+    let attempts = 0;
+    const id = setInterval(() => {
+      attempts++;
+      if (window.__TAURI__) {
+        clearInterval(id);
+        setState({ ready: true, isTauri: true });
+      } else if (attempts >= 15) {
+        clearInterval(id);
+        setState({ ready: true, isTauri: false });
+      }
+    }, 20);
+    return () => clearInterval(id);
+  }, [state.ready]);
+
+  return state;
+}
 
 export default function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
-
-  // Tauri first-run: show setup wizard before anything else (login, auth, etc.)
-  const isTauri = !!window.__TAURI__;
+  const { ready, isTauri } = useTauriReady();
   const setupDone = !!localStorage.getItem('desktop-setup-done');
+
+  // Wait until we know for certain whether we are inside Tauri or not.
+  // Shows a dark screen for at most 300 ms — invisible to the user.
+  if (!ready) {
+    return <div className="min-h-screen bg-slate-900" />;
+  }
+
+  // Tauri first-run: intercept before ANY other logic including auth
   if (isTauri && !setupDone) {
     return (
       <Suspense fallback={<div className="min-h-screen bg-slate-900" />}>
@@ -95,72 +137,32 @@ export default function App() {
     );
   }
 
-  // Online reservation widget — public embeddable, no auth
+  // Public standalone pages — no auth, no layout
   if (window.location.pathname === '/reservation-widget') {
-    return (
-      <Suspense fallback={<div className="min-h-screen bg-blue-50" />}>
-        <ReservationWidgetPage />
-      </Suspense>
-    );
+    return <Suspense fallback={<div className="min-h-screen bg-blue-50" />}><ReservationWidgetPage /></Suspense>;
   }
-
-  // Kiosk mode — standalone, no auth required
   if (window.location.pathname === '/kiosk') {
-    return (
-      <Suspense fallback={<div className="min-h-screen bg-gray-100" />}>
-        <KioskPage />
-      </Suspense>
-    );
+    return <Suspense fallback={<div className="min-h-screen bg-gray-100" />}><KioskPage /></Suspense>;
   }
-
-  // Pole display is a standalone page — no auth, no layout
   if (window.location.pathname === '/pole-display') {
-    return (
-      <Suspense fallback={<div style={{ background: '#0d1b2a', height: '100vh' }} />}>
-        <PoleDisplayPage />
-      </Suspense>
-    );
+    return <Suspense fallback={<div style={{ background: '#0d1b2a', height: '100vh' }} />}><PoleDisplayPage /></Suspense>;
   }
-
-  // Cyber kiosk — public, no auth, shown on customer's screen
   if (window.location.pathname === '/cyber-kiosk') {
-    return (
-      <Suspense fallback={<div style={{ background: '#030712', height: '100vh' }} />}>
-        <CyberKioskPage />
-      </Suspense>
-    );
+    return <Suspense fallback={<div style={{ background: '#030712', height: '100vh' }} />}><CyberKioskPage /></Suspense>;
   }
-
-  // Customer portal — public, no auth, no layout
   if (window.location.pathname === '/portal') {
-    return (
-      <Suspense fallback={<div className="min-h-screen bg-indigo-50" />}>
-        <CustomerPortalPage />
-      </Suspense>
-    );
+    return <Suspense fallback={<div className="min-h-screen bg-indigo-50" />}><CustomerPortalPage /></Suspense>;
   }
-
-  // Password reset — public, no auth, no layout
   if (window.location.pathname === '/reset-password') {
-    return (
-      <Suspense fallback={<div className="min-h-screen bg-slate-900" />}>
-        <ResetPasswordPage />
-      </Suspense>
-    );
+    return <Suspense fallback={<div className="min-h-screen bg-slate-900" />}><ResetPasswordPage /></Suspense>;
   }
-
-  // Payment link checkout — public, no auth, no layout
   if (window.location.pathname.startsWith('/pay/')) {
     return (
       <Suspense fallback={<div className="min-h-screen bg-slate-900" />}>
-        <Routes>
-          <Route path="/pay/:code" element={<PayCheckoutPage />} />
-        </Routes>
+        <Routes><Route path="/pay/:code" element={<PayCheckoutPage />} /></Routes>
       </Suspense>
     );
   }
-
-  // QR Menu — public, no auth
   if (window.location.pathname.startsWith('/menu/')) {
     return (
       <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
@@ -168,8 +170,6 @@ export default function App() {
       </Suspense>
     );
   }
-
-  // Online Ordering — public, no auth
   if (window.location.pathname.startsWith('/order/')) {
     return (
       <Suspense fallback={<div className="min-h-screen bg-white" />}>
@@ -179,7 +179,6 @@ export default function App() {
   }
 
   if (!isAuthenticated) {
-    // Ensure any /login?... URL is preserved so LoginPage can read params
     return (
       <GoogleOAuthProvider clientId={googleClientId || 'disabled'}>
         <LoginPage />
@@ -189,86 +188,67 @@ export default function App() {
 
   return (
     <DialogProvider>
-    <>
-    <Toaster position="top-right" richColors closeButton duration={4000} />
-    <Layout>
-      <Suspense fallback={<PageLoader />}>
-        <Routes>
-          <Route path="/" element={<Navigate to="/pos" replace />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-          {/* Sales */}
-          <Route path="/pos" element={<POSPage />} />
-          <Route path="/supermart" element={<SupermarketPOSPage />} />
-          <Route path="/hospitality" element={<HospitalityPage />} />
-          <Route path="/layaway" element={<LayawayPage />} />
-          <Route path="/proforma" element={<ProformaPage />} />
-          {/* Inventory */}
-          <Route path="/inventory" element={<InventoryPage />} />
-          <Route path="/batch" element={<BatchManagementPage />} />
-          <Route path="/serial" element={<SerialTrackingPage />} />
-          <Route path="/recipe" element={<RecipeManagementPage />} />
-          <Route path="/bundle" element={<BundleManagementPage />} />
-          <Route path="/suppliers" element={<SuppliersPage />} />
-          {/* Finance */}
-          <Route path="/cash-drawer" element={<CashDrawerPage />} />
-          <Route path="/expenses" element={<ExpensesPage />} />
-          <Route path="/reports" element={<ReportsPage />} />
-          <Route path="/sales-list" element={<SalesListPage />} />
-          {/* People */}
-          <Route path="/customers" element={<CustomersPage />} />
-          <Route path="/hr" element={<HRPage />} />
-          <Route path="/payroll" element={<PayrollPage />} />
-          {/* Hospitality */}
-          <Route path="/kds" element={<KDSPage />} />
-          {/* Marketing */}
-          <Route path="/promotions" element={<PromotionsPage />} />
-          <Route path="/gift-cards" element={<GiftCardsPage />} />
-          {/* Multi-store */}
-          <Route path="/transfers" element={<TransfersPage />} />
-          <Route path="/owner-dashboard" element={<OwnerDashboardPage />} />
-          {/* Clinic / Pharmacy */}
-          <Route path="/prescriptions" element={<PrescriptionsPage />} />
-          <Route path="/pharmacy" element={<PharmacyPage />} />
-          {/* Appointments / Service */}
-          <Route path="/appointments" element={<AppointmentsPage />} />
-          {/* Delivery */}
-          <Route path="/delivery" element={<DeliveryPage />} />
-          {/* System */}
-          <Route path="/notifications" element={<NotificationsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/setup" element={<SetupWizardPage />} />
-          <Route path="/forecasting" element={<ForecastingPage />} />
-          <Route path="/reconciliation" element={<ReconciliationPage />} />
-          <Route path="/franchise" element={<FranchisePage />} />
-          <Route path="/hotel" element={<HotelPage />} />
-          {/* Inventory - extended */}
-          <Route path="/damaged-goods" element={<DamagedGoodsPage />} />
-          <Route path="/stocktake" element={<StocktakePage />} />
-          <Route path="/rfq" element={<RFQPage />} />
-          {/* Hospitality - extended */}
-          <Route path="/waitlist" element={<WaitlistPage />} />
-          <Route path="/channel-manager" element={<ChannelManagerPage />} />
-          {/* Finance - extended */}
-          <Route path="/cheques" element={<ChequesPage />} />
-          <Route path="/ledger" element={<LedgerPage />} />
-          <Route path="/payment-links" element={<PaymentLinksPage />} />
-          {/* Security & Delivery */}
-          <Route path="/security-settings" element={<SecuritySettingsPage />} />
-          <Route path="/delivery-management" element={<DeliveryManagementPage />} />
-          {/* Fuel Pump */}
-          <Route path="/fuel-pump" element={<FuelPumpPage />} />
-          {/* Cybercafe */}
-          <Route path="/cybercafe" element={<CybercafePage />} />
-          {/* Field Sales */}
-          <Route path="/field-orders" element={<FieldOrdersPage />} />
-          <Route path="/delivery-routes" element={<DeliveryRoutesPage />} />
-          <Route path="/agent" element={<AgentPage />} />
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/pos" replace />} />
-        </Routes>
-      </Suspense>
-    </Layout>
-    </>
+      <>
+        <Toaster position="top-right" richColors closeButton duration={4000} />
+        <Layout>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              <Route path="/" element={<Navigate to="/pos" replace />} />
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/pos" element={<POSPage />} />
+              <Route path="/supermart" element={<SupermarketPOSPage />} />
+              <Route path="/hospitality" element={<HospitalityPage />} />
+              <Route path="/layaway" element={<LayawayPage />} />
+              <Route path="/proforma" element={<ProformaPage />} />
+              <Route path="/inventory" element={<InventoryPage />} />
+              <Route path="/batch" element={<BatchManagementPage />} />
+              <Route path="/serial" element={<SerialTrackingPage />} />
+              <Route path="/recipe" element={<RecipeManagementPage />} />
+              <Route path="/bundle" element={<BundleManagementPage />} />
+              <Route path="/suppliers" element={<SuppliersPage />} />
+              <Route path="/cash-drawer" element={<CashDrawerPage />} />
+              <Route path="/expenses" element={<ExpensesPage />} />
+              <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/sales-list" element={<SalesListPage />} />
+              <Route path="/customers" element={<CustomersPage />} />
+              <Route path="/hr" element={<HRPage />} />
+              <Route path="/payroll" element={<PayrollPage />} />
+              <Route path="/kds" element={<KDSPage />} />
+              <Route path="/promotions" element={<PromotionsPage />} />
+              <Route path="/gift-cards" element={<GiftCardsPage />} />
+              <Route path="/transfers" element={<TransfersPage />} />
+              <Route path="/owner-dashboard" element={<OwnerDashboardPage />} />
+              <Route path="/prescriptions" element={<PrescriptionsPage />} />
+              <Route path="/pharmacy" element={<PharmacyPage />} />
+              <Route path="/appointments" element={<AppointmentsPage />} />
+              <Route path="/delivery" element={<DeliveryPage />} />
+              <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/setup" element={<SetupWizardPage />} />
+              <Route path="/forecasting" element={<ForecastingPage />} />
+              <Route path="/reconciliation" element={<ReconciliationPage />} />
+              <Route path="/franchise" element={<FranchisePage />} />
+              <Route path="/hotel" element={<HotelPage />} />
+              <Route path="/damaged-goods" element={<DamagedGoodsPage />} />
+              <Route path="/stocktake" element={<StocktakePage />} />
+              <Route path="/rfq" element={<RFQPage />} />
+              <Route path="/waitlist" element={<WaitlistPage />} />
+              <Route path="/channel-manager" element={<ChannelManagerPage />} />
+              <Route path="/cheques" element={<ChequesPage />} />
+              <Route path="/ledger" element={<LedgerPage />} />
+              <Route path="/payment-links" element={<PaymentLinksPage />} />
+              <Route path="/security-settings" element={<SecuritySettingsPage />} />
+              <Route path="/delivery-management" element={<DeliveryManagementPage />} />
+              <Route path="/fuel-pump" element={<FuelPumpPage />} />
+              <Route path="/cybercafe" element={<CybercafePage />} />
+              <Route path="/field-orders" element={<FieldOrdersPage />} />
+              <Route path="/delivery-routes" element={<DeliveryRoutesPage />} />
+              <Route path="/agent" element={<AgentPage />} />
+              <Route path="*" element={<Navigate to="/pos" replace />} />
+            </Routes>
+          </Suspense>
+        </Layout>
+      </>
     </DialogProvider>
   );
 }

@@ -9,8 +9,6 @@ mod setup;
 mod license;
 mod discovery;
 
-use tauri::Manager;
-
 /// Check the remote server for a newer application version.
 ///
 /// Calls `GET <VITE_API_URL>/api/v1/super-admin/update-check` and returns the

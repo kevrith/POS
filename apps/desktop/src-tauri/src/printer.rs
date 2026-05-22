@@ -11,8 +11,11 @@ pub struct PrinterConfig {
 /// Connect to a network printer and test connectivity
 #[tauri::command]
 pub async fn connect_printer(host: String, port: u16) -> Result<bool, String> {
+    let addr = format!("{}:{}", host, port)
+        .parse::<std::net::SocketAddr>()
+        .map_err(|e| e.to_string())?;
     match TcpStream::connect_timeout(
-        &format!("{}:{}", host, port).parse().map_err(|e| e.to_string())?,
+        &addr,
         Duration::from_secs(3),
     ) {
         Ok(_) => Ok(true),
@@ -28,9 +31,11 @@ pub async fn print_to_network(host: String, port: u16, data_base64: String) -> R
         .decode(&data_base64)
         .map_err(|e| format!("Base64 decode error: {}", e))?;
 
-    let addr = format!("{}:{}", host, port);
+    let addr = format!("{}:{}", host, port)
+        .parse::<std::net::SocketAddr>()
+        .map_err(|e| e.to_string())?;
     let mut stream = TcpStream::connect_timeout(
-        &addr.parse().map_err(|e| e.to_string())?,
+        &addr,
         Duration::from_secs(5),
     )
     .map_err(|e| format!("Cannot connect to printer: {}", e))?;

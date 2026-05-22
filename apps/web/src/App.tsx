@@ -80,28 +80,24 @@ function PageLoader() {
 // Extend window type for Tauri (matches DesktopSetupPage declaration)
 declare global { interface Window { __TAURI__?: { invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T> } } }
 
-export default function App() {
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+function DesktopGate({ children }: { children: React.ReactNode }) {
+  const isTauri = !!window.__TAURI__;
+  const setupDone = !!localStorage.getItem('desktop-setup-done');
 
-  // On first Tauri launch: redirect to desktop setup wizard
-  if (
-    window.__TAURI__ &&
-    window.location.pathname !== '/desktop-setup' &&
-    !localStorage.getItem('desktop-setup-done')
-  ) {
-    window.location.replace('/desktop-setup');
-    return null;
-  }
-
-  // Desktop installation wizard — shown on first Tauri launch before setup
-  if (window.location.pathname === '/desktop-setup') {
+  if (isTauri && !setupDone) {
     return (
       <Suspense fallback={<div className="min-h-screen bg-slate-900" />}>
         <DesktopSetupPage />
       </Suspense>
     );
   }
+
+  return <>{children}</>;
+}
+
+export default function App() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
 
   // Online reservation widget — public embeddable, no auth
   if (window.location.pathname === '/reservation-widget') {
@@ -196,6 +192,7 @@ export default function App() {
   }
 
   return (
+    <DesktopGate>
     <DialogProvider>
     <>
     <Toaster position="top-right" richColors closeButton duration={4000} />
@@ -278,5 +275,6 @@ export default function App() {
     </Layout>
     </>
     </DialogProvider>
+    </DesktopGate>
   );
 }

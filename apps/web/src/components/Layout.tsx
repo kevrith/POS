@@ -589,13 +589,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {/* Logo + wordmark row */}
           <div className="flex items-center gap-3 mb-4">
             <div className="relative flex-shrink-0">
-              <div className="w-10 h-10 rounded-[10px] bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-blue-500/30 ring-1 ring-inset ring-white/15">
-                <img
-                  src="/favicon.svg"
-                  alt=""
-                  className="w-6 h-6 object-contain"
-                  onError={(e) => { (e.currentTarget.src = '/logo.png'); }}
-                />
+              <img
+                src="/logo.png"
+                alt="KASTRA POS"
+                className="w-10 h-10 object-contain rounded-[10px]"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  (e.currentTarget.nextElementSibling as HTMLElement | null)?.style.setProperty('display', 'flex');
+                }}
+              />
+              {/* Fallback gradient icon shown only if logo fails to load */}
+              <div className="w-10 h-10 rounded-[10px] bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700 items-center justify-center shadow-lg shadow-blue-500/30 ring-1 ring-inset ring-white/15 hidden">
+                <span className="text-white font-extrabold text-lg">K</span>
               </div>
               {/* Online dot */}
               <div className="absolute -bottom-0.5 -right-0.5 w-[11px] h-[11px] bg-emerald-400 rounded-full border-2 border-[#f8f9fb] dark:border-[#0d1117] shadow-sm" />

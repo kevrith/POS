@@ -489,8 +489,23 @@ export default function DesktopSetupPage() {
               </div>
 
               <div className="bg-gray-50 rounded-xl p-3 space-y-1">
-                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Machine ID · for license generation</div>
-                <div className="font-mono text-xs text-gray-700 break-all select-all">{machineId || 'Loading…'}</div>
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Machine ID · share this with your vendor to generate a license key</div>
+                <div className="flex items-center gap-2">
+                  <div className="font-mono text-xs text-gray-700 break-all select-all flex-1 bg-white border border-gray-200 rounded-lg px-3 py-2">{machineId || 'Loading…'}</div>
+                  <button
+                    onClick={() => {
+                      if (machineId) {
+                        navigator.clipboard.writeText(machineId);
+                        toast.success('Machine ID copied!');
+                      }
+                    }}
+                    disabled={!machineId}
+                    className="flex-shrink-0 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs font-semibold disabled:opacity-40 transition-colors"
+                  >
+                    Copy
+                  </button>
+                </div>
+                <p className="text-[10px] text-gray-400">Send this ID to your KASTRA vendor — they'll generate a license key tied to this machine.</p>
               </div>
 
               <div className="flex gap-3">

@@ -591,10 +591,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <div className="relative flex-shrink-0">
               <div className="w-10 h-10 rounded-[10px] bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-blue-500/30 ring-1 ring-inset ring-white/15">
                 <img
-                  src="/logo.png"
+                  src="/favicon.svg"
                   alt=""
                   className="w-6 h-6 object-contain"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  onError={(e) => { (e.currentTarget.src = '/logo.png'); }}
                 />
               </div>
               {/* Online dot */}

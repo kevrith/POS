@@ -28,14 +28,17 @@ import {
 
 declare global {
   interface Window {
-    __TAURI__?: {
-      invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
-    };
+    __TAURI__?: unknown;
+    __TAURI_INTERNALS__?: unknown;
   }
 }
 
 function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  if (window.__TAURI__) return window.__TAURI__.invoke<T>(cmd, args);
+  // Tauri v2: __TAURI_INTERNALS__ holds the invoke function
+  const internals = (window as unknown as { __TAURI_INTERNALS__?: { invoke?: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T> } }).__TAURI_INTERNALS__;
+  if (internals?.invoke) return internals.invoke<T>(cmd, args);
+  // Tauri v1 fallback
+  if (window.__TAURI__) return (window.__TAURI__ as { invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T> }).invoke<T>(cmd, args);
   // Browser dev fallback
   if (cmd === 'get_machine_id')         return Promise.resolve({ machine_id: 'dev-machine-001', hostname: 'localhost' } as T);
   if (cmd === 'validate_license_key')   return Promise.resolve(true as T);

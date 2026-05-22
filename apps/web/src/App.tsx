@@ -71,8 +71,15 @@ const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 
 declare global {
   interface Window {
-    __TAURI__?: { invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T> };
+    // Tauri v1 used __TAURI__, Tauri v2 uses __TAURI_INTERNALS__
+    __TAURI_INTERNALS__?: unknown;
+    __TAURI__?: unknown;
   }
+}
+
+/** Returns true when running inside a Tauri webview (v1 or v2) */
+function isTauriEnv(): boolean {
+  return !!(window.__TAURI_INTERNALS__ ?? window.__TAURI__);
 }
 
 function PageLoader() {
@@ -93,7 +100,7 @@ function PageLoader() {
  */
 function useTauriReady(): { ready: boolean; isTauri: boolean } {
   const [state, setState] = useState<{ ready: boolean; isTauri: boolean }>(() => {
-    if (window.__TAURI__) return { ready: true, isTauri: true };
+    if (isTauriEnv()) return { ready: true, isTauri: true };
     return { ready: false, isTauri: false };
   });
 
@@ -102,10 +109,11 @@ function useTauriReady(): { ready: boolean; isTauri: boolean } {
     let attempts = 0;
     const id = setInterval(() => {
       attempts++;
-      if (window.__TAURI__) {
+      if (isTauriEnv()) {
         clearInterval(id);
         setState({ ready: true, isTauri: true });
-      } else if (attempts >= 15) {
+      } else if (attempts >= 25) {
+        // 25 × 20ms = 500ms max wait — enough for any Tauri injection delay
         clearInterval(id);
         setState({ ready: true, isTauri: false });
       }

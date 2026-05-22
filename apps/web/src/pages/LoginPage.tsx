@@ -99,7 +99,7 @@ export default function LoginPage() {
     setForgotLoading(true);
     setForgotError('');
     try {
-      const res = await fetch('/api/v1/auth/forgot-password', {
+      const res = await fetch(`${API_URL}/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: forgotEmail }),
@@ -115,7 +115,13 @@ export default function LoginPage() {
   };
 
   const { login, loginWithPin, loginWithOAuth } = useAuthStore();
-  const API_URL = import.meta.env.VITE_API_URL ?? '/api/v1';
+  const API_URL = (() => {
+    try {
+      const stored = localStorage.getItem('kastra-server-url');
+      if (stored) return stored.replace(/\/$/, '') + '/api/v1';
+    } catch { /* ignore */ }
+    return import.meta.env.VITE_API_URL ?? '/api/v1';
+  })();
 
   // Handle OAuth redirect (legacy redirect flow fallback)
   useEffect(() => {
@@ -222,7 +228,7 @@ export default function LoginPage() {
     setStaffLoading(true);
     setStaff([]);
     try {
-      const res = await fetch(`/api/v1/business/${bizId}/staff`);
+      const res = await fetch(`${API_URL}/business/${bizId}/staff`);
       if (!res.ok) throw new Error('Not found');
       const data = (await res.json()) as StaffMember[];
       setStaff(data);
@@ -245,7 +251,7 @@ export default function LoginPage() {
     setStaffLoading(true);
     try {
       // Resolve short code → real UUID
-      const res = await fetch(`/api/v1/business/resolve/${encodeURIComponent(code)}`);
+      const res = await fetch(`${API_URL}/business/resolve/${encodeURIComponent(code)}`);
       if (!res.ok) throw new Error('Not found');
       const biz = (await res.json()) as { id: string; name: string; shortCode: string | null };
       localStorage.setItem('pos-business-id', biz.id);
@@ -328,7 +334,7 @@ export default function LoginPage() {
     }
     setRegLoading(true);
     try {
-      const res = await fetch('/api/v1/auth/register', {
+      const res = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

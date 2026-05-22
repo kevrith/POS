@@ -94,25 +94,26 @@ pub async fn vscu_process_queue(
     bhf_id: String,
     cmcKey: String,
 ) -> Result<serde_json::Value, String> {
-    let conn = open_db()?;
+    // Step 1: Fetch pending items from DB
+    let pending: Vec<(String, String, String, String)> = {
+        let conn = open_db()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, sale_id, receipt_number, payload \
+                 FROM vscu_queue \
+                 WHERE status='PENDING' AND attempts < 3 \
+                 LIMIT 50",
+            )
+            .map_err(|e| e.to_string())?;
 
-    // Fetch up to 50 pending items with fewer than 3 attempts
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, sale_id, receipt_number, payload \
-             FROM vscu_queue \
-             WHERE status='PENDING' AND attempts < 3 \
-             LIMIT 50",
-        )
-        .map_err(|e| e.to_string())?;
-
-    let pending: Vec<(String, String, String, String)> = stmt
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
-        .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
-        .collect();
-    
-    drop(stmt);
+        let results: Vec<(String, String, String, String)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+        
+        results
+    }; // conn is dropped here
 
     let total = pending.len();
     let mut submitted = 0u32;
@@ -120,18 +121,23 @@ pub async fn vscu_process_queue(
 
     let kra_url = "https://etims-api-sbx.kra.go.ke/etims-api/insertSalesData";
 
+    // Step 2: Process each item (with async operations)
     for (id, _sale_id, receipt_number, payload) in pending {
-        // Increment attempt count first
-        conn.execute(
-            "UPDATE vscu_queue SET attempts = attempts + 1 WHERE id = ?1",
-            params![id],
-        )
-        .ok();
+        // Increment attempt count
+        {
+            let conn = open_db()?;
+            conn.execute(
+                "UPDATE vscu_queue SET attempts = attempts + 1 WHERE id = ?1",
+                params![id],
+            )
+            .ok();
+        } // conn dropped
 
         // Deserialise payload
         let data: VscuSaleData = match serde_json::from_str(&payload) {
             Ok(d) => d,
             Err(_) => {
+                let conn = open_db()?;
                 conn.execute(
                     "UPDATE vscu_queue SET status='FAILED' WHERE id=?1",
                     params![id],
@@ -162,26 +168,30 @@ pub async fn vscu_process_queue(
             .await
             .unwrap_or(false);
 
-        if success {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs()
-                .to_string();
-            conn.execute(
-                "UPDATE vscu_queue SET status='SUBMITTED', submitted_at=?1 WHERE id=?2",
-                params![now, id],
-            )
-            .ok();
-            submitted += 1;
-        } else {
-            conn.execute(
-                "UPDATE vscu_queue SET status='FAILED' WHERE id=?1",
-                params![id],
-            )
-            .ok();
-            failed += 1;
-        }
+        // Update status in DB
+        {
+            let conn = open_db()?;
+            if success {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs()
+                    .to_string();
+                conn.execute(
+                    "UPDATE vscu_queue SET status='SUBMITTED', submitted_at=?1 WHERE id=?2",
+                    params![now, id],
+                )
+                .ok();
+                submitted += 1;
+            } else {
+                conn.execute(
+                    "UPDATE vscu_queue SET status='FAILED' WHERE id=?1",
+                    params![id],
+                )
+                .ok();
+                failed += 1;
+            }
+        } // conn dropped
     }
 
     Ok(serde_json::json!({

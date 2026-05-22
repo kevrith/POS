@@ -15,9 +15,8 @@ echo "=== STEP 2: Prisma generate ==="
 "$ROOT/node_modules/.bin/prisma" generate --schema "$ROOT/prisma/schema.prisma"
 echo "=== prisma generate OK ==="
 
-echo "=== STEP 2b: Prisma migrate deploy ==="
-"$ROOT/node_modules/.bin/prisma" migrate deploy --schema "$ROOT/prisma/schema.prisma"
-echo "=== prisma migrate deploy OK ==="
+echo "=== STEP 2b: Prisma migrate deploy — skipped at build time, runs on start ==="
+echo "=== (migrations run in startCommand where DATABASE_URL is available) ==="
 
 echo "=== STEP 3: NestJS build ==="
 cd "$ROOT/apps/api"

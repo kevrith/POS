@@ -48,17 +48,6 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Allow KASTRA Driver to use your location for delivery tracking."
         }
-      ],
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "compileSdkVersion": 34,
-            "targetSdkVersion": 34,
-            "buildToolsVersion": "34.0.0",
-            "minSdkVersion": 24
-          }
-        }
       ]
     ],
     "experiments": {

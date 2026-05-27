@@ -1,18 +1,27 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BASE_URL = 'http://localhost:3010/api/v1';
+export const SERVER_URL_KEY  = 'customer_server_url';
+export const DEFAULT_BASE_URL = 'https://api.kastra.co.ke/api/v1';
+
+export async function getBaseUrl(): Promise<string> {
+  try {
+    const stored = await AsyncStorage.getItem(SERVER_URL_KEY);
+    return stored ?? DEFAULT_BASE_URL;
+  } catch {
+    return DEFAULT_BASE_URL;
+  }
+}
 
 async function getHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  // Customer app is mostly public but supports optional auth token for future use
   const token = await AsyncStorage.getItem('customer_token').catch(() => null);
   if (token) headers['Authorization'] = `Bearer ${token}`;
   return headers;
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
-  const headers = await getHeaders();
-  const res = await fetch(`${BASE_URL}${path}`, { headers });
+  const [baseUrl, headers] = await Promise.all([getBaseUrl(), getHeaders()]);
+  const res = await fetch(`${baseUrl}${path}`, { headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error((err as any).message ?? `API error ${res.status}`);
@@ -21,8 +30,8 @@ export async function apiGet<T>(path: string): Promise<T> {
 }
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const headers = await getHeaders();
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const [baseUrl, headers] = await Promise.all([getBaseUrl(), getHeaders()]);
+  const res = await fetch(`${baseUrl}${path}`, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
@@ -35,8 +44,8 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
 }
 
 export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
-  const headers = await getHeaders();
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const [baseUrl, headers] = await Promise.all([getBaseUrl(), getHeaders()]);
+  const res = await fetch(`${baseUrl}${path}`, {
     method: 'PATCH',
     headers,
     body: JSON.stringify(body),

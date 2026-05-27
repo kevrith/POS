@@ -124,20 +124,59 @@ function useTauriReady(): { ready: boolean; isTauri: boolean } {
   return state;
 }
 
+/** Invoke a Tauri command — works for v1 and v2. Returns null if not in Tauri. */
+async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
+  try {
+    const internals = (window as unknown as { __TAURI_INTERNALS__?: { invoke?: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T> } }).__TAURI_INTERNALS__;
+    if (internals?.invoke) return internals.invoke<T>(cmd, args);
+    if (window.__TAURI__) return (window.__TAURI__ as { invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T> }).invoke<T>(cmd, args);
+  } catch { /* ignore */ }
+  return null;
+}
+
 export default function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
   const { ready, isTauri } = useTauriReady();
-  const setupDone = !!localStorage.getItem('desktop-setup-done');
+  const [tauriSetupVerified, setTauriSetupVerified] = useState(false);
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
 
-  // Wait until we know for certain whether we are inside Tauri or not.
-  // Shows a dark screen for at most 300 ms — invisible to the user.
-  if (!ready) {
+  // When in Tauri with setupDone flag, verify the Rust config — if UNCONFIGURED,
+  // the flag was stale (e.g., dev testing or config file deleted) and we show the wizard.
+  useEffect(() => {
+    if (!ready || !isTauri) {
+      setTauriSetupVerified(true);
+      return;
+    }
+    const setupDone = !!localStorage.getItem('desktop-setup-done');
+    if (!setupDone) {
+      // No flag → show wizard immediately
+      setShowSetupWizard(true);
+      setTauriSetupVerified(true);
+      return;
+    }
+    // Flag is set — verify Rust config matches
+    void tauriInvoke<{ mode: string }>('get_setup_mode').then(cfg => {
+      if (!cfg || cfg.mode === 'UNCONFIGURED') {
+        // Stale flag — clear it and show the wizard
+        localStorage.removeItem('desktop-setup-done');
+        localStorage.removeItem('desktop-device-role');
+        setShowSetupWizard(true);
+      }
+      setTauriSetupVerified(true);
+    }).catch(() => {
+      // Cannot reach Rust — assume flag is valid (browser dev mode)
+      setTauriSetupVerified(true);
+    });
+  }, [ready, isTauri]);
+
+  // Wait until Tauri env is detected AND (if Tauri) setup config is verified
+  if (!ready || (isTauri && !tauriSetupVerified)) {
     return <div className="min-h-screen bg-slate-900" />;
   }
 
   // Tauri first-run: intercept before ANY other logic including auth
-  if (isTauri && !setupDone) {
+  if (isTauri && showSetupWizard) {
     return (
       <Suspense fallback={<div className="min-h-screen bg-slate-900" />}>
         <DesktopSetupPage />

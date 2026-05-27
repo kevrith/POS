@@ -1025,6 +1025,30 @@ export default function LoginPage() {
 
         </div>
           </div>
+
+          {/* Reconfigure terminal (visible only in Tauri desktop app) */}
+          {!!(window.__TAURI_INTERNALS__ ?? window.__TAURI__) && (
+            <div className="mt-4 text-center">
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const internals = (window as unknown as { __TAURI_INTERNALS__?: { invoke?: (cmd: string) => Promise<unknown> } }).__TAURI_INTERNALS__;
+                    if (internals?.invoke) await internals.invoke('reset_setup');
+                    else if (window.__TAURI__) await (window.__TAURI__ as { invoke: (cmd: string) => Promise<unknown> }).invoke('reset_setup');
+                  } catch { /* ignore */ }
+                  localStorage.removeItem('desktop-setup-done');
+                  localStorage.removeItem('desktop-device-role');
+                  localStorage.removeItem('kastra-server-url');
+                  window.location.reload();
+                }}
+                className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                ⚙ Reconfigure this terminal
+              </button>
+            </div>
+          )}
+
         </div>
       </div>
     </div>

@@ -383,8 +383,12 @@ export default function DesktopSetupPage() {
         terminalName: terminalName || null,
       });
 
-      if (needsServerUrl) localStorage.setItem('kastra-server-url', serverUrl);
-      else                localStorage.removeItem('kastra-server-url');
+      if (needsServerUrl) {
+        localStorage.setItem('kastra-server-url', serverUrl);
+      } else {
+        // STANDALONE / SERVER: the API runs on this machine — point to localhost
+        localStorage.setItem('kastra-server-url', 'http://localhost:3010');
+      }
 
       localStorage.setItem('desktop-setup-done', '1');
       localStorage.setItem('desktop-device-role', role);

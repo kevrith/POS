@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useGoogleLogin } from '@react-oauth/google';
 import { useAuthStore } from '../stores/auth';
 import type { AuthUser } from '../stores/auth';
-import { Eye, EyeOff, Delete, ChevronLeft, Building2, Sparkles, Fingerprint } from 'lucide-react';
+import { Eye, EyeOff, Delete, ChevronLeft, Building2, Sparkles, Fingerprint, Settings } from 'lucide-react';
 import { isBiometricAvailable, authenticateBiometric } from '../lib/biometric';
 import { setToken } from '../lib/api';
 
@@ -440,7 +440,29 @@ export default function LoginPage() {
             ))}
           </div>
 
-          <p className="text-blue-200/30 text-xs mt-10">Trusted by businesses across Kenya</p>
+          {/* Reconfigure terminal — Tauri desktop only */}
+          {!!(window.__TAURI_INTERNALS__ ?? window.__TAURI__) && (
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const internals = (window as unknown as { __TAURI_INTERNALS__?: { invoke?: (cmd: string) => Promise<unknown> } }).__TAURI_INTERNALS__;
+                  if (internals?.invoke) await internals.invoke('reset_setup');
+                  else if (window.__TAURI__) await (window.__TAURI__ as { invoke: (cmd: string) => Promise<unknown> }).invoke('reset_setup');
+                } catch { /* ignore */ }
+                localStorage.removeItem('desktop-setup-done');
+                localStorage.removeItem('desktop-device-role');
+                localStorage.removeItem('kastra-server-url');
+                window.location.reload();
+              }}
+              className="mt-8 flex items-center gap-2 text-blue-200/50 hover:text-white/80 text-xs transition-colors group cursor-pointer"
+            >
+              <Settings className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform duration-300" />
+              Reconfigure this terminal
+            </button>
+          )}
+
+          <p className="text-blue-200/30 text-xs mt-4">Trusted by businesses across Kenya</p>
         </div>
       </div>
 
@@ -1040,28 +1062,6 @@ export default function LoginPage() {
         </div>
           </div>
 
-          {/* Reconfigure terminal (visible only in Tauri desktop app) */}
-          {!!(window.__TAURI_INTERNALS__ ?? window.__TAURI__) && (
-            <div className="mt-4 text-center">
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    const internals = (window as unknown as { __TAURI_INTERNALS__?: { invoke?: (cmd: string) => Promise<unknown> } }).__TAURI_INTERNALS__;
-                    if (internals?.invoke) await internals.invoke('reset_setup');
-                    else if (window.__TAURI__) await (window.__TAURI__ as { invoke: (cmd: string) => Promise<unknown> }).invoke('reset_setup');
-                  } catch { /* ignore */ }
-                  localStorage.removeItem('desktop-setup-done');
-                  localStorage.removeItem('desktop-device-role');
-                  localStorage.removeItem('kastra-server-url');
-                  window.location.reload();
-                }}
-                className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                ⚙ Reconfigure this terminal
-              </button>
-            </div>
-          )}
 
         </div>
       </div>

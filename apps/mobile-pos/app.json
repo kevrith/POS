@@ -46,6 +46,17 @@
         {
           "cameraPermission": "Allow KASTRA POS to access your camera for barcode scanning."
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "buildToolsVersion": "35.0.0",
+            "minSdkVersion": 24
+          }
+        }
       ]
     ],
     "experiments": {

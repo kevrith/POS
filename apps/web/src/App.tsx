@@ -141,31 +141,26 @@ export default function App() {
   const [tauriSetupVerified, setTauriSetupVerified] = useState(false);
   const [showSetupWizard, setShowSetupWizard] = useState(false);
 
-  // When in Tauri with setupDone flag, verify the Rust config — if UNCONFIGURED,
-  // the flag was stale (e.g., dev testing or config file deleted) and we show the wizard.
+  // Always use the Rust config file as the single source of truth.
+  // localStorage is unreliable (persists across re-installs in WebView2/WKWebView).
+  // If mode.json is missing/UNCONFIGURED → first run or reset → show wizard.
   useEffect(() => {
     if (!ready || !isTauri) {
       setTauriSetupVerified(true);
       return;
     }
-    const setupDone = !!localStorage.getItem('desktop-setup-done');
-    if (!setupDone) {
-      // No flag → show wizard immediately
-      setShowSetupWizard(true);
-      setTauriSetupVerified(true);
-      return;
-    }
-    // Flag is set — verify Rust config matches
     void tauriInvoke<{ mode: string }>('get_setup_mode').then(cfg => {
       if (!cfg || cfg.mode === 'UNCONFIGURED') {
-        // Stale flag — clear it and show the wizard
         localStorage.removeItem('desktop-setup-done');
         localStorage.removeItem('desktop-device-role');
         setShowSetupWizard(true);
       }
       setTauriSetupVerified(true);
     }).catch(() => {
-      // Cannot reach Rust — assume flag is valid (browser dev mode)
+      // Rust not reachable (browser dev mode) — fall back to localStorage
+      if (!localStorage.getItem('desktop-setup-done')) {
+        setShowSetupWizard(true);
+      }
       setTauriSetupVerified(true);
     });
   }, [ready, isTauri]);

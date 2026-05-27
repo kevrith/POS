@@ -146,11 +146,12 @@ export default function SetupWizardPage() {
   const prev = () => setStep((s) => s - 1);
 
   return (
-    <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-50 to-indigo-100 overflow-y-auto">
+      <div className="min-h-full flex items-center justify-center p-3 sm:p-4 py-6 sm:py-8">
+      <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl">
         {/* Step Indicator */}
         {step > 0 && step < 4 && (
-          <div className="bg-gray-50 border-b px-8 py-4">
+          <div className="bg-gray-50 border-b px-4 sm:px-8 py-3 sm:py-4">
             <div className="flex items-center justify-between">
               {STEP_LABELS.map((label, i) => (
                 <div key={i} className="flex items-center">
@@ -164,7 +165,7 @@ export default function SetupWizardPage() {
           </div>
         )}
 
-        <div className="p-8">
+        <div className="p-4 sm:p-6 md:p-8">
           {/* ── Step 0: Welcome ── */}
           {step === 0 && (
             <div className="text-center space-y-6">
@@ -276,7 +277,7 @@ export default function SetupWizardPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Business Type</label>
-                  <div className="grid grid-cols-1 gap-2 max-h-72 overflow-y-auto pr-1">
+                  <div className="grid grid-cols-1 gap-2 max-h-48 sm:max-h-72 overflow-y-auto pr-1">
                     {POS_MODES.map((m) => {
                       const Icon = m.icon;
                       const selected = bizForm.posMode === m.value;
@@ -590,6 +591,7 @@ export default function SetupWizardPage() {
             );
           })()}
         </div>
+      </div>
       </div>
     </div>
   );

@@ -28,6 +28,7 @@ export class BusinessController {
     return this.businessService.getSettings(businessId);
   }
 
+  @SkipSubscriptionCheck()
   @Patch(':businessId/settings')
   async updateSettings(
     @Param('businessId') businessId: string,
@@ -59,6 +60,7 @@ export class BusinessController {
     return this.businessService.getStores(businessId);
   }
 
+  @SkipSubscriptionCheck()
   @Post(':businessId/stores')
   async createStore(
     @Param('businessId') businessId: string,
@@ -151,6 +153,7 @@ export class BusinessController {
 
   // ─── Credential Management ──────────────────────────────────────────────────
 
+  @SkipSubscriptionCheck()
   @Patch(':businessId/etims-credentials')
   async saveEtimsCredentials(
     @Param('businessId') businessId: string,

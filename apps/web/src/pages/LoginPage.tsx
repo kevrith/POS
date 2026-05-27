@@ -332,6 +332,14 @@ export default function LoginPage() {
       setRegError('Password must be at least 8 characters');
       return;
     }
+    if (!/[A-Z]/.test(regPassword)) {
+      setRegError('Password must contain at least one uppercase letter');
+      return;
+    }
+    if (!/[0-9]/.test(regPassword)) {
+      setRegError('Password must contain at least one number');
+      return;
+    }
     setRegLoading(true);
     try {
       const res = await fetch(`${API_URL}/auth/register`, {
@@ -349,14 +357,10 @@ export default function LoginPage() {
         const data = await res.json() as { message?: string };
         throw new Error(data.message ?? 'Registration failed');
       }
-      // Auto-login then redirect to setup wizard
-      try {
-        await login(regEmail, regPassword);
-        navigate(urlPlan ? `/setup?plan=${urlPlan}` : '/setup');
-      } catch {
-        // If auto-login fails just show success and let them sign in manually
-        setRegSuccess(true);
-      }
+      const data = await res.json() as { accessToken: string; user: AuthUser };
+      // Use the token returned by registration — no second round-trip needed
+      await loginWithOAuth(data.accessToken, data.user);
+      navigate(urlPlan ? `/setup?plan=${urlPlan}` : '/setup');
     } catch (err) {
       setRegError(err instanceof Error ? err.message : 'Registration failed');
     } finally {
@@ -593,6 +597,14 @@ export default function LoginPage() {
                       {showRegPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
                   </div>
+                  {regPassword.length > 0 && (
+                    <div className="flex gap-3 mt-2 text-xs flex-wrap">
+                      <span className={regPassword.length >= 8 ? 'text-green-600' : 'text-gray-400'}>✓ 8+ chars</span>
+                      <span className={/[A-Z]/.test(regPassword) ? 'text-green-600' : 'text-gray-400'}>✓ Uppercase</span>
+                      <span className={/[a-z]/.test(regPassword) ? 'text-green-600' : 'text-gray-400'}>✓ Lowercase</span>
+                      <span className={/[0-9]/.test(regPassword) ? 'text-green-600' : 'text-gray-400'}>✓ Number</span>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>

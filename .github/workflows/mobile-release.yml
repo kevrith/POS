@@ -51,6 +51,9 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          accept-android-sdk-licenses: true
+          packages: 'platforms;android-34 build-tools;34.0.0 platform-tools'
 
       - name: Install EAS CLI
         run: npm install -g eas-cli@latest
@@ -58,6 +61,10 @@ jobs:
       - name: Install app dependencies
         working-directory: apps/mobile-pos
         run: npm ci
+
+      - name: Clean Expo prebuild artifacts
+        working-directory: apps/mobile-pos
+        run: rm -rf android ios .expo
 
       - name: Build Android APK (local)
         working-directory: apps/mobile-pos
@@ -115,6 +122,9 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          accept-android-sdk-licenses: true
+          packages: 'platforms;android-34 build-tools;34.0.0 platform-tools'
 
       - name: Install EAS CLI
         run: npm install -g eas-cli@latest
@@ -122,6 +132,10 @@ jobs:
       - name: Install app dependencies
         working-directory: apps/mobile-customer
         run: npm ci
+
+      - name: Clean Expo prebuild artifacts
+        working-directory: apps/mobile-customer
+        run: rm -rf android ios .expo
 
       - name: Build Android APK (local)
         working-directory: apps/mobile-customer
@@ -176,6 +190,9 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          accept-android-sdk-licenses: true
+          packages: 'platforms;android-34 build-tools;34.0.0 platform-tools'
 
       - name: Install EAS CLI
         run: npm install -g eas-cli@latest
@@ -183,6 +200,10 @@ jobs:
       - name: Install app dependencies
         working-directory: apps/mobile-driver
         run: npm ci
+
+      - name: Clean Expo prebuild artifacts
+        working-directory: apps/mobile-driver
+        run: rm -rf android ios .expo
 
       - name: Build Android APK (local)
         working-directory: apps/mobile-driver

@@ -632,7 +632,14 @@ export default function LoginPage() {
 
                 <button
                   type="button"
-                  onClick={() => handleGoogleRegister()}
+                  onClick={() => {
+                    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+                    if (!clientId || clientId === 'disabled') {
+                      setRegError('Google sign-in is not configured. Use email registration above, or contact your administrator.');
+                      return;
+                    }
+                    handleGoogleRegister();
+                  }}
                   className="flex items-center justify-center gap-3 w-full py-3 border-2 border-gray-200 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors text-sm"
                 >
                   <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -789,7 +796,14 @@ export default function LoginPage() {
 
               <button
                 type="button"
-                onClick={() => handleGoogleLogin()}
+                onClick={() => {
+                  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+                  if (!clientId || clientId === 'disabled') {
+                    setError('Google sign-in is not configured. Please use email and password, or contact your administrator to enable Google OAuth.');
+                    return;
+                  }
+                  handleGoogleLogin();
+                }}
                 className="flex items-center justify-center gap-3 w-full py-3 border-2 border-gray-200 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors text-sm"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24">

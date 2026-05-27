@@ -393,10 +393,8 @@ export default function DesktopSetupPage() {
       localStorage.setItem('desktop-setup-done', '1');
       localStorage.setItem('desktop-device-role', role);
 
-      // Always go to login first — staff logs in once to activate the terminal.
-      // After login, LoginPage reads desktop-device-role and redirects to the
-      // correct screen (kiosk, KDS, POS, etc.) with the correct businessId/storeId.
-      navigate('/login');
+      // Full reload so api.ts re-resolves the API URL from localStorage.
+      window.location.href = '/login';
     } catch (e) {
       toast.error('Failed to save: ' + String(e));
     } finally {

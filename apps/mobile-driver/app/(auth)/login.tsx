@@ -1,42 +1,63 @@
+/**
+ * Driver app login — supports email/password with configurable server URL.
+ * On first launch shows a server URL setup step.
+ */
+
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  SafeAreaView, ActivityIndicator, Alert, KeyboardAvoidingView,
+  Platform, ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
-import { driverApi } from '../../lib/api';
+import { useState, useEffect } from 'react';
+import * as SecureStore from 'expo-secure-store';
+import { driverApi, SERVER_URL_KEY, DEFAULT_BASE_URL, getBaseUrl } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth';
 import { Colors } from '../../constants/theme';
 
 interface LoginResponse {
-  access_token: string;
-  user: {
-    id: string;
-    name: string;
-    email: string;
-    role: string;
-    businessId: string;
-    storeId?: string;
-  };
+  accessToken?: string;
+  access_token?: string;
+  user: { id: string; name: string; email: string; role: string; businessId: string; storeId?: string; };
 }
 
+type Screen = 'SERVER_URL' | 'LOGIN';
+
 export default function LoginScreen() {
-  const router = useRouter();
-  const setAuth = useAuthStore((s) => s.setAuth);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const router  = useRouter();
+  const setAuth = useAuthStore(s => s.setAuth);
+
+  const [screen,       setScreen]       = useState<Screen>('SERVER_URL');
+  const [urlInput,     setUrlInput]     = useState(DEFAULT_BASE_URL);
+  const [urlTesting,   setUrlTesting]   = useState(false);
+  const [urlError,     setUrlError]     = useState('');
+
+  const [email,        setEmail]        = useState('');
+  const [password,     setPassword]     = useState('');
+  const [showPw,       setShowPw]       = useState(false);
+  const [loading,      setLoading]      = useState(false);
+
+  useEffect(() => {
+    void SecureStore.getItemAsync(SERVER_URL_KEY).then(stored => {
+      if (stored) { setUrlInput(stored); setScreen('LOGIN'); }
+    });
+  }, []);
+
+  async function handleSaveUrl() {
+    const url = urlInput.trim().replace(/\/$/, '');
+    if (!url) { setUrlError('Please enter the server URL.'); return; }
+    setUrlTesting(true);
+    setUrlError('');
+    try {
+      const res = await fetch(`${url}/auth/health`).catch(() => null);
+      if (!res || res.status >= 500) throw new Error('Cannot reach server.');
+    } catch (e: any) {
+      setUrlError(e.message ?? 'Could not verify server — check URL.');
+    } finally { setUrlTesting(false); }
+    await SecureStore.setItemAsync(SERVER_URL_KEY, url);
+    setScreen('LOGIN');
+  }
 
   async function handleLogin() {
     if (!email.trim() || !password) {
@@ -45,48 +66,80 @@ export default function LoginScreen() {
     }
     setLoading(true);
     try {
-      const result = await driverApi.post<LoginResponse>('/auth/login', {
-        email: email.trim().toLowerCase(),
-        password,
+      const baseUrl = await getBaseUrl();
+      const res = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
       });
-      setAuth(result.user, result.access_token);
+      const data = await res.json() as LoginResponse;
+      if (!res.ok) throw new Error((data as any).message ?? 'Invalid credentials');
+      const token = data.accessToken ?? data.access_token ?? '';
+      await SecureStore.setItemAsync('driver_token', token);
+      setAuth(data.user, token);
       router.replace('/(tabs)/deliveries');
-    } catch (err: any) {
-      Alert.alert('Login Failed', err.message ?? 'Invalid email or password.');
-    } finally {
-      setLoading(false);
-    }
+    } catch (e: any) {
+      Alert.alert('Login Failed', e.message ?? 'Invalid email or password.');
+    } finally { setLoading(false); }
+  }
+
+  if (screen === 'SERVER_URL') {
+    return (
+      <SafeAreaView style={s.safe}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <ScrollView contentContainerStyle={s.container} keyboardShouldPersistTaps="handled">
+            <View style={s.logoArea}>
+              <View style={s.logoCircle}><Ionicons name="server" size={36} color="#FFF" /></View>
+              <Text style={s.appName}>Kastra Driver</Text>
+              <Text style={s.appTagline}>Server Setup</Text>
+            </View>
+            <View style={s.card}>
+              <Text style={s.cardTitle}>API Server URL</Text>
+              <Text style={s.cardSub}>Enter the Kastra API server URL.{'\n'}Cloud users: leave as default.</Text>
+              {urlError ? <Text style={s.errorText}>{urlError}</Text> : null}
+              <TextInput
+                style={s.input}
+                value={urlInput}
+                onChangeText={v => { setUrlInput(v); setUrlError(''); }}
+                placeholder="https://api.kastra.co.ke/api/v1"
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                placeholderTextColor={Colors.textSecondary}
+                autoFocus
+              />
+              <Text style={s.hintText}>Default (cloud): https://api.kastra.co.ke/api/v1</Text>
+              <TouchableOpacity style={[s.btn, urlTesting && { opacity: 0.7 }]} onPress={handleSaveUrl} disabled={urlTesting}>
+                {urlTesting
+                  ? <ActivityIndicator color="#FFF" />
+                  : <><Ionicons name="arrow-forward-circle" size={20} color="#FFF" /><Text style={s.btnText}>Save & Continue</Text></>
+                }
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    );
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-          {/* Logo */}
-          <View style={styles.logoArea}>
-            <View style={styles.logoCircle}>
-              <Ionicons name="bicycle" size={40} color="#FFFFFF" />
-            </View>
-            <Text style={styles.appName}>Kastra Driver</Text>
-            <Text style={styles.appTagline}>Delivery Management</Text>
+    <SafeAreaView style={s.safe}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={s.container} keyboardShouldPersistTaps="handled">
+          <View style={s.logoArea}>
+            <View style={s.logoCircle}><Ionicons name="bicycle" size={40} color="#FFF" /></View>
+            <Text style={s.appName}>Kastra Driver</Text>
+            <Text style={s.appTagline}>Delivery Management</Text>
           </View>
-
-          {/* Form Card */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Driver Login</Text>
-            <Text style={styles.cardSubtitle}>
-              Sign in with your driver account credentials
-            </Text>
-
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Email Address</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="mail-outline" size={18} color={Colors.textSecondary} style={styles.inputIcon} />
+          <View style={s.card}>
+            <Text style={s.cardTitle}>Driver Login</Text>
+            <Text style={s.cardSub}>Sign in with your driver account credentials</Text>
+            <View style={s.fieldGroup}>
+              <Text style={s.label}>Email Address</Text>
+              <View style={s.inputWrapper}>
+                <Ionicons name="mail-outline" size={18} color={Colors.textSecondary} style={{ marginRight: 8 }} />
                 <TextInput
-                  style={styles.input}
+                  style={s.inputFlex}
                   value={email}
                   onChangeText={setEmail}
                   placeholder="driver@company.com"
@@ -97,128 +150,81 @@ export default function LoginScreen() {
                 />
               </View>
             </View>
-
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Password</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="lock-closed-outline" size={18} color={Colors.textSecondary} style={styles.inputIcon} />
+            <View style={s.fieldGroup}>
+              <Text style={s.label}>Password</Text>
+              <View style={s.inputWrapper}>
+                <Ionicons name="lock-closed-outline" size={18} color={Colors.textSecondary} style={{ marginRight: 8 }} />
                 <TextInput
-                  style={[styles.input, { flex: 1 }]}
+                  style={[s.inputFlex, { flex: 1 }]}
                   value={password}
                   onChangeText={setPassword}
                   placeholder="••••••••"
-                  secureTextEntry={!showPassword}
+                  secureTextEntry={!showPw}
                   placeholderTextColor={Colors.textSecondary}
                 />
-                <TouchableOpacity
-                  onPress={() => setShowPassword((v) => !v)}
-                  style={styles.eyeBtn}
-                >
-                  <Ionicons
-                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                    size={18}
-                    color={Colors.textSecondary}
-                  />
+                <TouchableOpacity onPress={() => setShowPw(v => !v)} style={{ padding: 4 }}>
+                  <Ionicons name={showPw ? 'eye-off-outline' : 'eye-outline'} size={18} color={Colors.textSecondary} />
                 </TouchableOpacity>
               </View>
             </View>
-
-            <TouchableOpacity
-              style={[styles.loginBtn, loading && { opacity: 0.7 }]}
-              onPress={handleLogin}
-              disabled={loading}
-              activeOpacity={0.85}
-            >
-              {loading ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <>
-                  <Ionicons name="log-in-outline" size={20} color="#FFFFFF" />
-                  <Text style={styles.loginBtnText}>Sign In</Text>
-                </>
-              )}
+            <TouchableOpacity style={[s.btn, loading && { opacity: 0.7 }]} onPress={handleLogin} disabled={loading}>
+              {loading
+                ? <ActivityIndicator color="#FFF" />
+                : <><Ionicons name="log-in-outline" size={20} color="#FFF" /><Text style={s.btnText}>Sign In</Text></>
+              }
             </TouchableOpacity>
           </View>
-
-          <Text style={styles.footer}>
-            Contact your manager if you need access
-          </Text>
+          <TouchableOpacity style={s.changeServerLink} onPress={() => setScreen('SERVER_URL')}>
+            <Ionicons name="settings-outline" size={14} color={Colors.textSecondary} />
+            <Text style={s.changeServerText}>Change server URL</Text>
+          </TouchableOpacity>
+          <Text style={s.footer}>Contact your manager if you need access</Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
-  container: {
-    flexGrow: 1,
-    padding: 24,
-    justifyContent: 'center',
-    gap: 24,
-  },
+  container: { flexGrow: 1, padding: 24, justifyContent: 'center', gap: 20 },
   logoArea: { alignItems: 'center', gap: 8 },
   logoCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: Colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    width: 80, height: 80, borderRadius: 40, backgroundColor: Colors.primary,
+    justifyContent: 'center', alignItems: 'center',
+    shadowColor: Colors.primary, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 8, elevation: 6,
   },
   appName: { fontSize: 26, fontWeight: '800', color: Colors.text },
   appTagline: { fontSize: 14, color: Colors.textSecondary },
   card: {
-    backgroundColor: Colors.card,
-    borderRadius: 20,
-    padding: 24,
-    gap: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
+    backgroundColor: Colors.card, borderRadius: 20, padding: 24, gap: 14,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
   },
-  cardTitle: { fontSize: 22, fontWeight: '700', color: Colors.text },
-  cardSubtitle: { fontSize: 13, color: Colors.textSecondary },
+  cardTitle: { fontSize: 20, fontWeight: '700', color: Colors.text },
+  cardSub: { fontSize: 13, color: Colors.textSecondary },
+  errorText: { fontSize: 13, color: Colors.error },
+  hintText: { fontSize: 12, color: Colors.textSecondary },
+  input: {
+    borderWidth: 1, borderColor: Colors.border, borderRadius: 12,
+    backgroundColor: Colors.background, paddingHorizontal: 14,
+    paddingVertical: 13, fontSize: 15, color: Colors.text,
+  },
   fieldGroup: { gap: 6 },
   label: { fontSize: 13, fontWeight: '600', color: Colors.text },
   inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 12,
-    backgroundColor: Colors.background,
-    paddingHorizontal: 12,
+    flexDirection: 'row', alignItems: 'center', borderWidth: 1,
+    borderColor: Colors.border, borderRadius: 12,
+    backgroundColor: Colors.background, paddingHorizontal: 12,
   },
-  inputIcon: { marginRight: 8 },
-  input: {
-    flex: 1,
-    paddingVertical: 13,
-    fontSize: 15,
-    color: Colors.text,
+  inputFlex: { flex: 1, paddingVertical: 13, fontSize: 15, color: Colors.text },
+  btn: {
+    backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 14,
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 4,
   },
-  eyeBtn: { padding: 4 },
-  loginBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 4,
-  },
-  loginBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
-  footer: {
-    textAlign: 'center',
-    fontSize: 13,
-    color: Colors.textSecondary,
-  },
+  btnText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  changeServerLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  changeServerText: { fontSize: 13, color: Colors.textSecondary },
+  footer: { textAlign: 'center', fontSize: 13, color: Colors.textSecondary },
 });

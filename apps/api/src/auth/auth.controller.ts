@@ -1,4 +1,5 @@
-import { Controller, Post, Body, UseGuards, Req, Get, Redirect, Delete, Param, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Req, Get, Redirect, Delete, Param, UnauthorizedException, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
@@ -80,13 +81,56 @@ export class AuthController {
     // passport initiates redirect — no body needed
   }
 
+  /**
+   * Mobile apps open this URL in the system browser to start Google OAuth.
+   * After auth, the callback redirects to the app's deep link scheme.
+   * e.g. GET /auth/google/mobile?scheme=kastra-pos
+   */
+  @Public()
+  @SkipThrottle()
+  @Get('google/mobile')
+  mobileGoogleAuth(@Query('scheme') scheme: string, @Res() res: Response) {
+    const clientId  = process.env.GOOGLE_CLIENT_ID ?? '';
+    const callbackUrl = process.env.GOOGLE_CALLBACK_URL ?? '';
+    const safeScheme = /^[a-zA-Z0-9\-]+$/.test(scheme ?? '') ? scheme : 'kastra-pos';
+    // Pass scheme via state so the callback can redirect to the right deep link
+    const state = Buffer.from(JSON.stringify({ mobile: 1, scheme: safeScheme })).toString('base64url');
+    const params = new URLSearchParams({
+      client_id:     clientId,
+      redirect_uri:  callbackUrl,
+      response_type: 'code',
+      scope:         'openid email profile',
+      state,
+      access_type:   'offline',
+      prompt:        'select_account',
+    });
+    res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+  }
+
   /** Google redirects back here after user grants permission. */
   @SkipThrottle()
   @Get('google/callback')
   @UseGuards(AuthGuard('google'))
   @Redirect()
-  async googleCallback(@Req() req: Request & { user: { accessToken: string; user: AuthUser } }) {
+  async googleCallback(
+    @Req() req: Request & { user: { accessToken: string; user: AuthUser } },
+    @Query('state') rawState: string,
+  ) {
     const { accessToken, user } = req.user;
+
+    // Check for mobile deep-link redirect
+    if (rawState) {
+      try {
+        const state = JSON.parse(Buffer.from(rawState, 'base64url').toString()) as { mobile?: number; scheme?: string };
+        if (state.mobile && state.scheme) {
+          const scheme = /^[a-zA-Z0-9\-]+$/.test(state.scheme) ? state.scheme : 'kastra-pos';
+          return {
+            url: `${scheme}://auth/google?token=${accessToken}&id=${user.id}&businessId=${user.businessId}&role=${user.role}&name=${encodeURIComponent(user.name)}&email=${encodeURIComponent(user.email ?? '')}`,
+          };
+        }
+      } catch { /* ignore malformed state */ }
+    }
+
     const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3001';
     // Redirect to frontend with token in query string; frontend stores it in sessionStorage
     return {

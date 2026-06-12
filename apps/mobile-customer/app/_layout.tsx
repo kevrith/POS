@@ -107,7 +107,10 @@ function SetupWizard({ onDone }: { onDone: () => void }) {
       ]);
       onDone();
     } catch (e: any) {
-      setBizError(e.message ?? 'Failed to find business.');
+      const msg = (e?.message ?? '').includes('Network request failed')
+        ? 'Could not reach the server. Make sure this phone is on the same Wi-Fi network as the server and the URL uses its LAN IP.'
+        : (e.message ?? 'Failed to find business.');
+      setBizError(msg);
     } finally {
       setBizLoading(false);
     }
@@ -139,14 +142,14 @@ function SetupWizard({ onDone }: { onDone: () => void }) {
                 style={ss.input}
                 value={urlInput}
                 onChangeText={v => { setUrlInput(v); setUrlError(''); }}
-                placeholder="https://api.kastra.co.ke/api/v1"
+                placeholder="https://pos-bhe5.onrender.com/api/v1"
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="url"
                 placeholderTextColor={SUBTLE}
                 autoFocus
               />
-              <Text style={ss.hint}>Default (cloud): https://api.kastra.co.ke/api/v1</Text>
+              <Text style={ss.hint}>Default (cloud): https://pos-bhe5.onrender.com/api/v1{'\n'}LAN server: http://192.168.x.x:3010/api/v1 (same Wi-Fi)</Text>
               <TouchableOpacity style={[ss.btn, urlTesting && { opacity: 0.7 }]} onPress={handleSaveUrl} disabled={urlTesting}>
                 {urlTesting
                   ? <ActivityIndicator color="#FFF" />

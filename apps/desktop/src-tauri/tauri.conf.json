@@ -5,7 +5,7 @@
   "build": {
     "beforeDevCommand": "cd ../../ && npm run dev:web",
     "devUrl": "http://localhost:3001",
-    "beforeBuildCommand": "",
+    "beforeBuildCommand": "cd ../web && npm run build",
     "frontendDist": "../../web/dist"
   },
   "app": {

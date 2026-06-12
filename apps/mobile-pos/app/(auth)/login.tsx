@@ -27,7 +27,7 @@ import { Colors } from '../../constants/theme';
 const SERVER_URL_KEY  = 'pos_server_url';
 const BUSINESS_ID_KEY = 'pos_business_id';
 const BUSINESS_NM_KEY = 'pos_business_name';
-const DEFAULT_URL     = 'https://api.kastra.co.ke/api/v1';
+const DEFAULT_URL     = 'https://pos-bhe5.onrender.com/api/v1';
 
 type Screen = 'SERVER_URL' | 'AUTH_MODE' | 'BUSINESS' | 'STAFF' | 'PIN_PAD' | 'EMAIL';
 
@@ -47,6 +47,15 @@ const DIGITS = ['1','2','3','4','5','6','7','8','9','','0','DEL'] as const;
 
 function initials(name: string) {
   return name.split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('');
+}
+
+/** RN fetch fails with the opaque "Network request failed" — translate it. */
+function friendlyError(e: unknown, fallback: string): string {
+  const msg = (e as Error)?.message ?? '';
+  if (msg.includes('Network request failed')) {
+    return 'Could not reach the server. Make sure your phone is on the same Wi-Fi network as the server, and that the URL uses your computer’s LAN IP (e.g. http://192.168.1.50:3010/api/v1).';
+  }
+  return msg || fallback;
 }
 
 export default function LoginScreen() {
@@ -145,7 +154,7 @@ export default function LoginScreen() {
       setScreen('STAFF');
       await loadStaff(biz.id);
     } catch (e: any) {
-      setBizError(e.message ?? 'Failed to find business.');
+      setBizError(friendlyError(e, 'Failed to find business.'));
     } finally {
       setBizLoading(false);
     }
@@ -194,7 +203,7 @@ export default function LoginScreen() {
       setAuth(data.user, token);
       router.replace('/(tabs)/pos');
     } catch (e: any) {
-      Alert.alert('Invalid PIN', e.message ?? 'Incorrect PIN. Please try again.');
+      Alert.alert('Login Failed', friendlyError(e, 'Incorrect PIN. Please try again.'));
       setPin('');
     } finally {
       setPinLoading(false);
@@ -230,7 +239,7 @@ export default function LoginScreen() {
       setAuth(data.user, token);
       router.replace('/(tabs)/pos');
     } catch (e: any) {
-      Alert.alert('Login Failed', e.message ?? 'Invalid email or password.');
+      Alert.alert('Login Failed', friendlyError(e, 'Invalid email or password.'));
     } finally {
       setEmailLoading(false);
     }
@@ -265,13 +274,13 @@ export default function LoginScreen() {
                 style={s.input}
                 value={urlInput}
                 onChangeText={v => { setUrlInput(v); setUrlError(''); }}
-                placeholder="https://api.kastra.co.ke/api/v1"
+                placeholder="https://pos-bhe5.onrender.com/api/v1"
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="url"
                 placeholderTextColor={Colors.textSecondary}
               />
-              <Text style={s.hintText}>Cloud (default): https://api.kastra.co.ke/api/v1{'\n'}LAN server: http://192.168.x.x:3010/api/v1</Text>
+              <Text style={s.hintText}>Cloud (default): https://pos-bhe5.onrender.com/api/v1{'\n'}LAN server: http://192.168.x.x:3010/api/v1</Text>
               <TouchableOpacity style={[s.btn, urlTesting && { opacity: 0.7 }]} onPress={handleSaveUrl} disabled={urlTesting}>
                 {urlTesting
                   ? <ActivityIndicator color="#FFF" />

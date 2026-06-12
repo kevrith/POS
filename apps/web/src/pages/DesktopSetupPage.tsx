@@ -47,7 +47,7 @@ function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (cmd === 'reset_setup')            return Promise.resolve(true as T);
   if (cmd === 'test_server_connection') return Promise.resolve(true as T);
   if (cmd === 'discover_servers')       return Promise.resolve([] as T);
-  if (cmd === 'get_cloud_url')          return Promise.resolve('https://api.kastra.co.ke' as T);
+  if (cmd === 'get_cloud_url')          return Promise.resolve('https://pos-bhe5.onrender.com' as T);
   return Promise.resolve(null as T);
 }
 
@@ -264,7 +264,7 @@ export default function DesktopSetupPage() {
   const [connectStatus, setConnectStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
   const [scanning,      setScanning]      = useState(false);
   const [discovered,    setDiscovered]    = useState<DiscoveredServer[]>([]);
-  const [cloudUrl,      setCloudUrl]      = useState('https://api.kastra.co.ke');
+  const [cloudUrl,      setCloudUrl]      = useState('https://pos-bhe5.onrender.com');
   const [terminalName,  setTerminalName]  = useState('');
   const [saving,        setSaving]        = useState(false);
 

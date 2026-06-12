@@ -201,10 +201,10 @@ export class SuperAdminService {
   /**
    * Build a machine-bound KPS license key.
    *
-   * Format: KPS-XXXXXXXX-XXXXXXXX-XXXXXXXX  (31 chars, all hex)
+   * Format: KPS-XXXXXXXX-XXXXXXXX-XXXXXXXX  (30 chars, segments all hex)
    *   seg1 = 8 random hex chars
    *   seg2 = 8 random hex chars
-   *   key_slice = seg1 + "-" + seg2[0..7]   (16 chars, matching Rust key[4..20])
+   *   key_slice = seg1 + "-" + seg2   (17 chars — must equal Rust's &key[4..21])
    *   seg3 = sha256(machineId + ":" + key_slice)[0..8]
    *
    * If machineId is omitted a random seg3 is used (non-verifiable offline).
@@ -212,7 +212,7 @@ export class SuperAdminService {
   private buildLicenseKey(machineId?: string): string {
     const seg1 = randomBytes(4).toString('hex');
     const seg2 = randomBytes(4).toString('hex');
-    const keySlice = `${seg1}-${seg2.slice(0, 7)}`; // 16 chars: seg1[8] + '-' + seg2[0..7]
+    const keySlice = `${seg1}-${seg2}`; // matches validate_license_key in apps/desktop/src-tauri/src/license.rs
     let seg3: string;
     if (machineId) {
       seg3 = createHash('sha256')

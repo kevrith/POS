@@ -19,7 +19,8 @@ import { useAuthStore } from '../../stores/auth';
 import { Colors } from '../../constants/theme';
 
 interface LoginResponse {
-  access_token: string;
+  accessToken?: string;
+  access_token?: string;
   user: {
     id: string;
     name: string;
@@ -49,7 +50,7 @@ export default function EmailLoginScreen() {
         email: email.trim().toLowerCase(),
         password,
       });
-      setAuth(result.user, result.access_token);
+      setAuth(result.user, result.accessToken ?? result.access_token ?? '');
       router.replace('/(tabs)/pos');
     } catch (err: any) {
       Alert.alert('Login Failed', err.message ?? 'Invalid credentials.');

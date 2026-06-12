@@ -86,7 +86,7 @@ pub fn get_cloud_url() -> String {
     // via the web Vite build that Tauri bundles.
     // We expose it as a Tauri command so the setup wizard can read it.
     option_env!("KASTRA_CLOUD_URL")
-        .unwrap_or("https://api.kastra.co.ke")
+        .unwrap_or("https://pos-bhe5.onrender.com")
         .to_string()
 }
 

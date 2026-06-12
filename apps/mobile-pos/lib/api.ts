@@ -1,6 +1,9 @@
 import * as SecureStore from 'expo-secure-store';
 
-const DEFAULT_BASE_URL = 'http://localhost:3010/api/v1';
+// Must match DEFAULT_URL in app/(auth)/login.tsx — the login screen stores the
+// chosen URL under SERVER_URL_KEY, which this module reads for every request.
+// Same deployed API the web app uses (see apps/web/vercel.json rewrite).
+const DEFAULT_BASE_URL = 'https://pos-bhe5.onrender.com/api/v1';
 const SERVER_URL_KEY = 'pos_server_url';
 
 async function getBaseUrl(): Promise<string> {

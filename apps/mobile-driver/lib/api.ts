@@ -1,7 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 
 export const SERVER_URL_KEY  = 'driver_server_url';
-export const DEFAULT_BASE_URL = 'https://api.kastra.co.ke/api/v1';
+export const DEFAULT_BASE_URL = 'https://pos-bhe5.onrender.com/api/v1';
 
 export async function getBaseUrl(): Promise<string> {
   try {

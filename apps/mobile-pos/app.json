@@ -18,7 +18,11 @@
       "buildNumber": "1",
       "infoPlist": {
         "NSCameraUsageDescription": "Camera is used to scan product barcodes at point of sale.",
-        "NSPhotoLibraryUsageDescription": "Used to attach receipt photos to expense records."
+        "NSPhotoLibraryUsageDescription": "Used to attach receipt photos to expense records.",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true,
+          "NSAllowsLocalNetworking": true
+        }
       }
     },
     "android": {
@@ -46,7 +50,8 @@
         {
           "cameraPermission": "Allow KASTRA POS to access your camera for barcode scanning."
         }
-      ]
+      ],
+      "./plugins/with-cleartext-traffic"
     ],
     "experiments": {
       "typedRoutes": false

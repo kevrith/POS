@@ -79,7 +79,10 @@ export default function LoginScreen() {
       setAuth(data.user, token);
       router.replace('/(tabs)/deliveries');
     } catch (e: any) {
-      Alert.alert('Login Failed', e.message ?? 'Invalid email or password.');
+      const msg = (e?.message ?? '').includes('Network request failed')
+        ? 'Could not reach the server. Make sure your phone is on the same Wi-Fi network as the server, and that the URL uses your computer’s LAN IP (e.g. http://192.168.1.50:3010/api/v1).'
+        : (e.message ?? 'Invalid email or password.');
+      Alert.alert('Login Failed', msg);
     } finally { setLoading(false); }
   }
 
@@ -101,14 +104,14 @@ export default function LoginScreen() {
                 style={s.input}
                 value={urlInput}
                 onChangeText={v => { setUrlInput(v); setUrlError(''); }}
-                placeholder="https://api.kastra.co.ke/api/v1"
+                placeholder="https://pos-bhe5.onrender.com/api/v1"
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="url"
                 placeholderTextColor={Colors.textSecondary}
                 autoFocus
               />
-              <Text style={s.hintText}>Default (cloud): https://api.kastra.co.ke/api/v1</Text>
+              <Text style={s.hintText}>Default (cloud): https://pos-bhe5.onrender.com/api/v1{'\n'}LAN server: http://192.168.x.x:3010/api/v1 (same Wi-Fi)</Text>
               <TouchableOpacity style={[s.btn, urlTesting && { opacity: 0.7 }]} onPress={handleSaveUrl} disabled={urlTesting}>
                 {urlTesting
                   ? <ActivityIndicator color="#FFF" />

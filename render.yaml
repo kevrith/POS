@@ -15,6 +15,11 @@ services:
       - key: DATABASE_URL
         sync: false           # Paste your Supabase / Neon / external PostgreSQL connection string here
                               # Format: postgresql://user:password@host:5432/dbname?sslmode=require
+      - key: DIRECT_URL
+        sync: false           # Direct (non-pooled) connection for `prisma migrate deploy`.
+                              # Supabase: use the Session pooler (port 5432), NOT the transaction
+                              # pooler (:6543) — migrations hang on the transaction pooler.
+                              # If your DATABASE_URL is already direct, use the same value.
       - key: JWT_SECRET
         generateValue: true   # Render auto-generates a random secret
       - key: ENCRYPTION_KEY

@@ -98,6 +98,9 @@ jobs:
         working-directory: apps/web
         env:
           VITE_API_URL: /api/v1
+          # Optional: set the VITE_GOOGLE_CLIENT_ID repo secret to enable
+          # "Sign in with Google" inside the desktop app.
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
           NODE_ENV: production
         run: npm run build
 
@@ -106,6 +109,10 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # beforeBuildCommand rebuilds apps/web, so the Vite env vars must be
+          # available to this step as well
+          VITE_API_URL: /api/v1
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
           # Updater signing keys (generate with: tauri signer generate)
           # Set TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD in repo Secrets
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

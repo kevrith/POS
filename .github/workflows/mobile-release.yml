@@ -17,7 +17,7 @@ on:
         required: true
         default: 'all'
         type: choice
-        options: [all, mobile-pos, mobile-customer, mobile-driver]
+        options: [all, mobile-pos, mobile-customer, mobile-driver, mobile-agent]
 
 permissions:
   contents: write  # needed to create/update GitHub releases
@@ -231,14 +231,82 @@ jobs:
           echo "## KASTRA Driver APK" >> $GITHUB_STEP_SUMMARY
           echo "Download the APK from the **Artifacts** section of this workflow run." >> $GITHUB_STEP_SUMMARY
 
+  # ── KASTRA Agent App (Field Sales) ────────────────────────────────────────────
+  build-agent:
+    name: Android — KASTRA Agent
+    if: >
+      github.event.inputs.app == 'all' ||
+      github.event.inputs.app == 'mobile-agent' ||
+      startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: apps/mobile-agent/package-lock.json
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          accept-android-sdk-licenses: true
+          packages: 'platforms;android-34 build-tools;34.0.0 platform-tools'
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli@latest
+
+      - name: Install app dependencies
+        working-directory: apps/mobile-agent
+        run: npm ci
+
+      - name: Clean Expo prebuild artifacts
+        working-directory: apps/mobile-agent
+        run: rm -rf android ios .expo
+
+      - name: Build Android APK (local)
+        working-directory: apps/mobile-agent
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+        run: |
+          mkdir -p build
+          eas build \
+            --platform android \
+            --profile ${{ github.event.inputs.profile || 'preview' }} \
+            --local \
+            --output ./build/kastra-agent.apk \
+            --non-interactive
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kastra-agent-${{ github.ref_name || 'manual' }}.apk
+          path: apps/mobile-agent/build/kastra-agent.apk
+          retention-days: 30
+
+      - name: Add download link to job summary
+        run: |
+          echo "## KASTRA Agent APK" >> $GITHUB_STEP_SUMMARY
+          echo "Download the APK from the **Artifacts** section of this workflow run." >> $GITHUB_STEP_SUMMARY
+
   # ── Publish: create/update rolling mobile-latest GitHub Release ───────────────
   publish:
     name: Publish mobile-latest GitHub Release
-    needs: [build-pos, build-customer, build-driver]
+    needs: [build-pos, build-customer, build-driver, build-agent]
     if: >
       always() &&
       (startsWith(github.ref, 'refs/tags/') || github.event.inputs.app == 'all') &&
-      (needs.build-pos.result == 'success' || needs.build-customer.result == 'success' || needs.build-driver.result == 'success')
+      (needs.build-pos.result == 'success' || needs.build-customer.result == 'success' || needs.build-driver.result == 'success' || needs.build-agent.result == 'success')
     runs-on: ubuntu-latest
 
     steps:
@@ -278,6 +346,7 @@ jobs:
           | **KASTRA POS** (Cashier) | Android | [kastra-pos-cashier.apk](https://github.com/kevrith/POS/releases/download/mobile-latest/kastra-pos-cashier.apk) |
           | **KASTRA Order** (Customer) | Android | [kastra-order-customer.apk](https://github.com/kevrith/POS/releases/download/mobile-latest/kastra-order-customer.apk) |
           | **KASTRA Driver** | Android | [kastra-driver.apk](https://github.com/kevrith/POS/releases/download/mobile-latest/kastra-driver.apk) |
+          | **KASTRA Agent** (Field Sales) | Android | [kastra-agent.apk](https://github.com/kevrith/POS/releases/download/mobile-latest/kastra-agent.apk) |
 
           ### Install on Android
           1. Download the APK on your Android phone
@@ -301,3 +370,4 @@ jobs:
           echo "| KASTRA POS (Cashier) | [kastra-pos-cashier.apk](https://github.com/kevrith/POS/releases/download/mobile-latest/kastra-pos-cashier.apk) |" >> $GITHUB_STEP_SUMMARY
           echo "| KASTRA Order (Customer) | [kastra-order-customer.apk](https://github.com/kevrith/POS/releases/download/mobile-latest/kastra-order-customer.apk) |" >> $GITHUB_STEP_SUMMARY
           echo "| KASTRA Driver | [kastra-driver.apk](https://github.com/kevrith/POS/releases/download/mobile-latest/kastra-driver.apk) |" >> $GITHUB_STEP_SUMMARY
+          echo "| KASTRA Agent | [kastra-agent.apk](https://github.com/kevrith/POS/releases/download/mobile-latest/kastra-agent.apk) |" >> $GITHUB_STEP_SUMMARY

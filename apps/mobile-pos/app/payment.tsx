@@ -18,6 +18,7 @@ import { useState } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { mobileApi, formatKES } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
+import { useActiveStore } from '../lib/useActiveStore';
 import { useCartStore } from '../stores/cart';
 import { queueSale } from '../lib/db';
 import { Colors } from '../constants/theme';
@@ -74,8 +75,7 @@ export default function PaymentScreen() {
   const { user } = useAuthStore();
   const { items: cartItems, subtotalCents, clearCart, customerId, priceLevel } = useCartStore();
 
-  const businessId = user?.businessId ?? 'biz-001';
-  const storeId = user?.storeId ?? 'store-001';
+  const { businessId, storeId } = useActiveStore();
   const cashierId = user?.id ?? '';
 
   const { data: bizSettings } = useQuery<{ taxType?: string; serviceChargeRate?: number }>({

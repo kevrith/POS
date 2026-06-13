@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useAuthStore } from '../stores/auth';
+import { useActiveStore } from '../lib/useActiveStore';
 import { useCartStore } from '../stores/cart';
 import { mobileApi } from '../lib/api';
 import { Colors } from '../constants/theme';
@@ -40,8 +41,7 @@ export default function BarcodeScanScreen() {
   const [scanning, setScanning] = useState(false);
   const [lastCode, setLastCode] = useState<string | null>(null);
 
-  const businessId = user?.businessId ?? 'biz-001';
-  const storeId = user?.storeId ?? 'store-001';
+  const { businessId, storeId } = useActiveStore();
 
   useEffect(() => {
     if (permission && !permission.granted) {

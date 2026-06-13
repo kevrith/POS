@@ -13,6 +13,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { mobileApi, formatKES } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth';
+import { useActiveStore } from '../../lib/useActiveStore';
 import { Colors } from '../../constants/theme';
 
 interface XReport {
@@ -64,8 +65,7 @@ function getDateRange(tab: ReportTab): { startDate: string; endDate: string } {
 
 export default function ReportsScreen() {
   const { user } = useAuthStore();
-  const businessId = user?.businessId ?? 'biz-001';
-  const storeId = user?.storeId ?? 'store-001';
+  const { businessId, storeId } = useActiveStore();
 
   const [activeTab, setActiveTab] = useState<ReportTab>('today');
 

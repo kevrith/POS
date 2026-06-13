@@ -17,6 +17,7 @@ import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { mobileApi } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth';
+import { useActiveStore } from '../../lib/useActiveStore';
 import { useCartStore } from '../../stores/cart';
 import { Colors } from '../../constants/theme';
 import { processSyncQueue } from '../../lib/sync';
@@ -36,7 +37,7 @@ export default function SettingsScreen() {
   const { user, clearAuth } = useAuthStore();
   const { clearCart } = useCartStore();
 
-  const businessId = user?.businessId ?? 'biz-001';
+  const { businessId } = useActiveStore();
 
   const [serverUrl, setServerUrl] = useState(DEFAULT_URL);
   const [editingUrl, setEditingUrl] = useState(false);

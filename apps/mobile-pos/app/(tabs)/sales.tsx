@@ -16,6 +16,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { mobileApi, formatKES } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth';
+import { useActiveStore } from '../../lib/useActiveStore';
 import { Colors } from '../../constants/theme';
 
 interface SaleItem {
@@ -72,8 +73,7 @@ function formatTime(iso: string): string {
 
 export default function SalesScreen() {
   const { user } = useAuthStore();
-  const businessId = user?.businessId ?? 'biz-001';
-  const storeId = user?.storeId ?? 'store-001';
+  const { businessId, storeId } = useActiveStore();
 
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [search, setSearch] = useState('');

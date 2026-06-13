@@ -16,6 +16,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState, useMemo } from 'react';
 import { mobileApi, formatKES } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth';
+import { useActiveStore } from '../../lib/useActiveStore';
 import { useCartStore } from '../../stores/cart';
 import { Colors } from '../../constants/theme';
 
@@ -47,13 +48,13 @@ export default function POSScreen() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [showCart, setShowCart] = useState(false);
 
-  const businessId = user?.businessId ?? 'biz-001';
-  const storeId = user?.storeId ?? 'store-001';
+  const { businessId, storeId } = useActiveStore();
 
   const { data: itemsData, isLoading } = useQuery<Item[]>({
     queryKey: ['items', businessId, storeId],
     queryFn: () =>
       mobileApi.get<Item[]>(`/items?businessId=${businessId}&storeId=${storeId}`),
+    enabled: !!businessId && !!storeId,
     staleTime: 5 * 60 * 1000,
   });
 

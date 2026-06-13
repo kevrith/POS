@@ -24,6 +24,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   token: null,
   setAuth: (user, token) => {
     SecureStore.setItemAsync('pos_token', token).catch(() => {});
+    // Persist the user too — businessId/storeId are needed after app restarts
+    SecureStore.setItemAsync('pos_user', JSON.stringify(user)).catch(() => {});
     set({ user, token });
   },
   setTokenFromStorage: (token) => {
@@ -31,7 +33,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
   clearAuth: () => {
     SecureStore.deleteItemAsync('pos_token').catch(() => {});
+    SecureStore.deleteItemAsync('pos_user').catch(() => {});
     set({ user: null, token: null });
   },
   isLoggedIn: () => !!get().token,
 }));
+
+/** Restore token + user from SecureStore (app cold start). */
+export async function restoreSession(): Promise<boolean> {
+  try {
+    const [token, userJson] = await Promise.all([
+      SecureStore.getItemAsync('pos_token'),
+      SecureStore.getItemAsync('pos_user'),
+    ]);
+    if (!token) return false;
+    const user = userJson ? (JSON.parse(userJson) as User) : null;
+    useAuthStore.setState({ token, user });
+    return true;
+  } catch {
+    return false;
+  }
+}

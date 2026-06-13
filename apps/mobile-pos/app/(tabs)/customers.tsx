@@ -17,6 +17,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { mobileApi, formatKES } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth';
+import { useActiveStore } from '../../lib/useActiveStore';
 import { useCartStore } from '../../stores/cart';
 import { Colors } from '../../constants/theme';
 import { useRouter } from 'expo-router';
@@ -42,7 +43,7 @@ export default function CustomersScreen() {
   const { user } = useAuthStore();
   const setCustomer = useCartStore((s) => s.setCustomer);
 
-  const businessId = user?.businessId ?? 'biz-001';
+  const { businessId } = useActiveStore();
 
   const [search, setSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);

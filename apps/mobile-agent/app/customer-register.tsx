@@ -11,7 +11,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import * as Location from 'expo-location';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { agentApi, friendlyError } from '../lib/api';
+import { agentApi } from '../lib/api';
+import { enqueue, uuid } from '../lib/offline';
 import { useAuthStore } from '../stores/auth';
 import { Colors } from '../constants/theme';
 
@@ -50,8 +51,10 @@ export default function CustomerRegisterScreen() {
   }
 
   const register = useMutation({
-    mutationFn: () =>
-      agentApi.post('/field-sales/customers', {
+    mutationFn: async () => {
+      const offlineId = uuid();
+      const body = {
+        offlineId,
         agentId,
         businessId,
         name: name.trim(),
@@ -61,13 +64,35 @@ export default function CustomerRegisterScreen() {
         gpsLat: gps?.lat,
         gpsLng: gps?.lng,
         creditLimitCents: creditLimit ? Math.round(parseFloat(creditLimit) * 100) : undefined,
-      }),
-    onSuccess: () => {
+      };
+      try {
+        return await agentApi.post('/field-sales/customers', body);
+      } catch (e) {
+        const msg = (e as Error)?.message ?? '';
+        if (!msg.includes('Network request failed')) throw e; // server error → surface
+        await enqueue({
+          offlineId,
+          type: 'REGISTER_CUSTOMER',
+          path: '/field-sales/customers',
+          body,
+          label: `New customer · ${name.trim()}`,
+        });
+        return { queued: true };
+      }
+    },
+    onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['agent-customers'] });
       void qc.invalidateQueries({ queryKey: ['call-plan'] });
-      Alert.alert('Customer Registered', `${name.trim()} has been added.`, [{ text: 'OK', onPress: () => router.back() }]);
+      const queued = (res as { queued?: boolean })?.queued;
+      Alert.alert(
+        queued ? 'Saved Offline' : 'Customer Registered',
+        queued
+          ? `${name.trim()} is saved on your phone and will sync when you’re back online.`
+          : `${name.trim()} has been added.`,
+        [{ text: 'OK', onPress: () => router.back() }],
+      );
     },
-    onError: (e) => Alert.alert('Could not register', friendlyError(e, 'Please try again.')),
+    onError: (e) => Alert.alert('Could not register', (e as Error)?.message || 'Please try again.'),
   });
 
   function submit() {

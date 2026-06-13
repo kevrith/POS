@@ -33,6 +33,8 @@ interface RegisterCustomerDto {
   gpsLng?: number;
   routeId?: string;
   creditLimitCents?: number;
+  /** Client-supplied idempotency key for offline queue replay (mobile-agent). */
+  offlineId?: string;
 }
 
 interface CreateFieldOrderDto {
@@ -48,6 +50,8 @@ interface CreateFieldOrderDto {
   }[];
   notes?: string;
   isSampleOrder?: boolean;
+  /** Client-supplied idempotency key for offline queue replay (mobile-agent). */
+  offlineId?: string;
 }
 
 interface UpdateFieldOrderStatusDto {
@@ -146,6 +150,15 @@ export class FieldSalesService {
     businessId: string,
     dto: RegisterCustomerDto,
   ) {
+    // Idempotency: a retried offline registration returns the existing customer
+    // instead of creating a duplicate (offlineId is @unique on Customer).
+    if (dto.offlineId) {
+      const existing = await this.prisma.customer.findUnique({
+        where: { offlineId: dto.offlineId },
+      });
+      if (existing) return existing;
+    }
+
     // Auto-generate shopCode: SHOP-XXXX
     const result = await this.prisma.$queryRaw<{ max: string | null }[]>`
       SELECT MAX("shopCode") as max FROM "Customer" WHERE "businessId" = ${businessId}
@@ -172,6 +185,7 @@ export class FieldSalesService {
         routeId: dto.routeId,
         creditLimitCents: dto.creditLimitCents ?? 0,
         shopCode,
+        offlineId: dto.offlineId,
       },
     });
   }
@@ -208,6 +222,21 @@ export class FieldSalesService {
     businessId: string,
     dto: CreateFieldOrderDto,
   ) {
+    // Idempotency: if the client retried a queued order, return the existing one
+    // instead of creating a duplicate (offlineId is @unique on FieldOrder).
+    if (dto.offlineId) {
+      const existing = await this.prisma.fieldOrder.findUnique({
+        where: { offlineId: dto.offlineId },
+        include: {
+          items: true,
+          customer: { select: { name: true, shopCode: true, phone: true } },
+          agent: { select: { name: true } },
+          route: { select: { name: true } },
+        },
+      });
+      if (existing) return existing;
+    }
+
     // Get agent's default store via UserStore junction
     const userStore = await this.prisma.userStore.findFirst({
       where: { userId: agentId },
@@ -267,7 +296,7 @@ export class FieldSalesService {
 
     const order = await this.prisma.fieldOrder.create({
       data: {
-        offlineId: uuidv4(),
+        offlineId: dto.offlineId ?? uuidv4(),
         businessId,
         storeId: userStore?.storeId ?? undefined,
         agentId,
@@ -629,22 +658,59 @@ export class FieldSalesService {
 
   // ─── Payment Collection ────────────────────────────────────────────────────
 
-  async collectPayment(orderId: string, businessId: string, dto: { amountCents: number; method: string; reference?: string; collectedBy: string }) {
+  async collectPayment(orderId: string, businessId: string, dto: { amountCents: number; method: string; reference?: string; collectedBy: string; offlineId?: string }) {
+    // Idempotency: if this exact payment was already recorded (offline replay),
+    // return the order untouched — never double-count money.
+    if (dto.offlineId) {
+      const existing = await this.prisma.fieldOrderPayment.findUnique({
+        where: { offlineId: dto.offlineId },
+      });
+      if (existing) {
+        return this.prisma.fieldOrder.findFirst({ where: { id: orderId, businessId } });
+      }
+    }
+
     const order = await this.prisma.fieldOrder.findFirst({ where: { id: orderId, businessId } });
     if (!order) throw new NotFoundException('Order not found');
 
     const newPaid = order.paidAmountCents + dto.amountCents;
     const paymentStatus = newPaid >= order.totalCents ? 'PAID' : newPaid > 0 ? 'PARTIAL' : 'UNPAID';
 
-    return this.prisma.fieldOrder.update({
-      where: { id: orderId },
-      data: {
-        paidAmountCents: newPaid,
-        paymentStatus,
-        paymentMethod: dto.method,
-        mpesaReference: dto.reference,
-      },
-    });
+    // Record the payment (audit + idempotency) and update the order atomically.
+    // The unique offlineId means a concurrent replay fails the create, so the
+    // order increment only ever happens once per real payment.
+    try {
+      const [, updated] = await this.prisma.$transaction([
+        this.prisma.fieldOrderPayment.create({
+          data: {
+            offlineId: dto.offlineId,
+            fieldOrderId: orderId,
+            businessId,
+            amountCents: dto.amountCents,
+            method: dto.method,
+            reference: dto.reference,
+            collectedBy: dto.collectedBy,
+          },
+        }),
+        this.prisma.fieldOrder.update({
+          where: { id: orderId },
+          data: {
+            paidAmountCents: newPaid,
+            paymentStatus,
+            paymentMethod: dto.method,
+            mpesaReference: dto.reference,
+          },
+        }),
+      ]);
+      return updated;
+    } catch (e: unknown) {
+      // P2002 = unique constraint on offlineId → a parallel replay already
+      // recorded it; return the current order rather than erroring.
+      if ((e as { code?: string }).code === 'P2002') {
+        return this.prisma.fieldOrder.findFirst({ where: { id: orderId, businessId } });
+      }
+      throw e;
+    }
   }
 
   // ─── Visit Log ────────────────────────────────────────────────────────────

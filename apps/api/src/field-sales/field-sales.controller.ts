@@ -87,6 +87,7 @@ export class FieldSalesController {
       gpsLng?: number;
       routeId?: string;
       creditLimitCents?: number;
+      offlineId?: string;
     },
   ) {
     const { agentId, businessId, ...dto } = body;
@@ -130,6 +131,7 @@ export class FieldSalesController {
       }[];
       notes?: string;
       isSampleOrder?: boolean;
+      offlineId?: string;
     },
   ) {
     const { agentId, businessId, ...dto } = body;
@@ -238,7 +240,7 @@ export class FieldSalesController {
   collectPayment(
     @Param('id') id: string,
     @Query('businessId') businessId: string,
-    @Body() body: { amountCents: number; method: string; reference?: string; collectedBy: string },
+    @Body() body: { amountCents: number; method: string; reference?: string; collectedBy: string; offlineId?: string },
   ) {
     return this.service.collectPayment(id, businessId, body);
   }

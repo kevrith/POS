@@ -21,6 +21,24 @@ Talks to the existing `field-sales` controller (`/api/v1/field-sales/*`) plus
 `/items` and `/auth/login`. Default server is the deployed cloud API
 (`pos-bhe5.onrender.com`); changeable on the login screen for LAN servers.
 
+## Offline queueing
+Orders, customer registrations, and payments work with no signal:
+- Each mutation tries the network first (so the credit-limit rejection still
+  shows instantly when online). On a network failure it's written to a
+  persistent AsyncStorage queue (`lib/offline.ts`) and the agent sees a
+  "Saved Offline" confirmation.
+- `useOfflineSync` flushes the queue on app launch, every 30s, and whenever the
+  app returns to the foreground. A thin amber **SyncBanner** shows the pending
+  count and lets the agent force a retry.
+- Every queued action carries an `offlineId` (UUID). The backend deduplicates
+  on it (`FieldOrder.offlineId`, `Customer.offlineId`, `FieldOrderPayment.offlineId`),
+  so a replay of a request that actually succeeded never double-creates an order
+  or **double-counts a payment**. Migration: `20260613000000_add_field_offline_idempotency`.
+
+Limitation: a customer registered while offline has no server id until it
+syncs, so you can't capture an order against that brand-new shop until the
+registration has uploaded.
+
 ## Develop
 ```bash
 npm install

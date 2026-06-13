@@ -10,7 +10,8 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { agentApi, formatKES, friendlyError } from '../../lib/api';
+import { agentApi, formatKES } from '../../lib/api';
+import { enqueue, flushQueue, uuid } from '../../lib/offline';
 import { useAuthStore } from '../../stores/auth';
 import { useCartStore } from '../../stores/cart';
 import { Colors } from '../../constants/theme';
@@ -56,11 +57,14 @@ export default function OrderScreen() {
   }, [items.data, search]);
 
   const submit = useMutation({
-    mutationFn: () =>
-      agentApi.post('/field-sales/orders', {
+    mutationFn: async () => {
+      const offlineId = uuid();
+      const body = {
+        offlineId,
         agentId,
         businessId,
         customerId: cart.customerId,
+        customerName: cart.customerName,
         items: cart.lines.map((l) => ({
           itemId: l.itemId,
           itemName: l.itemName,
@@ -70,20 +74,49 @@ export default function OrderScreen() {
         })),
         notes: cart.notes || undefined,
         isSampleOrder: cart.isSampleOrder,
-      }),
-    onSuccess: () => {
+      };
+
+      // Try the network first so the agent gets immediate feedback (especially
+      // the credit-limit rejection) when they DO have signal.
+      try {
+        return await agentApi.post('/field-sales/orders', body);
+      } catch (e) {
+        const msg = (e as Error)?.message ?? '';
+        if (msg.includes('CREDIT_LIMIT') || msg.toLowerCase().includes('credit limit')) {
+          throw e; // real rejection — surface it, do not queue
+        }
+        if (!msg.includes('Network request failed')) {
+          throw e; // other server error — surface it
+        }
+        // Offline: queue for later. Same offlineId → server dedupes on replay.
+        await enqueue({
+          offlineId,
+          type: 'CREATE_ORDER',
+          path: '/field-sales/orders',
+          body,
+          label: `Order for ${cart.customerName ?? 'customer'} · ${formatKES(cart.subtotalCents())}`,
+        });
+        return { queued: true };
+      }
+    },
+    onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['agent-stats'] });
       void qc.invalidateQueries({ queryKey: ['call-plan'] });
-      Alert.alert('Order Saved', 'The order has been submitted for processing.', [
-        { text: 'OK', onPress: () => { cart.clear(); router.replace('/(tabs)/today'); } },
-      ]);
+      const queued = (res as { queued?: boolean })?.queued;
+      Alert.alert(
+        queued ? 'Order Saved Offline' : 'Order Saved',
+        queued
+          ? 'No connection right now — the order is saved on your phone and will sync automatically when you’re back online.'
+          : 'The order has been submitted for processing.',
+        [{ text: 'OK', onPress: () => { cart.clear(); router.replace('/(tabs)/today'); } }],
+      );
     },
     onError: (e) => {
       const msg = (e as Error)?.message ?? '';
       if (msg.includes('CREDIT_LIMIT') || msg.toLowerCase().includes('credit limit')) {
         Alert.alert('Credit Limit Exceeded', 'This order would push the customer over their credit limit. Collect a payment first, or request a credit increase.');
       } else {
-        Alert.alert('Could not save order', friendlyError(e, 'Please try again.'));
+        Alert.alert('Could not save order', msg || 'Please try again.');
       }
     },
   });

@@ -804,6 +804,7 @@ model Leave {
 
 model Customer {
   id                      String                  @id @default(uuid())
+  offlineId               String?                 @unique // idempotency key for offline registration (mobile-agent)
   businessId              String
   name                    String
   phone                   String?
@@ -2703,6 +2704,7 @@ model FieldOrder {
   deliveryRunOrders    DeliveryRunOrder[]
   proof                DeliveryProof[]
   creditRequests       CreditApprovalRequest[]
+  payments             FieldOrderPayment[]
 
   @@index([businessId, status])
   @@index([agentId])
@@ -2710,6 +2712,24 @@ model FieldOrder {
   @@index([routeId])
   @@index([orderNumber])
   @@index([paymentStatus])
+}
+
+// Individual payment collected against a field order — gives an audit trail and
+// idempotency for offline payment replay (offlineId is the client's dedup key).
+model FieldOrderPayment {
+  id           String     @id @default(uuid())
+  offlineId    String?    @unique
+  fieldOrderId String
+  businessId   String
+  amountCents  Int
+  method       String     // CASH | MPESA | BANK | CHEQUE
+  reference    String?
+  collectedBy  String     // User.id (SALES_AGENT)
+  createdAt    DateTime   @default(now())
+  fieldOrder   FieldOrder @relation(fields: [fieldOrderId], references: [id], onDelete: Cascade)
+
+  @@index([fieldOrderId])
+  @@index([businessId])
 }
 
 model FieldOrderItem {

@@ -9,7 +9,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { agentApi, formatKES, friendlyError } from '../../lib/api';
+import { agentApi, formatKES } from '../../lib/api';
+import { enqueue, uuid } from '../../lib/offline';
 import { useAuthStore } from '../../stores/auth';
 import { Colors } from '../../constants/theme';
 
@@ -53,20 +54,44 @@ export default function CollectionsScreen() {
   const [reference, setReference] = useState('');
 
   const collect = useMutation({
-    mutationFn: () =>
-      agentApi.post(`/field-sales/orders/${payTarget!.order.id}/collect-payment?businessId=${businessId}`, {
+    mutationFn: async () => {
+      const offlineId = uuid();
+      const path = `/field-sales/orders/${payTarget!.order.id}/collect-payment?businessId=${businessId}`;
+      const body = {
+        offlineId,
         amountCents: Math.round(parseFloat(amount) * 100),
         method,
         reference: reference || undefined,
         collectedBy: agentId,
-      }),
-    onSuccess: () => {
+      };
+      try {
+        return await agentApi.post(path, body);
+      } catch (e) {
+        const msg = (e as Error)?.message ?? '';
+        if (!msg.includes('Network request failed')) throw e; // server error → surface
+        // Offline: queue. The offlineId is the dedup key — the server records the
+        // payment exactly once even if this replays, so money is never double-counted.
+        await enqueue({
+          offlineId,
+          type: 'COLLECT_PAYMENT',
+          path,
+          body,
+          label: `Payment ${formatKES(body.amountCents)} · ${payTarget!.customer.name}`,
+        });
+        return { queued: true };
+      }
+    },
+    onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['credit-collection'] });
       void qc.invalidateQueries({ queryKey: ['call-plan'] });
+      const queued = (res as { queued?: boolean })?.queued;
       setPayTarget(null); setAmount(''); setReference(''); setMethod('CASH');
-      Alert.alert('Payment Recorded', 'The collection has been saved.');
+      Alert.alert(
+        queued ? 'Payment Saved Offline' : 'Payment Recorded',
+        queued ? 'Saved on your phone — it will sync automatically when you’re back online.' : 'The collection has been saved.',
+      );
     },
-    onError: (e) => Alert.alert('Could not record payment', friendlyError(e, 'Please try again.')),
+    onError: (e) => Alert.alert('Could not record payment', (e as Error)?.message || 'Please try again.'),
   });
 
   function openPay(order: UnpaidOrder, customer: CollectionCustomer) {

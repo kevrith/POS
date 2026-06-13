@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
+import { getReceiptPrintPref, setReceiptPrintPref, type PrintMethod } from '../lib/receiptPrint';
 import { useAuthStore } from '../stores/auth';
 import {
   Save,
@@ -488,6 +489,16 @@ export default function SettingsPage() {
     isDefault: false,
     handles: ['RECEIPT'] as string[],
   });
+
+  // Per-terminal default receipt printer (localStorage; used for silent auto-print on checkout)
+  const [receiptPrint, setReceiptPrint] = useState(getReceiptPrintPref);
+  function updateReceiptPrint(patch: Partial<{ method: PrintMethod; autoPrint: boolean }>) {
+    setReceiptPrint((prev) => {
+      const next = { ...prev, ...patch };
+      setReceiptPrintPref(next);
+      return next;
+    });
+  }
 
   // ─── API Keys ──────────────────────────────────────────────────────────────
   const [newKeyName, setNewKeyName] = useState('');
@@ -3075,8 +3086,53 @@ export default function SettingsPage() {
       {/* ── Printers Tab ─────────────────────────────────────────────────── */}
       {activeTab === 'printers' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-gray-500">{printers.length} printer(s) configured</p>
+          {/* Per-terminal default receipt printer — silent auto-print on checkout */}
+          <div className="bg-white rounded-xl shadow p-5">
+            <div className="flex items-start gap-3 mb-4">
+              <Printer className="w-5 h-5 text-blue-600 mt-0.5" />
+              <div>
+                <h3 className="font-semibold text-gray-800">Receipt Printing (this device)</h3>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  Choose how this till prints receipts. Set it once — every sale prints automatically, no pop-up.
+                </p>
+              </div>
+            </div>
+
+            <label className="block text-sm font-medium text-gray-700 mb-1">Receipt printer</label>
+            <select
+              value={receiptPrint.method}
+              onChange={(e) => updateReceiptPrint({ method: e.target.value as PrintMethod })}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm mb-1 bg-white"
+            >
+              <option value="ask">Ask each time (show the picker)</option>
+              <option value="browser">Browser / System printer (A4 / PDF)</option>
+              <option value="usb">USB Thermal (ESC/POS via WebUSB)</option>
+              <option value="bluetooth">Bluetooth Thermal printer</option>
+              <option value="star">Network — Star (WebPRNT)</option>
+              <option value="epson">Network — Epson (ePOS)</option>
+            </select>
+            <p className="text-xs text-gray-400 mb-4">
+              USB &amp; Bluetooth ask the browser to pick the device the first time, then remember it. Network printers
+              use the IP saved in their own section. {receiptPrint.method === 'ask' && 'With “Ask each time”, the picker shows after every sale.'}
+            </p>
+
+            <label className={`flex items-center justify-between p-3 rounded-lg border ${receiptPrint.method === 'ask' ? 'border-gray-100 bg-gray-50 opacity-60' : 'border-gray-200'}`}>
+              <div>
+                <p className="text-sm font-medium text-gray-800">Auto-print after each sale</p>
+                <p className="text-xs text-gray-500">Print silently on checkout with no confirmation pop-up.</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={receiptPrint.autoPrint && receiptPrint.method !== 'ask'}
+                disabled={receiptPrint.method === 'ask'}
+                onChange={(e) => updateReceiptPrint({ autoPrint: e.target.checked })}
+                className="w-5 h-5 accent-blue-600"
+              />
+            </label>
+          </div>
+
+          <div className="flex items-center justify-between pt-2">
+            <p className="text-sm text-gray-500">{printers.length} routing printer(s) configured</p>
             <button
               onClick={() => setShowAddPrinter(true)}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"

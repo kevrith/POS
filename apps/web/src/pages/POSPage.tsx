@@ -18,6 +18,7 @@ import PriceOverrideModal from '../components/pos/PriceOverrideModal';
 import ExpiryWarningModal from '../components/pos/ExpiryWarningModal';
 import CameraModal from '../components/pos/CameraModal';
 import type { ReceiptData } from '../lib/printer';
+import { autoPrintReceipt } from '../lib/receiptPrint';
 import { subscribeToEvent, SocketEvents } from '../lib/socket';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -502,20 +503,32 @@ export default function POSPage() {
       };
       setReceiptData(receipt);
 
+      // Keep a local copy so the auto-print includes the eTIMS QR once it resolves.
+      let printReceipt: ReceiptData = receipt;
+
       api.post<{ success: boolean; controlNumber?: string; intrlData?: string }>(`/etims/submit/${result.id}`)
         .then((res) => {
-          setReceiptData((prev) => prev ? {
-            ...prev,
+          const etims = {
             etimsSubmitted: res.success,
             kraQRCode: res.intrlData ?? res.controlNumber,
             etimsControlNumber: res.controlNumber,
-          } : prev);
+          };
+          printReceipt = { ...printReceipt, ...etims };
+          setReceiptData((prev) => prev ? { ...prev, ...etims } : prev);
         })
         .catch(() => {
+          printReceipt = { ...printReceipt, etimsSubmitted: false };
           setReceiptData((prev) => prev ? { ...prev, etimsSubmitted: false } : prev);
         })
         .finally(() => {
           setLastReceipt(result);
+          // Enterprise flow: print silently to the printer configured for this
+          // terminal (Settings → Printers). Falls back to the picker only if the
+          // device is unavailable, so a receipt is never silently lost.
+          void autoPrintReceipt(printReceipt, enableCashDrawer).catch(() => {
+            setReceiptData(printReceipt);
+            setShowPrintModal(true);
+          });
         });
 
       try {

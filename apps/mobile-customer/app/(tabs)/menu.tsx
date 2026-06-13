@@ -6,9 +6,9 @@ import {
   StyleSheet,
   ActivityIndicator,
   ScrollView,
-  SafeAreaView,
   TextInput,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { apiGet, formatKES } from '../../lib/api';
@@ -125,7 +125,7 @@ export default function MenuScreen() {
   }, [allItems, selectedCategory, search]);
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView edges={['top']} style={styles.safe}>
       <View style={styles.headerBar}>
         <Text style={styles.headerTitle}>Menu</Text>
         <TouchableOpacity onPress={() => refetch()} style={styles.refreshBtn}>

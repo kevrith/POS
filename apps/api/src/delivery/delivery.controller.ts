@@ -155,4 +155,14 @@ export class DeliveryController {
   async saveCourier(@Body() dto: any) {
     return this.deliveryService.saveCourierIntegration(dto);
   }
+
+  // GET /delivery/:id — single delivery (driver app detail screen).
+  // Declared last so it never shadows the literal GET routes above.
+  @Get(':id')
+  async getDelivery(
+    @Param('id') id: string,
+    @Query('businessId') businessId?: string,
+  ) {
+    return this.deliveryService.getDeliveryOrderById(id, businessId);
+  }
 }

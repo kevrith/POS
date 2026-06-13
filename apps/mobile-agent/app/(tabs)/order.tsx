@@ -3,7 +3,7 @@
  * with quantities, then submit. Handles the CREDIT_LIMIT_EXCEEDED response.
  */
 import {
-  View, Text, TextInput, StyleSheet, SafeAreaView, FlatList,
+  View, Text, TextInput, StyleSheet, FlatList,
   TouchableOpacity, ActivityIndicator, Alert, Modal, Switch,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -130,7 +130,7 @@ export default function OrderScreen() {
   const subtotal = cart.subtotalCents();
 
   return (
-    <SafeAreaView style={st.safe}>
+    <View style={st.safe}>
       <View style={st.header}>
         <Text style={st.title}>New Order</Text>
         {cart.lines.length > 0 && (
@@ -250,7 +250,7 @@ export default function OrderScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 

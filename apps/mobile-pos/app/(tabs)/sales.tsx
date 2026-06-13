@@ -4,13 +4,13 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   ActivityIndicator,
   Modal,
   ScrollView,
   RefreshControl,
   TextInput,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -114,7 +114,7 @@ export default function SalesScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView edges={['top']} style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Sales History</Text>
@@ -211,7 +211,7 @@ export default function SalesScreen() {
       {/* Sale Detail Modal */}
       <Modal visible={!!selectedSale} animationType="slide" presentationStyle="pageSheet">
         {selectedSale && (
-          <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }}>
+          <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: Colors.background }}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Receipt #{selectedSale.receiptNumber}</Text>
               <TouchableOpacity onPress={() => setSelectedSale(null)}>

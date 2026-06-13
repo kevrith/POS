@@ -3,9 +3,10 @@
  * which van-sales/distribution businesses use to map and route customers.
  */
 import {
-  View, Text, TextInput, StyleSheet, SafeAreaView, ScrollView,
+  View, Text, TextInput, StyleSheet, ScrollView,
   TouchableOpacity, ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
@@ -102,7 +103,7 @@ export default function CustomerRegisterScreen() {
   }
 
   return (
-    <SafeAreaView style={st.safe}>
+    <SafeAreaView edges={['top']} style={st.safe}>
       <View style={st.header}>
         <TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={Colors.text} /></TouchableOpacity>
         <Text style={st.title}>New Customer</Text>

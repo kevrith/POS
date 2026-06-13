@@ -3,7 +3,7 @@
  * (customers to visit today, prioritised by outstanding balance).
  */
 import {
-  View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity,
+  View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, RefreshControl, Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -74,7 +74,7 @@ export default function TodayScreen() {
     : 0;
 
   return (
-    <SafeAreaView style={st.safe}>
+    <View style={st.safe}>
       <View style={st.header}>
         <View>
           <Text style={st.greeting}>Hi, {user?.name?.split(' ')[0] ?? 'Agent'}</Text>
@@ -167,7 +167,7 @@ export default function TodayScreen() {
           </View>
         )}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 

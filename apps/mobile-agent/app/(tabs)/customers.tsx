@@ -3,7 +3,7 @@
  * register a new customer and quick actions (order / call).
  */
 import {
-  View, Text, TextInput, StyleSheet, SafeAreaView, FlatList,
+  View, Text, TextInput, StyleSheet, FlatList,
   TouchableOpacity, ActivityIndicator, RefreshControl, Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -48,7 +48,7 @@ export default function CustomersScreen() {
   }
 
   return (
-    <SafeAreaView style={st.safe}>
+    <View style={st.safe}>
       <View style={st.header}>
         <Text style={st.title}>Customers</Text>
         <TouchableOpacity style={st.addBtn} onPress={() => router.push('/customer-register')}>
@@ -110,7 +110,7 @@ export default function CustomersScreen() {
           );
         }}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 

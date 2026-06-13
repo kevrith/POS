@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import * as Font from 'expo-font';
 import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '../stores/auth';
 import { View, ActivityIndicator } from 'react-native';
 import { Colors } from '../constants/theme';
@@ -59,11 +60,14 @@ export default function RootLayout() {
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <StatusBar style="auto" />
-      <AuthGate>
-        <Stack screenOptions={{ headerShown: false }} />
-      </AuthGate>
-    </QueryClientProvider>
+    <SafeAreaProvider>
+      <QueryClientProvider client={queryClient}>
+        {/* dark icons — the app uses light backgrounds, keeps battery/clock legible */}
+        <StatusBar style="dark" />
+        <AuthGate>
+          <Stack screenOptions={{ headerShown: false }} />
+        </AuthGate>
+      </QueryClientProvider>
+    </SafeAreaProvider>
   );
 }

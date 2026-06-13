@@ -3,7 +3,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TextInput,
   Alert,
@@ -12,6 +11,7 @@ import {
   Platform,
   Modal,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
@@ -159,9 +159,16 @@ export default function PaymentScreen() {
   const { mutate: completeSale, isPending } = useMutation({
     mutationFn: async (payload: SalePayload) => {
       try {
-        return await mobileApi.post<SaleResult>('/sales', payload);
+        return await mobileApi.post<SaleResult>('/sales/checkout', payload);
       } catch (err) {
-        await queueSale(payload.offlineId, payload);
+        // Only queue + report "offline" for genuine network failures. A server
+        // error (e.g. 404, validation) must surface so it isn't hidden as a
+        // pending sale that can never sync.
+        const msg = (err as Error)?.message ?? '';
+        if (msg.includes('Network request failed')) {
+          await queueSale(payload.offlineId, payload);
+          throw new Error('__OFFLINE__');
+        }
         throw err;
       }
     },
@@ -172,13 +179,16 @@ export default function PaymentScreen() {
       setShowSuccess(true);
     },
     onError: (err: any) => {
-      Alert.alert(
-        'Saved Offline',
-        err.message?.includes('fetch')
-          ? 'No internet connection. Sale saved to offline queue and will sync when online.'
-          : `Sale queued. Error: ${err.message ?? 'Unknown'}`,
-        [{ text: 'OK', onPress: () => { clearCart(); router.replace('/(tabs)/pos' as any); } }]
-      );
+      if (err?.message === '__OFFLINE__') {
+        Alert.alert(
+          'Saved Offline',
+          'No internet connection. Sale saved to the offline queue and will sync automatically when you’re back online.',
+          [{ text: 'OK', onPress: () => { clearCart(); router.replace('/(tabs)/pos' as any); } }]
+        );
+      } else {
+        // Real failure — keep the cart so the cashier can retry.
+        Alert.alert('Sale Failed', err?.message ?? 'Could not complete the sale. Please try again.');
+      }
     },
   });
 
@@ -217,7 +227,7 @@ export default function PaymentScreen() {
     Math.round((parseFloat(splitCard || '0') || 0) * 100);
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView edges={['top']} style={styles.safe}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         {/* Header */}
         <View style={styles.header}>

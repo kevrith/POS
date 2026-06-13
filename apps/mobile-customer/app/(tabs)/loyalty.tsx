@@ -5,10 +5,10 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  SafeAreaView,
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { apiPost, formatKES } from '../../lib/api';
@@ -83,7 +83,7 @@ export default function LoyaltyScreen() {
   const tierConfig = getTierConfig(data?.tier);
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView edges={['top']} style={styles.safe}>
       <View style={styles.headerBar}>
         <Text style={styles.headerTitle}>Loyalty Program</Text>
       </View>

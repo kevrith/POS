@@ -72,6 +72,13 @@ export class DeliveryService {
     return { data };
   }
 
+  /** Single delivery order — used by the driver app's detail screen. */
+  async getDeliveryOrderById(id: string, businessId?: string) {
+    const where: any = { id };
+    if (businessId) where.businessId = businessId;
+    return this.prisma.deliveryOrder.findFirst({ where });
+  }
+
   async createDeliveryOrder(dto: CreateDeliveryOrderDto) {
     // Calculate delivery zone and pricing
     const zone = await this.findDeliveryZone(dto.businessId, dto.lat, dto.lng);

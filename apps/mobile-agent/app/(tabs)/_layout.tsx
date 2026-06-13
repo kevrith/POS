@@ -1,5 +1,5 @@
 import { Tabs, Redirect } from 'expo-router';
-import { View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/auth';
 import { SyncBanner } from '../../components/SyncBanner';
@@ -9,8 +9,10 @@ export default function TabsLayout() {
   const token = useAuthStore((s) => s.token);
   if (!token) return <Redirect href="/(auth)/login" />;
 
+  // This layout owns the top inset (so the banner sits below the status bar);
+  // the individual tab screens are plain Views and must NOT inset top again.
   return (
-    <View style={{ flex: 1, backgroundColor: Colors.background }}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: Colors.background }}>
       {/* Sync banner pinned at the top; shows only when actions are queued */}
       <SyncBanner />
       <Tabs
@@ -48,6 +50,6 @@ export default function TabsLayout() {
           options={{ title: 'Profile', tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} /> }}
         />
       </Tabs>
-    </View>
+    </SafeAreaView>
   );
 }

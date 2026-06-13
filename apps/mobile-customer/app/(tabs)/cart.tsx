@@ -4,8 +4,8 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useCartStore } from '../../stores/cart';
@@ -22,7 +22,7 @@ export default function CartScreen() {
 
   if (items.length === 0) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView edges={['top']} style={styles.safe}>
         <View style={styles.headerBar}>
           <Text style={styles.headerTitle}>Cart</Text>
         </View>
@@ -46,7 +46,7 @@ export default function CartScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView edges={['top']} style={styles.safe}>
       <View style={styles.headerBar}>
         <Text style={styles.headerTitle}>Cart</Text>
         <Text style={styles.itemCount}>{items.length} item(s)</Text>

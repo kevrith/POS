@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useOfflineSync } from '../lib/useOfflineSync';
 
 const queryClient = new QueryClient({
@@ -15,10 +16,13 @@ function OfflineSyncRunner() {
 
 export default function RootLayout() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <StatusBar style="light" />
-      <OfflineSyncRunner />
-      <Stack screenOptions={{ headerShown: false }} />
-    </QueryClientProvider>
+    <SafeAreaProvider>
+      <QueryClientProvider client={queryClient}>
+        {/* dark icons — the app uses light backgrounds, keeps battery/clock legible */}
+        <StatusBar style="dark" />
+        <OfflineSyncRunner />
+        <Stack screenOptions={{ headerShown: false }} />
+      </QueryClientProvider>
+    </SafeAreaProvider>
   );
 }

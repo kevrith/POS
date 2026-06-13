@@ -3,10 +3,10 @@ import {
   Text,
   FlatList,
   StyleSheet,
-  SafeAreaView,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { driverApi, formatKES } from '../../lib/api';
@@ -69,7 +69,7 @@ export default function EarningsScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView edges={['top']} style={styles.safe}>
       <View style={styles.headerBar}>
         <Text style={styles.headerTitle}>My Earnings</Text>
       </View>

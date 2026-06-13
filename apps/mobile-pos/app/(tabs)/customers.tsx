@@ -4,7 +4,6 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   ActivityIndicator,
   Modal,
   ScrollView,
@@ -12,6 +11,7 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -103,7 +103,7 @@ export default function CustomersScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView edges={['top']} style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerRow}>
@@ -175,7 +175,7 @@ export default function CustomersScreen() {
       {/* Customer Detail Modal */}
       <Modal visible={!!selectedCustomer} animationType="slide" presentationStyle="pageSheet">
         {selectedCustomer && (
-          <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }}>
+          <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: Colors.background }}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Customer Details</Text>
               <TouchableOpacity onPress={() => setSelectedCustomer(null)}>
@@ -231,7 +231,7 @@ export default function CustomersScreen() {
 
       {/* Add Customer Modal */}
       <Modal visible={showAddModal} animationType="slide" presentationStyle="pageSheet">
-        <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }}>
+        <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: Colors.background }}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>New Customer</Text>
             <TouchableOpacity onPress={() => setShowAddModal(false)}>

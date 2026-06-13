@@ -12,10 +12,10 @@
  */
 
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  SafeAreaView, ActivityIndicator, Alert, ScrollView,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView,
   KeyboardAvoidingView, Platform, FlatList, Linking,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect, useCallback } from 'react';
@@ -258,7 +258,7 @@ export default function LoginScreen() {
   // ── SERVER URL step ──────────────────────────────────────────────────────
   if (screen === 'SERVER_URL') {
     return (
-      <SafeAreaView style={s.safe}>
+      <SafeAreaView edges={['top']} style={s.safe}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <ScrollView contentContainerStyle={s.centered} keyboardShouldPersistTaps="handled">
             <View style={s.logoArea}>
@@ -297,7 +297,7 @@ export default function LoginScreen() {
   // ── AUTH MODE step ────────────────────────────────────────────────────────
   if (screen === 'AUTH_MODE') {
     return (
-      <SafeAreaView style={s.safe}>
+      <SafeAreaView edges={['top']} style={s.safe}>
         <ScrollView contentContainerStyle={s.centered}>
           <View style={s.logoArea}>
             <View style={s.logoCircle}><Ionicons name="bag" size={36} color="#FFF" /></View>
@@ -344,7 +344,7 @@ export default function LoginScreen() {
   // ── BUSINESS CODE step ────────────────────────────────────────────────────
   if (screen === 'BUSINESS') {
     return (
-      <SafeAreaView style={s.safe}>
+      <SafeAreaView edges={['top']} style={s.safe}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <ScrollView contentContainerStyle={s.centered} keyboardShouldPersistTaps="handled">
             <TouchableOpacity style={s.backRow} onPress={() => setScreen('AUTH_MODE')}>
@@ -386,7 +386,7 @@ export default function LoginScreen() {
   // ── STAFF GRID step ───────────────────────────────────────────────────────
   if (screen === 'STAFF') {
     return (
-      <SafeAreaView style={s.safe}>
+      <SafeAreaView edges={['top']} style={s.safe}>
         <View style={s.staffHeader}>
           <TouchableOpacity onPress={() => {
             void SecureStore.deleteItemAsync(BUSINESS_ID_KEY);
@@ -440,7 +440,7 @@ export default function LoginScreen() {
   // ── PIN PAD step ──────────────────────────────────────────────────────────
   if (screen === 'PIN_PAD' && selectedUser) {
     return (
-      <SafeAreaView style={s.safe}>
+      <SafeAreaView edges={['top']} style={s.safe}>
         <ScrollView contentContainerStyle={[s.centered, { paddingVertical: 32 }]}>
           <TouchableOpacity style={s.backRow} onPress={() => { setPin(''); setScreen('STAFF'); }}>
             <Ionicons name="arrow-back" size={20} color={Colors.text} />
@@ -488,7 +488,7 @@ export default function LoginScreen() {
 
   // ── EMAIL LOGIN step ──────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={s.safe}>
+    <SafeAreaView edges={['top']} style={s.safe}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={s.centered} keyboardShouldPersistTaps="handled">
           <TouchableOpacity style={s.backRow} onPress={() => setScreen('AUTH_MODE')}>

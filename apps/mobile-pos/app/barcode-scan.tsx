@@ -3,9 +3,9 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
@@ -112,7 +112,7 @@ export default function BarcodeScanScreen() {
 
   if (!permission) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView edges={['top']} style={styles.safe}>
         <View style={styles.center}>
           <Text style={styles.permText}>Checking camera permissions...</Text>
         </View>
@@ -122,7 +122,7 @@ export default function BarcodeScanScreen() {
 
   if (!permission.granted) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView edges={['top']} style={styles.safe}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={22} color={Colors.text} />
@@ -159,7 +159,7 @@ export default function BarcodeScanScreen() {
       {/* Overlay */}
       <View style={styles.overlay}>
         {/* Header */}
-        <SafeAreaView>
+        <SafeAreaView edges={['top']}>
           <View style={styles.scanHeader}>
             <TouchableOpacity onPress={() => router.back()} style={styles.scanBackBtn}>
               <Ionicons name="arrow-back" size={22} color="#FFFFFF" />

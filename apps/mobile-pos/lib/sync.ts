@@ -8,7 +8,7 @@ export async function processSyncQueue(): Promise<{ synced: number; failed: numb
 
   for (const sale of pending) {
     try {
-      await mobileApi.post('/sales', sale.payload);
+      await mobileApi.post('/sales/checkout', sale.payload);
       await markSaleSynced(sale.offlineId);
       synced++;
     } catch {

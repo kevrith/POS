@@ -5,11 +5,11 @@ import {
   TouchableOpacity,
   FlatList,
   StyleSheet,
-  SafeAreaView,
   ActivityIndicator,
   Modal,
   ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
@@ -90,7 +90,7 @@ export default function POSScreen() {
   const cartCount = cartItems.reduce((sum, i) => sum + i.quantity, 0);
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView edges={['top']} style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.searchRow}>
@@ -238,7 +238,7 @@ export default function POSScreen() {
 
       {/* Cart Modal */}
       <Modal visible={showCart} animationType="slide" presentationStyle="pageSheet">
-        <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }}>
+        <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: Colors.background }}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Cart ({cartCount})</Text>
             <TouchableOpacity onPress={() => setShowCart(false)}>

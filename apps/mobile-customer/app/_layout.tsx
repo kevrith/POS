@@ -3,10 +3,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import { useState, useEffect } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  SafeAreaView, ActivityIndicator, KeyboardAvoidingView,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView,
   Platform, ScrollView, Alert,
 } from 'react-native';
+import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { SERVER_URL_KEY, DEFAULT_BASE_URL } from '../lib/api';
@@ -126,7 +126,7 @@ function SetupWizard({ onDone }: { onDone: () => void }) {
 
   if (screen === 'SERVER_URL') {
     return (
-      <SafeAreaView style={ss.safe}>
+      <SafeAreaView edges={['top']} style={ss.safe}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <ScrollView contentContainerStyle={ss.centered} keyboardShouldPersistTaps="handled">
             <View style={ss.logoWrap}>
@@ -165,7 +165,7 @@ function SetupWizard({ onDone }: { onDone: () => void }) {
 
   // BUSINESS_CODE
   return (
-    <SafeAreaView style={ss.safe}>
+    <SafeAreaView edges={['top']} style={ss.safe}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={ss.centered} keyboardShouldPersistTaps="handled">
           <View style={ss.logoWrap}>
@@ -243,13 +243,16 @@ export default function RootLayout() {
   const [setupDone, setSetupDone] = useState(false);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <StatusBar style="auto" />
-      {setupDone ? (
-        <Stack screenOptions={{ headerShown: false }} />
-      ) : (
-        <SetupWizard onDone={() => setSetupDone(true)} />
-      )}
-    </QueryClientProvider>
+    <SafeAreaProvider>
+      <QueryClientProvider client={queryClient}>
+        {/* dark icons — the app uses light backgrounds, keeps battery/clock legible */}
+        <StatusBar style="dark" />
+        {setupDone ? (
+          <Stack screenOptions={{ headerShown: false }} />
+        ) : (
+          <SetupWizard onDone={() => setSetupDone(true)} />
+        )}
+      </QueryClientProvider>
+    </SafeAreaProvider>
   );
 }

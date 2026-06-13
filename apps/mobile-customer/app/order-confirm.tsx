@@ -3,8 +3,8 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/theme';
@@ -16,7 +16,7 @@ export default function OrderConfirmScreen() {
   const isDelivery = params.orderType === 'DELIVERY';
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView edges={['top']} style={styles.safe}>
       <View style={styles.container}>
         {/* Success Icon */}
         <View style={styles.iconCircle}>

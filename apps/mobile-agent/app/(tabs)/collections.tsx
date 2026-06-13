@@ -3,7 +3,7 @@
  * orders. The agent records a payment against an order (cash / M-Pesa).
  */
 import {
-  View, Text, TextInput, StyleSheet, SafeAreaView, FlatList,
+  View, Text, TextInput, StyleSheet, FlatList,
   TouchableOpacity, ActivityIndicator, RefreshControl, Modal, Alert, Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -102,7 +102,7 @@ export default function CollectionsScreen() {
   const totalOutstanding = (data ?? []).reduce((s, c) => s + c.outstandingCents, 0);
 
   return (
-    <SafeAreaView style={st.safe}>
+    <View style={st.safe}>
       <View style={st.header}>
         <Text style={st.title}>Collections</Text>
         <Text style={st.totalOwed}>{formatKES(totalOutstanding)}</Text>
@@ -200,7 +200,7 @@ export default function CollectionsScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 

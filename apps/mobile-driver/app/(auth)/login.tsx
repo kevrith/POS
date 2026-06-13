@@ -4,10 +4,10 @@
  */
 
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  SafeAreaView, ActivityIndicator, Alert, KeyboardAvoidingView,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, KeyboardAvoidingView,
   Platform, ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect } from 'react';
@@ -88,7 +88,7 @@ export default function LoginScreen() {
 
   if (screen === 'SERVER_URL') {
     return (
-      <SafeAreaView style={s.safe}>
+      <SafeAreaView edges={['top']} style={s.safe}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <ScrollView contentContainerStyle={s.container} keyboardShouldPersistTaps="handled">
             <View style={s.logoArea}>
@@ -126,7 +126,7 @@ export default function LoginScreen() {
   }
 
   return (
-    <SafeAreaView style={s.safe}>
+    <SafeAreaView edges={['top']} style={s.safe}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={s.container} keyboardShouldPersistTaps="handled">
           <View style={s.logoArea}>

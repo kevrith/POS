@@ -2,7 +2,7 @@
  * Profile — agent identity, this-month performance, server URL, logout.
  */
 import {
-  View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Alert,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -54,7 +54,7 @@ export default function ProfileScreen() {
   }
 
   return (
-    <SafeAreaView style={st.safe}>
+    <View style={st.safe}>
       <ScrollView contentContainerStyle={{ padding: 16 }}>
         <View style={st.profileCard}>
           <View style={st.avatar}><Text style={st.avatarText}>{user?.name?.charAt(0).toUpperCase() ?? 'A'}</Text></View>
@@ -98,7 +98,7 @@ export default function ProfileScreen() {
 
         <Text style={st.version}>KASTRA Agent v1.0.0</Text>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 

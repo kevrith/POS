@@ -14,13 +14,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { mobileApi, formatKES } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { useActiveStore } from '../lib/useActiveStore';
 import { useCartStore } from '../stores/cart';
 import { queueSale } from '../lib/db';
+import { isPrintingEnabled, printReceipt, type PrintableReceipt } from '../lib/receiptPrint';
 import { Colors } from '../constants/theme';
 
 type PaymentMethod = 'CASH' | 'MPESA' | 'CARD' | 'BANK_TRANSFER' | 'SPLIT';
@@ -78,12 +79,12 @@ export default function PaymentScreen() {
   const { businessId, storeId } = useActiveStore();
   const cashierId = user?.id ?? '';
 
-  const { data: bizSettings } = useQuery<{ taxType?: string; serviceChargeRate?: number }>({
+  const { data: bizSettings } = useQuery<{ taxType?: string; serviceChargeRate?: number; name?: string }>({
     queryKey: ['mobile-biz-settings', businessId],
     queryFn: () => mobileApi.get(`/business/${businessId}/settings`),
     enabled: !!businessId,
     staleTime: 5 * 60_000,
-    select: (d: any) => ({ taxType: d.taxType ?? 'VAT', serviceChargeRate: d.serviceChargeRate ?? 10 }),
+    select: (d: any) => ({ taxType: d.taxType ?? 'VAT', serviceChargeRate: d.serviceChargeRate ?? 10, name: d.name }),
   });
   const taxType = bizSettings?.taxType ?? 'VAT';
 
@@ -102,6 +103,10 @@ export default function PaymentScreen() {
   const [splitCard, setSplitCard] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [completedSale, setCompletedSale] = useState<SaleResult | null>(null);
+  const [printOn, setPrintOn] = useState(false);
+  const [receiptSnap, setReceiptSnap] = useState<PrintableReceipt | null>(null);
+
+  useEffect(() => { void isPrintingEnabled().then(setPrintOn); }, []);
 
   // Discount
   const discountVal = parseFloat(discountInput || '0') || 0;
@@ -174,6 +179,19 @@ export default function PaymentScreen() {
     },
     onSuccess: (result: SaleResult) => {
       qc.invalidateQueries({ queryKey: ['sales'] });
+      // Snapshot the receipt before the cart is cleared (for optional printing).
+      setReceiptSnap({
+        businessName: bizSettings?.name ?? 'KASTRA POS',
+        receiptNumber: result.receiptNumber,
+        dateISO: new Date().toISOString(),
+        lines: cartItems.map((i) => ({ name: i.name, quantity: i.quantity, unitPriceCents: i.unitPriceCents })),
+        subtotalCents: subtotal,
+        taxLabel,
+        taxCents: finalTax,
+        totalCents: totalAfterDiscount,
+        paymentMethod: payMethod,
+        changeCents: payMethod === 'CASH' ? change : 0,
+      });
       clearCart();
       setCompletedSale(result);
       setShowSuccess(true);
@@ -558,6 +576,16 @@ export default function PaymentScreen() {
                 <Text style={styles.changeCardValue}>{formatKES(change)}</Text>
               </View>
             )}
+            {printOn && receiptSnap && (
+              <TouchableOpacity
+                style={styles.printReceiptBtn}
+                onPress={() => { void printReceipt(receiptSnap).catch(() => {}); }}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="print-outline" size={20} color={Colors.primary} />
+                <Text style={styles.printReceiptBtnText}>Print Receipt</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={styles.newSaleBtn} onPress={handleNewSale} activeOpacity={0.85}>
               <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
               <Text style={styles.newSaleBtnText}>New Sale</Text>
@@ -752,4 +780,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   newSaleBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
+  printReceiptBtn: {
+    backgroundColor: Colors.card,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    borderRadius: 12,
+    paddingVertical: 13,
+    paddingHorizontal: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+    width: '100%',
+    justifyContent: 'center',
+  },
+  printReceiptBtnText: { color: Colors.primary, fontSize: 16, fontWeight: '700' },
 });

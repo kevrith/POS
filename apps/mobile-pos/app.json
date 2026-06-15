@@ -51,6 +51,12 @@
           "cameraPermission": "Allow KASTRA POS to access your camera for barcode scanning."
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "color": "#030712"
+        }
+      ],
       "./plugins/with-cleartext-traffic"
     ],
     "experiments": {

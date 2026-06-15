@@ -7,16 +7,37 @@ import * as Font from 'expo-font';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '../stores/auth';
+import { usePushNotifications } from '@pos/mobile-push';
+import { routeForTap } from '../lib/push';
+import { useOfflineSync } from '../lib/useOfflineSync';
+import { useLocationBroadcast } from '../lib/location';
+import { SyncBanner } from '../components/SyncBanner';
 import { View, ActivityIndicator } from 'react-native';
 import { Colors } from '../constants/theme';
 
 const queryClient = new QueryClient();
+
+/** Flushes the offline action queue + broadcasts live location while logged in. */
+function DriverBackgroundTasks() {
+  const driverId = useAuthStore((s) => s.user?.id);
+  useOfflineSync();
+  useLocationBroadcast(driverId);
+  return null;
+}
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const segments = useSegments();
   const { token, setAuth } = useAuthStore();
   const [checking, setChecking] = useState(true);
+
+  // Tapping a "New delivery" push opens that delivery (works from cold start too).
+  usePushNotifications({
+    onTap: (data) => {
+      const route = routeForTap(data);
+      if (route) router.push(route as never);
+    },
+  });
 
   useEffect(() => {
     async function check() {
@@ -65,6 +86,8 @@ export default function RootLayout() {
         {/* dark icons — the app uses light backgrounds, keeps battery/clock legible */}
         <StatusBar style="dark" />
         <AuthGate>
+          <DriverBackgroundTasks />
+          <SyncBanner />
           <Stack screenOptions={{ headerShown: false }} />
         </AuthGate>
       </QueryClientProvider>

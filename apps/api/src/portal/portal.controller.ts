@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Param } from '@nestjs/common';
 import { Public } from '../auth/jwt-auth.guard';
 import { SkipSubscriptionCheck } from '../auth/subscription.guard';
 import { PortalService } from './portal.service';
@@ -39,5 +39,30 @@ export class PortalController {
     @Query('businessId') businessId: string,
   ) {
     return this.svc.getOrderHistory(phone, businessId);
+  }
+
+  /** Customer pays for their order via M-Pesa STK push (prompt to their phone). */
+  @Post('pay-order')
+  payOrder(@Body() body: { phone: string; amountCents: number; reference: string }) {
+    return this.svc.payOrder(body);
+  }
+
+  /** Poll STK status: { status: 'pending' | 'paid' | 'failed' }. */
+  @Get('pay-status/:checkoutRequestId')
+  payStatus(@Param('checkoutRequestId') checkoutRequestId: string) {
+    return this.svc.payStatus(checkoutRequestId);
+  }
+
+  /** Customer self-service table reservation (auto-assigns a free table). */
+  @Post('reserve')
+  reserve(@Body() body: {
+    businessId: string;
+    customerName: string;
+    phone?: string;
+    partySize: number;
+    reservationTime: string;
+    notes?: string;
+  }) {
+    return this.svc.reserveTable(body);
   }
 }

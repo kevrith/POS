@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Print from 'expo-print';
 import { driverApi, formatKES } from '../../lib/api';
+import { enqueue, flushQueue, uuid } from '../../lib/offline';
 import { Colors, STATUS_COLORS } from '../../constants/theme';
 
 interface DeliveryDetail {
@@ -45,8 +46,24 @@ export default function DeliveryDetailScreen() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: (status: string) =>
-      driverApi.patch(`/delivery/${id}`, { status }),
+    // Offline-first: queue the status change (survives dead zones), update the
+    // UI optimistically, then try to flush. The PATCH is idempotent so a replay
+    // is harmless.
+    mutationFn: async (status: string) => {
+      await enqueue({
+        offlineId: uuid(),
+        method: 'PATCH',
+        path: `/delivery/${id}`,
+        body: { status },
+        label: `Set order to ${status.replace('_', ' ').toLowerCase()}`,
+      });
+      void flushQueue();
+    },
+    onMutate: (status: string) => {
+      queryClient.setQueryData<DeliveryDetail>(['delivery', id], (prev) =>
+        prev ? { ...prev, status } : prev,
+      );
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['delivery', id] });
       queryClient.invalidateQueries({ queryKey: ['deliveries'] });

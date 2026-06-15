@@ -6,6 +6,7 @@ import { AuthService } from '../auth/auth.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { EtimsService } from '../etims/etims.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PushService } from '../push/push.service';
 import { EventsGateway } from '../events/events.gateway';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { SubscriptionLimitsService } from '../subscription/subscription-limits.service';
@@ -70,6 +71,7 @@ export class SalesService {
     private webhooks: WebhooksService,
     private etims: EtimsService,
     private notifications: NotificationsService,
+    private push: PushService,
     private events: EventsGateway,
     private loyalty: LoyaltyService,
     private subscriptionLimits: SubscriptionLimitsService,
@@ -327,6 +329,12 @@ export class SalesService {
         });
         // In-app notification
         this.notifications.notifyLowStock(businessId, item.name, stock, item.id).catch(() => {});
+        // Push the people who can act on it (Manage → Stock in the mobile app).
+        this.push.sendToBusinessRoles(businessId, ['OWNER', 'MANAGER', 'ADMIN'], {
+          title: 'Low stock',
+          body: `${item.name} is low (${stock} left).`,
+          data: { type: 'low_stock', id: item.id },
+        }).catch(() => {});
       }
     }
   }
@@ -347,6 +355,11 @@ export class SalesService {
         customer.balanceCents,
         customer.id,
       ).catch(() => {});
+      this.push.sendToBusinessRoles(businessId, ['OWNER', 'MANAGER', 'ADMIN'], {
+        title: 'Customer credit due',
+        body: `${customer.name} owes ${(customer.balanceCents / 100).toLocaleString('en-KE', { style: 'currency', currency: 'KES' })}.`,
+        data: { type: 'credit', id: customer.id },
+      }).catch(() => {});
     }
   }
 

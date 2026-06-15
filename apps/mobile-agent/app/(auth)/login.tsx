@@ -14,6 +14,7 @@ import { useState, useEffect } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { agentApi, SERVER_URL_KEY, DEFAULT_BASE_URL, getBaseUrl, friendlyError } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth';
+import { syncPushToken } from '../../lib/push';
 import { Colors } from '../../constants/theme';
 
 interface LoginResponse {
@@ -76,6 +77,7 @@ export default function LoginScreen() {
       if (!res.ok) throw new Error((data as { message?: string }).message ?? 'Invalid credentials');
       const token = data.accessToken ?? data.access_token ?? '';
       setAuth(data.user, token);
+      void syncPushToken(data.user.id);
       router.replace('/(tabs)/today');
     } catch (e) {
       Alert.alert('Login Failed', friendlyError(e, 'Invalid email or password.'));

@@ -2,6 +2,9 @@
 node_modules
 **/node_modules
 
+# Expo build/cache artifacts
+**/.expo/
+
 # Environment variables
 .env
 .env.local

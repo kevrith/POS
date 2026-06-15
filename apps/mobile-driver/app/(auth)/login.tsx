@@ -14,6 +14,7 @@ import { useState, useEffect } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { driverApi, SERVER_URL_KEY, DEFAULT_BASE_URL, getBaseUrl } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth';
+import { syncPushToken } from '../../lib/push';
 import { Colors } from '../../constants/theme';
 
 interface LoginResponse {
@@ -77,6 +78,7 @@ export default function LoginScreen() {
       const token = data.accessToken ?? data.access_token ?? '';
       await SecureStore.setItemAsync('driver_token', token);
       setAuth(data.user, token);
+      void syncPushToken(data.user.id); // register for delivery push (best-effort)
       router.replace('/(tabs)/deliveries');
     } catch (e: any) {
       const msg = (e?.message ?? '').includes('Network request failed')

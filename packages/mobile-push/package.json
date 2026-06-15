@@ -1,0 +1,21 @@
+{
+  "name": "@pos/mobile-push",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shared Expo push-notification client used by all KASTRA mobile apps",
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "types": "types/index.d.ts",
+  "scripts": {
+    "test": "jest"
+  },
+  "peerDependencies": {
+    "expo-constants": "*",
+    "expo-device": "*",
+    "expo-notifications": "*",
+    "react": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  }
+}

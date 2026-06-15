@@ -9,12 +9,15 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { apiPost, formatKES } from '../lib/api';
+import { registerCustomerPushToken } from '../lib/push';
+import { initiateStk, pollStkUntilDone } from '../lib/payments';
 import { useCartStore } from '../stores/cart';
 import { useSessionStore } from '../stores/session';
 import { Colors } from '../constants/theme';
@@ -45,6 +48,14 @@ export default function CheckoutScreen() {
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const [tipCents, setTipCents] = useState(0);
+
+  // Post-order M-Pesa payment step.
+  const [placed, setPlaced] = useState<{ orderNumber: string; amountCents: number } | null>(null);
+  const [payState, setPayState] = useState<'idle' | 'sending' | 'waiting' | 'paid' | 'failed'>('idle');
+
+  const grandTotal = () => totalCents() + tipCents;
+
   async function placeOrder() {
     if (!name.trim()) {
       Alert.alert('Required', 'Please enter your name.');
@@ -69,8 +80,10 @@ export default function CheckoutScreen() {
       const notesWithTable = [
         tableNumber.trim() ? `Table: ${tableNumber.trim()}` : '',
         notes.trim(),
+        tipCents > 0 ? `Tip: ${formatKES(tipCents)}` : '',
       ].filter(Boolean).join('. ');
 
+      const orderTotal = grandTotal();
       const payload = {
         businessId,
         customerName: name.trim(),
@@ -83,23 +96,48 @@ export default function CheckoutScreen() {
           quantity: i.quantity,
           priceCents: i.retailPriceCents,
         })),
-        totalCents: totalCents(),
+        totalCents: orderTotal,
       };
-
       const result = await apiPost<PlaceOrderResponse>('/portal/order', payload);
 
+      // Register for order-status push now that this customer record exists.
+      void registerCustomerPushToken(businessId, phone.trim());
+
       clearCart();
-      router.replace({
-        pathname: '/order-confirm',
-        params: {
-          orderNumber: result.orderNumber ?? result.orderId,
-          orderType,
-        },
-      } as any);
+      // Offer in-app M-Pesa payment before navigating to the confirmation.
+      setPlaced({ orderNumber: result.orderNumber ?? result.orderId, amountCents: orderTotal });
     } catch (err: any) {
       Alert.alert('Order Failed', err.message ?? 'Could not place order. Please try again.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  function goToConfirm(paid: boolean) {
+    const orderNumber = placed?.orderNumber ?? '';
+    setPlaced(null);
+    router.replace({
+      pathname: '/order-confirm',
+      params: { orderNumber, orderType, paid: paid ? '1' : '0' },
+    } as any);
+  }
+
+  async function payWithMpesa() {
+    if (!placed) return;
+    setPayState('sending');
+    try {
+      const { checkoutRequestId } = await initiateStk(phone.trim(), placed.amountCents, placed.orderNumber);
+      setPayState('waiting');
+      const status = await pollStkUntilDone(checkoutRequestId);
+      if (status === 'paid') {
+        setPayState('paid');
+        setTimeout(() => goToConfirm(true), 1200);
+      } else {
+        setPayState('failed');
+      }
+    } catch (err: any) {
+      setPayState('failed');
+      Alert.alert('Payment Error', err.message ?? 'Could not start M-Pesa payment.');
     }
   }
 
@@ -231,9 +269,38 @@ export default function CheckoutScreen() {
               </View>
             ))}
             <View style={styles.divider} />
+
+            {/* Tip */}
+            <Text style={styles.tipLabel}>Add a tip?</Text>
+            <View style={styles.tipRow}>
+              {[
+                { label: 'None', cents: 0 },
+                { label: 'KES 50', cents: 5000 },
+                { label: 'KES 100', cents: 10000 },
+                { label: '10%', cents: Math.round(totalCents() * 0.1) },
+              ].map((opt) => {
+                const active = tipCents === opt.cents;
+                return (
+                  <TouchableOpacity
+                    key={opt.label}
+                    style={[styles.tipChip, active && styles.tipChipActive]}
+                    onPress={() => setTipCents(opt.cents)}
+                  >
+                    <Text style={[styles.tipChipText, active && { color: '#FFF' }]}>{opt.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {tipCents > 0 && (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryName}>Tip</Text>
+                <Text style={styles.summaryPrice}>{formatKES(tipCents)}</Text>
+              </View>
+            )}
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValue}>{formatKES(totalCents())}</Text>
+              <Text style={styles.totalValue}>{formatKES(grandTotal())}</Text>
             </View>
           </View>
 
@@ -259,6 +326,47 @@ export default function CheckoutScreen() {
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Post-order M-Pesa payment step */}
+      <Modal visible={!!placed} animationType="slide" transparent onRequestClose={() => goToConfirm(false)}>
+        <View style={styles.payBackdrop}>
+          <View style={styles.paySheet}>
+            <View style={styles.payIconWrap}>
+              <Ionicons
+                name={payState === 'paid' ? 'checkmark-circle' : payState === 'failed' ? 'close-circle' : 'phone-portrait'}
+                size={44}
+                color={payState === 'paid' ? Colors.success : payState === 'failed' ? Colors.error : Colors.primary}
+              />
+            </View>
+            <Text style={styles.payTitle}>
+              {payState === 'paid' ? 'Payment received!' :
+               payState === 'failed' ? 'Payment not completed' :
+               payState === 'waiting' ? 'Check your phone' :
+               'Pay with M-Pesa?'}
+            </Text>
+            <Text style={styles.paySub}>
+              {payState === 'paid' ? `Order ${placed?.orderNumber} is paid.` :
+               payState === 'waiting' ? `Enter your M-Pesa PIN to pay ${placed ? formatKES(placed.amountCents) : ''}.` :
+               payState === 'failed' ? 'You can try again or pay on delivery.' :
+               `Order ${placed?.orderNumber} · ${placed ? formatKES(placed.amountCents) : ''}`}
+            </Text>
+
+            {(payState === 'sending' || payState === 'waiting') ? (
+              <ActivityIndicator size="large" color={Colors.primary} style={{ marginVertical: 16 }} />
+            ) : payState === 'paid' ? null : (
+              <>
+                <TouchableOpacity style={styles.payBtn} onPress={payWithMpesa}>
+                  <Ionicons name="phone-portrait" size={18} color="#FFF" />
+                  <Text style={styles.payBtnText}>{payState === 'failed' ? 'Retry M-Pesa' : 'Send M-Pesa prompt'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.payLater} onPress={() => goToConfirm(false)}>
+                  <Text style={styles.payLaterText}>{orderType === 'DELIVERY' ? 'Pay on delivery' : 'Pay at counter'}</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -370,4 +478,45 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     paddingHorizontal: 16,
   },
+  tipLabel: { fontSize: 13, fontWeight: '600', color: Colors.text, marginBottom: 8 },
+  tipRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  tipChip: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+  },
+  tipChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  tipChipText: { fontSize: 13, fontWeight: '600', color: Colors.text },
+  payBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  paySheet: {
+    backgroundColor: Colors.card,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    padding: 24,
+    paddingBottom: 36,
+    alignItems: 'center',
+    gap: 6,
+  },
+  payIconWrap: { marginBottom: 4 },
+  payTitle: { fontSize: 19, fontWeight: '800', color: Colors.text, textAlign: 'center' },
+  paySub: { fontSize: 14, color: Colors.textSecondary, textAlign: 'center', lineHeight: 20 },
+  payBtn: {
+    marginTop: 16,
+    backgroundColor: Colors.success,
+    borderRadius: 14,
+    paddingVertical: 15,
+    paddingHorizontal: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    alignSelf: 'stretch',
+  },
+  payBtnText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  payLater: { marginTop: 12, paddingVertical: 8 },
+  payLaterText: { color: Colors.textSecondary, fontSize: 14, fontWeight: '600' },
 });

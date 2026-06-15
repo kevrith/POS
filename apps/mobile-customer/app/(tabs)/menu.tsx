@@ -9,6 +9,7 @@ import {
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { apiGet, formatKES } from '../../lib/api';
@@ -92,6 +93,7 @@ function ItemCard({ item }: { item: MenuItem }) {
 }
 
 export default function MenuScreen() {
+  const router = useRouter();
   const businessId = useSessionStore((s) => s.businessId);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [search, setSearch] = useState('');
@@ -128,9 +130,15 @@ export default function MenuScreen() {
     <SafeAreaView edges={['top']} style={styles.safe}>
       <View style={styles.headerBar}>
         <Text style={styles.headerTitle}>Menu</Text>
-        <TouchableOpacity onPress={() => refetch()} style={styles.refreshBtn}>
-          <Ionicons name="refresh" size={22} color={Colors.primary} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={() => router.push('/reserve')} style={styles.reserveBtn}>
+            <Ionicons name="calendar-outline" size={16} color={Colors.primary} />
+            <Text style={styles.reserveText}>Reserve</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => refetch()} style={styles.refreshBtn}>
+            <Ionicons name="refresh" size={22} color={Colors.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Search bar */}
@@ -221,6 +229,13 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
   },
   headerTitle: { fontSize: 20, fontWeight: '700', color: Colors.text },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  reserveBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    borderWidth: 1, borderColor: Colors.primary, borderRadius: 18,
+    paddingHorizontal: 12, paddingVertical: 6,
+  },
+  reserveText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
   refreshBtn: { padding: 4 },
   searchContainer: {
     backgroundColor: Colors.card,

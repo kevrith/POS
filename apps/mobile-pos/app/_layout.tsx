@@ -7,8 +7,22 @@ import * as Linking from 'expo-linking';
 import * as SecureStore from 'expo-secure-store';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '../stores/auth';
+import { usePushNotifications } from '@pos/mobile-push';
+import { routeForTap } from '../lib/push';
 
 SplashScreen.preventAutoHideAsync();
+
+/** Navigate to the relevant screen when a manager taps a push notification. */
+function PushHandler() {
+  const router = useRouter();
+  usePushNotifications({
+    onTap: (data) => {
+      const route = routeForTap(data);
+      if (route) router.push(route as never);
+    },
+  });
+  return null;
+}
 
 const queryClient = new QueryClient();
 
@@ -63,6 +77,7 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <StatusBar style="dark" />
         <DeepLinkHandler />
+        <PushHandler />
         <Stack screenOptions={{ headerShown: false }} />
       </QueryClientProvider>
     </SafeAreaProvider>

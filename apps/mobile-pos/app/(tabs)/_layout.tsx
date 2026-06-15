@@ -1,8 +1,13 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
+import { useAuthStore } from '../../stores/auth';
+import { canManage } from '../../lib/roles';
 
 export default function TabsLayout() {
+  const role = useAuthStore((s) => s.user?.role);
+  const showManage = canManage(role);
+
   return (
     <Tabs
       screenOptions={{
@@ -45,6 +50,17 @@ export default function TabsLayout() {
           title: 'Customers',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="people" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="manage"
+        options={{
+          title: 'Manage',
+          // Hidden entirely for cashiers/waiters — they never see or reach it.
+          href: showManage ? undefined : null,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="cube" size={size} color={color} />
           ),
         }}
       />

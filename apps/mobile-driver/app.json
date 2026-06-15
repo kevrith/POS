@@ -53,6 +53,12 @@
           "locationAlwaysAndWhenInUsePermission": "Allow KASTRA Driver to use your location for delivery tracking."
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "color": "#030712"
+        }
+      ],
       "./plugins/with-cleartext-traffic"
     ],
     "experiments": {

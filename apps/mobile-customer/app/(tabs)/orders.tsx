@@ -12,9 +12,16 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { useRouter } from 'expo-router';
 import { apiGet } from '../../lib/api';
 import { useSessionStore } from '../../stores/session';
+import { useCartStore } from '../../stores/cart';
+import { parseOrderItems, matchOrderToMenu, MenuItemLite } from '../../lib/reorder';
 import { Colors, STATUS_COLORS } from '../../constants/theme';
+
+interface PortalMenuResp {
+  categories: Array<{ items: MenuItemLite[] }>;
+}
 
 // Shape from GET /portal/orders (portal service getOrderHistory)
 interface PortalOrder {
@@ -31,7 +38,10 @@ interface PortalOrder {
 const POLL_INTERVAL_MS = 10_000; // 10 seconds
 
 export default function OrdersScreen() {
+  const router = useRouter();
   const businessId = useSessionStore((s) => s.businessId);
+  const { addItem, updateQty, clearCart } = useCartStore();
+  const [reordering, setReordering] = useState<string | null>(null);
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -112,6 +122,38 @@ export default function OrdersScreen() {
       CANCELLED: 'Cancelled',
     };
     return labels[status] ?? status;
+  }
+
+  async function handleReorder(order: PortalOrder) {
+    setReordering(order.id);
+    try {
+      const lines = parseOrderItems(order.notes);
+      if (lines.length === 0) {
+        Alert.alert('Cannot reorder', 'This order has no items we can re-add.');
+        return;
+      }
+      const menu = await apiGet<PortalMenuResp>(`/portal/menu?businessId=${businessId}`);
+      const flat = (menu.categories ?? []).flatMap((c) => c.items);
+      const { matched, missing } = matchOrderToMenu(lines, flat);
+      if (matched.length === 0) {
+        Alert.alert('Unavailable', 'None of these items are on the menu right now.');
+        return;
+      }
+      clearCart();
+      for (const m of matched) {
+        addItem({ id: m.id, name: m.name, retailPriceCents: m.retailPriceCents });
+        if (m.quantity > 1) updateQty(m.id, m.quantity);
+      }
+      const note = missing.length ? `\n\nUnavailable now: ${missing.join(', ')}` : '';
+      Alert.alert('Added to cart', `${matched.length} item(s) added.${note}`, [
+        { text: 'Keep browsing', style: 'cancel' },
+        { text: 'View cart', onPress: () => router.push('/(tabs)/cart') },
+      ]);
+    } catch (e: any) {
+      Alert.alert('Reorder failed', e?.message ?? 'Could not reorder.');
+    } finally {
+      setReordering(null);
+    }
   }
 
   return (
@@ -257,6 +299,21 @@ export default function OrdersScreen() {
                     </View>
                   )}
                 </View>
+
+                <TouchableOpacity
+                  style={styles.reorderBtn}
+                  onPress={() => handleReorder(item)}
+                  disabled={reordering === item.id}
+                >
+                  {reordering === item.id ? (
+                    <ActivityIndicator size="small" color={Colors.primary} />
+                  ) : (
+                    <>
+                      <Ionicons name="repeat" size={15} color={Colors.primary} />
+                      <Text style={styles.reorderText}>Reorder</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
               </View>
             );
           }}
@@ -392,6 +449,18 @@ const styles = StyleSheet.create({
   addressRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   addressText: { flex: 1, fontSize: 13, color: Colors.textSecondary },
   orderFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  reorderBtn: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  reorderText: { color: Colors.primary, fontSize: 14, fontWeight: '700' },
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   dateText: { fontSize: 12, color: Colors.textSecondary },
 });

@@ -12,32 +12,20 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { mobileApi, formatKES } from '../../lib/api';
-import { useAuthStore } from '../../stores/auth';
 import { useActiveStore } from '../../lib/useActiveStore';
 import { Colors } from '../../constants/theme';
 
-interface XReport {
-  totalSales: number;
-  totalRevenueCents: number;
-  totalTaxCents: number;
-  totalDiscountCents: number;
-  cashSales: number;
-  cashRevenueCents: number;
-  mpesaSales: number;
-  mpesaRevenueCents: number;
-  cardSales: number;
-  cardRevenueCents: number;
-  otherRevenueCents: number;
-  averageTransactionCents: number;
-  refundCount?: number;
-  refundCents?: number;
+// Matches the web /reports/sales response (apps/api reports.service.ts)
+interface SalesReportResp {
+  sales: Array<{ discountCents: number }>;
+  summary: {
+    totalSales: number;
+    totalRevenueCents: number;
+    totalVatCents: number;
+    totalTotCents: number;
+  };
 }
-
-interface SalesSummary {
-  period: string;
-  totalSales: number;
-  totalRevenueCents: number;
-}
+interface PayMethod { method: string; totalCents: number; count: number }
 
 type ReportTab = 'today' | 'week' | 'month';
 
@@ -47,44 +35,64 @@ const TAB_LABELS: Record<ReportTab, string> = {
   month: 'This Month',
 };
 
-function getDateRange(tab: ReportTab): { startDate: string; endDate: string } {
+/**
+ * Same local-day boundaries the web app uses (ReportsPage getDateRange):
+ * start at 00:00:00 and end at 23:59:59.999 in the device's timezone, sent as
+ * full ISO timestamps. The old version sent bare dates (UTC midnight), so the
+ * end bound landed before today's sales and the report read 0.
+ */
+function getDateRange(tab: ReportTab): { startDate: string; endDate: string; label: string } {
   const now = new Date();
-  const end = now.toISOString().split('T')[0];
-  if (tab === 'today') {
-    return { startDate: end, endDate: end };
-  }
-  if (tab === 'week') {
-    const start = new Date(now);
-    start.setDate(now.getDate() - 6);
-    return { startDate: start.toISOString().split('T')[0], endDate: end };
-  }
-  // month
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  return { startDate: start.toISOString().split('T')[0], endDate: end };
+  const start = new Date(now);
+  const end = new Date(now);
+  if (tab === 'week') start.setDate(now.getDate() - 6);
+  if (tab === 'month') start.setDate(1);
+  start.setHours(0, 0, 0, 0);
+  end.setHours(23, 59, 59, 999);
+  const fmt = (d: Date) => d.toLocaleDateString('en-KE', { day: 'numeric', month: 'short' });
+  const label = tab === 'today' ? fmt(now) : `${fmt(start)} — ${fmt(end)}`;
+  return { startDate: start.toISOString(), endDate: end.toISOString(), label };
 }
 
 export default function ReportsScreen() {
-  const { user } = useAuthStore();
   const { businessId, storeId } = useActiveStore();
 
   const [activeTab, setActiveTab] = useState<ReportTab>('today');
 
-  const { startDate, endDate } = getDateRange(activeTab);
+  const { startDate, endDate, label: dateLabel } = getDateRange(activeTab);
+  const qs = `businessId=${businessId}&storeId=${storeId}&startDate=${startDate}&endDate=${endDate}`;
 
-  const { data: xReport, isLoading, refetch, isRefetching } = useQuery<XReport>({
-    queryKey: ['x-report', businessId, storeId, startDate, endDate],
-    queryFn: () =>
-      mobileApi.get<XReport>(
-        `/reports/x-report?businessId=${businessId}&storeId=${storeId}&startDate=${startDate}&endDate=${endDate}`
-      ),
-    staleTime: 60_000,
+  // Same endpoints the web Reports page uses, so both show identical numbers.
+  const { data: report, isLoading, refetch, isRefetching } = useQuery<SalesReportResp>({
+    queryKey: ['report-sales', businessId, storeId, startDate, endDate],
+    queryFn: () => mobileApi.get<SalesReportResp>(`/reports/sales?${qs}`),
+    enabled: !!businessId && !!storeId,
+    staleTime: 30_000,
   });
 
-  const total = xReport?.totalRevenueCents ?? 0;
-  const tax = xReport?.totalTaxCents ?? 0;
-  const discount = xReport?.totalDiscountCents ?? 0;
-  const txCount = xReport?.totalSales ?? 0;
-  const avgTx = xReport?.averageTransactionCents ?? 0;
+  const { data: payMethods, refetch: refetchPay } = useQuery<PayMethod[]>({
+    queryKey: ['report-pay', businessId, storeId, startDate, endDate],
+    queryFn: () => mobileApi.get<PayMethod[]>(`/reports/payment-methods?${qs}`),
+    enabled: !!businessId && !!storeId,
+    staleTime: 30_000,
+  });
+
+  const summary = report?.summary;
+  const total = summary?.totalRevenueCents ?? 0;
+  const txCount = summary?.totalSales ?? 0;
+  const tax = (summary?.totalVatCents ?? 0) + (summary?.totalTotCents ?? 0);
+  const avgTx = txCount > 0 ? Math.round(total / txCount) : 0;
+  const discount = (report?.sales ?? []).reduce((s, x) => s + (x.discountCents ?? 0), 0);
+
+  const payOf = (m: string) => payMethods?.find((p) => p.method === m);
+  const cash = payOf('CASH');
+  const mpesa = payOf('MPESA');
+  const card = payOf('CARD');
+  const otherCents = (payMethods ?? [])
+    .filter((p) => !['CASH', 'MPESA', 'CARD'].includes(p.method))
+    .reduce((s, p) => s + p.totalCents, 0);
+
+  const refresh = () => { void refetch(); void refetchPay(); };
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
@@ -115,12 +123,10 @@ export default function ReportsScreen() {
       ) : (
         <ScrollView
           contentContainerStyle={styles.content}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} colors={[Colors.primary]} />}
+          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refresh} colors={[Colors.primary]} />}
         >
           {/* Date Range */}
-          <Text style={styles.dateLabel}>
-            {startDate === endDate ? startDate : `${startDate} — ${endDate}`}
-          </Text>
+          <Text style={styles.dateLabel}>{dateLabel}</Text>
 
           {/* Revenue Card */}
           <View style={[styles.card, styles.revenueCard]}>
@@ -158,63 +164,40 @@ export default function ReportsScreen() {
           <View style={styles.card}>
             <PaymentRow
               label="Cash"
-              count={xReport?.cashSales ?? 0}
-              amountCents={xReport?.cashRevenueCents ?? 0}
+              count={cash?.count ?? 0}
+              amountCents={cash?.totalCents ?? 0}
               icon="cash-outline"
               color={Colors.success}
             />
             <View style={styles.divider} />
             <PaymentRow
               label="M-Pesa"
-              count={xReport?.mpesaSales ?? 0}
-              amountCents={xReport?.mpesaRevenueCents ?? 0}
+              count={mpesa?.count ?? 0}
+              amountCents={mpesa?.totalCents ?? 0}
               icon="phone-portrait-outline"
               color={Colors.primary}
             />
             <View style={styles.divider} />
             <PaymentRow
               label="Card"
-              count={xReport?.cardSales ?? 0}
-              amountCents={xReport?.cardRevenueCents ?? 0}
+              count={card?.count ?? 0}
+              amountCents={card?.totalCents ?? 0}
               icon="card-outline"
               color={Colors.indigo}
             />
-            {(xReport?.otherRevenueCents ?? 0) > 0 && (
+            {otherCents > 0 && (
               <>
                 <View style={styles.divider} />
                 <PaymentRow
                   label="Other"
                   count={0}
-                  amountCents={xReport?.otherRevenueCents ?? 0}
+                  amountCents={otherCents}
                   icon="ellipsis-horizontal-circle-outline"
                   color={Colors.textSecondary}
                 />
               </>
             )}
           </View>
-
-          {/* Refunds (if any) */}
-          {(xReport?.refundCount ?? 0) > 0 && (
-            <>
-              <Text style={styles.sectionTitle}>Refunds</Text>
-              <View style={styles.card}>
-                <View style={styles.payRow}>
-                  <View style={styles.payLeft}>
-                    <View style={[styles.payIcon, { backgroundColor: Colors.error + '15' }]}>
-                      <Ionicons name="arrow-undo-outline" size={16} color={Colors.error} />
-                    </View>
-                    <Text style={styles.payLabel}>Refunds Issued</Text>
-                  </View>
-                  <View style={styles.payRight}>
-                    <Text style={styles.payCount}>{xReport?.refundCount ?? 0} txns</Text>
-                    <Text style={[styles.payAmount, { color: Colors.error }]}>
-                      -{formatKES(xReport?.refundCents ?? 0)}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </>
-          )}
 
           {/* Net Summary */}
           <Text style={styles.sectionTitle}>Net Summary</Text>

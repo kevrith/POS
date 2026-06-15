@@ -83,10 +83,14 @@ export default function PaymentScreen() {
     queryKey: ['mobile-biz-settings', businessId],
     queryFn: () => mobileApi.get(`/business/${businessId}/settings`),
     enabled: !!businessId,
-    staleTime: 5 * 60_000,
-    select: (d: any) => ({ taxType: d.taxType ?? 'VAT', serviceChargeRate: d.serviceChargeRate ?? 10, name: d.name }),
+    staleTime: 60_000,
+    refetchOnMount: 'always', // always reflect the business's current tax setting
   });
-  const taxType = bizSettings?.taxType ?? 'VAT';
+  // Use the business's real taxType (VAT/TOT/NONE). Until settings load — or if
+  // the fetch fails — assume NONE so we never show a phantom VAT line that the
+  // web (which reads the same setting) doesn't show. Tax is inclusive, so this
+  // never changes the amount charged, only the breakdown shown.
+  const taxType = (bizSettings?.taxType as string | undefined) ?? 'NONE';
 
   const subtotal = subtotalCents();
   const { taxCents, exTaxCents, label: taxLabel } = calculateTax(subtotal, taxType);

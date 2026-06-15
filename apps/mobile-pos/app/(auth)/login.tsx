@@ -22,6 +22,7 @@ import { useState, useEffect, useCallback } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { mobileApi } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth';
+import { syncPushToken } from '../../lib/push';
 import { Colors } from '../../constants/theme';
 
 const SERVER_URL_KEY  = 'pos_server_url';
@@ -201,6 +202,7 @@ export default function LoginScreen() {
       const token = data.accessToken ?? data.access_token ?? '';
       await SecureStore.setItemAsync('pos_token', token);
       setAuth(data.user, token);
+      void syncPushToken(data.user.id);
       router.replace('/(tabs)/pos');
     } catch (e: any) {
       Alert.alert('Login Failed', friendlyError(e, 'Incorrect PIN. Please try again.'));
@@ -237,6 +239,7 @@ export default function LoginScreen() {
       const token = data.accessToken ?? data.access_token ?? '';
       await SecureStore.setItemAsync('pos_token', token);
       setAuth(data.user, token);
+      void syncPushToken(data.user.id);
       router.replace('/(tabs)/pos');
     } catch (e: any) {
       Alert.alert('Login Failed', friendlyError(e, 'Invalid email or password.'));

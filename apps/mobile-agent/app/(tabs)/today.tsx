@@ -4,14 +4,16 @@
  */
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Linking,
+  ActivityIndicator, RefreshControl, Linking, Alert,
 } from 'react-native';
+import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { agentApi, formatKES } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth';
 import { useCartStore } from '../../stores/cart';
+import { checkInVisit } from '../../lib/visits';
 import { Colors, PRIORITY_COLORS } from '../../constants/theme';
 
 interface AgentStats {
@@ -60,12 +62,27 @@ export default function TodayScreen() {
     enabled: !!agentId && !!businessId,
   });
 
+  const qc = useQueryClient();
+  const [checkingIn, setCheckingIn] = useState<string | null>(null);
+
   const refreshing = stats.isRefetching || callPlan.isRefetching;
   function refetchAll() { void stats.refetch(); void callPlan.refetch(); }
 
   function startOrder(c: CallPlanCustomer) {
     setCustomer(c.id, c.name);
     router.push('/(tabs)/order');
+  }
+
+  async function handleCheckIn(c: CallPlanCustomer) {
+    setCheckingIn(c.id);
+    try {
+      await checkInVisit({ customerId: c.id, customerName: c.name, businessId, agentId });
+      await qc.invalidateQueries({ queryKey: ['call-plan', agentId, businessId] });
+    } catch (e: any) {
+      Alert.alert('Check-in failed', e?.message ?? 'Could not log the visit.');
+    } finally {
+      setCheckingIn(null);
+    }
   }
 
   const s = stats.data;
@@ -148,7 +165,8 @@ export default function TodayScreen() {
                 <Text style={st.shopCode}>{item.shopCode}</Text>
               </View>
               <Text style={st.callMeta}>
-                {item.daysSinceVisit != null ? `Visited ${item.daysSinceVisit}d ago` : 'Never visited'} · {item.totalOrders} orders
+                {item.daysSinceVisit === 0 ? 'Visited today' :
+                 item.daysSinceVisit != null ? `Visited ${item.daysSinceVisit}d ago` : 'Never visited'} · {item.totalOrders} orders
               </Text>
               {item.outstandingCents > 0 && (
                 <Text style={st.outstanding}>Owes {formatKES(item.outstandingCents)}</Text>
@@ -162,6 +180,27 @@ export default function TodayScreen() {
                   <Ionicons name="call" size={15} color={Colors.primary} />
                   <Text style={[st.actionBtnText, { color: Colors.primary }]}>Call</Text>
                 </TouchableOpacity>
+                {item.daysSinceVisit === 0 ? (
+                  <View style={[st.actionBtn, st.actionBtnDone]}>
+                    <Ionicons name="checkmark-circle" size={15} color={Colors.success} />
+                    <Text style={[st.actionBtnText, { color: Colors.success }]}>Checked in</Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={[st.actionBtn, st.actionBtnGhost]}
+                    onPress={() => handleCheckIn(item)}
+                    disabled={checkingIn === item.id}
+                  >
+                    {checkingIn === item.id ? (
+                      <ActivityIndicator size="small" color={Colors.primary} />
+                    ) : (
+                      <>
+                        <Ionicons name="location" size={15} color={Colors.primary} />
+                        <Text style={[st.actionBtnText, { color: Colors.primary }]}>Check in</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           </View>
@@ -208,6 +247,7 @@ const st = StyleSheet.create({
     paddingVertical: 7, paddingHorizontal: 14, borderRadius: 8,
   },
   actionBtnGhost: { backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border },
+  actionBtnDone: { backgroundColor: Colors.success + '15', borderWidth: 1, borderColor: Colors.success + '40' },
   actionBtnText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
   empty: { alignItems: 'center', padding: 40, gap: 6 },
   emptyText: { fontSize: 15, fontWeight: '600', color: Colors.text },

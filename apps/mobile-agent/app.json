@@ -45,6 +45,12 @@
           "locationWhenInUsePermission": "Allow KASTRA Agent to use your location to register and visit customers."
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "color": "#030712"
+        }
+      ],
       "./plugins/with-cleartext-traffic"
     ],
     "experiments": {

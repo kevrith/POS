@@ -1,5 +1,7 @@
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { usePushNotifications } from '@pos/mobile-push';
+import { routeForTap } from '../lib/push';
 import { StatusBar } from 'expo-status-bar';
 import { useState, useEffect } from 'react';
 import {
@@ -239,6 +241,18 @@ const ss = StyleSheet.create({
   changeLinkText: { fontSize: 12, color: SUBTLE },
 });
 
+/** Routes the customer to the relevant screen when they tap a push notification. */
+function PushHandler() {
+  const router = useRouter();
+  usePushNotifications({
+    onTap: (data) => {
+      const route = routeForTap(data);
+      if (route) router.push(route as never);
+    },
+  });
+  return null;
+}
+
 export default function RootLayout() {
   const [setupDone, setSetupDone] = useState(false);
 
@@ -248,7 +262,10 @@ export default function RootLayout() {
         {/* dark icons — the app uses light backgrounds, keeps battery/clock legible */}
         <StatusBar style="dark" />
         {setupDone ? (
-          <Stack screenOptions={{ headerShown: false }} />
+          <>
+            <PushHandler />
+            <Stack screenOptions={{ headerShown: false }} />
+          </>
         ) : (
           <SetupWizard onDone={() => setSetupDone(true)} />
         )}

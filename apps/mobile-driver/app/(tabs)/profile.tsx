@@ -9,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/auth';
+import { clearPushToken } from '../../lib/push';
 import { Colors } from '../../constants/theme';
 
 export default function ProfileScreen() {
@@ -25,6 +26,7 @@ export default function ProfileScreen() {
           text: 'Sign Out',
           style: 'destructive',
           onPress: () => {
+            if (user?.id) void clearPushToken(user.id);
             clearAuth();
             router.replace('/(auth)/login');
           },

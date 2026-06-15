@@ -17,7 +17,7 @@ import { agentApi } from './api';
 
 const QUEUE_KEY = 'agent:action_queue';
 
-export type ActionType = 'CREATE_ORDER' | 'REGISTER_CUSTOMER' | 'COLLECT_PAYMENT';
+export type ActionType = 'CREATE_ORDER' | 'REGISTER_CUSTOMER' | 'COLLECT_PAYMENT' | 'LOG_VISIT';
 
 export interface QueuedAction {
   offlineId: string;       // idempotency key, also the queue id

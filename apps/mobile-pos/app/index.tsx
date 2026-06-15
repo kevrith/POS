@@ -2,6 +2,7 @@ import { Redirect } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { useAuthStore, restoreSession } from '../stores/auth';
+import { restoreActiveStore } from '../stores/activeStore';
 import { Colors } from '../constants/theme';
 
 export default function Index() {
@@ -9,7 +10,7 @@ export default function Index() {
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    void restoreSession().finally(() => setHydrated(true));
+    void Promise.all([restoreSession(), restoreActiveStore()]).finally(() => setHydrated(true));
   }, []);
 
   if (!hydrated) {

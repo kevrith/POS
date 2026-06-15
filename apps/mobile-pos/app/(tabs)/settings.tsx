@@ -21,6 +21,7 @@ import { useActiveStore } from '../../lib/useActiveStore';
 import { useCartStore } from '../../stores/cart';
 import { Colors } from '../../constants/theme';
 import { processSyncQueue } from '../../lib/sync';
+import { clearPushToken } from '../../lib/push';
 import { isPrintingEnabled, setPrintingEnabled } from '../../lib/receiptPrint';
 
 const SERVER_URL_KEY = 'pos_server_url';
@@ -106,6 +107,7 @@ export default function SettingsScreen() {
           text: 'Logout',
           style: 'destructive',
           onPress: () => {
+            if (user?.id) void clearPushToken(user.id);
             clearCart();
             clearAuth();
             router.replace('/(auth)/login');

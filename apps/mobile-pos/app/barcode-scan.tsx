@@ -23,7 +23,8 @@ interface Item {
   retailPriceCents: number;
   wholesalePriceCents?: number;
   vipPriceCents?: number;
-  stock?: number;
+  currentStock?: number;
+  trackStock?: boolean;
 }
 
 function getItemPrice(item: Item, level: 'RETAIL' | 'WHOLESALE' | 'VIP'): number {
@@ -59,7 +60,10 @@ export default function BarcodeScanScreen() {
       const items = await mobileApi.get<Item[]>(
         `/items?businessId=${businessId}&storeId=${storeId}&barcode=${encodeURIComponent(code)}`
       );
-      const item = Array.isArray(items) ? items[0] : null;
+      // The backend filters by exact barcode (item/UOM/variant). Never fall back
+      // to the first item — an unknown barcode must report "not found", not grab
+      // some unrelated product.
+      const item = Array.isArray(items) && items.length === 1 ? items[0] : null;
 
       if (!item) {
         Alert.alert(
@@ -67,13 +71,14 @@ export default function BarcodeScanScreen() {
           `No item found for barcode: ${code}`,
           [
             { text: 'Try Again', onPress: () => { setScanned(false); setScanning(false); setLastCode(null); } },
+            { text: 'Add New Item', onPress: () => router.replace(`/manage-item-form?barcode=${encodeURIComponent(code)}`) },
             { text: 'Back to POS', onPress: () => router.back() },
           ]
         );
         return;
       }
 
-      if ((item.stock ?? 1) <= 0) {
+      if (item.trackStock && (item.currentStock ?? 0) <= 0) {
         Alert.alert(
           'Out of Stock',
           `${item.name} is out of stock.`,

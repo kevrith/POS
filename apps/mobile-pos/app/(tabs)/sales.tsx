@@ -20,7 +20,8 @@ import { useActiveStore } from '../../lib/useActiveStore';
 import { Colors } from '../../constants/theme';
 
 interface SaleItem {
-  itemName: string;
+  // The Sale list API returns raw SaleItem rows whose field is `name`.
+  name: string;
   quantity: number;
   unitPriceCents: number;
   totalCents: number;
@@ -58,9 +59,14 @@ interface SalesResponse {
 }
 
 const STATUS_COLORS: Record<string, string> = {
+  // Checkout writes PAID (and AMENDED after an eTIMS amendment) — these are the
+  // real completed-sale statuses, not COMPLETED.
+  PAID: Colors.success,
+  AMENDED: Colors.success,
   COMPLETED: Colors.success,
   VOIDED: Colors.error,
   REFUNDED: Colors.warning,
+  PARTIALLY_REFUNDED: Colors.warning,
   LAYAWAY: Colors.indigo,
 };
 
@@ -257,7 +263,7 @@ export default function SalesScreen() {
               <View style={styles.detailCard}>
                 {selectedSale.items.map((item, i) => (
                   <View key={i} style={[styles.itemRow, i > 0 && styles.itemRowBorder]}>
-                    <Text style={styles.itemRowName} numberOfLines={2}>{item.itemName}</Text>
+                    <Text style={styles.itemRowName} numberOfLines={2}>{item.name}</Text>
                     <Text style={styles.itemRowQty}>{item.quantity}x</Text>
                     <Text style={styles.itemRowTotal}>{formatKES(item.totalCents)}</Text>
                   </View>

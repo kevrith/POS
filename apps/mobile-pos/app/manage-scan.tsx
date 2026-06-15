@@ -30,13 +30,15 @@ export default function ManageScanScreen() {
     setBusy(true);
     try {
       const items = await mobileApi.get<Item[]>(
-        `/items?businessId=${businessId}&storeId=${storeId}&search=${encodeURIComponent(code)}`
+        `/items?businessId=${businessId}&storeId=${storeId}&barcode=${encodeURIComponent(code)}`
       );
-      const match = Array.isArray(items) ? items.find((i) => i.barcode === code) ?? items[0] : null;
+      // Exact-barcode lookup — don't fall back to items[0], or an unknown barcode
+      // would open some unrelated item's stock screen.
+      const match = Array.isArray(items) && items.length === 1 ? items[0] : null;
       if (!match) {
         Alert.alert('Not found', `No item for barcode ${code}.`, [
           { text: 'Scan again', onPress: () => setBusy(false) },
-          { text: 'Add new', onPress: () => router.replace('/manage-item-form') },
+          { text: 'Add new', onPress: () => router.replace(`/manage-item-form?barcode=${encodeURIComponent(code)}`) },
         ]);
         return;
       }

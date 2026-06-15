@@ -78,7 +78,23 @@ export class DeliveryService {
   async getDeliveryOrderById(id: string, businessId?: string) {
     const where: any = { id };
     if (businessId) where.businessId = businessId;
-    return this.prisma.deliveryOrder.findFirst({ where });
+    const order = await this.prisma.deliveryOrder.findFirst({
+      where,
+      // Line items live on the linked Sale, not the DeliveryOrder — include them
+      // so the driver app's detail screen / printed receipt can show what's inside.
+      include: { sale: { include: { items: true } } },
+    });
+    if (!order) return null;
+    return {
+      ...order,
+      items: order.sale?.items?.map((i) => ({
+        name: i.name,
+        quantity: i.quantity,
+        unitPriceCents: i.unitPriceCents,
+        totalCents: i.totalCents,
+      })) ?? [],
+      totalCents: order.sale?.totalCents ?? null,
+    };
   }
 
   async createDeliveryOrder(dto: CreateDeliveryOrderDto) {

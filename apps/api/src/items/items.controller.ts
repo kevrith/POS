@@ -54,8 +54,9 @@ export class ItemsController {
     @Query('storeId') storeId?: string,
     @Query('search') search?: string,
     @Query('activeOnly') activeOnly?: string,
+    @Query('barcode') barcode?: string,
   ) {
-    return this.items.findAll(businessId, storeId, search, activeOnly === 'true');
+    return this.items.findAll(businessId, storeId, search, activeOnly === 'true', barcode);
   }
 
   @Get('categories')

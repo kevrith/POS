@@ -32,14 +32,15 @@ interface ItemDetail {
 export default function ManageItemFormScreen() {
   const router = useRouter();
   const qc = useQueryClient();
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, barcode: scannedBarcode } = useLocalSearchParams<{ id?: string; barcode?: string }>();
   const { businessId, storeId } = useActiveStore();
   const isEdit = !!id;
 
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [cost, setCost] = useState('');
-  const [barcode, setBarcode] = useState('');
+  // Prefill the barcode when arriving from a "scan → add new" flow.
+  const [barcode, setBarcode] = useState(scannedBarcode ?? '');
   const [category, setCategory] = useState('');
   const [trackStock, setTrackStock] = useState(true);
   const [initialStock, setInitialStock] = useState('');
@@ -70,6 +71,8 @@ export default function ManageItemFormScreen() {
       qc.invalidateQueries({ queryKey: ['manage-stock'] });
       qc.invalidateQueries({ queryKey: ['manage-item', id] });
       qc.invalidateQueries({ queryKey: ['manage-low-stock'] });
+      // Refresh the POS catalog so a newly created item shows up without a manual refresh.
+      qc.invalidateQueries({ queryKey: ['items'] });
       Alert.alert('Saved', `Item ${isEdit ? 'updated' : 'created'}.`);
       router.back();
     },

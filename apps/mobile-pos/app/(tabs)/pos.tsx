@@ -25,11 +25,13 @@ interface Item {
   name: string;
   barcode?: string;
   sku?: string;
-  category?: string;
+  // The API returns category as an object ({ id, name, color }) or null.
+  category?: { name?: string } | string | null;
   retailPriceCents: number;
   wholesalePriceCents?: number;
   vipPriceCents?: number;
-  stock?: number;
+  currentStock?: number;
+  trackStock?: boolean;
 }
 
 type PriceLevel = 'RETAIL' | 'WHOLESALE' | 'VIP';
@@ -38,6 +40,11 @@ function getItemPrice(item: Item, level: PriceLevel): number {
   if (level === 'WHOLESALE' && item.wholesalePriceCents) return item.wholesalePriceCents;
   if (level === 'VIP' && item.vipPriceCents) return item.vipPriceCents;
   return item.retailPriceCents;
+}
+
+function categoryName(item: Item): string | undefined {
+  if (!item.category) return undefined;
+  return typeof item.category === 'string' ? item.category : item.category.name;
 }
 
 export default function POSScreen() {
@@ -61,14 +68,14 @@ export default function POSScreen() {
   const items = itemsData ?? [];
 
   const categories = useMemo(() => {
-    const cats = new Set(items.map((i) => i.category).filter(Boolean) as string[]);
+    const cats = new Set(items.map(categoryName).filter(Boolean) as string[]);
     return ['All', ...Array.from(cats)];
   }, [items]);
 
   const filteredItems = useMemo(() => {
     let result = items;
     if (selectedCategory !== 'All') {
-      result = result.filter((i) => i.category === selectedCategory);
+      result = result.filter((i) => categoryName(i) === selectedCategory);
     }
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -178,17 +185,17 @@ export default function POSScreen() {
                   <Ionicons name="cube" size={24} color={Colors.primary} />
                 </View>
                 <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
-                {item.stock !== undefined ? (
-                  <Text style={[styles.stockText, item.stock <= 0 && { color: Colors.error }]}>
-                    Stock: {item.stock}
+                {item.trackStock ? (
+                  <Text style={[styles.stockText, (item.currentStock ?? 0) <= 0 && { color: Colors.error }]}>
+                    Stock: {item.currentStock ?? 0}
                   </Text>
                 ) : null}
                 <Text style={styles.itemPrice}>{formatKES(price)}</Text>
                 {qty === 0 ? (
                   <TouchableOpacity
-                    style={[styles.addBtn, item.stock === 0 && styles.addBtnDisabled]}
+                    style={[styles.addBtn, item.trackStock && (item.currentStock ?? 0) <= 0 && styles.addBtnDisabled]}
                     onPress={() => handleAddItem(item)}
-                    disabled={item.stock === 0}
+                    disabled={item.trackStock && (item.currentStock ?? 0) <= 0}
                   >
                     <Ionicons name="add" size={16} color="#FFFFFF" />
                     <Text style={styles.addBtnText}>Add</Text>

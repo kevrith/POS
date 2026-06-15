@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, AlertTriangle, Camera, Keyboard } from 'lucide-react';
+import { X, AlertTriangle, Camera, Keyboard, Zap } from 'lucide-react';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { BarcodeFormat, DecodeHintType } from '@zxing/library';
 
@@ -8,6 +8,9 @@ interface Props {
   onClose: () => void;
 }
 
+// ── ZXing fallback (desktop browsers without the native BarcodeDetector) ──────
+// TRY_HARDER is intentionally omitted: it makes ZXing attempt rotations/inversions
+// on every frame, which noticeably slows 1D retail-barcode scanning.
 const HINTS = new Map<DecodeHintType, any>([
   [DecodeHintType.POSSIBLE_FORMATS, [
     BarcodeFormat.EAN_13,
@@ -20,106 +23,190 @@ const HINTS = new Map<DecodeHintType, any>([
     BarcodeFormat.ITF,
     BarcodeFormat.DATA_MATRIX,
   ]],
-  [DecodeHintType.TRY_HARDER, true],
 ]);
+
+// Formats for the native BarcodeDetector (Android/Chrome tablets) — same engine
+// the mobile POS uses, so scanning is fast and accurate.
+const NATIVE_FORMATS = [
+  'ean_13', 'ean_8', 'code_128', 'code_39', 'qr_code',
+  'upc_a', 'upc_e', 'itf', 'codabar', 'data_matrix',
+];
 
 export default function CameraModal({ onScan, onClose }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const controlsRef = useRef<{ stop: () => void } | null>(null);
+  const zxingControlsRef = useRef<{ stop: () => void } | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const rafRef = useRef<number | null>(null);
   const firedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<'starting' | 'scanning' | 'error'>('starting');
+  const [engine, setEngine] = useState<'native' | 'zxing' | null>(null);
   const [attempts, setAttempts] = useState(0);
   const [manualInput, setManualInput] = useState('');
   const [showManual, setShowManual] = useState(false);
 
+  // Stop all camera resources (native loop, ZXing controls, media tracks).
+  function teardown() {
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    zxingControlsRef.current?.stop();
+    zxingControlsRef.current = null;
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+  }
+
+  function fire(text: string) {
+    if (firedRef.current) return;
+    const val = text.trim();
+    if (!val) return;
+    firedRef.current = true;
+    teardown();
+    onScan(val);
+  }
+
+  function mapCameraError(e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes('Permission') || msg.includes('NotAllowed') || msg.includes('NotGranted')) {
+      return 'Camera permission denied. Click the camera icon in your browser address bar to allow access.';
+    }
+    if (msg.includes('NotFound') || msg.includes('DevicesNotFound') || msg.includes('Requested device not found')) {
+      return 'No camera found on this device.';
+    }
+    if (msg.includes('NotReadable') || msg.includes('TrackStartError')) {
+      return 'Camera is in use by another app. Close other apps using the camera and try again.';
+    }
+    return `Camera error: ${msg}`;
+  }
+
   useEffect(() => {
     if (!videoRef.current) return;
-
-    const reader = new BrowserMultiFormatReader(HINTS, {
-      delayBetweenScanAttempts: 150,
-      delayBetweenScanSuccess: 300,
-    });
-
     firedRef.current = false;
+    let cancelled = false;
 
-    reader.decodeFromConstraints(
-      {
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-      },
-      videoRef.current,
-      (result, err) => {
-        if (firedRef.current) return;
+    const NativeDetector = (window as any).BarcodeDetector;
 
-        if (result) {
-          const text = result.getText().trim();
-          if (text) {
-            firedRef.current = true;
-            controlsRef.current?.stop();
-            controlsRef.current = null;
-            if (videoRef.current) videoRef.current.srcObject = null;
-            onScan(text);
-            return;
-          }
+    async function startNative() {
+      try {
+        const detector = new NativeDetector({ formats: NATIVE_FORMATS });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        });
+        if (cancelled || firedRef.current) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
         }
+        streamRef.current = stream;
+        const video = videoRef.current!;
+        video.srcObject = stream;
+        await video.play().catch(() => {});
+        setEngine('native');
+        setStatus('scanning');
 
-        if (err) {
-          if (err.name === 'NotFoundException') {
-            // Normal — no barcode in frame yet
-            setAttempts(n => n + 1);
+        const tick = async () => {
+          if (cancelled || firedRef.current) return;
+          try {
+            const codes = await detector.detect(video);
+            if (codes && codes.length > 0 && codes[0].rawValue) {
+              fire(codes[0].rawValue);
+              return;
+            }
+          } catch {
+            // Transient detect() failures (e.g. frame not ready) — keep looping.
+          }
+          setAttempts((n) => n + 1);
+          rafRef.current = requestAnimationFrame(tick);
+        };
+        rafRef.current = requestAnimationFrame(tick);
+      } catch (e) {
+        if (cancelled) return;
+        // getUserMedia failures are real (permission/device); show them. A failure
+        // constructing the detector falls back to ZXing instead.
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/getUserMedia|Permission|NotAllowed|NotFound|NotReadable/i.test(msg)) {
+          setError(mapCameraError(e));
+          setStatus('error');
+        } else {
+          startZxing();
+        }
+      }
+    }
+
+    function startZxing() {
+      const reader = new BrowserMultiFormatReader(HINTS, {
+        delayBetweenScanAttempts: 100,
+        delayBetweenScanSuccess: 300,
+      });
+      setEngine('zxing');
+
+      reader.decodeFromConstraints(
+        {
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        },
+        videoRef.current!,
+        (result, err) => {
+          if (firedRef.current) return;
+          if (result) {
+            const text = result.getText().trim();
+            if (text) {
+              fire(text);
+              return;
+            }
+          }
+          if (err && err.name === 'NotFoundException') {
+            setAttempts((n) => n + 1);
             setStatus('scanning');
-          } else {
+          } else if (err) {
             console.warn('[Camera scan error]', err.name, err.message);
           }
         }
-      }
-    ).then((controls) => {
-      if (firedRef.current) {
-        controls.stop();
-        return;
-      }
-      controlsRef.current = controls;
-      setStatus('scanning');
-    }).catch((e: unknown) => {
-      const msg = e instanceof Error ? e.message : String(e);
-      let friendly = `Camera error: ${msg}`;
-      if (msg.includes('Permission') || msg.includes('NotAllowed') || msg.includes('NotGranted')) {
-        friendly = 'Camera permission denied. Click the camera icon in your browser address bar to allow access.';
-      } else if (msg.includes('NotFound') || msg.includes('DevicesNotFound') || msg.includes('Requested device not found')) {
-        friendly = 'No camera found on this device.';
-      } else if (msg.includes('NotReadable') || msg.includes('TrackStartError')) {
-        friendly = 'Camera is in use by another app. Close other apps using the camera and try again.';
-      }
-      setError(friendly);
-      setStatus('error');
-    });
+      ).then((controls) => {
+        if (firedRef.current || cancelled) {
+          controls.stop();
+          return;
+        }
+        zxingControlsRef.current = controls;
+        setStatus('scanning');
+      }).catch((e: unknown) => {
+        if (cancelled) return;
+        setError(mapCameraError(e));
+        setStatus('error');
+      });
+    }
+
+    if (typeof NativeDetector !== 'undefined') {
+      startNative();
+    } else {
+      startZxing();
+    }
 
     return () => {
+      cancelled = true;
       firedRef.current = true;
-      controlsRef.current?.stop();
-      controlsRef.current = null;
-      if (videoRef.current) videoRef.current.srcObject = null;
+      teardown();
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleClose = () => {
     firedRef.current = true;
-    controlsRef.current?.stop();
-    controlsRef.current = null;
+    teardown();
     onClose();
   };
 
   const handleManualSubmit = () => {
     const val = manualInput.trim();
     if (!val) return;
-    firedRef.current = true;
-    controlsRef.current?.stop();
-    controlsRef.current = null;
-    onScan(val);
+    fire(val);
   };
 
   return (
@@ -130,6 +217,11 @@ export default function CameraModal({ onScan, onClose }: Props) {
           <div className="flex items-center gap-2">
             <Camera className="w-4 h-4 text-blue-600" />
             <span className="font-semibold text-sm">Scan Barcode</span>
+            {engine === 'native' && (
+              <span title="Fast native scanner" className="flex items-center gap-0.5 text-[10px] font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
+                <Zap className="w-3 h-3" /> Fast
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1">
             <button

@@ -66,19 +66,32 @@ export class ItemsService {
     private inventory: InventoryService,
   ) {}
 
-  async findAll(businessId: string, storeId?: string, search?: string, activeOnly = false) {
+  async findAll(businessId: string, storeId?: string, search?: string, activeOnly = false, barcode?: string) {
+    const trimmedBarcode = barcode?.trim();
     const items = await this.prisma.item.findMany({
       where: {
         businessId,
         ...(storeId ? { storeId } : {}),
         deletedAt: null,
         ...(activeOnly && { isActive: true }),
-        ...(search && {
-          OR: [
-            { name: { contains: search, mode: 'insensitive' } },
-            { barcode: { contains: search, mode: 'insensitive' } },
-          ],
-        }),
+        // Exact barcode lookup takes precedence (used by barcode scanners). Match
+        // the item's own barcode OR any of its UOM/variant barcodes.
+        ...(trimmedBarcode
+          ? {
+              OR: [
+                { barcode: trimmedBarcode },
+                { uoms: { some: { barcode: trimmedBarcode } } },
+                { variants: { some: { barcode: trimmedBarcode } } },
+              ],
+            }
+          : search
+          ? {
+              OR: [
+                { name: { contains: search, mode: 'insensitive' } },
+                { barcode: { contains: search, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
       },
       include: {
         itemCategory: true,

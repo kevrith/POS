@@ -162,10 +162,15 @@ export class SalesService {
       }
     }
 
-    // Honour the cashier's explicit choice (0 = disabled). Fall back to business setting for old clients.
+    // Honour the cashier's explicit choice (0 = disabled). When the client omits
+    // it, only apply service charge if the business has it ON by default — so a
+    // client that doesn't send the value (e.g. mobile POS) still respects the
+    // Settings toggle instead of always getting charged.
     const serviceChargeCents = dto.serviceChargeCents !== undefined
       ? dto.serviceChargeCents
-      : calculateServiceCharge(subtotalCents, store.business.serviceChargeRate);
+      : store.business.serviceChargeDefault
+        ? calculateServiceCharge(subtotalCents, store.business.serviceChargeRate)
+        : 0;
     const discountCents = dto.discountCents ?? 0;
     const tipCents = dto.tipCents ?? 0;
     const taxBase = subtotalCents - discountCents;

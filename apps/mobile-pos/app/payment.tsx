@@ -43,6 +43,7 @@ interface SalePayload {
   items: Array<{ itemId: string; quantity: number }>;
   payments: Array<{ method: string; amountCents: number; reference?: string }>;
   discountCents?: number;
+  serviceChargeCents?: number;
 }
 
 const PAYMENT_METHODS: Array<{ key: PaymentMethod; label: string; icon: any; color: string }> = [
@@ -79,7 +80,7 @@ export default function PaymentScreen() {
   const { businessId, storeId } = useActiveStore();
   const cashierId = user?.id ?? '';
 
-  const { data: bizSettings } = useQuery<{ taxType?: string; serviceChargeRate?: number; name?: string }>({
+  const { data: bizSettings } = useQuery<{ taxType?: string; serviceChargeRate?: number; serviceChargeDefault?: boolean; name?: string }>({
     queryKey: ['mobile-biz-settings', businessId],
     queryFn: () => mobileApi.get(`/business/${businessId}/settings`),
     enabled: !!businessId,
@@ -119,8 +120,14 @@ export default function PaymentScreen() {
       ? Math.round((subtotal * discountVal) / 100)
       : Math.round(discountVal * 100);
   const effectiveDiscount = Math.min(rawDiscount, subtotal);
-  const totalAfterDiscount = subtotal - effectiveDiscount;
-  const { taxCents: finalTax } = calculateTax(totalAfterDiscount, taxType);
+  const goodsAfterDiscount = subtotal - effectiveDiscount;
+  // Service charge: only when the business has it ON by default — matches the web
+  // and the backend, so a sale with the toggle OFF is never silently surcharged.
+  const serviceChargeCents = bizSettings?.serviceChargeDefault
+    ? Math.round((subtotal * (bizSettings?.serviceChargeRate ?? 0)) / 100)
+    : 0;
+  const totalAfterDiscount = goodsAfterDiscount + serviceChargeCents; // amount actually charged
+  const { taxCents: finalTax } = calculateTax(goodsAfterDiscount, taxType); // VAT extracted from goods only
 
   const tendered = Math.round((parseFloat(amountTendered || '0') || 0) * 100);
   const change = Math.max(0, tendered - totalAfterDiscount);
@@ -233,6 +240,8 @@ export default function PaymentScreen() {
       items: cartItems.map((i) => ({ itemId: i.id, quantity: i.quantity })),
       payments,
       discountCents: effectiveDiscount > 0 ? effectiveDiscount : undefined,
+      // Send explicitly (incl. 0) so the backend never falls back to applying it.
+      serviceChargeCents,
     };
     completeSale(payload);
   }
@@ -282,6 +291,12 @@ export default function PaymentScreen() {
               <View style={styles.summaryLine}>
                 <Text style={styles.summaryLabel}>{taxLabel}</Text>
                 <Text style={styles.summaryValue}>{formatKES(taxCents)}</Text>
+              </View>
+            )}
+            {serviceChargeCents > 0 && (
+              <View style={styles.summaryLine}>
+                <Text style={styles.summaryLabel}>Service charge ({bizSettings?.serviceChargeRate ?? 0}%)</Text>
+                <Text style={styles.summaryValue}>{formatKES(serviceChargeCents)}</Text>
               </View>
             )}
           </View>

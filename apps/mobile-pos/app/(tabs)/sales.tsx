@@ -36,7 +36,10 @@ interface Sale {
   id: string;
   receiptNumber: string;
   totalCents: number;
-  taxCents: number;
+  // The API returns VAT/TOT separately (the Sale model has no single taxCents field).
+  vatCents?: number;
+  totCents?: number;
+  serviceChargeCents?: number;
   discountCents: number;
   status: string;
   type: string;
@@ -272,10 +275,20 @@ export default function SalesScreen() {
                     </Text>
                   </View>
                 )}
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Tax</Text>
-                  <Text style={styles.detailValue}>{formatKES(selectedSale.taxCents)}</Text>
-                </View>
+                {(selectedSale.vatCents ?? 0) + (selectedSale.totCents ?? 0) > 0 && (
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Tax</Text>
+                    <Text style={styles.detailValue}>
+                      {formatKES((selectedSale.vatCents ?? 0) + (selectedSale.totCents ?? 0))}
+                    </Text>
+                  </View>
+                )}
+                {(selectedSale.serviceChargeCents ?? 0) > 0 && (
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Service charge</Text>
+                    <Text style={styles.detailValue}>{formatKES(selectedSale.serviceChargeCents ?? 0)}</Text>
+                  </View>
+                )}
                 <View style={[styles.detailRow, styles.totalRow]}>
                   <Text style={styles.totalLabel}>Total</Text>
                   <Text style={styles.totalValue}>{formatKES(selectedSale.totalCents)}</Text>

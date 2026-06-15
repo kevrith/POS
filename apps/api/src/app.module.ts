@@ -41,6 +41,7 @@ import { ReportSchedulesModule } from './report-schedules/report-schedules.modul
 import { WebhooksModule } from './webhooks/webhooks.module';
 // New modules
 import { EmailModule } from './email/email.module';
+import { PushModule } from './push/push.module';
 import { QueueModule } from './queue/queue.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { SuperAdminModule } from './super-admin/super-admin.module';
@@ -83,6 +84,7 @@ import { DbBackupModule } from './backup/db-backup.module';
     ]),
     // Infrastructure
     EmailModule,
+    PushModule,
     QueueModule.register(),
     // Data
     PrismaModule,

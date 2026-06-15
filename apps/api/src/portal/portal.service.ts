@@ -1,13 +1,91 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { MpesaService } from '../payments/mpesa.service';
 
 @Injectable()
 export class PortalService {
   constructor(
     private prisma: PrismaService,
     private notifications: NotificationsService,
+    private mpesa: MpesaService,
   ) {}
+
+  /** Customer self-service M-Pesa STK push for an order they just placed. */
+  async payOrder(dto: { phone: string; amountCents: number; reference: string }) {
+    return this.mpesa.initiateSTKPush({
+      phone: dto.phone,
+      amountCents: dto.amountCents,
+      accountReference: dto.reference,
+    });
+  }
+
+  /** Poll the STK result so the app can show paid/failed. */
+  async payStatus(checkoutRequestId: string) {
+    return this.mpesa.querySTKStatus(checkoutRequestId);
+  }
+
+  /**
+   * Customer self-service table reservation. Auto-assigns the smallest free
+   * table that fits the party at the requested time (customers don't know table
+   * ids). A ±2h window counts as a clash, mirroring the POS reservation logic.
+   */
+  async reserveTable(dto: {
+    businessId: string;
+    customerName: string;
+    phone?: string;
+    partySize: number;
+    reservationTime: string;
+    notes?: string;
+  }) {
+    const store = await this.prisma.store.findFirst({ where: { businessId: dto.businessId } });
+    if (!store) throw new Error('No store found');
+
+    const when = new Date(dto.reservationTime);
+    const tables = await this.prisma.table.findMany({
+      where: { storeId: store.id },
+      orderBy: { capacity: 'asc' },
+    });
+
+    for (const table of tables) {
+      if (table.capacity < dto.partySize) continue;
+      const clash = await this.prisma.tableReservation.findFirst({
+        where: {
+          tableId: table.id,
+          status: 'CONFIRMED',
+          reservationTime: {
+            gte: new Date(when.getTime() - 120 * 60000),
+            lte: new Date(when.getTime() + 120 * 60000),
+          },
+        },
+      });
+      if (clash) continue;
+
+      const reservation = await this.prisma.tableReservation.create({
+        data: {
+          tableId: table.id,
+          customerName: dto.customerName,
+          customerPhone: dto.phone,
+          partySize: dto.partySize,
+          reservationTime: when,
+          status: 'CONFIRMED',
+          notes: dto.notes,
+        },
+      });
+
+      if (dto.phone) {
+        this.notifications.sendSMS(
+          dto.businessId,
+          dto.phone,
+          `Hi ${dto.customerName}, your table for ${dto.partySize} is confirmed for ${when.toLocaleString('en-KE')} (Table ${table.number}).`,
+        ).catch(() => {});
+      }
+
+      return { ...reservation, tableNumber: table.number };
+    }
+
+    throw new Error('No tables available at that time. Please try another slot.');
+  }
 
   async getMenu(businessId: string) {
     const business = await this.prisma.business.findUnique({

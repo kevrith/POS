@@ -809,6 +809,7 @@ model Customer {
   name                    String
   phone                   String?
   email                   String?
+  deviceToken             String?                 // Expo push token (self-service customer app)
   creditLimitCents        Int                     @default(0)
   creditLimitPendingCents Int                     @default(0)
   creditApprovalStatus    String                  @default("NONE")

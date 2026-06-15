@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PushService, deliveryStatusMessage } from '../push/push.service';
 import { v4 as uuidv4 } from 'uuid';
 
 interface CreateDeliveryOrderDto {
@@ -53,6 +54,7 @@ export class DeliveryService {
     private prisma: PrismaService,
     private audit: AuditService,
     private notifications: NotificationsService,
+    private push: PushService,
   ) {}
 
   async getDeliveryOrders(businessId: string, storeId?: string, status?: string, search?: string) {
@@ -243,6 +245,15 @@ export class DeliveryService {
         `Your order #${delivery.orderNumber} has been assigned a driver. Track: ${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/track/${delivery.orderNumber}`,
       ).catch(() => {});
     }
+
+    // Push the assigned driver so they see the job without manually refreshing.
+    this.push
+      .sendToUser(driverId, {
+        title: 'New delivery assigned',
+        body: `Order #${delivery.orderNumber} · ${delivery.deliveryAddress ?? 'tap to view'}`,
+        data: { type: 'delivery', id: delivery.id },
+      })
+      .catch(() => {});
 
     return delivery;
   }
@@ -436,7 +447,7 @@ export class DeliveryService {
   async updateDeliveryOrder(id: string, dto: { status?: string; notes?: string; scheduledAt?: string; deliveryFeeCents?: number; receivedBy?: string; deliveredAt?: string }) {
     const delivery = await this.prisma.deliveryOrder.findUnique({ where: { id } });
     if (!delivery) throw new NotFoundException('Delivery not found');
-    return this.prisma.deliveryOrder.update({
+    const updated = await this.prisma.deliveryOrder.update({
       where: { id },
       data: {
         ...(dto.status && { status: dto.status }),
@@ -447,6 +458,21 @@ export class DeliveryService {
         ...(dto.status === 'DELIVERED' && { deliveredAt: dto.deliveredAt ? new Date(dto.deliveredAt) : new Date() }),
       },
     });
+
+    // Keep the customer's self-service app in the loop on status changes.
+    if (dto.status && dto.status !== delivery.status && delivery.customerPhone) {
+      const msg = deliveryStatusMessage(dto.status, updated.orderNumber);
+      if (msg) {
+        this.push
+          .sendToCustomerByPhone(updated.businessId, delivery.customerPhone, {
+            ...msg,
+            data: { type: 'order', id: updated.id },
+          })
+          .catch(() => {});
+      }
+    }
+
+    return updated;
   }
 
   async cancelDeliveryOrder(id: string) {

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { X, DollarSign, Smartphone, CreditCard, Scissors, AlertCircle, Loader2, CheckCircle, Gift, BedDouble, Building2, Camera, Nfc, Terminal, BookOpen } from 'lucide-react';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { api } from '../lib/api';
@@ -535,10 +536,10 @@ export default function PaymentModal({
     }
   }
 
-  return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col" style={{ maxHeight: 'calc(100vh - 80px)' }}>
-        <div className="flex items-center justify-between px-6 py-4 border-b">
+  return createPortal(
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-2 sm:p-4" style={{ paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom))' }}>
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden" style={{ maxHeight: 'calc(100dvh - 1rem)' }}>
+        <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
           <div>
             <h2 className="text-lg font-bold text-gray-800">Payment</h2>
             <div className="text-2xl font-bold text-blue-600">{formatKES(totalCents)}</div>
@@ -549,12 +550,12 @@ export default function PaymentModal({
         </div>
 
         {/* Grouped payment method tabs */}
-        <div className="border-b bg-gray-50">
+        <div className="border-b bg-gray-50 flex-shrink-0">
           <div className="flex">
             {tabGroups.map((group) => {
               const groupActive = group.methods.some((m) => m.id === method);
               return (
-                <div key={group.label} className={`flex-1 border-r last:border-r-0 ${groupActive ? 'bg-white' : ''}`}>
+                <div key={group.label} className={`flex-1 min-w-0 border-r last:border-r-0 ${groupActive ? 'bg-white' : ''}`}>
                   {/* Group label */}
                   <div className={`text-center text-[10px] font-semibold uppercase tracking-wide pt-1.5 pb-0.5 ${
                     groupActive ? 'text-blue-600' : 'text-gray-400'
@@ -567,7 +568,7 @@ export default function PaymentModal({
                       <button
                         key={id}
                         onClick={() => { setMethod(id); cancelMpesa(); }}
-                        className={`flex-1 py-2 text-[11px] font-medium transition-colors flex flex-col items-center gap-0.5 ${
+                        className={`flex-1 min-w-0 px-0.5 py-2 text-[11px] font-medium transition-colors flex flex-col items-center gap-0.5 ${
                           method === id
                             ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
                             : 'text-gray-500 hover:bg-gray-100'
@@ -584,7 +585,7 @@ export default function PaymentModal({
           </div>
         </div>
 
-        <div className="p-6">
+        <div className="p-6 flex-1 overflow-y-auto">
           {error && (
             <div className="mb-4 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -1461,6 +1462,7 @@ export default function PaymentModal({
           <p className="text-white text-sm mt-3">Scan gift card barcode</p>
         </div>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -956,7 +956,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               backgroundSize: '20px 20px'
             }} />
           </div>
-          <div className={`relative z-10 ${
+          {/* NOTE: intentionally no z-index here. A positioned z-index would create
+              a stacking context that traps in-page modals (fixed z-50) BELOW the
+              z-30 mobile bottom nav. DOM order already paints this above the
+              background pattern, so `relative` alone is enough. */}
+          <div className={`relative ${
             ['/pos', '/supermart', '/hospitality', '/kds', '/fuel-pump', '/cybercafe'].some(p => location.pathname.startsWith(p))
               ? 'flex-1 flex flex-col overflow-hidden'
               : ''

@@ -14,19 +14,21 @@ export class DeliveryController {
     @Query('storeId') storeId?: string,
     @Query('status') status?: string,
     @Query('search') search?: string,
+    @Query('channel') channel?: string,
   ) {
-    return this.deliveryService.getDeliveryOrders(businessId, storeId, status, search);
+    return this.deliveryService.getDeliveryOrders(businessId, storeId, status, search, channel);
   }
 
-  // Alias: GET /delivery?businessId=...&storeId=...&status=...
+  // Alias: GET /delivery?businessId=...&storeId=...&status=...&channel=...
   @Get()
   async listDeliveries(
     @Query('businessId') businessId: string,
     @Query('storeId') storeId?: string,
     @Query('status') status?: string,
     @Query('search') search?: string,
+    @Query('channel') channel?: string,
   ) {
-    const result = await this.deliveryService.getDeliveryOrders(businessId, storeId, status, search);
+    const result = await this.deliveryService.getDeliveryOrders(businessId, storeId, status, search, channel);
     return result.data;
   }
 

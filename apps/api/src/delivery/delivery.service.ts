@@ -57,10 +57,11 @@ export class DeliveryService {
     private push: PushService,
   ) {}
 
-  async getDeliveryOrders(businessId: string, storeId?: string, status?: string, search?: string) {
+  async getDeliveryOrders(businessId: string, storeId?: string, status?: string, search?: string, channel?: string) {
     const where: any = { businessId };
     if (storeId) where.storeId = storeId;
     if (status && status !== 'ALL') where.status = status;
+    if (channel && channel !== 'ALL') where.channel = channel;
     if (search) where.OR = [
       { customerName: { contains: search, mode: 'insensitive' } },
       { orderNumber: { contains: search } },
@@ -70,6 +71,7 @@ export class DeliveryService {
       where,
       orderBy: { createdAt: 'desc' },
       take: 100,
+      include: { items: true },
     });
     return { data };
   }
@@ -460,9 +462,11 @@ export class DeliveryService {
     }
   }
 
-  async updateDeliveryOrder(id: string, dto: { status?: string; notes?: string; scheduledAt?: string; deliveryFeeCents?: number; receivedBy?: string; deliveredAt?: string }) {
+  async updateDeliveryOrder(id: string, dto: { status?: string; notes?: string; scheduledAt?: string; deliveryFeeCents?: number; receivedBy?: string; deliveredAt?: string; etaMinutes?: number; rejectionReason?: string }) {
     const delivery = await this.prisma.deliveryOrder.findUnique({ where: { id } });
     if (!delivery) throw new NotFoundException('Delivery not found');
+    const accepting = dto.status === 'CONFIRMED' || dto.status === 'ACCEPTED';
+    const rejecting = dto.status === 'REJECTED' || dto.status === 'CANCELLED';
     const updated = await this.prisma.deliveryOrder.update({
       where: { id },
       data: {
@@ -471,6 +475,10 @@ export class DeliveryService {
         ...(dto.scheduledAt && { scheduledAt: new Date(dto.scheduledAt) }),
         ...(dto.deliveryFeeCents !== undefined && { deliveryFeeCents: dto.deliveryFeeCents }),
         ...(dto.receivedBy !== undefined && { receivedBy: dto.receivedBy }),
+        ...(dto.etaMinutes !== undefined && { etaMinutes: dto.etaMinutes }),
+        ...(dto.rejectionReason !== undefined && { rejectionReason: dto.rejectionReason }),
+        ...(accepting && { acceptedAt: new Date() }),
+        ...(rejecting && { rejectedAt: new Date() }),
         ...(dto.status === 'DELIVERED' && { deliveredAt: dto.deliveredAt ? new Date(dto.deliveredAt) : new Date() }),
       },
     });

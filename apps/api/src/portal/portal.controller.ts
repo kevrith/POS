@@ -53,6 +53,15 @@ export class PortalController {
     return this.svc.payStatus(checkoutRequestId);
   }
 
+  /** Confirm an M-Pesa payment for an order → marks PAID + reconciles into a Sale. */
+  @Post('order/:id/confirm-payment')
+  confirmPayment(
+    @Param('id') id: string,
+    @Body() body: { checkoutRequestId: string },
+  ) {
+    return this.svc.confirmPayment(id, body.checkoutRequestId);
+  }
+
   /** Customer self-service table reservation (auto-assigns a free table). */
   @Post('reserve')
   reserve(@Body() body: {

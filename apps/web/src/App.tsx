@@ -61,6 +61,7 @@ const SecuritySettingsPage = lazy(() => import('./pages/SecuritySettingsPage'));
 const DeliveryManagementPage = lazy(() => import('./pages/DeliveryManagementPage'));
 const QRMenuPage = lazy(() => import('./pages/QRMenuPage'));
 const OnlineOrderPage = lazy(() => import('./pages/OnlineOrderPage'));
+const OnlineOrdersPage = lazy(() => import('./pages/OnlineOrdersPage'));
 const FuelPumpPage = lazy(() => import('./pages/FuelPumpPage'));
 const CybercafePage = lazy(() => import('./pages/CybercafePage'));
 const CyberKioskPage = lazy(() => import('./pages/CyberKioskPage'));
@@ -264,6 +265,7 @@ export default function App() {
               <Route path="/pharmacy" element={<PharmacyPage />} />
               <Route path="/appointments" element={<AppointmentsPage />} />
               <Route path="/delivery" element={<DeliveryPage />} />
+              <Route path="/online-orders" element={<OnlineOrdersPage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/setup" element={<SetupWizardPage />} />

@@ -18,13 +18,23 @@ export class CustomerPortalService {
 
   // ─── Auth ─────────────────────────────────────────────────────────────────
 
-  async requestOtp(phone: string, businessId: string) {
-    const customer = await this.prisma.customer.findFirst({
+  async requestOtp(phone: string, businessId: string, name?: string) {
+    if (!phone?.trim()) throw new BadRequestException('Phone number is required');
+    if (!businessId) throw new BadRequestException('Business is required');
+
+    // Self-service registration: find the customer or create one on first contact.
+    // A bare phone-only Customer is harmless; phoneVerifiedAt gates "real" identity.
+    let customer = await this.prisma.customer.findFirst({
       where: { phone, businessId },
       select: { id: true, name: true },
     });
+    let isNew = false;
     if (!customer) {
-      throw new NotFoundException('Customer not found with this phone number');
+      customer = await this.prisma.customer.create({
+        data: { businessId, phone, name: name?.trim() || 'Customer' },
+        select: { id: true, name: true },
+      });
+      isNew = true;
     }
 
     // Generate 6-digit OTP
@@ -32,14 +42,10 @@ export class CustomerPortalService {
     const otpHash = createHash('sha256').update(otp).digest('hex');
     const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
 
-    // Upsert session
+    // Upsert the OTP-placeholder session for this customer
     await this.prisma.customerPortalSession.upsert({
       where: { sessionToken: `otp-placeholder-${customer.id}` },
-      update: {
-        otpHash,
-        otpExpiresAt,
-        expiresAt: otpExpiresAt,
-      },
+      update: { otpHash, otpExpiresAt, expiresAt: otpExpiresAt },
       create: {
         customerId: customer.id,
         phone,
@@ -50,19 +56,30 @@ export class CustomerPortalService {
       },
     });
 
-    // In production: send via AT SMS. In dev, return OTP for testing.
+    // Send the code via SMS (Africa's Talking). Fire-and-forget so an SMS failure
+    // never blocks login; dev still echoes the OTP for testing.
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { name: true },
+    });
+    const brand = business?.name ?? 'KASTRA';
+    this.notifications
+      .sendSMS(businessId, phone, `${otp} is your ${brand} verification code. It expires in 10 minutes.`)
+      .catch(() => {});
+
     const isDev = process.env.NODE_ENV !== 'production';
     return {
       sent: true,
       customerId: customer.id,
+      isNew,
       ...(isDev ? { otp } : {}),
     };
   }
 
-  async verifyOtp(phone: string, otp: string, businessId: string) {
+  async verifyOtp(phone: string, otp: string, businessId: string, name?: string) {
     const customer = await this.prisma.customer.findFirst({
       where: { phone, businessId },
-      select: { id: true, name: true, shopCode: true },
+      select: { id: true, name: true, shopCode: true, phoneVerifiedAt: true },
     });
     if (!customer) {
       throw new NotFoundException('Customer not found');
@@ -87,6 +104,21 @@ export class CustomerPortalService {
       throw new UnauthorizedException('Invalid OTP');
     }
 
+    // First verified login for this phone → treat as a brand-new registration.
+    const isNew = !customer.phoneVerifiedAt;
+
+    // Capture/refresh profile: stamp verification, and set the name if the
+    // customer supplied one and we only had the placeholder default.
+    const shouldSetName = !!name?.trim() && (isNew || !customer.name || customer.name === 'Customer');
+    const updated = await this.prisma.customer.update({
+      where: { id: customer.id },
+      data: {
+        ...(customer.phoneVerifiedAt ? {} : { phoneVerifiedAt: new Date() }),
+        ...(shouldSetName ? { name: name!.trim() } : {}),
+      },
+      select: { name: true, shopCode: true },
+    });
+
     // Generate real session token
     const rawToken = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
@@ -107,32 +139,124 @@ export class CustomerPortalService {
 
     return {
       sessionToken: rawToken,
+      token: rawToken, // alias — web portal reads `token`, mobile reads `sessionToken`
       customerId: customer.id,
-      shopCode: customer.shopCode,
-      customerName: customer.name,
+      shopCode: updated.shopCode,
+      customerName: updated.name,
+      isNew,
     };
   }
 
-  // ─── Orders ───────────────────────────────────────────────────────────────
+  // ─── Profile ──────────────────────────────────────────────────────────────
+
+  async getProfile(customerId: string) {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        email: true,
+        shopCode: true,
+        loyaltyPoints: true,
+        phoneVerifiedAt: true,
+        businessId: true,
+      },
+    });
+    if (!customer) throw new NotFoundException('Customer not found');
+    return customer;
+  }
+
+  // ─── Orders (unified: online portal orders + agent field orders) ──────────
 
   async getPortalOrders(customerId: string) {
-    return this.prisma.fieldOrder.findMany({
-      where: { customerId },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
+    const [online, field] = await Promise.all([
+      this.prisma.deliveryOrder.findMany({
+        where: { customerId, channel: 'PORTAL' },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+        include: { items: true },
+      }),
+      this.prisma.fieldOrder.findMany({
+        where: { customerId },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+        include: { items: true },
+      }),
+    ]);
+
+    const normalized = [
+      ...online.map((o) => this.normalizeOnline(o)),
+      ...field.map((o) => this.normalizeField(o)),
+    ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    return normalized;
+  }
+
+  async getPortalOrder(customerId: string, orderId: string) {
+    const online = await this.prisma.deliveryOrder.findFirst({
+      where: { id: orderId, customerId, channel: 'PORTAL' },
+      include: { items: true },
+    });
+    if (online) return this.normalizeOnline(online);
+
+    const field = await this.prisma.fieldOrder.findFirst({
+      where: { id: orderId, customerId },
       include: {
         items: true,
         route: { select: { id: true, name: true } },
         deliveryRunOrders: {
           select: {
-            id: true,
-            status: true,
-            deliveredAt: true,
+            id: true, status: true, deliveredAt: true,
             proof: { select: { id: true, receivedByName: true, capturedAt: true } },
           },
         },
       },
     });
+    if (!field) throw new NotFoundException('Order not found');
+    return this.normalizeField(field);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private normalizeOnline(o: any) {
+    return {
+      id: o.id,
+      orderNumber: o.orderNumber,
+      channel: 'ONLINE' as const,
+      status: o.status,
+      paymentStatus: o.paymentStatus,
+      fulfillmentType: o.fulfillmentType,
+      deliveryAddress: o.deliveryAddress,
+      etaMinutes: o.etaMinutes,
+      totalCents: o.totalCents,
+      invoiceNumber: null as string | null,
+      createdAt: o.createdAt,
+      deliveredAt: o.deliveredAt,
+      items: (o.items ?? []).map((i: any) => ({
+        itemId: i.itemId, name: i.name, quantity: i.quantity, unitPriceCents: i.unitPriceCents, totalCents: i.totalCents,
+      })),
+    };
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private normalizeField(o: any) {
+    return {
+      id: o.id,
+      orderNumber: o.orderNumber ?? o.id.slice(0, 8),
+      channel: 'AGENT' as const,
+      status: o.status,
+      paymentStatus: o.paymentStatus,
+      fulfillmentType: 'DELIVERY' as const,
+      deliveryAddress: null as string | null,
+      etaMinutes: null as number | null,
+      totalCents: o.totalCents,
+      invoiceNumber: o.invoiceNumber ?? null,
+      createdAt: o.createdAt,
+      deliveredAt: o.deliveredAt ?? null,
+      items: (o.items ?? []).map((i: any) => ({
+        itemId: i.itemId, name: i.itemName, quantity: i.quantity, unitPriceCents: i.unitPriceCents, totalCents: i.totalCents,
+      })),
+    };
   }
 
   // ─── Statement ────────────────────────────────────────────────────────────

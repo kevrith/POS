@@ -13,6 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { SERVER_URL_KEY, DEFAULT_BASE_URL } from '../lib/api';
 import { useSessionStore } from '../stores/session';
+import LoginGate from '../components/LoginGate';
 
 const queryClient = new QueryClient();
 
@@ -253,22 +254,42 @@ function PushHandler() {
   return null;
 }
 
-export default function RootLayout() {
+function Gate() {
   const [setupDone, setSetupDone] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+  const token = useSessionStore((s) => s.token);
+  const restore = useSessionStore((s) => s.restore);
 
+  // Load any persisted session token before deciding login vs. ready.
+  useEffect(() => {
+    restore().finally(() => setAuthChecked(true));
+  }, [restore]);
+
+  if (!setupDone) return <SetupWizard onDone={() => setSetupDone(true)} />;
+  if (!authChecked) {
+    return (
+      <View style={[ss.safe, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={PRIMARY} />
+      </View>
+    );
+  }
+  if (!token) return <LoginGate onDone={() => { /* token now in store → re-render to tabs */ }} />;
+
+  return (
+    <>
+      <PushHandler />
+      <Stack screenOptions={{ headerShown: false }} />
+    </>
+  );
+}
+
+export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         {/* dark icons — the app uses light backgrounds, keeps battery/clock legible */}
         <StatusBar style="dark" />
-        {setupDone ? (
-          <>
-            <PushHandler />
-            <Stack screenOptions={{ headerShown: false }} />
-          </>
-        ) : (
-          <SetupWizard onDone={() => setSetupDone(true)} />
-        )}
+        <Gate />
       </QueryClientProvider>
     </SafeAreaProvider>
   );

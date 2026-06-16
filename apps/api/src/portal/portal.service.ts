@@ -1,7 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MpesaService } from '../payments/mpesa.service';
+import { SalesService } from '../sales/sales.service';
+import { SaleType } from '@pos/shared';
 
 @Injectable()
 export class PortalService {
@@ -9,7 +11,72 @@ export class PortalService {
     private prisma: PrismaService,
     private notifications: NotificationsService,
     private mpesa: MpesaService,
+    private sales: SalesService,
   ) {}
+
+  /**
+   * Verify an M-Pesa STK result and, if paid, mark the portal order PAID and turn
+   * it into a real Sale (inventory + loyalty + eTIMS). Best-effort: a failure to
+   * build the Sale never blocks marking the order paid.
+   */
+  async confirmPayment(orderId: string, checkoutRequestId: string) {
+    const order = await this.prisma.deliveryOrder.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.paymentStatus === 'PAID') {
+      return { paid: true, orderId, saleId: order.saleId };
+    }
+
+    // Trust M-Pesa, not the client, before flipping the order to paid.
+    const status = await this.mpesa.querySTKStatus(checkoutRequestId);
+    if (status.status !== 'paid') {
+      return { paid: false, status: status.status, message: status.resultDesc };
+    }
+
+    await this.prisma.deliveryOrder.update({
+      where: { id: orderId },
+      data: {
+        paymentStatus: 'PAID',
+        paymentRef: checkoutRequestId,
+        ...(order.status === 'PENDING' && { status: 'CONFIRMED', acceptedAt: new Date() }),
+      },
+    });
+
+    // Reconcile into a Sale when every line maps to a catalog item.
+    let saleId: string | null = order.saleId ?? null;
+    const lineItems = order.items
+      .filter((i) => !!i.itemId)
+      .map((i) => ({ itemId: i.itemId as string, quantity: i.quantity }));
+    if (!saleId && lineItems.length > 0 && lineItems.length === order.items.length) {
+      try {
+        const cashier = await this.prisma.user.findFirst({
+          where: { businessId: order.businessId, role: 'OWNER' },
+          select: { id: true },
+        });
+        if (cashier) {
+          const sale = await this.sales.createSale(order.businessId, {
+            storeId: order.storeId,
+            cashierId: cashier.id,
+            customerId: order.customerId ?? undefined,
+            type: SaleType.NORMAL,
+            priceLevel: 'RETAIL',
+            items: lineItems,
+            payments: [{ method: 'MPESA', amountCents: order.totalCents, reference: checkoutRequestId }],
+          });
+          saleId = (sale as { id?: string })?.id ?? null;
+          if (saleId) {
+            await this.prisma.deliveryOrder.update({ where: { id: orderId }, data: { saleId } });
+          }
+        }
+      } catch {
+        // Best-effort reconciliation — the order stays PAID even if Sale build fails.
+      }
+    }
+
+    return { paid: true, orderId, saleId };
+  }
 
   /** Customer self-service M-Pesa STK push for an order they just placed. */
   async payOrder(dto: { phone: string; amountCents: number; reference: string }) {
@@ -152,13 +219,28 @@ export class PortalService {
     customerName: string;
     phone: string;
     address: string;
-    items: Array<{ name: string; quantity: number; priceCents: number }>;
+    items: Array<{ itemId?: string; name: string; quantity: number; priceCents: number }>;
     orderType: 'DELIVERY' | 'PICKUP';
     notes?: string;
   }) {
+    if (!dto.items?.length) throw new BadRequestException('Order has no items');
+
     // Get first store for this business
     const store = await this.prisma.store.findFirst({ where: { businessId: dto.businessId } });
     if (!store) throw new Error('No store found');
+
+    // Link to the registered customer (created at OTP login) so the order shows
+    // up in their authenticated history and earns loyalty when paid.
+    const customer = dto.phone
+      ? await this.prisma.customer.findFirst({
+          where: { businessId: dto.businessId, phone: dto.phone },
+          select: { id: true },
+        })
+      : null;
+
+    // Totals — prices are VAT-inclusive, so extract the embedded 16% VAT.
+    const subtotalCents = dto.items.reduce((s, i) => s + i.priceCents * i.quantity, 0);
+    const taxCents = Math.round(subtotalCents * 16 / 116);
 
     // Generate order number
     const year = new Date().getFullYear();
@@ -173,11 +255,27 @@ export class PortalService {
         businessId: dto.businessId,
         storeId: store.id,
         orderNumber,
+        channel: 'PORTAL',
+        fulfillmentType: dto.orderType,
+        customerId: customer?.id ?? null,
         customerName: dto.customerName,
         customerPhone: dto.phone,
         deliveryAddress: dto.orderType === 'DELIVERY' ? dto.address : 'PICKUP',
-        notes: `${dto.orderType}: ${dto.items.map(i => `${i.quantity}x ${i.name}`).join(', ')}${dto.notes ? '. ' + dto.notes : ''}`,
+        subtotalCents,
+        taxCents,
+        totalCents: subtotalCents,
         status: 'PENDING',
+        paymentStatus: 'UNPAID',
+        notes: dto.notes ?? null,
+        items: {
+          create: dto.items.map((i) => ({
+            itemId: i.itemId ?? null,
+            name: i.name,
+            quantity: i.quantity,
+            unitPriceCents: i.priceCents,
+            totalCents: i.priceCents * i.quantity,
+          })),
+        },
       },
     });
 
@@ -190,9 +288,10 @@ export class PortalService {
       ).catch(() => {});
     }
 
-    return { orderNumber: order.orderNumber, orderId: order.id, status: 'PENDING' };
+    return { orderNumber: order.orderNumber, orderId: order.id, status: 'PENDING', totalCents: subtotalCents };
   }
 
+  /** Legacy phone-based history (kept for the public tracking screen). */
   async getOrderHistory(phone: string, businessId: string) {
     const orders = await this.prisma.deliveryOrder.findMany({
       where: {
@@ -202,15 +301,8 @@ export class PortalService {
       },
       orderBy: { createdAt: 'desc' },
       take: 20,
-      select: {
-        id: true,
-        orderNumber: true,
-        status: true,
-        deliveryAddress: true,
-        notes: true,
-        deliveryFeeCents: true,
-        createdAt: true,
-        deliveredAt: true,
+      include: {
+        items: { select: { name: true, quantity: true, unitPriceCents: true, totalCents: true } },
       },
     });
     return orders;

@@ -265,7 +265,7 @@ function PaymentModal({
     setMethod(m);
     setLoading(true);
     try {
-      const data = await portalFetch('/portal/pay', {
+      const data = await portalFetch('/portal/me/pay', {
         method: 'POST',
         body: JSON.stringify({ fieldOrderId: order.id, method: m }),
       });
@@ -377,12 +377,12 @@ function OrdersTab({ session }: { session: PortalSession }) {
 
   const { data: orders = [], isLoading, refetch } = useQuery<FieldOrder[]>({
     queryKey: ['portal-orders', session.customerId],
-    queryFn: () => portalFetch('/portal/orders'),
+    queryFn: () => portalFetch('/portal/me/orders'),
     retry: false,
   });
 
   const reorderMutation = useMutation({
-    mutationFn: (fieldOrderId: string) => portalFetch('/portal/reorder', {
+    mutationFn: (fieldOrderId: string) => portalFetch('/portal/me/reorder', {
       method: 'POST',
       body: JSON.stringify({ fieldOrderId }),
     }),
@@ -495,7 +495,7 @@ function PayTab({ session }: { session: PortalSession }) {
 
   const { data: statement, isLoading } = useQuery<PortalStatement>({
     queryKey: ['portal-statement', session.customerId],
-    queryFn: () => portalFetch('/portal/statement'),
+    queryFn: () => portalFetch('/portal/me/statement'),
     retry: false,
   });
 
@@ -564,7 +564,7 @@ function PayTab({ session }: { session: PortalSession }) {
 function StatementTab({ session }: { session: PortalSession }) {
   const { data: statement, isLoading } = useQuery<PortalStatement>({
     queryKey: ['portal-statement', session.customerId],
-    queryFn: () => portalFetch('/portal/statement'),
+    queryFn: () => portalFetch('/portal/me/statement'),
     retry: false,
   });
 
@@ -759,7 +759,7 @@ export default function CustomerPortalPage() {
   const verifySession = useCallback(async (sess: PortalSession): Promise<boolean> => {
     localStorage.setItem('portal-session', JSON.stringify(sess));
     try {
-      await portalFetch('/portal/orders');
+      await portalFetch('/portal/me/orders');
       return true;
     } catch {
       return false;

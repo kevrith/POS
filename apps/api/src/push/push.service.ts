@@ -33,6 +33,11 @@ export function deliveryStatusMessage(
 ): { title: string; body: string } | null {
   const ref = orderNumber ? `Order #${orderNumber}` : 'Your order';
   switch (status) {
+    case 'CONFIRMED':
+    case 'ACCEPTED':
+      return { title: 'Order confirmed', body: `${ref} has been accepted and is being prepared.` };
+    case 'READY':
+      return { title: 'Ready for pickup', body: `${ref} is ready for collection.` };
     case 'ASSIGNED':
       return { title: 'Driver on the way', body: `${ref} has been assigned to a driver.` };
     case 'IN_TRANSIT':
@@ -40,6 +45,9 @@ export function deliveryStatusMessage(
       return { title: 'Out for delivery', body: `${ref} is on its way to you.` };
     case 'DELIVERED':
       return { title: 'Delivered', body: `${ref} has been delivered. Enjoy!` };
+    case 'REJECTED':
+    case 'CANCELLED':
+      return { title: 'Order cancelled', body: `${ref} was cancelled. Contact the store for help.` };
     case 'FAILED':
       return { title: 'Delivery issue', body: `We hit a problem delivering ${ref.toLowerCase()}. We'll be in touch.` };
     default:

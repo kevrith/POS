@@ -51,7 +51,7 @@ export default function CheckoutScreen() {
   const [tipCents, setTipCents] = useState(0);
 
   // Post-order M-Pesa payment step.
-  const [placed, setPlaced] = useState<{ orderNumber: string; amountCents: number } | null>(null);
+  const [placed, setPlaced] = useState<{ orderNumber: string; orderId: string; amountCents: number } | null>(null);
   const [payState, setPayState] = useState<'idle' | 'sending' | 'waiting' | 'paid' | 'failed'>('idle');
 
   const grandTotal = () => totalCents() + tipCents;
@@ -92,6 +92,7 @@ export default function CheckoutScreen() {
         notes: notesWithTable || undefined,
         orderType,
         items: items.map((i) => ({
+          itemId: i.id, // cart id is the catalog item id — enables Sale reconciliation
           name: i.name,
           quantity: i.quantity,
           priceCents: i.retailPriceCents,
@@ -105,7 +106,7 @@ export default function CheckoutScreen() {
 
       clearCart();
       // Offer in-app M-Pesa payment before navigating to the confirmation.
-      setPlaced({ orderNumber: result.orderNumber ?? result.orderId, amountCents: orderTotal });
+      setPlaced({ orderNumber: result.orderNumber ?? result.orderId, orderId: result.orderId, amountCents: orderTotal });
     } catch (err: any) {
       Alert.alert('Order Failed', err.message ?? 'Could not place order. Please try again.');
     } finally {
@@ -130,6 +131,9 @@ export default function CheckoutScreen() {
       setPayState('waiting');
       const status = await pollStkUntilDone(checkoutRequestId);
       if (status === 'paid') {
+        // Reconcile server-side: marks the order PAID and creates the Sale
+        // (inventory + loyalty + eTIMS). Best-effort — confirmation still proceeds.
+        void apiPost(`/portal/order/${placed.orderId}/confirm-payment`, { checkoutRequestId }).catch(() => {});
         setPayState('paid');
         setTimeout(() => goToConfirm(true), 1200);
       } else {

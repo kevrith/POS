@@ -809,6 +809,7 @@ model Customer {
   name                    String
   phone                   String?
   email                   String?
+  phoneVerifiedAt         DateTime?               // set on first successful portal OTP verify (self-service customer app)
   deviceToken             String?                 // Expo push token (self-service customer app)
   creditLimitCents        Int                     @default(0)
   creditLimitPendingCents Int                     @default(0)
@@ -1397,6 +1398,18 @@ model DeliveryOrder {
   deliveredAt         DateTime?
   status              String    @default("PENDING")
   deliveryFeeCents    Int       @default(0)
+  // Online/portal order extensions (structured items + payment + acceptance)
+  channel             String    @default("POS")     // POS | PORTAL (customer self-service)
+  fulfillmentType     String    @default("DELIVERY") // DELIVERY | PICKUP
+  subtotalCents       Int       @default(0)
+  taxCents            Int       @default(0)
+  totalCents          Int       @default(0)
+  paymentStatus       String    @default("UNPAID")  // UNPAID | PAID
+  paymentRef          String?
+  acceptedAt          DateTime?
+  rejectedAt          DateTime?
+  rejectionReason     String?
+  etaMinutes          Int?
   lat                 Float?
   lng                 Float?
   proofPhotoUrl       String?
@@ -1408,8 +1421,23 @@ model DeliveryOrder {
   customer            Customer? @relation(fields: [customerId], references: [id])
   sale                Sale?     @relation(fields: [saleId], references: [id])
   store               Store     @relation(fields: [storeId], references: [id])
+  items               DeliveryOrderItem[]
 
   @@index([businessId, storeId, status])
+}
+
+model DeliveryOrderItem {
+  id              String        @id @default(uuid())
+  deliveryOrderId String
+  itemId          String?
+  name            String
+  quantity        Int
+  unitPriceCents  Int
+  totalCents      Int
+  modifiers       String?
+  deliveryOrder   DeliveryOrder @relation(fields: [deliveryOrderId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryOrderId])
 }
 
 model LeaveBalance {

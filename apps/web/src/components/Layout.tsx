@@ -9,6 +9,7 @@ import {
   Fuel, Lock, BedDouble, CheckCircle2, Trash2, Radio, BookOpen,
   Link2, FileText, Clock, Send, Shield, Tablet, Fingerprint,
   ClipboardList, MapPin, Store, Zap, Building2, PanelLeftClose, PanelLeftOpen,
+  ShoppingBag,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { api, getToken } from '../lib/api';
@@ -70,6 +71,7 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
     roles: ['OWNER', 'MANAGER'],
     items: [
       { to: '/delivery', icon: Truck, label: 'Delivery', businessTypes: ['HOSPITALITY', 'FAST_FOOD', 'RETAIL', 'SUPERMARKET'] },
+      { to: '/online-orders', icon: ShoppingBag, label: 'Online Orders', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['HOSPITALITY', 'FAST_FOOD', 'RETAIL', 'SUPERMARKET'] },
       { to: '/delivery-management', icon: Truck, label: 'Delivery Dispatch', roles: ['OWNER', 'MANAGER'], businessTypes: ['HOSPITALITY', 'FAST_FOOD', 'RETAIL', 'SUPERMARKET'] },
       { to: '/field-orders', icon: ClipboardList, label: 'Field Orders', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
       { to: '/delivery-routes', icon: MapPin, label: 'Delivery Routes', roles: ['OWNER', 'MANAGER'] },

@@ -1,466 +1,176 @@
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  FlatList,
-  StyleSheet,
-  ActivityIndicator,
-  Alert,
-  RefreshControl,
+  View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { apiGet } from '../../lib/api';
+import { apiGet, formatKES } from '../../lib/api';
 import { useSessionStore } from '../../stores/session';
 import { useCartStore } from '../../stores/cart';
-import { parseOrderItems, matchOrderToMenu, MenuItemLite } from '../../lib/reorder';
 import { Colors, STATUS_COLORS } from '../../constants/theme';
 
-interface PortalMenuResp {
-  categories: Array<{ items: MenuItemLite[] }>;
-}
-
-// Shape from GET /portal/orders (portal service getOrderHistory)
-interface PortalOrder {
+interface UnifiedItem { itemId?: string; name: string; quantity: number; unitPriceCents: number; totalCents: number }
+interface UnifiedOrder {
   id: string;
   orderNumber: string;
+  channel: 'ONLINE' | 'AGENT';
   status: string;
-  deliveryAddress?: string;
-  notes?: string;
-  deliveryFeeCents?: number;
+  paymentStatus: string;
+  fulfillmentType: string;
+  deliveryAddress?: string | null;
+  etaMinutes?: number | null;
+  totalCents: number;
+  invoiceNumber?: string | null;
   createdAt: string;
   deliveredAt?: string | null;
+  items: UnifiedItem[];
 }
 
-const POLL_INTERVAL_MS = 10_000; // 10 seconds
+function statusLabel(s: string): string {
+  const map: Record<string, string> = {
+    PENDING: 'Pending', CONFIRMED: 'Confirmed', READY: 'Ready', ASSIGNED: 'Driver assigned',
+    IN_TRANSIT: 'On the way', DELIVERED: 'Delivered', CANCELLED: 'Cancelled', REJECTED: 'Rejected',
+    SUBMITTED: 'Submitted', PACKED: 'Packed', DISPATCHED: 'Dispatched', INVOICED: 'Invoiced', DRAFT: 'Draft',
+  };
+  return map[s] ?? s;
+}
 
 export default function OrdersScreen() {
   const router = useRouter();
-  const businessId = useSessionStore((s) => s.businessId);
+  const customerName = useSessionStore((s) => s.customerName);
   const { addItem, updateQty, clearCart } = useCartStore();
-  const [reordering, setReordering] = useState<string | null>(null);
-  const [phone, setPhone] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [orders, setOrders] = useState<PortalOrder[]>([]);
-  const [searched, setSearched] = useState(false);
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  function stopPolling() {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
+  const { data: orders = [], isLoading, refetch, isRefetching } = useQuery<UnifiedOrder[]>({
+    queryKey: ['my-orders'],
+    queryFn: () => apiGet<UnifiedOrder[]>('/portal/me/orders'),
+    refetchInterval: 15_000,
+  });
+
+  function reorder(order: UnifiedOrder) {
+    const lines = order.items.filter((i) => i.itemId);
+    if (lines.length === 0) { Alert.alert('Cannot reorder', 'These items are no longer available.'); return; }
+    clearCart();
+    for (const i of lines) {
+      addItem({ id: i.itemId!, name: i.name, retailPriceCents: i.unitPriceCents });
+      if (i.quantity > 1) updateQty(i.itemId!, i.quantity);
     }
-  }
-
-  function startPolling(phoneVal: string) {
-    stopPolling();
-    pollingRef.current = setInterval(async () => {
-      if (!phoneVal.trim()) return;
-      try {
-        const data = await apiGet<PortalOrder[]>(
-          `/portal/orders?phone=${encodeURIComponent(phoneVal.trim())}&businessId=${businessId}`
-        );
-        setOrders(Array.isArray(data) ? data : []);
-      } catch {
-        // Silent refresh failure — don't alert on background poll
-      }
-    }, POLL_INTERVAL_MS);
-  }
-
-  // Stop polling when unmounted
-  useEffect(() => {
-    return () => stopPolling();
-  }, []);
-
-  async function fetchOrders(isRefresh = false) {
-    if (!phone.trim()) {
-      Alert.alert('Phone Required', 'Please enter your phone number to view orders.');
-      return;
-    }
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    try {
-      const data = await apiGet<PortalOrder[]>(
-        `/portal/orders?phone=${encodeURIComponent(phone.trim())}&businessId=${businessId}`
-      );
-      setOrders(Array.isArray(data) ? data : []);
-      setSearched(true);
-      startPolling(phone);
-    } catch (err: any) {
-      Alert.alert('Error', err.message ?? 'Could not load orders.');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }
-
-  const onRefresh = useCallback(() => {
-    if (searched) fetchOrders(true);
-  }, [searched, phone]);
-
-  function getStatusIcon(status: string): string {
-    switch (status) {
-      case 'PENDING': return 'time-outline';
-      case 'ASSIGNED': return 'person-outline';
-      case 'IN_TRANSIT': return 'bicycle-outline';
-      case 'DELIVERED': return 'checkmark-circle-outline';
-      case 'CANCELLED': return 'close-circle-outline';
-      default: return 'ellipse-outline';
-    }
-  }
-
-  function getStatusLabel(status: string): string {
-    const labels: Record<string, string> = {
-      PENDING: 'Pending',
-      ASSIGNED: 'Driver Assigned',
-      IN_TRANSIT: 'On the Way',
-      DELIVERED: 'Delivered',
-      CANCELLED: 'Cancelled',
-    };
-    return labels[status] ?? status;
-  }
-
-  async function handleReorder(order: PortalOrder) {
-    setReordering(order.id);
-    try {
-      const lines = parseOrderItems(order.notes);
-      if (lines.length === 0) {
-        Alert.alert('Cannot reorder', 'This order has no items we can re-add.');
-        return;
-      }
-      const menu = await apiGet<PortalMenuResp>(`/portal/menu?businessId=${businessId}`);
-      const flat = (menu.categories ?? []).flatMap((c) => c.items);
-      const { matched, missing } = matchOrderToMenu(lines, flat);
-      if (matched.length === 0) {
-        Alert.alert('Unavailable', 'None of these items are on the menu right now.');
-        return;
-      }
-      clearCart();
-      for (const m of matched) {
-        addItem({ id: m.id, name: m.name, retailPriceCents: m.retailPriceCents });
-        if (m.quantity > 1) updateQty(m.id, m.quantity);
-      }
-      const note = missing.length ? `\n\nUnavailable now: ${missing.join(', ')}` : '';
-      Alert.alert('Added to cart', `${matched.length} item(s) added.${note}`, [
-        { text: 'Keep browsing', style: 'cancel' },
-        { text: 'View cart', onPress: () => router.push('/(tabs)/cart') },
-      ]);
-    } catch (e: any) {
-      Alert.alert('Reorder failed', e?.message ?? 'Could not reorder.');
-    } finally {
-      setReordering(null);
-    }
+    Alert.alert('Added to cart', `${lines.length} item(s) added.`, [
+      { text: 'Keep browsing', style: 'cancel' },
+      { text: 'View cart', onPress: () => router.push('/(tabs)/cart') },
+    ]);
   }
 
   return (
-    <SafeAreaView edges={['top']} style={styles.safe}>
-      <View style={styles.headerBar}>
-        <Text style={styles.headerTitle}>My Orders</Text>
-        {searched && (
-          <View style={styles.pollIndicator}>
-            <Ionicons name="sync" size={14} color={Colors.success} />
-            <Text style={styles.pollText}>Live</Text>
-          </View>
-        )}
+    <SafeAreaView edges={['top']} style={s.safe}>
+      <View style={s.header}>
+        <Text style={s.headerTitle}>My Orders</Text>
+        {customerName ? <Text style={s.headerSub}>{customerName}</Text> : null}
       </View>
 
-      <View style={styles.searchSection}>
-        <Text style={styles.searchLabel}>Track your orders</Text>
-        <View style={styles.inputRow}>
-          <View style={styles.prefixBox}>
-            <Text style={styles.prefixText}>+254</Text>
-          </View>
-          <TextInput
-            style={styles.phoneInput}
-            value={phone}
-            onChangeText={(t) => {
-              setPhone(t);
-              // If user changes phone, stop polling until they search again
-              if (searched) {
-                stopPolling();
-                setSearched(false);
-                setOrders([]);
-              }
-            }}
-            placeholder="7XX XXX XXX"
-            keyboardType="phone-pad"
-            maxLength={12}
-            placeholderTextColor={Colors.textSecondary}
-            returnKeyType="search"
-            onSubmitEditing={() => fetchOrders(false)}
-          />
-        </View>
-        <TouchableOpacity
-          style={[styles.searchBtn, loading && { opacity: 0.7 }]}
-          onPress={() => fetchOrders(false)}
-          disabled={loading}
-          activeOpacity={0.85}
-        >
-          {loading ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <>
-              <Ionicons name="search" size={18} color="#FFFFFF" />
-              <Text style={styles.searchBtnText}>View Orders</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {searched ? (
+      {isLoading ? (
+        <View style={s.center}><ActivityIndicator size="large" color={Colors.primary} /></View>
+      ) : (
         <FlatList
           data={orders}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={Colors.primary}
-            />
-          }
+          keyExtractor={(o) => o.id}
+          contentContainerStyle={s.list}
+          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={Colors.primary} />}
           ListEmptyComponent={
-            <View style={styles.emptyState}>
+            <View style={s.empty}>
               <Ionicons name="cube-outline" size={56} color={Colors.border} />
-              <Text style={styles.emptyTitle}>No orders found</Text>
-              <Text style={styles.emptySubtitle}>
-                We could not find any orders for this phone number.
-              </Text>
+              <Text style={s.emptyTitle}>No orders yet</Text>
+              <Text style={s.emptySub}>Your orders will appear here once you place one.</Text>
             </View>
           }
-          renderItem={({ item }) => {
-            const statusColor = STATUS_COLORS[item.status] ?? Colors.textSecondary;
-            const isDelivery = item.deliveryAddress && item.deliveryAddress !== 'PICKUP';
+          renderItem={({ item: o }) => {
+            const color = STATUS_COLORS[o.status] ?? Colors.textSecondary;
             return (
-              <View style={styles.orderCard}>
-                <View style={styles.orderHeader}>
-                  <View style={styles.orderNumberRow}>
-                    <Ionicons name="receipt" size={16} color={Colors.primary} />
-                    <Text style={styles.orderNumber}>
-                      Order #{item.orderNumber}
-                    </Text>
-                  </View>
-                  <View
-                    style={[styles.statusBadge, { backgroundColor: statusColor + '20', borderColor: statusColor }]}
-                  >
-                    <Ionicons
-                      name={getStatusIcon(item.status) as any}
-                      size={12}
-                      color={statusColor}
-                    />
-                    <Text style={[styles.statusText, { color: statusColor }]}>
-                      {getStatusLabel(item.status)}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Order Type */}
-                <View style={styles.typeRow}>
-                  <Ionicons
-                    name={isDelivery ? 'bicycle-outline' : 'bag-check-outline'}
-                    size={14}
-                    color={Colors.textSecondary}
-                  />
-                  <Text style={styles.typeText}>
-                    {isDelivery ? 'Delivery' : 'Pickup'}
-                  </Text>
-                </View>
-
-                {isDelivery && item.deliveryAddress && (
-                  <View style={styles.addressRow}>
-                    <Ionicons name="location-outline" size={14} color={Colors.textSecondary} />
-                    <Text style={styles.addressText} numberOfLines={1}>
-                      {item.deliveryAddress}
-                    </Text>
-                  </View>
-                )}
-
-                <View style={styles.orderFooter}>
-                  <View style={styles.dateRow}>
-                    <Ionicons name="calendar-outline" size={13} color={Colors.textSecondary} />
-                    <Text style={styles.dateText}>
-                      {new Date(item.createdAt).toLocaleDateString('en-KE', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </Text>
-                  </View>
-                  {item.deliveredAt && (
-                    <View style={styles.dateRow}>
-                      <Ionicons name="checkmark-circle-outline" size={13} color={Colors.success} />
-                      <Text style={[styles.dateText, { color: Colors.success }]}>Delivered</Text>
+              <View style={s.card}>
+                <View style={s.cardTop}>
+                  <View style={s.rowGap}>
+                    <Ionicons name="receipt" size={15} color={Colors.primary} />
+                    <Text style={s.orderNum}>{o.orderNumber}</Text>
+                    <View style={[s.chBadge, o.channel === 'AGENT' ? s.chAgent : s.chOnline]}>
+                      <Text style={[s.chText, o.channel === 'AGENT' ? { color: '#92400E' } : { color: '#3730A3' }]}>
+                        {o.channel === 'AGENT' ? 'Agent' : 'Online'}
+                      </Text>
                     </View>
-                  )}
+                  </View>
+                  <View style={[s.statusBadge, { backgroundColor: color + '20', borderColor: color }]}>
+                    <Text style={[s.statusText, { color }]}>{statusLabel(o.status)}</Text>
+                  </View>
                 </View>
 
-                <TouchableOpacity
-                  style={styles.reorderBtn}
-                  onPress={() => handleReorder(item)}
-                  disabled={reordering === item.id}
-                >
-                  {reordering === item.id ? (
-                    <ActivityIndicator size="small" color={Colors.primary} />
-                  ) : (
-                    <>
-                      <Ionicons name="repeat" size={15} color={Colors.primary} />
-                      <Text style={styles.reorderText}>Reorder</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
+                <View style={s.items}>
+                  {o.items.map((it, idx) => (
+                    <View key={idx} style={s.itemRow}>
+                      <Text style={s.itemName} numberOfLines={1}>{it.quantity}× {it.name}</Text>
+                      <Text style={s.itemTotal}>{formatKES(it.totalCents)}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                <View style={s.cardBottom}>
+                  <View style={s.rowGap}>
+                    <Text style={s.total}>{formatKES(o.totalCents)}</Text>
+                    <View style={[s.payBadge, o.paymentStatus === 'PAID' ? s.paid : s.unpaid]}>
+                      <Text style={[s.payText, o.paymentStatus === 'PAID' ? { color: '#166534' } : { color: '#991B1B' }]}>{o.paymentStatus}</Text>
+                    </View>
+                    {o.etaMinutes ? <Text style={s.eta}>ETA {o.etaMinutes}m</Text> : null}
+                  </View>
+                  {o.items.some((i) => i.itemId) ? (
+                    <TouchableOpacity style={s.reorderBtn} onPress={() => reorder(o)}>
+                      <Ionicons name="repeat" size={14} color={Colors.primary} />
+                      <Text style={s.reorderText}>Reorder</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+
+                {o.invoiceNumber ? (
+                  <Text style={s.invoice}><Ionicons name="document-text-outline" size={12} color={Colors.textSecondary} /> Invoice {o.invoiceNumber}</Text>
+                ) : null}
               </View>
             );
           }}
         />
-      ) : (
-        <View style={styles.promptState}>
-          <Ionicons name="cube-outline" size={56} color={Colors.border} />
-          <Text style={styles.promptTitle}>Track Your Orders</Text>
-          <Text style={styles.promptText}>
-            Enter your phone number above to view your order history and live tracking.
-          </Text>
-        </View>
       )}
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
-  headerBar: {
-    backgroundColor: Colors.card,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+  header: { backgroundColor: Colors.card, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.border },
   headerTitle: { fontSize: 20, fontWeight: '700', color: Colors.text },
-  pollIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.success + '15',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 5,
-  },
-  pollText: { fontSize: 12, color: Colors.success, fontWeight: '600' },
-  searchSection: {
-    backgroundColor: Colors.card,
-    padding: 16,
-    gap: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  searchLabel: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' },
-  inputRow: { flexDirection: 'row', gap: 8 },
-  prefixBox: {
-    backgroundColor: Colors.background,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    justifyContent: 'center',
-  },
-  prefixText: { fontSize: 15, color: Colors.text, fontWeight: '600' },
-  phoneInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 15,
-    color: Colors.text,
-    backgroundColor: Colors.background,
-  },
-  searchBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: 10,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-  },
-  searchBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
-  listContent: { padding: 16, gap: 12 },
-  emptyState: { alignItems: 'center', paddingVertical: 48, gap: 12 },
+  headerSub: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 60 },
+  list: { padding: 14, gap: 12 },
+  empty: { alignItems: 'center', paddingVertical: 60, gap: 10 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: Colors.text },
-  emptySubtitle: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    paddingHorizontal: 32,
-  },
-  promptState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-    gap: 12,
-  },
-  promptTitle: { fontSize: 18, fontWeight: '700', color: Colors.text },
-  promptText: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  orderCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 12,
-    padding: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
-    gap: 8,
-  },
-  orderHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  orderNumberRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  orderNumber: { fontSize: 15, fontWeight: '700', color: Colors.text },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 4,
-  },
-  statusText: { fontSize: 12, fontWeight: '600' },
-  typeRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  typeText: { fontSize: 13, color: Colors.textSecondary },
-  addressRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  addressText: { flex: 1, fontSize: 13, color: Colors.textSecondary },
-  orderFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  reorderBtn: {
-    marginTop: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 9,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-  },
-  reorderText: { color: Colors.primary, fontSize: 14, fontWeight: '700' },
-  dateRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  dateText: { fontSize: 12, color: Colors.textSecondary },
+  emptySub: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center', paddingHorizontal: 32 },
+  card: { backgroundColor: Colors.card, borderRadius: 12, padding: 14, gap: 10 },
+  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  rowGap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  orderNum: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  chBadge: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6 },
+  chOnline: { backgroundColor: '#E0E7FF' },
+  chAgent: { backgroundColor: '#FEF3C7' },
+  chText: { fontSize: 10, fontWeight: '700' },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12, borderWidth: 1 },
+  statusText: { fontSize: 11, fontWeight: '600' },
+  items: { borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 8, gap: 4 },
+  itemRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  itemName: { flex: 1, fontSize: 13, color: Colors.text, marginRight: 8 },
+  itemTotal: { fontSize: 13, color: Colors.textSecondary },
+  cardBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 8 },
+  total: { fontSize: 16, fontWeight: '800', color: Colors.primary },
+  payBadge: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6 },
+  paid: { backgroundColor: '#DCFCE7' },
+  unpaid: { backgroundColor: '#FEE2E2' },
+  payText: { fontSize: 10, fontWeight: '700' },
+  eta: { fontSize: 11, color: Colors.textSecondary },
+  reorderBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9, borderWidth: 1, borderColor: Colors.primary },
+  reorderText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
+  invoice: { fontSize: 11, color: Colors.textSecondary },
 });

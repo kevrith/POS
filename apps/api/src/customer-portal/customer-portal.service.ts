@@ -167,6 +167,45 @@ export class CustomerPortalService {
     return customer;
   }
 
+  async updateProfile(customerId: string, dto: { name?: string; email?: string }) {
+    const customer = await this.prisma.customer.findUnique({ where: { id: customerId }, select: { id: true } });
+    if (!customer) throw new NotFoundException('Customer not found');
+    return this.prisma.customer.update({
+      where: { id: customerId },
+      data: {
+        ...(dto.name?.trim() ? { name: dto.name.trim() } : {}),
+        ...(dto.email !== undefined ? { email: dto.email.trim() || null } : {}),
+      },
+      select: { id: true, name: true, phone: true, email: true, loyaltyPoints: true },
+    });
+  }
+
+  /** KDPA: customer-initiated data deletion. Creates a PENDING request the business
+   *  owner reviews in Settings → KDPA (review cascades to anonymize the customer). */
+  async requestAccountDeletion(customerId: string, reason?: string) {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { id: true, businessId: true },
+    });
+    if (!customer) throw new NotFoundException('Customer not found');
+
+    const existing = await this.prisma.dataDeletionRequest.findFirst({
+      where: { customerId, status: 'PENDING' },
+    });
+    if (existing) return { requested: true, status: 'PENDING', id: existing.id };
+
+    const req = await this.prisma.dataDeletionRequest.create({
+      data: {
+        businessId: customer.businessId,
+        requestedBy: 'CUSTOMER',
+        customerId,
+        reason: reason?.trim() || 'Customer self-service deletion request',
+        status: 'PENDING',
+      },
+    });
+    return { requested: true, status: 'PENDING', id: req.id };
+  }
+
   // ─── Orders (unified: online portal orders + agent field orders) ──────────
 
   async getPortalOrders(customerId: string) {

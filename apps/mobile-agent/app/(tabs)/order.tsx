@@ -10,11 +10,45 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import * as Print from 'expo-print';
 import { agentApi, formatKES } from '../../lib/api';
 import { enqueue, flushQueue, uuid } from '../../lib/offline';
 import { useAuthStore } from '../../stores/auth';
 import { useCartStore } from '../../stores/cart';
 import { Colors } from '../../constants/theme';
+
+interface OrderSnapshot {
+  orderNumber?: string;
+  customerName?: string | null;
+  lines: Array<{ itemName: string; quantity: number; unitPriceCents: number }>;
+  subtotalCents: number;
+}
+
+/** Build + open a printable/shareable order confirmation (Bluetooth/AirPrint/share). */
+async function printOrderConfirmation(snap: OrderSnapshot) {
+  const rows = snap.lines
+    .map(
+      (l) => `<tr><td>${l.itemName}</td><td style="text-align:center">${l.quantity}</td>` +
+        `<td style="text-align:right">${formatKES(l.unitPriceCents)}</td>` +
+        `<td style="text-align:right">${formatKES(l.unitPriceCents * l.quantity)}</td></tr>`,
+    )
+    .join('');
+  const html = `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>body{font-family:Arial,sans-serif;padding:20px;font-size:14px}h1{font-size:20px;text-align:center;margin:0 0 4px}
+    .sub{text-align:center;color:#555;margin:0 0 14px}table{width:100%;border-collapse:collapse;margin-top:8px}
+    th,td{border-bottom:1px solid #ddd;padding:8px;text-align:left}th{background:#f5f5f5}
+    .total{font-weight:bold;font-size:16px;text-align:right;margin-top:12px}.foot{margin-top:24px;text-align:center;color:#777;font-size:12px}</style>
+    </head><body>
+    <h1>ORDER CONFIRMATION</h1>
+    <p class="sub">${snap.orderNumber ? `Order #${snap.orderNumber} · ` : ''}${new Date().toLocaleString('en-KE')}</p>
+    <p><strong>Customer:</strong> ${snap.customerName ?? '—'}</p>
+    <table><thead><tr><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Unit</th><th style="text-align:right">Total</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+    <p class="total">TOTAL: ${formatKES(snap.subtotalCents)}</p>
+    <p class="foot">Thank you for your business.</p>
+    </body></html>`;
+  await Print.printAsync({ html });
+}
 
 interface Item {
   id: string;
@@ -103,12 +137,23 @@ export default function OrderScreen() {
       void qc.invalidateQueries({ queryKey: ['agent-stats'] });
       void qc.invalidateQueries({ queryKey: ['call-plan'] });
       const queued = (res as { queued?: boolean })?.queued;
+      // Snapshot the cart before clearing so the agent can print/share a copy.
+      const snap: OrderSnapshot = {
+        orderNumber: (res as { orderNumber?: string })?.orderNumber,
+        customerName: cart.customerName,
+        lines: cart.lines.map((l) => ({ itemName: l.itemName, quantity: l.quantity, unitPriceCents: l.unitPriceCents })),
+        subtotalCents: cart.subtotalCents(),
+      };
+      const done = () => { cart.clear(); router.replace('/(tabs)/today'); };
       Alert.alert(
         queued ? 'Order Saved Offline' : 'Order Saved',
         queued
           ? 'No connection right now — the order is saved on your phone and will sync automatically when you’re back online.'
           : 'The order has been submitted for processing.',
-        [{ text: 'OK', onPress: () => { cart.clear(); router.replace('/(tabs)/today'); } }],
+        [
+          { text: 'Print / Share', onPress: async () => { try { await printOrderConfirmation(snap); } catch { /* user cancelled */ } done(); } },
+          { text: 'OK', onPress: done },
+        ],
       );
     },
     onError: (e) => {

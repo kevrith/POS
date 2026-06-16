@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   Param,
   UseGuards,
@@ -39,6 +40,24 @@ export class CustomerPortalController {
   @UseGuards(PortalAuthGuard)
   getProfile(@Request() req: { portalCustomerId: string }) {
     return this.service.getProfile(req.portalCustomerId);
+  }
+
+  @Patch('me')
+  @UseGuards(PortalAuthGuard)
+  updateProfile(
+    @Request() req: { portalCustomerId: string },
+    @Body() body: { name?: string; email?: string },
+  ) {
+    return this.service.updateProfile(req.portalCustomerId, body);
+  }
+
+  @Post('me/delete')
+  @UseGuards(PortalAuthGuard)
+  deleteAccount(
+    @Request() req: { portalCustomerId: string },
+    @Body() body: { reason?: string },
+  ) {
+    return this.service.requestAccountDeletion(req.portalCustomerId, body.reason);
   }
 
   @Get('me/orders')

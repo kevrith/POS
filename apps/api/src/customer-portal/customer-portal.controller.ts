@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   UseGuards,
@@ -58,6 +59,27 @@ export class CustomerPortalController {
     @Body() body: { reason?: string },
   ) {
     return this.service.requestAccountDeletion(req.portalCustomerId, body.reason);
+  }
+
+  @Get('me/addresses')
+  @UseGuards(PortalAuthGuard)
+  getAddresses(@Request() req: { portalCustomerId: string }) {
+    return this.service.getAddresses(req.portalCustomerId);
+  }
+
+  @Post('me/addresses')
+  @UseGuards(PortalAuthGuard)
+  addAddress(
+    @Request() req: { portalCustomerId: string },
+    @Body() body: { label?: string; address: string; lat?: number; lng?: number; isDefault?: boolean },
+  ) {
+    return this.service.addAddress(req.portalCustomerId, body);
+  }
+
+  @Delete('me/addresses/:id')
+  @UseGuards(PortalAuthGuard)
+  deleteAddress(@Request() req: { portalCustomerId: string }, @Param('id') id: string) {
+    return this.service.deleteAddress(req.portalCustomerId, id);
   }
 
   @Get('me/orders')

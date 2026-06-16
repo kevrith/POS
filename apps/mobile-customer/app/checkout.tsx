@@ -14,8 +14,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
-import { apiPost, formatKES } from '../lib/api';
+import { useState, useEffect } from 'react';
+import { apiGet, apiPost, formatKES } from '../lib/api';
 import { registerCustomerPushToken } from '../lib/push';
 import { initiateStk, pollStkUntilDone } from '../lib/payments';
 import { useCartStore } from '../stores/cart';
@@ -47,6 +47,24 @@ export default function CheckoutScreen() {
   const [tableNumber, setTableNumber] = useState('');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Saved delivery addresses
+  const [savedAddresses, setSavedAddresses] = useState<{ id: string; label?: string | null; address: string; isDefault: boolean }[]>([]);
+  const [saveAddress, setSaveAddress] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    apiGet<{ id: string; label?: string | null; address: string; isDefault: boolean }[]>('/portal/me/addresses')
+      .then((list) => {
+        if (!active) return;
+        setSavedAddresses(list);
+        // Prefill with the default address if the field is still empty.
+        const def = list.find((a) => a.isDefault) ?? list[0];
+        if (def) setAddress((prev) => prev || def.address);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   const [tipCents, setTipCents] = useState(0);
 
@@ -103,6 +121,14 @@ export default function CheckoutScreen() {
 
       // Register for order-status push now that this customer record exists.
       void registerCustomerPushToken(businessId, phone.trim());
+
+      // Save a brand-new delivery address for next time, if opted in.
+      if (
+        orderType === 'DELIVERY' && saveAddress && address.trim() &&
+        !savedAddresses.some((a) => a.address.trim() === address.trim())
+      ) {
+        void apiPost('/portal/me/addresses', { address: address.trim(), isDefault: savedAddresses.length === 0 }).catch(() => {});
+      }
 
       clearCart();
       // Offer in-app M-Pesa payment before navigating to the confirmation.
@@ -218,6 +244,25 @@ export default function CheckoutScreen() {
             {orderType === 'DELIVERY' ? (
               <>
                 <Text style={styles.fieldLabel}>Delivery Address *</Text>
+                {savedAddresses.length > 0 ? (
+                  <View style={styles.addrChips}>
+                    {savedAddresses.map((a) => {
+                      const active = address.trim() === a.address.trim();
+                      return (
+                        <TouchableOpacity
+                          key={a.id}
+                          style={[styles.addrChip, active && styles.addrChipActive]}
+                          onPress={() => setAddress(a.address)}
+                        >
+                          <Ionicons name="location" size={13} color={active ? '#FFFFFF' : Colors.primary} />
+                          <Text style={[styles.addrChipText, active && { color: '#FFFFFF' }]} numberOfLines={1}>
+                            {a.label || a.address}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ) : null}
                 <TextInput
                   style={[styles.input, styles.multilineInput]}
                   value={address}
@@ -228,6 +273,12 @@ export default function CheckoutScreen() {
                   numberOfLines={3}
                   textAlignVertical="top"
                 />
+                {!savedAddresses.some((a) => a.address.trim() === address.trim()) && address.trim() ? (
+                  <TouchableOpacity style={styles.saveAddrRow} onPress={() => setSaveAddress((v) => !v)}>
+                    <Ionicons name={saveAddress ? 'checkbox' : 'square-outline'} size={18} color={Colors.primary} />
+                    <Text style={styles.saveAddrText}>Save this address for next time</Text>
+                  </TouchableOpacity>
+                ) : null}
               </>
             ) : (
               <>
@@ -442,6 +493,16 @@ const styles = StyleSheet.create({
     height: 72,
     textAlignVertical: 'top',
   },
+  addrChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+  addrChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 5, maxWidth: '100%',
+    borderWidth: 1, borderColor: Colors.primary, borderRadius: 18,
+    paddingHorizontal: 12, paddingVertical: 7, backgroundColor: Colors.card,
+  },
+  addrChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  addrChipText: { fontSize: 12, color: Colors.primary, fontWeight: '600', flexShrink: 1 },
+  saveAddrRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  saveAddrText: { fontSize: 13, color: Colors.text },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

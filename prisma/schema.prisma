@@ -837,6 +837,7 @@ model Customer {
   portalSessions          CustomerPortalSession[]
   agentVisits             AgentVisit[]
   creditRequests          CreditApprovalRequest[]
+  addresses               CustomerAddress[]
   sales                   Sale[]
   salesAgent              User?                   @relation("AgentCustomers", fields: [salesAgentId], references: [id])
   route                   SalesRoute?             @relation(fields: [routeId], references: [id])
@@ -846,6 +847,20 @@ model Customer {
   @@index([shopCode])
   @@index([salesAgentId])
   @@index([routeId])
+}
+
+model CustomerAddress {
+  id         String   @id @default(uuid())
+  customerId String
+  label      String?  // e.g. "Home", "Work"
+  address    String
+  lat        Float?
+  lng        Float?
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
 }
 
 model Layaway {

@@ -206,6 +206,42 @@ export class CustomerPortalService {
     return { requested: true, status: 'PENDING', id: req.id };
   }
 
+  // ─── Saved addresses ──────────────────────────────────────────────────────
+
+  async getAddresses(customerId: string) {
+    return this.prisma.customerAddress.findMany({
+      where: { customerId },
+      orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  async addAddress(
+    customerId: string,
+    dto: { label?: string; address: string; lat?: number; lng?: number; isDefault?: boolean },
+  ) {
+    if (!dto.address?.trim()) throw new BadRequestException('Address is required');
+    if (dto.isDefault) {
+      await this.prisma.customerAddress.updateMany({ where: { customerId }, data: { isDefault: false } });
+    }
+    return this.prisma.customerAddress.create({
+      data: {
+        customerId,
+        label: dto.label?.trim() || null,
+        address: dto.address.trim(),
+        lat: dto.lat ?? null,
+        lng: dto.lng ?? null,
+        isDefault: dto.isDefault ?? false,
+      },
+    });
+  }
+
+  async deleteAddress(customerId: string, id: string) {
+    const addr = await this.prisma.customerAddress.findFirst({ where: { id, customerId } });
+    if (!addr) throw new NotFoundException('Address not found');
+    await this.prisma.customerAddress.delete({ where: { id } });
+    return { ok: true };
+  }
+
   // ─── Orders (unified: online portal orders + agent field orders) ──────────
 
   async getPortalOrders(customerId: string) {

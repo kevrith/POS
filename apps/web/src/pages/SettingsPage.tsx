@@ -1240,6 +1240,60 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* ── Online Store link card ── */}
+        {(() => {
+          const shopUrl = `${window.location.origin}/shop/${businessId}`;
+          return (
+            <div className="bg-gradient-to-r from-indigo-50 to-violet-50 border border-indigo-200 rounded-xl p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm font-bold text-indigo-800">Online Store</span>
+                    <span className="text-xs bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full font-medium">Share with customers</span>
+                  </div>
+                  <div className="font-mono text-sm text-indigo-900 bg-white border-2 border-indigo-200 rounded-xl px-3 py-2.5 truncate select-all mb-3">
+                    {shopUrl}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      id="copy-shop-link-btn"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(shopUrl);
+                        const btn = document.getElementById('copy-shop-link-btn');
+                        if (btn) { btn.textContent = '✓ Copied!'; setTimeout(() => { if (btn) btn.textContent = 'Copy link'; }, 2000); }
+                      }}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors"
+                    >
+                      Copy link
+                    </button>
+                    <a
+                      href={shopUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-4 py-2 bg-white border border-indigo-300 text-indigo-700 text-sm font-semibold rounded-lg hover:bg-indigo-50 transition-colors"
+                    >
+                      Open
+                    </a>
+                  </div>
+                  <p className="text-xs text-indigo-600 mt-2">
+                    Customers open this link to order for delivery or pickup, pay by M-Pesa, and track their orders.
+                  </p>
+                </div>
+                <div className="flex-shrink-0 text-center">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(shopUrl)}`}
+                    alt="Online store QR code"
+                    width={120}
+                    height={120}
+                    className="rounded-lg border border-indigo-200 bg-white p-1"
+                  />
+                  <p className="text-[11px] text-indigo-500 mt-1">Scan to order</p>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         <div className="bg-white rounded-xl shadow p-6 space-y-5">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Business Name</label>

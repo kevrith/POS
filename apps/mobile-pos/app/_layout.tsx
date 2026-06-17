@@ -1,7 +1,8 @@
 import { Stack, useRouter } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { Alert } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Linking from 'expo-linking';
 import * as SecureStore from 'expo-secure-store';
@@ -9,6 +10,23 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '../stores/auth';
 import { usePushNotifications } from '@pos/mobile-push';
 import { routeForTap } from '../lib/push';
+
+/** Watches the auth token. If it gets cleared while the app is open (e.g. the
+ *  API wrapper detected an expired session on a 401), bounce to the login
+ *  screen with a clear message instead of leaving the user on empty screens. */
+function SessionGuard() {
+  const router = useRouter();
+  const token = useAuthStore((s) => s.token);
+  const prev = useRef(token);
+  useEffect(() => {
+    if (prev.current && !token) {
+      Alert.alert('Session expired', 'Please sign in again to continue.');
+      router.replace('/(auth)/login');
+    }
+    prev.current = token;
+  }, [token, router]);
+  return null;
+}
 
 SplashScreen.preventAutoHideAsync();
 
@@ -78,6 +96,7 @@ export default function RootLayout() {
         <StatusBar style="dark" />
         <DeepLinkHandler />
         <PushHandler />
+        <SessionGuard />
         <Stack screenOptions={{ headerShown: false }} />
       </QueryClientProvider>
     </SafeAreaProvider>

@@ -1,10 +1,12 @@
 import * as SecureStore from 'expo-secure-store';
+import { useAuthStore } from '../stores/auth';
 
 // Must match DEFAULT_URL in app/(auth)/login.tsx — the login screen stores the
 // chosen URL under SERVER_URL_KEY, which this module reads for every request.
 // Same deployed API the web app uses (see apps/web/vercel.json rewrite).
 const DEFAULT_BASE_URL = 'https://pos-bhe5.onrender.com/api/v1';
 const SERVER_URL_KEY = 'pos_server_url';
+const TOKEN_KEY = 'pos_token';
 
 async function getBaseUrl(): Promise<string> {
   try {
@@ -17,27 +19,104 @@ async function getBaseUrl(): Promise<string> {
 
 async function getToken(): Promise<string | null> {
   try {
-    return await SecureStore.getItemAsync('pos_token');
+    return await SecureStore.getItemAsync(TOKEN_KEY);
   } catch {
     return null;
   }
 }
 
+// ── JWT helpers ──────────────────────────────────────────────────────────────
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+/** Minimal base64 decode (RN has no reliable atob). */
+function decodeB64(input: string): string {
+  const str = input.replace(/=+$/, '');
+  let output = '';
+  for (let bc = 0, bs = 0, buffer, i = 0; (buffer = str.charAt(i++)); ) {
+    const idx = B64.indexOf(buffer);
+    if (idx === -1) continue;
+    bs = bc % 4 ? bs * 64 + idx : idx;
+    if (bc++ % 4) output += String.fromCharCode(255 & (bs >> ((-2 * bc) & 6)));
+  }
+  return output;
+}
+/** Seconds until the JWT expires (negative = already expired, null = unknown). */
+function secondsUntilExpiry(token: string): number | null {
+  try {
+    const payload = token.split('.')[1];
+    const json = decodeB64(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    const exp = (JSON.parse(json) as { exp?: number }).exp;
+    return typeof exp === 'number' ? exp - Math.floor(Date.now() / 1000) : null;
+  } catch {
+    return null;
+  }
+}
+
+// ── Session handling ─────────────────────────────────────────────────────────
+let refreshInFlight: Promise<string | null> | null = null;
+
+/** Proactively refresh the access token while it is still valid, so an active
+ *  cashier is never bounced to login mid-shift. Returns the token to use. */
+async function ensureFreshToken(token: string | null, baseUrl: string): Promise<string | null> {
+  if (!token) return null;
+  const left = secondsUntilExpiry(token);
+  // Refresh when <2 min remain but still valid (refresh endpoint needs a live token).
+  if (left === null || left > 120 || left <= 0) return token;
+
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const res = await fetch(`${baseUrl}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return token;
+        const data = (await res.json().catch(() => ({}))) as { accessToken?: string };
+        const next = data.accessToken;
+        if (next) {
+          await SecureStore.setItemAsync(TOKEN_KEY, next).catch(() => {});
+          useAuthStore.getState().setTokenFromStorage(next);
+          return next;
+        }
+        return token;
+      } catch {
+        return token;
+      } finally {
+        refreshInFlight = null;
+      }
+    })();
+  }
+  return (await refreshInFlight) ?? token;
+}
+
+/** Wipe the session so the SessionGuard redirects to the login screen. */
+function forceLogout() {
+  SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => {});
+  useAuthStore.getState().clearAuth();
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const [baseUrl, token] = await Promise.all([getBaseUrl(), getToken()]);
+  const baseUrl = await getBaseUrl();
+  let token = await getToken();
+  token = await ensureFreshToken(token, baseUrl);
+
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const url = `${baseUrl}${path}`;
-  const res = await fetch(url, {
+  const res = await fetch(`${baseUrl}${path}`, {
     method,
     headers,
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
 
+  // Expired/invalid session → log out cleanly instead of showing empty data.
+  if (res.status === 401 && token) {
+    forceLogout();
+    throw new Error('Your session has expired. Please sign in again.');
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error((err as any).message ?? `API error ${res.status}`);
+    throw new Error((err as { message?: string }).message ?? `API error ${res.status}`);
   }
   if (res.status === 204) return undefined as T;
   return res.json();

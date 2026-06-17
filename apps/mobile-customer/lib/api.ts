@@ -1,7 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSessionStore } from '../stores/session';
 
 export const SERVER_URL_KEY  = 'customer_server_url';
 export const DEFAULT_BASE_URL = 'https://pos-bhe5.onrender.com/api/v1';
+
+/** Expired/revoked portal session → clear it so the app returns to the login gate. */
+async function handleUnauthorized() {
+  await useSessionStore.getState().logout().catch(() => {});
+}
 
 export async function getBaseUrl(): Promise<string> {
   try {
@@ -22,6 +28,10 @@ async function getHeaders(): Promise<Record<string, string>> {
 export async function apiGet<T>(path: string): Promise<T> {
   const [baseUrl, headers] = await Promise.all([getBaseUrl(), getHeaders()]);
   const res = await fetch(`${baseUrl}${path}`, { headers });
+  if (res.status === 401 && (headers as Record<string, string>).Authorization) {
+    await handleUnauthorized();
+    throw new Error('Your session has expired. Please sign in again.');
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error((err as any).message ?? `API error ${res.status}`);
@@ -36,6 +46,10 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
     headers,
     body: JSON.stringify(body),
   });
+  if (res.status === 401 && (headers as Record<string, string>).Authorization) {
+    await handleUnauthorized();
+    throw new Error('Your session has expired. Please sign in again.');
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error((err as any).message ?? `API error ${res.status}`);
@@ -50,6 +64,10 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
     headers,
     body: JSON.stringify(body),
   });
+  if (res.status === 401 && (headers as Record<string, string>).Authorization) {
+    await handleUnauthorized();
+    throw new Error('Your session has expired. Please sign in again.');
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error((err as any).message ?? `API error ${res.status}`);

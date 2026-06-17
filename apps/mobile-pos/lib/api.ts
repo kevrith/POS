@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import { useAuthStore } from '../stores/auth';
+import { secondsUntilExpiry } from './jwt';
 
 // Must match DEFAULT_URL in app/(auth)/login.tsx — the login screen stores the
 // chosen URL under SERVER_URL_KEY, which this module reads for every request.
@@ -20,32 +21,6 @@ async function getBaseUrl(): Promise<string> {
 async function getToken(): Promise<string | null> {
   try {
     return await SecureStore.getItemAsync(TOKEN_KEY);
-  } catch {
-    return null;
-  }
-}
-
-// ── JWT helpers ──────────────────────────────────────────────────────────────
-const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-/** Minimal base64 decode (RN has no reliable atob). */
-function decodeB64(input: string): string {
-  const str = input.replace(/=+$/, '');
-  let output = '';
-  for (let bc = 0, bs = 0, buffer, i = 0; (buffer = str.charAt(i++)); ) {
-    const idx = B64.indexOf(buffer);
-    if (idx === -1) continue;
-    bs = bc % 4 ? bs * 64 + idx : idx;
-    if (bc++ % 4) output += String.fromCharCode(255 & (bs >> ((-2 * bc) & 6)));
-  }
-  return output;
-}
-/** Seconds until the JWT expires (negative = already expired, null = unknown). */
-function secondsUntilExpiry(token: string): number | null {
-  try {
-    const payload = token.split('.')[1];
-    const json = decodeB64(payload.replace(/-/g, '+').replace(/_/g, '/'));
-    const exp = (JSON.parse(json) as { exp?: number }).exp;
-    return typeof exp === 'number' ? exp - Math.floor(Date.now() / 1000) : null;
   } catch {
     return null;
   }

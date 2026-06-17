@@ -10,14 +10,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { mobileApi, formatKES } from '../../lib/api';
 import { useActiveStore } from '../../lib/useActiveStore';
 import { Colors } from '../../constants/theme';
 
 // Matches the web /reports/sales response (apps/api reports.service.ts)
+interface SaleLine { name: string; quantity: number; totalCents: number }
 interface SalesReportResp {
-  sales: Array<{ discountCents: number }>;
+  sales: Array<{ discountCents: number; items?: SaleLine[] }>;
   summary: {
     totalSales: number;
     totalRevenueCents: number;
@@ -26,6 +27,7 @@ interface SalesReportResp {
   };
 }
 interface PayMethod { method: string; totalCents: number; count: number }
+interface LowStockItem { id: string; name: string; currentStock: number }
 
 type ReportTab = 'today' | 'week' | 'month';
 
@@ -77,6 +79,27 @@ export default function ReportsScreen() {
     staleTime: 30_000,
   });
 
+  const { data: lowStock, refetch: refetchLow } = useQuery<LowStockItem[]>({
+    queryKey: ['report-lowstock', businessId, storeId],
+    queryFn: () => mobileApi.get<LowStockItem[]>(`/items/low-stock?businessId=${businessId}&storeId=${storeId}`),
+    enabled: !!businessId && !!storeId,
+    staleTime: 60_000,
+  });
+
+  // Top sellers for the period — aggregated from the sales report's line items.
+  const topItems = useMemo(() => {
+    const map = new Map<string, { name: string; qty: number; revenue: number }>();
+    for (const s of report?.sales ?? []) {
+      for (const it of s.items ?? []) {
+        const e = map.get(it.name) ?? { name: it.name, qty: 0, revenue: 0 };
+        e.qty += it.quantity;
+        e.revenue += it.totalCents;
+        map.set(it.name, e);
+      }
+    }
+    return [...map.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 5);
+  }, [report]);
+
   const summary = report?.summary;
   const total = summary?.totalRevenueCents ?? 0;
   const txCount = summary?.totalSales ?? 0;
@@ -92,7 +115,7 @@ export default function ReportsScreen() {
     .filter((p) => !['CASH', 'MPESA', 'CARD'].includes(p.method))
     .reduce((s, p) => s + p.totalCents, 0);
 
-  const refresh = () => { void refetch(); void refetchPay(); };
+  const refresh = () => { void refetch(); void refetchPay(); void refetchLow(); };
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
@@ -198,6 +221,54 @@ export default function ReportsScreen() {
               </>
             )}
           </View>
+
+          {/* Top Items */}
+          {topItems.length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>Top Sellers</Text>
+              <View style={styles.card}>
+                {topItems.map((it, i) => (
+                  <View key={it.name} style={[styles.payRow, i > 0 && { borderTopWidth: 1, borderTopColor: Colors.border }]}>
+                    <View style={styles.payLeft}>
+                      <View style={[styles.rankBadge, i === 0 && { backgroundColor: Colors.primary }]}>
+                        <Text style={[styles.rankText, i === 0 && { color: '#FFFFFF' }]}>{i + 1}</Text>
+                      </View>
+                      <Text style={styles.payLabel} numberOfLines={1}>{it.name}</Text>
+                    </View>
+                    <View style={styles.payRight}>
+                      <Text style={styles.payCount}>{it.qty} sold</Text>
+                      <Text style={styles.payAmount}>{formatKES(it.revenue)}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
+
+          {/* Low Stock */}
+          {lowStock && lowStock.length > 0 && (
+            <>
+              <Text style={[styles.sectionTitle, { color: Colors.error }]}>
+                Low Stock ({lowStock.length})
+              </Text>
+              <View style={styles.card}>
+                {lowStock.slice(0, 6).map((it, i) => (
+                  <View key={it.id} style={[styles.payRow, i > 0 && { borderTopWidth: 1, borderTopColor: Colors.border }]}>
+                    <View style={styles.payLeft}>
+                      <Ionicons name="alert-circle" size={16} color={Colors.error} />
+                      <Text style={styles.payLabel} numberOfLines={1}>{it.name}</Text>
+                    </View>
+                    <Text style={[styles.payAmount, { color: it.currentStock <= 0 ? Colors.error : Colors.warning }]}>
+                      {it.currentStock} left
+                    </Text>
+                  </View>
+                ))}
+                {lowStock.length > 6 && (
+                  <Text style={styles.moreText}>+{lowStock.length - 6} more — see Manage › Stock</Text>
+                )}
+              </View>
+            </>
+          )}
 
           {/* Net Summary */}
           <Text style={styles.sectionTitle}>Net Summary</Text>
@@ -338,6 +409,9 @@ const styles = StyleSheet.create({
   payRight: { alignItems: 'flex-end', gap: 2 },
   payCount: { fontSize: 11, color: Colors.textSecondary },
   payAmount: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  rankBadge: { width: 22, height: 22, borderRadius: 11, backgroundColor: Colors.border, justifyContent: 'center', alignItems: 'center' },
+  rankText: { fontSize: 12, fontWeight: '800', color: Colors.textSecondary },
+  moreText: { fontSize: 12, color: Colors.textSecondary, textAlign: 'center', paddingTop: 8 },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
   summaryLabel: { fontSize: 13, color: Colors.textSecondary },
   summaryValue: { fontSize: 13, fontWeight: '600', color: Colors.text },

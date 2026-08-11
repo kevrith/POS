@@ -63,6 +63,7 @@ const QRMenuPage = lazy(() => import('./pages/QRMenuPage'));
 const OnlineOrderPage = lazy(() => import('./pages/OnlineOrderPage'));
 const OnlineOrdersPage = lazy(() => import('./pages/OnlineOrdersPage'));
 const ShopPage = lazy(() => import('./pages/ShopPage'));
+const AffiliatePortalPage = lazy(() => import('./pages/AffiliatePortalPage'));
 const FuelPumpPage = lazy(() => import('./pages/FuelPumpPage'));
 const CybercafePage = lazy(() => import('./pages/CybercafePage'));
 const CyberKioskPage = lazy(() => import('./pages/CyberKioskPage'));
@@ -225,6 +226,13 @@ export default function App() {
     return (
       <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
         <Routes><Route path="/shop/:businessId" element={<ShopPage />} /></Routes>
+      </Suspense>
+    );
+  }
+  if (window.location.pathname.startsWith('/affiliate')) {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+        <Routes><Route path="/affiliate" element={<AffiliatePortalPage />} /></Routes>
       </Suspense>
     );
   }

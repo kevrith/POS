@@ -51,6 +51,7 @@ export default function LoginPage() {
   const urlParams = new URLSearchParams(window.location.search);
   const urlMode = urlParams.get('mode');
   const urlPlan = (urlParams.get('plan') ?? '').toUpperCase();
+  const urlAffiliate = urlParams.get('aff') ?? ''; // affiliate referral code
 
   const [mode, setMode] = useState<LoginMode>(urlMode === 'register' ? 'register' : 'email');
 
@@ -351,6 +352,7 @@ export default function LoginPage() {
           password: regPassword,
           businessName: regBusiness,
           ...(urlPlan ? { plan: urlPlan } : {}),
+          ...(urlAffiliate ? { affiliateCode: urlAffiliate } : {}),
         }),
       });
       if (!res.ok) {

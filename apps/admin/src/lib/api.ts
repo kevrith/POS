@@ -62,6 +62,24 @@ async function request<T>(path: string, opts: RequestInit = {}, isLogin = false)
   return res.json() as Promise<T>;
 }
 
+// Some admin-authorised endpoints live outside the /super-admin prefix (e.g. the
+// affiliate program, guarded by SuperAdminAuthGuard). Hit the API root directly.
+const API_ROOT = `${_origin}/api/v1`;
+async function requestRoot<T>(path: string, opts: RequestInit = {}): Promise<T> {
+  const token = getAdminToken();
+  const res = await fetch(`${API_ROOT}${path}`, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(opts.headers ?? {}) },
+  });
+  if (res.status === 401) { clearAdminToken(); window.location.href = '/'; throw new Error('Session expired'); }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(body.message ?? `Request failed (${res.status})`);
+  }
+  if (res.status === 204) return undefined as T;
+  return res.json() as Promise<T>;
+}
+
 export const adminApi = {
   login: (email: string, password: string) =>
     request<{ token: string }>('/login', { method: 'POST', body: JSON.stringify({ email, password }) }, true),
@@ -104,6 +122,15 @@ export const adminApi = {
     request<any>('/force-update', { method: 'POST', body: JSON.stringify({ version, message, isRequired }) }),
 
   getReferrals: (page = 1) => request<any>(`/referrals?page=${page}&limit=20`),
+
+  // Affiliate program (guarded by SuperAdminAuthGuard, outside /super-admin)
+  getAffiliates: (status?: string) =>
+    requestRoot<any[]>(`/affiliate/admin${status && status !== 'ALL' ? `?status=${status}` : ''}`),
+  getAffiliate: (id: string) => requestRoot<any>(`/affiliate/admin/${id}`),
+  setAffiliateStatus: (id: string, status: string, commissionPercent?: number) =>
+    requestRoot<any>(`/affiliate/admin/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status, commissionPercent }) }),
+  recordAffiliatePayout: (id: string, data: { amountCents: number; method?: string; reference?: string; notes?: string }) =>
+    requestRoot<any>(`/affiliate/admin/${id}/payout`, { method: 'POST', body: JSON.stringify(data) }),
 
   getBusinessUsers: (id: string) => request<any[]>(`/businesses/${id}/users`),
 

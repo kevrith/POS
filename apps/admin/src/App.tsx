@@ -7,12 +7,13 @@ import BusinessesPage from './pages/BusinessesPage';
 import LicenseKeysPage from './pages/LicenseKeysPage';
 import SupportPage from './pages/SupportPage';
 import ReferralsPage from './pages/ReferralsPage';
+import AffiliatesPage from './pages/AffiliatesPage';
 import UsersPage from './pages/UsersPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import WebhooksPage from './pages/WebhooksPage';
 import PlatformSettingsPage from './pages/PlatformSettingsPage';
 
-type Page = 'dashboard' | 'businesses' | 'users' | 'license-keys' | 'support' | 'referrals' | 'analytics' | 'webhooks' | 'platform-settings';
+type Page = 'dashboard' | 'businesses' | 'users' | 'license-keys' | 'support' | 'referrals' | 'affiliates' | 'analytics' | 'webhooks' | 'platform-settings';
 
 const C = {
   bg: '#0a0f1e',
@@ -66,6 +67,7 @@ const NAV: Array<{ id: Page; label: string; icon: string; color: string; group?:
   { id: 'analytics',         label: 'Analytics',        icon: MoreIcons.analytics, color: '#10b981' },
   { id: 'license-keys',      label: 'License Keys',     icon: Icons.license,       color: C.success },
   { id: 'referrals',         label: 'Referrals',        icon: MoreIcons.referral,  color: '#f472b6' },
+  { id: 'affiliates',        label: 'Affiliates',       icon: MoreIcons.referral,  color: '#8b5cf6' },
   { id: 'webhooks',          label: 'Webhooks',         icon: MoreIcons.webhooks,  color: '#f59e0b' },
   { id: 'support',           label: 'Support Tools',    icon: Icons.support,       color: C.warning },
   { id: 'platform-settings', label: 'Platform Settings',icon: MoreIcons.settings,  color: '#8b5cf6' },
@@ -432,6 +434,7 @@ export default function App() {
           {page === 'analytics'          && <AnalyticsPage />}
           {page === 'license-keys'       && <LicenseKeysPage />}
           {page === 'referrals'          && <ReferralsPage />}
+          {page === 'affiliates'         && <AffiliatesPage />}
           {page === 'webhooks'           && <WebhooksPage />}
           {page === 'support'            && <SupportPage />}
           {page === 'platform-settings'  && <PlatformSettingsPage />}

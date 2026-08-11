@@ -214,4 +214,19 @@ export class EmailService {
         </div>`,
     });
   }
+
+  async sendAffiliatePayout(opts: { to: string; name: string; amount: string; method: string; reference: string; balance: string }) {
+    return this.send({
+      to: opts.to,
+      subject: `Payout sent: ${opts.amount} — KASTRA Affiliate`,
+      html: `
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+          <h2 style="color:#4f46e5">Payout sent</h2>
+          <p>Hi ${opts.name},</p>
+          <p>We've sent you a payout of <strong>${opts.amount}</strong> via <strong>${opts.method}</strong>${opts.reference ? ` (ref: ${opts.reference})` : ''}.</p>
+          <p>Your remaining balance is <strong>${opts.balance}</strong>.</p>
+          <p style="color:#6b7280;font-size:12px;margin-top:24px">KASTRA POS</p>
+        </div>`,
+    });
+  }
 }

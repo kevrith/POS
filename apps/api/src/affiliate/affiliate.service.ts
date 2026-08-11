@@ -236,6 +236,18 @@ export class AffiliateService {
       this.prisma.affiliate.update({ where: { id }, data: { balanceCents: { decrement: dto.amountCents } } }),
       this.prisma.affiliateCommission.updateMany({ where: { affiliateId: id, status: 'PENDING' }, data: { status: 'PAID', payoutId: payout.id } }),
     ]);
+
+    // Send the affiliate a payout receipt.
+    this.email
+      .sendAffiliatePayout({
+        to: affiliate.email,
+        name: affiliate.name,
+        amount: fmtKES(dto.amountCents),
+        method: dto.method ?? affiliate.payoutMethod ?? '—',
+        reference: dto.reference ?? '',
+        balance: fmtKES(Math.max(0, affiliate.balanceCents - dto.amountCents)),
+      })
+      .catch(() => {});
     return payout;
   }
 }

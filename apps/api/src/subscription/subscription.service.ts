@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
+import { AffiliateService } from '../affiliate/affiliate.service';
 import { createHmac, randomBytes } from 'node:crypto';
 
 export const PLANS = {
@@ -20,6 +21,7 @@ export class SubscriptionService {
   constructor(
     private prisma: PrismaService,
     private email: EmailService,
+    private affiliate: AffiliateService,
   ) {}
 
   getPlans() {
@@ -131,6 +133,13 @@ export class SubscriptionService {
       },
     });
     this.logger.log(`Business ${businessId} activated on ${tier} plan`);
+
+    // Recurring affiliate commission — credit the partner (if any) who referred
+    // this business, based on the plan price they just paid.
+    const amountCents = (PLANS[tier]?.amountKES ?? 0) * 100;
+    if (amountCents > 0) {
+      await this.affiliate.recordSubscriptionCommission(businessId, amountCents).catch(() => {});
+    }
 
     // Auto-generate a license key for the paying customer
     try {

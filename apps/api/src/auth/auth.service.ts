@@ -6,6 +6,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
+import { AffiliateService } from '../affiliate/affiliate.service';
 import * as bcrypt from 'bcrypt';
 import * as speakeasy from 'speakeasy';
 import { UserRole } from '@pos/shared';
@@ -36,6 +37,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwt: JwtService,
     private email: EmailService,
+    private affiliate: AffiliateService,
   ) {}
 
   // ─── Password complexity validation ─────────────────────────
@@ -334,6 +336,7 @@ export class AuthService {
     email: string;
     password: string;
     businessName: string;
+    affiliateCode?: string;
   }): Promise<{ accessToken: string; user: AuthUser }> {
     const existing = await this.prisma.user.findUnique({ where: { email: data.email } });
     if (existing) throw new BadRequestException('Email already registered');
@@ -372,6 +375,11 @@ export class AuthService {
 
       return { business, store, user };
     });
+
+    // Attribute the signup to an affiliate if a valid, active code was supplied.
+    if (data.affiliateCode) {
+      await this.affiliate.attributeSignup(data.affiliateCode, result.business.id).catch(() => {});
+    }
 
     const payload: JwtPayload = {
       sub: result.user.id,

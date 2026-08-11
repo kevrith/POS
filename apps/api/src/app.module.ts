@@ -46,6 +46,7 @@ import { QueueModule } from './queue/queue.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { SuperAdminModule } from './super-admin/super-admin.module';
 import { ReferralsModule } from './referrals/referrals.module';
+import { AffiliateModule } from './affiliate/affiliate.module';
 import { KdpaModule } from './kdpa/kdpa.module';
 import { PrescriptionsModule } from './prescriptions/prescriptions.module';
 import { PharmacyModule } from './pharmacy/pharmacy.module';
@@ -125,6 +126,7 @@ import { DbBackupModule } from './backup/db-backup.module';
     SubscriptionModule,
     SuperAdminModule,
     ReferralsModule,
+    AffiliateModule,
     KdpaModule,
     PrescriptionsModule,
     PharmacyModule,

@@ -36,6 +36,7 @@ model Business {
   paystackSubscriptionId        String?
   paystackPublicKey             String?
   referralCode                  String?               @unique
+  affiliateCode                 String?               // affiliate code this business signed up under (external partner program)
   shortCode                     String?               @unique
   createdAt                     DateTime              @default(now())
   updatedAt                     DateTime              @updatedAt
@@ -1214,6 +1215,74 @@ model Referral {
 
   @@index([referrerBusinessId])
   @@index([code])
+}
+
+// ── Affiliate program (external partners, separate from business referrals) ──
+model Affiliate {
+  id                String    @id @default(uuid())
+  name              String
+  email             String    @unique
+  phone             String?
+  passwordHash      String
+  code              String    @unique // unique promo code/link slug, e.g. AFF-XXXXXX
+  status            String    @default("PENDING") // PENDING | ACTIVE | SUSPENDED | REJECTED
+  commissionPercent Int       @default(10)        // recurring % of each subscription payment
+  payoutMethod      String?                       // MPESA | BANK
+  payoutDetails     String?                       // M-Pesa phone or bank account
+  balanceCents      Int       @default(0)         // earned but not yet paid out
+  totalEarnedCents  Int       @default(0)
+  approvedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  conversions       AffiliateConversion[]
+  commissions       AffiliateCommission[]
+  payouts           AffiliatePayout[]
+
+  @@index([code])
+  @@index([status])
+}
+
+// A business attributed to an affiliate (one business → at most one affiliate).
+model AffiliateConversion {
+  id           String    @id @default(uuid())
+  affiliateId  String
+  businessId   String    @unique
+  status       String    @default("SIGNED_UP") // SIGNED_UP | SUBSCRIBED | CHURNED
+  subscribedAt DateTime?
+  createdAt    DateTime  @default(now())
+  affiliate    Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+
+  @@index([affiliateId])
+}
+
+// One commission earned from a single subscription payment (recurring model).
+model AffiliateCommission {
+  id          String    @id @default(uuid())
+  affiliateId String
+  businessId  String
+  amountCents Int
+  baseCents   Int       // the payment the commission was computed from
+  percent     Int
+  status      String    @default("PENDING") // PENDING | PAID
+  payoutId    String?
+  createdAt   DateTime  @default(now())
+  affiliate   Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+
+  @@index([affiliateId])
+  @@index([businessId])
+}
+
+model AffiliatePayout {
+  id          String    @id @default(uuid())
+  affiliateId String
+  amountCents Int
+  method      String?   // MPESA | BANK
+  reference   String?   // M-Pesa code / bank reference
+  notes       String?
+  createdAt   DateTime  @default(now())
+  affiliate   Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+
+  @@index([affiliateId])
 }
 
 model LicenseKey {

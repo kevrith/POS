@@ -26,6 +26,7 @@ interface RegisterDto {
   email: string;
   password: string;
   businessName: string;
+  affiliateCode?: string;
 }
 
 @SkipSubscriptionCheck()

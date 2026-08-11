@@ -13,6 +13,7 @@ import { RolesGuard } from './roles.guard';
 import { TenantGuard } from './tenant.guard';
 import { SubscriptionGuard } from './subscription.guard';
 import { EmailModule } from '../email/email.module';
+import { AffiliateModule } from '../affiliate/affiliate.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { EmailModule } from '../email/email.module';
       }),
     }),
     EmailModule,
+    AffiliateModule,
   ],
   providers: [AuthService, WebAuthnService, JwtStrategy, GoogleStrategy, JwtAuthGuard, RolesGuard, TenantGuard, SubscriptionGuard],
   controllers: [AuthController, WebAuthnController],

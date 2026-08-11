@@ -183,4 +183,35 @@ export class EmailService {
         </div>`,
     });
   }
+
+  async sendAffiliateApproved(opts: { to: string; name: string; code: string; link: string; commissionPercent: number }) {
+    return this.send({
+      to: opts.to,
+      subject: 'You\'re approved — KASTRA Affiliate Program',
+      html: `
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+          <h2 style="color:#4f46e5">Welcome aboard, ${opts.name}!</h2>
+          <p>Your affiliate application has been approved. You'll earn <strong>${opts.commissionPercent}% recurring commission</strong> on every subscription payment from businesses you refer.</p>
+          <p>Your referral link:</p>
+          <p style="background:#f3f4f6;border-radius:8px;padding:12px;font-family:monospace;word-break:break-all">${opts.link}</p>
+          <p>Share it far and wide. Track your signups, commissions and payouts anytime from your dashboard.</p>
+          <p style="color:#6b7280;font-size:12px;margin-top:24px">Your code: ${opts.code} · KASTRA POS</p>
+        </div>`,
+    });
+  }
+
+  async sendAffiliateCommission(opts: { to: string; name: string; amount: string; businessName: string; balance: string }) {
+    return this.send({
+      to: opts.to,
+      subject: `You earned ${opts.amount} — KASTRA Affiliate`,
+      html: `
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+          <h2 style="color:#10b981">Commission earned!</h2>
+          <p>Hi ${opts.name},</p>
+          <p><strong>${opts.businessName}</strong> made a subscription payment, so you just earned <strong>${opts.amount}</strong>.</p>
+          <p>Your current balance is <strong>${opts.balance}</strong>. Payouts are processed by the KASTRA team.</p>
+          <p style="color:#6b7280;font-size:12px;margin-top:24px">KASTRA POS</p>
+        </div>`,
+    });
+  }
 }

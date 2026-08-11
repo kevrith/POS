@@ -1061,6 +1061,11 @@ export default function LoginPage() {
             </div>
           )}
 
+          <p className="text-center text-xs text-gray-400 mt-6">
+            Want to earn by referring businesses?{' '}
+            <a href="/affiliate" className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline">Join our affiliate program →</a>
+          </p>
+
         </div>
           </div>
 

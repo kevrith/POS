@@ -1,16 +1,20 @@
 import { Injectable, BadRequestException, UnauthorizedException, NotFoundException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
+import { EmailService } from '../email/email.service';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AffiliateTokenPayload { sub: string; role: 'AFFILIATE'; code: string }
+
+const fmtKES = (cents: number) => `KES ${(cents / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
 
 @Injectable()
 export class AffiliateService {
   constructor(
     private prisma: PrismaService,
     private jwt: JwtService,
+    private email: EmailService,
   ) {}
 
   private sign(a: { id: string; code: string }): string {
@@ -163,6 +167,18 @@ export class AffiliateService {
         ? [this.prisma.affiliateConversion.update({ where: { id: conversion.id }, data: { status: 'SUBSCRIBED', subscribedAt: new Date() } })]
         : []),
     ]);
+
+    // Notify the affiliate they earned a commission.
+    const business = await this.prisma.business.findUnique({ where: { id: businessId }, select: { name: true } });
+    this.email
+      .sendAffiliateCommission({
+        to: affiliate.email,
+        name: affiliate.name,
+        amount: fmtKES(amountCents),
+        businessName: business?.name ?? 'A business',
+        balance: fmtKES(affiliate.balanceCents + amountCents),
+      })
+      .catch(() => {});
   }
 
   // ── Admin (super-admin) ─────────────────────────────────────────────────────
@@ -186,7 +202,8 @@ export class AffiliateService {
   async adminSetStatus(id: string, status: string, commissionPercent?: number) {
     const valid = ['PENDING', 'ACTIVE', 'SUSPENDED', 'REJECTED'];
     if (!valid.includes(status)) throw new BadRequestException('Invalid status');
-    return this.prisma.affiliate.update({
+    const before = await this.prisma.affiliate.findUnique({ where: { id } });
+    const updated = await this.prisma.affiliate.update({
       where: { id },
       data: {
         status,
@@ -194,6 +211,15 @@ export class AffiliateService {
         ...(commissionPercent !== undefined && { commissionPercent }),
       },
     });
+
+    // Email the affiliate the first time they're approved.
+    if (status === 'ACTIVE' && before?.status !== 'ACTIVE') {
+      const link = `${process.env.APP_URL ?? 'https://app.kastrapos.co.ke'}/?mode=register&aff=${updated.code}`;
+      this.email
+        .sendAffiliateApproved({ to: updated.email, name: updated.name, code: updated.code, link, commissionPercent: updated.commissionPercent })
+        .catch(() => {});
+    }
+    return updated;
   }
 
   /** Record a manual payout: creates the record, clears matching PENDING commissions, decrements balance. */

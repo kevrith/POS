@@ -25,11 +25,30 @@ services:
       - key: ENCRYPTION_KEY
         sync: false           # 64 hex chars — generate with: openssl rand -hex 32
       - key: FRONTEND_URL
-        sync: false           # e.g. https://kastra-pos.vercel.app
+        sync: false           # web app origin, e.g. https://pos-web-sigma.vercel.app
+                              # (used for CORS + affiliate/referral email links)
       - key: ADMIN_URL
-        sync: false           # e.g. https://kastra-admin.vercel.app
+        sync: false           # admin console origin, e.g. https://kastra-admin.vercel.app
       - key: EXTRA_ORIGINS
         sync: false           # Comma-separated extra allowed origins (optional)
+      # ── Email (Resend) — REQUIRED for affiliate/subscription/receipt emails ──
+      - key: RESEND_API_KEY
+        sync: false           # from resend.com/api-keys
+      - key: EMAIL_FROM
+        sync: false           # e.g. "KASTRA POS <receipts@yourdomain.com>" (verified Resend domain)
+      # ── Paystack billing — REQUIRED for subscriptions + affiliate commissions ──
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      - key: PAYSTACK_WEBHOOK_SECRET
+        sync: false
+      - key: PAYSTACK_STARTER_PLAN
+        sync: false           # Paystack plan code for the Starter tier
+      - key: PAYSTACK_GROWTH_PLAN
+        sync: false
+      - key: PAYSTACK_PRO_PLAN
+        sync: false
+      - key: PAYSTACK_ENTERPRISE_PLAN
+        sync: false
       - key: SUPER_ADMIN_EMAIL
         sync: false
       - key: SUPER_ADMIN_PASSWORD

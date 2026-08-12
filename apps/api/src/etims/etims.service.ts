@@ -3,6 +3,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import * as crypto from 'crypto';
 
+/**
+ * KRA's public eTIMS receipt-verification endpoint. Scanning a compliant receipt QR
+ * opens this page with the seller PIN + branch + receipt signature, exactly like the
+ * QR printed by a KRA-approved control unit.
+ */
+const ETIMS_VERIFY_BASE =
+  process.env.ETIMS_VERIFY_URL ??
+  'https://etims.kra.go.ke/common/link/etims/receipt/indexEtimsReceiptData';
+
 // ─── KRA eTIMS API interfaces ─────────────────────────────────────────────────
 
 interface EtimsInvoiceItem {
@@ -258,14 +267,36 @@ export class EtimsService {
 
   // ─── Sale submission ──────────────────────────────────────────────────────
 
-  async submitSale(saleId: string): Promise<{ success: boolean; controlNumber?: string; intrlData?: string; reason?: string }> {
+  /**
+   * Build the QR payload that KRA expects on an eTIMS receipt.
+   *
+   * A compliant receipt QR is a **link into the KRA verification portal**, not the
+   * bare signature — scanning it with any phone camera must land the buyer on the
+   * KRA page showing the invoice. The `Data` parameter is the concatenation of the
+   * seller PIN, the branch id and the receipt signature returned by KRA.
+   */
+  private buildEtimsQrUrl(kraPin?: string | null, branchId?: string | null, signature?: string | null): string | undefined {
+    const pin = (kraPin ?? '').trim().toUpperCase();
+    const branch = (branchId ?? '00').trim().padStart(2, '0');
+    const sign = (signature ?? '').trim();
+    if (!pin || !sign) return undefined;
+    return `${ETIMS_VERIFY_BASE}?Data=${encodeURIComponent(`${pin}${branch}${sign}`)}`;
+  }
+
+  async submitSale(saleId: string): Promise<{ success: boolean; controlNumber?: string; intrlData?: string; qrUrl?: string; reason?: string }> {
     const sale = await this.prisma.sale.findUnique({ where: { id: saleId } });
     if (!sale) throw new BadRequestException('Sale not found');
-    if (sale.etimsSubmitted) return {
-      success: true,
-      controlNumber: sale.etimsControlNumber ?? undefined,
-      intrlData: (sale as any).etimsIntrlData ?? sale.etimsControlNumber ?? undefined,
-    };
+    if (sale.etimsSubmitted) {
+      const biz = await this.prisma.business.findUnique({ where: { id: sale.businessId } });
+      const sign = (sale as any).etimsIntrlData ?? sale.etimsControlNumber ?? undefined;
+      const id = this.etimsIdentity(biz);
+      return {
+        success: true,
+        controlNumber: sale.etimsControlNumber ?? undefined,
+        intrlData: sign,
+        qrUrl: this.buildEtimsQrUrl(id.kraPin, id.branchId, sign),
+      };
+    }
 
     const business = await this.prisma.business.findUnique({ where: { id: sale.businessId } });
     let controlNumber: string;
@@ -297,7 +328,26 @@ export class EtimsService {
       after: { controlNumber },
     });
 
-    return { success: true, controlNumber, intrlData };
+    const identity = this.etimsIdentity(business);
+    return {
+      success: true,
+      controlNumber,
+      intrlData,
+      qrUrl: this.buildEtimsQrUrl(identity.kraPin, identity.branchId, intrlData),
+    };
+  }
+
+  /** The seller PIN and branch id live inside the encrypted eTIMS credentials. */
+  private etimsIdentity(
+    business: { etimsCredentialsEncrypted?: string | null } | null,
+  ): { kraPin?: string; branchId: string } {
+    if (!business?.etimsCredentialsEncrypted) return { branchId: '00' };
+    try {
+      const creds = this.decryptCredentials(business.etimsCredentialsEncrypted);
+      return { kraPin: creds.kraPin, branchId: creds.branchId ?? '00' };
+    } catch {
+      return { branchId: '00' };
+    }
   }
 
   async submitAmendment(saleId: string): Promise<{ success: boolean }> {

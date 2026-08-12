@@ -406,12 +406,12 @@ export default function SupermarketPOSPage() {
       };
       setReceiptData(receipt);
 
-      api.post<{ success: boolean; controlNumber?: string; intrlData?: string }>(`/etims/submit/${result.id}`)
+      api.post<{ success: boolean; controlNumber?: string; intrlData?: string; qrUrl?: string }>(`/etims/submit/${result.id}`)
         .then((res) => {
           setReceiptData((prev) => prev ? {
             ...prev,
             etimsSubmitted: res.success,
-            kraQRCode: res.intrlData ?? res.controlNumber,
+            kraQRCode: res.qrUrl ?? res.intrlData ?? res.controlNumber,
             etimsControlNumber: res.controlNumber,
           } : prev);
         })

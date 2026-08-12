@@ -224,7 +224,7 @@ export class PdfService {
             <tr><td>Commission</td><td class="amount">${(payslip.commissionCents / 100).toFixed(2)}</td></tr>
             <tr class="total-row"><td><strong>GROSS PAY</strong></td><td class="amount"><strong>${(payslip.grossPay / 100).toFixed(2)}</strong></td></tr>
             <tr><td style="color:red">PAYE (Income Tax)</td><td class="amount" style="color:red">-${(payslip.payeAmount / 100).toFixed(2)}</td></tr>
-            <tr><td style="color:red">NHIF</td><td class="amount" style="color:red">-${(payslip.nhifAmount / 100).toFixed(2)}</td></tr>
+            <tr><td style="color:red">SHIF</td><td class="amount" style="color:red">-${(payslip.shifAmount / 100).toFixed(2)}</td></tr>
             <tr><td style="color:red">NSSF Tier 1</td><td class="amount" style="color:red">-${(payslip.nssf1Amount / 100).toFixed(2)}</td></tr>
             <tr><td style="color:red">NSSF Tier 2</td><td class="amount" style="color:red">-${(payslip.nssf2Amount / 100).toFixed(2)}</td></tr>
             <tr><td style="color:red">Housing Levy (1.5%)</td><td class="amount" style="color:red">-${(payslip.housingLevyAmount / 100).toFixed(2)}</td></tr>
@@ -482,7 +482,7 @@ export class PdfService {
     const yearPayslips = payslips.filter((p: any) => p.payrollRun?.year === year);
 
     // Build monthly rows (all 12 months, empty if no data)
-    let totalGross = 0, totalPaye = 0, totalNhif = 0, totalNssf = 0;
+    let totalGross = 0, totalPaye = 0, totalShif = 0, totalNssf = 0;
     let totalHousingLevy = 0, totalNetPay = 0, totalPersonalRelief = 0;
 
     const rows = MONTHS.map((m, i) => {
@@ -499,7 +499,7 @@ export class PdfService {
       const personalRelief = 240000; // KES 2,400 in cents
       totalGross += p.grossPay ?? 0;
       totalPaye += p.payeAmount ?? 0;
-      totalNhif += p.nhifAmount ?? 0;
+      totalShif += p.shifAmount ?? 0;
       totalNssf += (p.nssf1Amount ?? 0) + (p.nssf2Amount ?? 0);
       totalHousingLevy += p.housingLevyAmount ?? 0;
       totalNetPay += p.netPay ?? 0;
@@ -513,7 +513,7 @@ export class PdfService {
         <td class="amount">${fmt(Math.max(0, (p.grossPay ?? 0) - (p.nssf1Amount ?? 0) - (p.nssf2Amount ?? 0)))}</td>
         <td class="amount">${fmt(p.payeAmount ?? 0)}</td>
         <td class="amount">${fmt(personalRelief)}</td>
-        <td class="amount">${fmt(p.nhifAmount ?? 0)}</td>
+        <td class="amount">${fmt(p.shifAmount ?? 0)}</td>
         <td class="amount">${fmt(p.housingLevyAmount ?? 0)}</td>
         <td class="amount">${fmt(p.netPay ?? 0)}</td>
       </tr>`;
@@ -555,7 +555,7 @@ export class PdfService {
             <th class="amount">Taxable Pay<br/>(KES)</th>
             <th class="amount">Tax Charged<br/>(KES)</th>
             <th class="amount">Personal Relief<br/>(KES)</th>
-            <th class="amount">NHIF<br/>(KES)</th>
+            <th class="amount">SHIF<br/>(KES)</th>
             <th class="amount">Housing Levy<br/>(KES)</th>
             <th class="amount">Net Pay<br/>(KES)</th>
           </tr>
@@ -569,7 +569,7 @@ export class PdfService {
             <td class="amount"><strong>${fmt(Math.max(0, totalGross - totalNssf))}</strong></td>
             <td class="amount"><strong>${fmt(totalPaye)}</strong></td>
             <td class="amount"><strong>${fmt(totalPersonalRelief)}</strong></td>
-            <td class="amount"><strong>${fmt(totalNhif)}</strong></td>
+            <td class="amount"><strong>${fmt(totalShif)}</strong></td>
             <td class="amount"><strong>${fmt(totalHousingLevy)}</strong></td>
             <td class="amount"><strong>${fmt(totalNetPay)}</strong></td>
           </tr>
@@ -936,5 +936,114 @@ export class PdfService {
     `;
 
     return this.htmlWrapper(`Invoice ${order.invoiceNumber ?? orderId} — ${business?.name ?? ''}`, content);
+  }
+
+  /**
+   * Delivery note for a field order — quantities only, no prices, with a
+   * signature block for the receiving shop and any captured proof of delivery.
+   */
+  async generateFieldOrderDeliveryNote(orderId: string): Promise<string> {
+    const order = await (this.prisma as any).fieldOrder.findUnique({
+      where: { id: orderId },
+      include: {
+        items: true,
+        customer: true,
+        agent: { select: { name: true, phone: true } },
+        route: { select: { name: true } },
+        proof: true,
+        deliveryRunOrders: {
+          include: { deliveryRun: { include: { driver: { select: { name: true, phone: true } } } } },
+        },
+      },
+    });
+    if (!order) throw new Error('Field order not found');
+
+    const business = await this.prisma.business.findUnique({
+      where: { id: order.businessId },
+      select: { name: true, receiptHeader: true },
+    });
+
+    const date = new Date(order.dispatchedAt ?? order.createdAt).toLocaleDateString('en-KE', {
+      day: '2-digit', month: 'long', year: 'numeric',
+    });
+    const run = order.deliveryRunOrders?.[0]?.deliveryRun;
+    const proof = Array.isArray(order.proof) ? order.proof[0] : order.proof;
+
+    const itemRows = order.items
+      .map((i: any, idx: number) => `
+        <tr>
+          <td style="text-align:center">${idx + 1}</td>
+          <td>${i.itemName}${i.isSample ? ' <span style="background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:bold">SAMPLE</span>' : ''}</td>
+          <td style="text-align:center">${i.quantity}</td>
+          <td style="text-align:center">${i.deliveredQuantity ?? ''}</td>
+          <td style="text-align:center">${(i.backOrderQuantity ?? 0) > 0 ? i.backOrderQuantity : ''}</td>
+        </tr>
+      `).join('');
+
+    const content = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px">
+        <div>
+          <div style="font-size:26px;font-weight:bold;color:#1e3a5f">${business?.name ?? 'Business'}</div>
+          ${business?.receiptHeader ? `<div style="color:#555;margin-top:4px">${business.receiptHeader}</div>` : ''}
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:22px;font-weight:bold;color:#1e3a5f;letter-spacing:1px">DELIVERY NOTE</div>
+          <div style="color:#555;margin-top:6px">Order #: <strong>${order.orderNumber ?? orderId}</strong></div>
+          <div style="color:#555">Date: <strong>${date}</strong></div>
+          <div style="color:#555">Status: <strong>${order.status}</strong></div>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;margin-bottom:24px;gap:24px">
+        <div style="flex:1;padding:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px">
+          <p style="font-weight:bold;margin:0 0 6px;color:#1e3a5f">Deliver To</p>
+          <div style="font-size:14px;font-weight:bold">${order.customer?.name ?? '—'}</div>
+          ${order.customer?.phone ? `<div style="color:#555">${order.customer.phone}</div>` : ''}
+          ${order.customer?.shopCode ? `<div style="color:#888;font-size:11px">Code: ${order.customer.shopCode}</div>` : ''}
+          ${order.customer?.address ? `<div style="color:#555">${order.customer.address}</div>` : ''}
+        </div>
+        <div style="flex:1;padding:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px">
+          <p style="font-weight:bold;margin:0 0 6px;color:#1e3a5f">Dispatch</p>
+          ${order.route?.name ? `<div style="color:#555">Route: <strong>${order.route.name}</strong></div>` : ''}
+          ${run?.driver?.name ? `<div style="color:#555">Driver: <strong>${run.driver.name}</strong>${run.driver.phone ? ` (${run.driver.phone})` : ''}</div>` : ''}
+          ${order.agent?.name ? `<div style="color:#555">Agent: ${order.agent.name}</div>` : ''}
+        </div>
+      </div>
+
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:#1e3a5f;color:white">
+            <th style="padding:10px;text-align:center;width:40px">#</th>
+            <th style="padding:10px;text-align:left">Description</th>
+            <th style="padding:10px;text-align:center;width:80px">Ordered</th>
+            <th style="padding:10px;text-align:center;width:80px">Delivered</th>
+            <th style="padding:10px;text-align:center;width:90px">Back-order</th>
+          </tr>
+        </thead>
+        <tbody>${itemRows}</tbody>
+      </table>
+
+      <div style="margin-top:16px;font-size:11px;color:#888">
+        This delivery note confirms goods only — it is not a tax invoice and shows no prices.
+      </div>
+
+      ${proof ? `
+      <div style="margin-top:24px;padding:14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px">
+        <p style="font-weight:bold;margin:0 0 6px;color:#166534">Proof of Delivery</p>
+        ${proof.receivedByName ? `<div style="font-size:12px">Received by: <strong>${proof.receivedByName}</strong></div>` : ''}
+        ${proof.notes ? `<div style="font-size:12px;color:#555">${proof.notes}</div>` : ''}
+        ${proof.latitude ? `<div style="font-size:11px;color:#888">GPS: ${proof.latitude}, ${proof.longitude}</div>` : ''}
+        ${proof.signatureBase64 ? `<img src="${proof.signatureBase64}" alt="Signature" style="max-height:80px;margin-top:8px;background:white;border:1px solid #ddd" />` : ''}
+      </div>` : `
+      <div style="margin-top:48px;display:flex;gap:80px;font-size:12px;color:#555">
+        <div>Delivered By: ___________________<br/><small>Name &amp; Signature — Date: ___________</small></div>
+        <div>Received By: ___________________<br/><small>Name &amp; Signature — Date: ___________</small></div>
+      </div>`}
+    `;
+
+    return this.htmlWrapper(
+      `Delivery Note ${order.orderNumber ?? orderId} — ${business?.name ?? ''}`,
+      content,
+    );
   }
 }

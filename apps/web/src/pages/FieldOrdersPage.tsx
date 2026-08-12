@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '../lib/api';
+import { api, openPdfReport } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { useDialog } from '../components/Dialog';
 import { toast } from 'sonner';
@@ -76,6 +76,9 @@ interface DeliveryRun {
   id: string;
   routeId: string;
   routeName?: string;
+  /** The API returns the route as a nested object; routeName is not a top-level field. */
+  route?: { id: string; name: string; color?: string };
+  driver?: { id: string; name: string } | null;
   date: string;
   status: string;
 }
@@ -140,10 +143,11 @@ const PAYMENT_BADGE: Record<PaymentStatus, string> = {
 // ── Picking List Print Helper ─────────────────────────────────────────────────
 
 function printPickingList(order: FieldOrder, businessName: string) {
-  const el = document.getElementById(`picking-list-${order.id}`);
-  if (!el) return;
   const win = window.open('', '_blank', 'width=800,height=600');
-  if (!win) return;
+  if (!win) {
+    toast.error('Popup blocked — allow popups for this site to print');
+    return;
+  }
   win.document.write(`
     <html><head><title>Picking List - ${order.orderNumber}</title>
     <style>
@@ -181,8 +185,9 @@ function printPickingList(order: FieldOrder, businessName: string) {
   `);
   win.document.close();
   win.focus();
-  win.print();
-  win.close();
+  // Let the new document lay out before printing, and leave the window open so the
+  // user can retry from the browser dialog (closing immediately cancels the job).
+  setTimeout(() => win.print(), 250);
 }
 
 // ── New Order Modal ───────────────────────────────────────────────────────────
@@ -582,14 +587,26 @@ function OrderDetailPanel({
   const [expectedDate, setExpectedDate] = useState(order.expectedDeliveryDate?.split('T')[0] ?? '');
   const [showRunModal, setShowRunModal] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState('');
+  const [newRunRouteId, setNewRunRouteId] = useState(order.routeId ?? '');
+  const [newRunDate, setNewRunDate] = useState(
+    (order.expectedDeliveryDate ?? new Date().toISOString()).split('T')[0],
+  );
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [payAmount, setPayAmount] = useState('');
   const [payMethod, setPayMethod] = useState('CASH');
   const [payRef, setPayRef] = useState('');
 
-  const { data: runs = [] } = useQuery<DeliveryRun[]>({
+  // Any run that has not been closed out can still receive orders — not just PLANNED ones.
+  const { data: allRuns = [] } = useQuery<DeliveryRun[]>({
     queryKey: ['delivery-runs-open', businessId],
-    queryFn: () => api.get(`/delivery-routes/runs?businessId=${businessId}&status=PLANNED`),
+    queryFn: () => api.get(`/delivery-routes/runs?businessId=${businessId}`),
+    enabled: showRunModal,
+  });
+  const runs = allRuns.filter((r) => r.status === 'PLANNED' || r.status === 'IN_PROGRESS');
+
+  const { data: allRoutes = [] } = useQuery<SalesRoute[]>({
+    queryKey: ['sales-routes', businessId],
+    queryFn: () => api.get(`/field-sales/routes?businessId=${businessId}`),
     enabled: showRunModal,
   });
 
@@ -606,22 +623,61 @@ function OrderDetailPanel({
 
   const assignRunMutation = useMutation({
     mutationFn: (runId: string) =>
-      api.post(`/delivery-routes/runs/${runId}/orders`, { fieldOrderId: order.id }),
+      api.post(`/delivery-routes/runs/${runId}/orders`, { fieldOrderId: order.id, businessId }),
     onSuccess: () => {
       toast.success('Added to delivery run');
       qc.invalidateQueries({ queryKey: ['field-orders'] });
+      qc.invalidateQueries({ queryKey: ['delivery-runs'] });
       setShowRunModal(false);
       onRefresh();
     },
     onError: (err) => toast.error((err as Error).message),
   });
 
+  // No open run yet — create one for this order in a single step so the user isn't
+  // bounced to the Delivery Routes page mid-flow.
+  const createRunMutation = useMutation({
+    mutationFn: () =>
+      api.post<{ id: string }>('/delivery-routes/runs', {
+        businessId,
+        routeId: newRunRouteId || order.routeId,
+        date: newRunDate,
+        orderIds: [order.id],
+      }),
+    onSuccess: () => {
+      toast.success('Delivery run created and order dispatched');
+      qc.invalidateQueries({ queryKey: ['field-orders'] });
+      qc.invalidateQueries({ queryKey: ['delivery-runs'] });
+      setShowRunModal(false);
+      onRefresh();
+    },
+    onError: (err) => toast.error((err as Error).message),
+  });
+
+  /** Open the printable invoice; the PDF route needs the JWT so window.open() can't be used. */
+  async function openInvoice() {
+    try {
+      await openPdfReport(`/reports/pdf/field-order-invoice/${order.id}`);
+    } catch (err) {
+      toast.error((err as Error).message || 'Could not open the invoice');
+    }
+  }
+
+  async function openDeliveryNote() {
+    try {
+      await openPdfReport(`/reports/pdf/field-order-delivery-note/${order.id}`);
+    } catch (err) {
+      toast.error((err as Error).message || 'Could not open the delivery note');
+    }
+  }
+
   const invoiceMutation = useMutation({
     mutationFn: () =>
       api.post<{ invoiceNumber: string }>(`/field-sales/orders/${order.id}/generate-invoice`, { businessId }),
     onSuccess: (data) => {
-      toast.success(`Invoice ${data.invoiceNumber} created — view it under Sales → Proformas`);
+      toast.success(`Invoice ${data.invoiceNumber} created — opening it now`);
       qc.invalidateQueries({ queryKey: ['field-orders'] });
+      void openInvoice();
       onRefresh();
     },
     onError: (err) => toast.error((err as Error).message),
@@ -633,6 +689,7 @@ function OrderDetailPanel({
     onSuccess: (data) => {
       toast.success(`Partial invoice ${data.invoiceNumber} created for ${data.deliveredItemCount} delivered item(s)`);
       qc.invalidateQueries({ queryKey: ['field-orders'] });
+      void openInvoice();
       onRefresh();
     },
     onError: (err) => toast.error((err as Error).message),
@@ -692,11 +749,20 @@ function OrderDetailPanel({
             >
               <Printer className="w-4 h-4" />
             </button>
+            {['DISPATCHED', 'DELIVERED', 'INVOICED'].includes(order.status) && (
+              <button
+                onClick={() => void openDeliveryNote()}
+                className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/30 hover:bg-orange-200 dark:hover:bg-orange-900/50 text-orange-700 dark:text-orange-300 transition-colors"
+                title="Print Delivery Note"
+              >
+                <Truck className="w-4 h-4" />
+              </button>
+            )}
             {order.status === 'INVOICED' && (
               <button
-                onClick={() => window.open(`/api/v1/reports/pdf/field-order-invoice/${order.id}`, '_blank')}
+                onClick={() => void openInvoice()}
                 className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30 hover:bg-purple-200 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 transition-colors"
-                title="Print Invoice PDF"
+                title="Print Invoice"
               >
                 <FileText className="w-4 h-4" />
               </button>
@@ -958,16 +1024,49 @@ function OrderDetailPanel({
               </button>
             </div>
             <div className="p-4 space-y-2 max-h-60 overflow-y-auto">
-              {runs.length === 0 && <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-4">No planned delivery runs found. Create a run first.</p>}
+              {runs.length === 0 && (
+                <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-2">
+                  No open delivery runs — create one below.
+                </p>
+              )}
               {runs.map((run) => (
                 <label key={run.id} className="flex items-center gap-3 p-2.5 border border-gray-200 dark:border-gray-700 rounded-xl cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50">
                   <input type="radio" name="run" value={run.id} checked={selectedRunId === run.id} onChange={() => setSelectedRunId(run.id)} className="accent-indigo-600" />
                   <div>
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{run.routeName ?? run.routeId}</p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500">{fmtDate(run.date)}</p>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{run.route?.name ?? run.routeName ?? 'Route'}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                      {fmtDate(run.date)} · {run.status}{run.driver ? ` · ${run.driver.name}` : ''}
+                    </p>
                   </div>
                 </label>
               ))}
+
+              <div className="pt-2 mt-1 border-t border-gray-100 dark:border-gray-700 space-y-2">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Or start a new run</p>
+                <select
+                  value={newRunRouteId}
+                  onChange={(e) => setNewRunRouteId(e.target.value)}
+                  className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                >
+                  <option value="">Select route…</option>
+                  {allRoutes.filter((r) => r.isActive).map((r) => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
+                <input
+                  type="date"
+                  value={newRunDate}
+                  onChange={(e) => setNewRunDate(e.target.value)}
+                  className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+                <button
+                  onClick={() => createRunMutation.mutate()}
+                  disabled={!newRunRouteId || !newRunDate || createRunMutation.isPending}
+                  className="w-full py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-semibold disabled:opacity-50 transition-colors"
+                >
+                  {createRunMutation.isPending ? 'Creating…' : 'Create run & dispatch'}
+                </button>
+              </div>
             </div>
             <div className="p-4 flex gap-2 border-t border-gray-200 dark:border-gray-700">
               <button onClick={() => setShowRunModal(false)} className="flex-1 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>

@@ -461,6 +461,13 @@ export class ReportsController {
     res.send(html);
   }
 
+  @Get('pdf/field-order-delivery-note/:orderId')
+  async fieldOrderDeliveryNotePdf(@Param('orderId') orderId: string, @Res() res: Response) {
+    const html = await this.pdf.generateFieldOrderDeliveryNote(orderId);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  }
+
   @Get('pdf/delivery-receipt/:deliveryId')
   async deliveryReceiptPdf(@Param('deliveryId') deliveryId: string, @Res() res: Response) {
     const html = await this.pdf.generateDeliveryReceipt(deliveryId);
@@ -507,16 +514,29 @@ export class ReportsController {
     res.send(csv);
   }
 
-  @Get('nhif-return')
-  async nhifReturn(
+  @Get('shif-return')
+  async shifReturn(
     @Query('businessId') businessId: string,
     @Query('month') month: string,
     @Query('year') year: string,
     @Res() res: Response,
   ) {
-    const csv = await this.reports.nhifReturnFile(businessId, Number(month), Number(year));
+    const csv = await this.reports.shifReturnFile(businessId, Number(month), Number(year));
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="NHIF-SHA-Return-${month}-${year}.csv"`);
+    res.setHeader('Content-Disposition', `attachment; filename="SHIF-Return-${month}-${year}.csv"`);
+    res.send(csv);
+  }
+  /** Legacy path — NHIF became SHIF on 1 Oct 2024. Kept so old links keep working. */
+  @Get('nhif-return')
+  async nhifReturnLegacy(
+    @Query('businessId') businessId: string,
+    @Query('month') month: string,
+    @Query('year') year: string,
+    @Res() res: Response,
+  ) {
+    const csv = await this.reports.shifReturnFile(businessId, Number(month), Number(year));
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="SHIF-Return-${month}-${year}.csv"`);
     res.send(csv);
   }
 

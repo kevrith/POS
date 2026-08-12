@@ -193,13 +193,18 @@ export const api = {
 export async function openPdfReport(path: string): Promise<void> {
   // Fetch the HTML report with auth token, then open in a new tab as a Blob URL
   // (window.open directly would fail because the new tab has no JWT in sessionStorage)
+  await maybeRefreshToken();
   const token = getToken();
   const res = await fetch(`${API_URL}${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!res.ok) {
-    console.error(`PDF report failed: ${res.status}`);
-    return;
+    let message = `Could not open the document (${res.status})`;
+    try {
+      const body = await res.json() as { message?: string };
+      if (body.message) message = body.message;
+    } catch { /* response was not JSON */ }
+    throw new Error(message);
   }
   const html = await res.text();
   const blob = new Blob([html], { type: 'text/html; charset=utf-8' });

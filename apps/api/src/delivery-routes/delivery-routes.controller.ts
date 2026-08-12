@@ -3,13 +3,17 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { DeliveryRoutesService } from './delivery-routes.service';
+import type { Request } from 'express';
+import type { AuthUser } from '../auth/auth.service';
 
 @Controller('delivery-routes')
 @UseGuards(JwtAuthGuard)
@@ -47,6 +51,23 @@ export class DeliveryRoutesController {
     @Query('businessId') businessId: string,
   ) {
     return this.service.getRun(id, businessId);
+  }
+
+  @Post('runs/:id/orders')
+  addOrderToRun(
+    @Param('id') id: string,
+    @Req() req: Request & { user: AuthUser },
+    @Body() body: { fieldOrderId: string; businessId?: string },
+  ) {
+    return this.service.addOrderToRun(id, req.user.businessId, body.fieldOrderId);
+  }
+
+  @Delete('run-orders/:id')
+  removeOrderFromRun(
+    @Param('id') id: string,
+    @Req() req: Request & { user: AuthUser },
+  ) {
+    return this.service.removeOrderFromRun(id, req.user.businessId);
   }
 
   @Post('runs/:id/expenses')

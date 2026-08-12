@@ -10,6 +10,7 @@ import { PushService } from '../push/push.service';
 import { EventsGateway } from '../events/events.gateway';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { SubscriptionLimitsService } from '../subscription/subscription-limits.service';
+import { LedgerService } from '../ledger/ledger.service';
 import { SaleType, SaleStatus, InventoryMovementType, calculateVAT, calculateTOT, calculateServiceCharge } from '@pos/shared';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -75,6 +76,7 @@ export class SalesService {
     private events: EventsGateway,
     private loyalty: LoyaltyService,
     private subscriptionLimits: SubscriptionLimitsService,
+    private ledger: LedgerService,
   ) {}
 
   async createSale(businessId: string, dto: CreateSaleDto) {
@@ -290,6 +292,21 @@ export class SalesService {
     // Check stock levels for low-stock notifications + webhook
     this.checkAndDispatchLowStock(businessId, dto.storeId, dto.items.map(i => i.itemId)).catch(() => {});
 
+    // Post the double-entry so the trial balance and P&L reflect trading activity.
+    // Fire-and-forget: a bookkeeping failure must never fail a sale at the till.
+    this.postSaleToLedger({
+      businessId,
+      storeId: dto.storeId,
+      receiptNumber: sale.receiptNumber,
+      isCredit: dto.type === SaleType.CREDIT,
+      totalCents,
+      vatCents,
+      totCents,
+      serviceChargeCents,
+      tipCents,
+      payments: dto.payments,
+    }).catch(() => {});
+
     // Send SMS receipt to customer if they have a phone number
     if (dto.customerId) {
       this.sendSmsReceipt(businessId, dto.customerId, sale.receiptNumber, totalCents).catch(() => {});
@@ -319,7 +336,99 @@ export class SalesService {
     });
 
     return { ...sale, pointsEarned, loyaltyBalance, monthlyTxCount, freeTxLimit: monthlyTxCount !== null ? FREE_TX_LIMIT : null };
-  }  private async checkAndDispatchLowStock(businessId: string, storeId: string, itemIds: string[]): Promise<void> {
+  }
+
+  /**
+   * Kenyan retail chart-of-accounts posting for one sale.
+   *
+   *   Dr  Cash / M-Pesa / Bank / Accounts Receivable   (what was tendered)
+   *     Cr  Sales Revenue                              (net of tax & service charge)
+   *     Cr  VAT / Turnover Tax Payable                 (tax extracted from the inclusive price)
+   *     Cr  Service Charge Income, Tips Payable        (when charged)
+   */
+  private async postSaleToLedger(input: {
+    businessId: string;
+    storeId: string;
+    receiptNumber: string;
+    isCredit: boolean;
+    totalCents: number;
+    vatCents: number;
+    totCents: number;
+    serviceChargeCents: number;
+    tipCents: number;
+    payments: Array<{ method: string; amountCents: number }>;
+  }): Promise<void> {
+    const lines: Array<{
+      accountCode: string;
+      accountName: string;
+      debitCents: number;
+      creditCents: number;
+    }> = [];
+
+    const debit = (accountCode: string, accountName: string, amount: number) => {
+      if (amount > 0) lines.push({ accountCode, accountName, debitCents: amount, creditCents: 0 });
+    };
+    const credit = (accountCode: string, accountName: string, amount: number) => {
+      if (amount > 0) lines.push({ accountCode, accountName, debitCents: 0, creditCents: amount });
+    };
+
+    if (input.isCredit) {
+      debit('1200', 'Accounts Receivable', input.totalCents);
+    } else {
+      const tendered = new Map<string, number>();
+      for (const p of input.payments) {
+        tendered.set(p.method, (tendered.get(p.method) ?? 0) + p.amountCents);
+      }
+      // Over-tender is change handed back, so never debit more than the sale total.
+      const totalTendered = [...tendered.values()].reduce((s, v) => s + v, 0);
+      const scale = totalTendered > input.totalCents && totalTendered > 0
+        ? input.totalCents / totalTendered
+        : 1;
+
+      for (const [method, amount] of tendered) {
+        const value = Math.round(amount * scale);
+        if (method === 'CASH') debit('1000', 'Cash on Hand', value);
+        else if (method.startsWith('MPESA')) debit('1010', 'M-Pesa Control', value);
+        else if (method === 'CARD') debit('1020', 'Card Settlement', value);
+        else debit('1030', 'Bank / Other Receipts', value);
+      }
+    }
+
+    credit('2100', 'VAT Payable', input.vatCents);
+    credit('2110', 'Turnover Tax Payable', input.totCents);
+    credit('4100', 'Service Charge Income', input.serviceChargeCents);
+    credit('2200', 'Tips Payable', input.tipCents);
+
+    const revenue =
+      input.totalCents -
+      input.vatCents -
+      input.totCents -
+      input.serviceChargeCents -
+      input.tipCents;
+    credit('4000', 'Sales Revenue', revenue);
+
+    const debits = lines.reduce((s, l) => s + l.debitCents, 0);
+    const credits = lines.reduce((s, l) => s + l.creditCents, 0);
+    // Rounding from tax extraction can leave a cent; park it so the entry balances.
+    if (debits !== credits) {
+      const diff = debits - credits;
+      if (diff > 0) credit('4900', 'Rounding Difference', diff);
+      else debit('4900', 'Rounding Difference', -diff);
+    }
+
+    if (lines.length === 0) return;
+
+    await this.ledger.autoPost({
+      businessId: input.businessId,
+      storeId: input.storeId,
+      description: `Sale ${input.receiptNumber}`,
+      reference: input.receiptNumber,
+      sourceType: 'SALE',
+      lines,
+    });
+  }
+
+  private async checkAndDispatchLowStock(businessId: string, storeId: string, itemIds: string[]): Promise<void> {
     const itemList = await this.prisma.item.findMany({ where: { id: { in: itemIds }, trackStock: true } });
     for (const item of itemList) {
       const stock = await this.inventory.getStockLevel(item.id, storeId);
@@ -689,9 +798,47 @@ export class SalesService {
     });
   }
 
+  /** Void a quotation that was never converted. Only PROFORMA-status records may be cancelled. */
+  async cancelProforma(proformaId: string, businessId: string, actorId?: string) {
+    const proforma = await this.prisma.sale.findFirst({
+      where: { id: proformaId, businessId, type: SaleType.PROFORMA },
+    });
+    if (!proforma) throw new NotFoundException('Proforma not found');
+    if (proforma.status !== SaleStatus.PROFORMA) {
+      throw new BadRequestException('Only an active proforma can be cancelled');
+    }
+
+    const updated = await this.prisma.sale.update({
+      where: { id: proformaId },
+      data: { status: SaleStatus.CANCELLED },
+    });
+
+    // A field order that produced this invoice must not stay stuck in INVOICED.
+    if (proforma.receiptNumber) {
+      await this.prisma.fieldOrder.updateMany({
+        where: { businessId, invoiceNumber: proforma.receiptNumber },
+        data: { status: 'DELIVERED', invoiceNumber: null, invoicedAt: null },
+      });
+    }
+
+    await this.audit.createEntry({
+      businessId,
+      actor: actorId ?? 'system',
+      actorType: 'USER',
+      action: 'PROFORMA_CANCELLED',
+      entity: 'Sale',
+      entityId: proformaId,
+      before: { status: proforma.status },
+      after: { status: SaleStatus.CANCELLED },
+      source: 'POS',
+    });
+
+    return updated;
+  }
+
   async convertProformaToSaleV2(
     proformaId: string,
-    dto: { cashierId: string; payments: { method: string; amountCents: number; reference?: string }[] },
+    dto: { cashierId: string; storeId?: string; payments: { method: string; amountCents: number; reference?: string }[] },
   ) {
     // 1. Find the proforma (businessId/storeId come from the proforma itself)
     const proforma = await this.prisma.sale.findFirst({
@@ -710,17 +857,31 @@ export class SalesService {
       throw new BadRequestException('Proforma has expired');
     }
 
-    // 2. Resolve store for receipt sequence; proforma may have no storeId if created without one —
-    //    if missing, the caller must supply it via the legacy endpoint.
-    if (!proforma.storeId) {
-      throw new BadRequestException('Proforma has no associated store — use the legacy convert endpoint and supply storeId');
+    // 2. Resolve store for the receipt sequence. Proformas created outside the POS
+    //    (e.g. from a field order) carry no storeId — fall back to the caller's store,
+    //    then to the business's first store, rather than dead-ending the conversion.
+    const storeId =
+      proforma.storeId ??
+      dto.storeId ??
+      (
+        await this.prisma.store.findFirst({
+          where: { businessId: proforma.businessId },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true },
+        })
+      )?.id;
+
+    if (!storeId) {
+      throw new BadRequestException('No store found for this business — create a store before converting proformas');
     }
 
-    const store = await this.prisma.store.findUnique({ where: { id: proforma.storeId } });
-    if (!store) throw new NotFoundException('Store not found');
+    const store = await this.prisma.store.findUnique({ where: { id: storeId } });
+    if (!store || store.businessId !== proforma.businessId) {
+      throw new NotFoundException('Store not found');
+    }
 
     const updatedStore = await this.prisma.store.update({
-      where: { id: proforma.storeId },
+      where: { id: storeId },
       data: { receiptSequence: { increment: 1 } },
     });
 
@@ -732,7 +893,7 @@ export class SalesService {
         data: {
           offlineId: uuidv4(),
           businessId: proforma.businessId,
-          storeId: proforma.storeId,
+          storeId,
           receiptNumber,
           cashierId: dto.cashierId,
           customerId: proforma.customerId,
@@ -779,7 +940,7 @@ export class SalesService {
                 offlineId: uuidv4(),
                 businessId: proforma.businessId,
                 itemId: item.itemId,
-                storeId: proforma.storeId,
+                storeId,
                 type: InventoryMovementType.SALE,
                 quantity: -item.quantity,
                 saleId: newSale.id,

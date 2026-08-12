@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { api } from '../lib/api';
+import { api, openPdfReport } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
-import { X } from 'lucide-react';
-
+import { useDialog } from '../components/Dialog';
+import { X, Printer, FileText } from 'lucide-react';
 
 interface Proforma {
   id: string;
@@ -13,6 +13,7 @@ interface Proforma {
   customerPhone?: string;
   status: string;
   totalCents: number;
+  notes?: string;
   proformaValidUntil?: string;
   createdAt: string;
   items: Array<{
@@ -23,41 +24,90 @@ interface Proforma {
   }>;
 }
 
+const PAYMENT_METHODS = [
+  { value: 'CASH', label: 'Cash' },
+  { value: 'MPESA', label: 'M-Pesa' },
+  { value: 'CARD', label: 'Card' },
+  { value: 'BANK_TRANSFER', label: 'Bank Transfer' },
+  { value: 'CHEQUE', label: 'Cheque' },
+];
+
 export default function ProformaPage() {
   const [selectedProforma, setSelectedProforma] = useState<Proforma | null>(null);
+  const [payMethod, setPayMethod] = useState('CASH');
+  const [payRef, setPayRef] = useState('');
   const queryClient = useQueryClient();
+  const { confirm } = useDialog();
   const user = useAuthStore((s) => s.user);
   const businessId = user?.businessId ?? '';
 
-  const { data: proformas = [], isLoading } = useQuery({
+  const { data: proformas = [], isLoading, error } = useQuery({
     queryKey: ['proformas', businessId],
     queryFn: () => api.get<Proforma[]>(`/sales/proformas?businessId=${businessId}`),
     enabled: !!businessId,
   });
 
   const convertMutation = useMutation({
-    mutationFn: (id: string) => api.post(`/sales/proforma/${id}/convert`, {
-      cashierId: user!.id,
-      payments: [{ method: 'CASH', amountCents: (proformas as Proforma[]).find((p) => p.id === id)?.totalCents ?? 0 }],
-    }),
-    onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ['proformas', businessId] });
-      setSelectedProforma(null);
-      toast.success(`Converted! Receipt: ${data.receiptNumber ?? 'N/A'}`);
+    mutationFn: (vars: { id: string; method: string; reference?: string }) => {
+      const proforma = proformas.find((p) => p.id === vars.id);
+      return api.post<{ id: string; receiptNumber: string }>(`/sales/proforma/${vars.id}/convert`, {
+        cashierId: user?.id,
+        storeId: user?.storeId,
+        payments: [
+          {
+            method: vars.method,
+            amountCents: proforma?.totalCents ?? 0,
+            reference: vars.reference || undefined,
+          },
+        ],
+      });
     },
-    onError: (err: any) => toast.error(err?.message ?? 'Conversion failed'),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['proformas', businessId] });
+      queryClient.invalidateQueries({ queryKey: ['sales'] });
+      setSelectedProforma(null);
+      setPayRef('');
+      toast.success(`Converted to sale — receipt ${data.receiptNumber}`, {
+        action: {
+          label: 'Print receipt',
+          onClick: () => void openReceipt(data.id),
+        },
+      });
+    },
+    onError: (err: Error) => toast.error(err.message || 'Conversion failed'),
   });
 
   const cancelMutation = useMutation({
-    mutationFn: (proformaId: string) => api.patch(`/sales/${proformaId}`, { status: 'CANCELLED' }),
+    mutationFn: (proformaId: string) => api.patch(`/sales/proformas/${proformaId}/cancel`, {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['proformas', businessId] });
       setSelectedProforma(null);
+      toast.success('Quotation cancelled');
     },
+    onError: (err: Error) => toast.error(err.message || 'Could not cancel'),
   });
 
+  /** Quotations and their converted receipts both render through the sale-receipt PDF route. */
+  async function openReceipt(saleId: string) {
+    try {
+      await openPdfReport(`/reports/pdf/sale/${saleId}`);
+    } catch (err) {
+      toast.error((err as Error).message || 'Could not open the document');
+    }
+  }
+
+  async function handleCancel(proforma: Proforma) {
+    const ok = await confirm({
+      title: 'Cancel quotation',
+      message: `Cancel ${proforma.receiptNumber}? This cannot be undone.`,
+      confirmLabel: 'Cancel quotation',
+      variant: 'danger',
+    });
+    if (ok) cancelMutation.mutate(proforma.id);
+  }
+
   const formatKES = (cents: number) => `KES ${(cents / 100).toFixed(2)}`;
-  const formatDate = (date: string) => new Date(date).toLocaleDateString();
+  const formatDate = (date: string) => new Date(date).toLocaleDateString('en-KE');
 
   const activeProformas = proformas.filter((p) => p.status === 'PROFORMA');
   const expiredProformas = activeProformas.filter(
@@ -92,9 +142,11 @@ export default function ProformaPage() {
 
         {isLoading ? (
           <div className="p-8 text-center">Loading...</div>
+        ) : error ? (
+          <div className="p-8 text-center text-red-600">{(error as Error).message}</div>
         ) : activeProformas.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
-            No proformas found. Create one from the POS screen.
+            No quotations yet. Create one from the POS screen, or generate an invoice from a field order.
           </div>
         ) : (
           <table className="w-full">
@@ -140,14 +192,14 @@ export default function ProformaPage() {
                           View
                         </button>
                         <button
-                          onClick={() => convertMutation.mutate(proforma.id)}
-                          disabled={convertMutation.isPending}
-                          className="px-3 py-1.5 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                          onClick={() => void openReceipt(proforma.id)}
+                          className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 flex items-center gap-1"
+                          title="Print / save as PDF"
                         >
-                          Convert to Sale
+                          <Printer size={14} /> Print
                         </button>
                         <button
-                          onClick={() => cancelMutation.mutate(proforma.id)}
+                          onClick={() => handleCancel(proforma)}
                           disabled={cancelMutation.isPending}
                           className="bg-red-600 text-white px-3 py-1 rounded text-sm disabled:opacity-50"
                         >
@@ -164,8 +216,8 @@ export default function ProformaPage() {
       </div>
 
       {selectedProforma && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white p-6 rounded shadow-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded shadow-lg max-w-2xl w-full max-h-[85vh] overflow-y-auto">
             <div className="flex justify-between items-start mb-4">
               <div>
                 <h2 className="text-xl font-bold">Proforma {selectedProforma.receiptNumber}</h2>
@@ -199,22 +251,64 @@ export default function ProformaPage() {
               </table>
             </div>
 
+            {selectedProforma.notes && (
+              <p className="text-sm text-gray-500 mb-4">{selectedProforma.notes}</p>
+            )}
+
             <div className="flex justify-between items-center mb-4">
               <span className="text-lg font-medium">Total</span>
               <span className="text-2xl font-bold">{formatKES(selectedProforma.totalCents)}</span>
             </div>
 
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Payment Method</label>
+                <select
+                  value={payMethod}
+                  onChange={(e) => setPayMethod(e.target.value)}
+                  className="w-full border rounded px-3 py-2 text-sm"
+                >
+                  {PAYMENT_METHODS.map((m) => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+                </select>
+              </div>
+              {payMethod !== 'CASH' && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Reference</label>
+                  <input
+                    value={payRef}
+                    onChange={(e) => setPayRef(e.target.value)}
+                    placeholder="e.g. QHJ23K8LP0"
+                    className="w-full border rounded px-3 py-2 text-sm"
+                  />
+                </div>
+              )}
+            </div>
+
             <div className="flex gap-2">
               <button
-                onClick={() => convertMutation.mutate(selectedProforma.id)}
+                onClick={() =>
+                  convertMutation.mutate({
+                    id: selectedProforma.id,
+                    method: payMethod,
+                    reference: payRef,
+                  })
+                }
                 disabled={convertMutation.isPending}
                 className="flex-1 bg-green-600 text-white py-2 rounded font-medium disabled:opacity-50"
               >
                 {convertMutation.isPending ? 'Converting...' : 'Convert to Sale'}
               </button>
               <button
+                onClick={() => void openReceipt(selectedProforma.id)}
+                className="px-4 bg-gray-100 text-gray-700 py-2 rounded font-medium flex items-center gap-1.5"
+              >
+                <FileText size={16} /> Print
+              </button>
+              <button
                 onClick={() => setSelectedProforma(null)}
-                className="flex-1 bg-gray-300 py-2 rounded font-medium"
+                className="px-4 bg-gray-300 py-2 rounded font-medium"
               >
                 Close
               </button>

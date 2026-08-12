@@ -142,9 +142,21 @@ export class SalesController {
   @Post('proforma/:id/convert')
   async convertProformaToSaleV2(
     @Param('id') id: string,
-    @Body() dto: { cashierId: string; payments: Array<{ method: string; amountCents: number; reference?: string }> },
+    @Body() dto: { cashierId?: string; storeId?: string; payments: Array<{ method: string; amountCents: number; reference?: string }> },
+    @Req() req: Request & { user: AuthUser },
   ) {
-    return this.salesService.convertProformaToSaleV2(id, dto);
+    return this.salesService.convertProformaToSaleV2(id, {
+      ...dto,
+      cashierId: dto.cashierId ?? req.user.id,
+    });
+  }
+
+  @Patch('proformas/:id/cancel')
+  async cancelProforma(
+    @Param('id') id: string,
+    @Req() req: Request & { user: AuthUser },
+  ) {
+    return this.salesService.cancelProforma(id, req.user.businessId, req.user.id);
   }
 
   @Patch(':id/mark-credit-paid')

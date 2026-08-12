@@ -1,20 +1,12 @@
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  TextInput,
-  Alert,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Modal,
+  View, Text, TouchableOpacity, StyleSheet, ScrollView,
+  TextInput, Alert, ActivityIndicator, KeyboardAvoidingView,
+  Platform, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { mobileApi, formatKES } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
@@ -24,78 +16,398 @@ import { queueSale } from '../lib/db';
 import { isPrintingEnabled, printReceipt, type PrintableReceipt } from '../lib/receiptPrint';
 import { Colors } from '../constants/theme';
 
-type PaymentMethod = 'CASH' | 'MPESA' | 'CARD' | 'BANK_TRANSFER' | 'SPLIT';
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-interface SaleResult {
-  id: string;
-  receiptNumber: string;
-  totalCents: number;
-}
+type PaymentMethod = 'CASH' | 'MPESA_STK' | 'MPESA_MANUAL' | 'CARD' | 'BANK_TRANSFER' | 'GIFT_CARD' | 'CREDIT' | 'SPLIT';
+type StkStatus = 'idle' | 'sending' | 'waiting' | 'paid' | 'failed';
+
+interface SaleResult { id: string; receiptNumber: string; totalCents: number; }
 
 interface SalePayload {
-  offlineId: string;
-  businessId: string;
-  storeId: string;
-  cashierId: string;
-  customerId?: string;
-  type: 'NORMAL';
-  priceLevel: 'RETAIL' | 'WHOLESALE' | 'VIP';
-  items: Array<{ itemId: string; quantity: number }>;
+  offlineId: string; businessId: string; storeId: string; cashierId: string;
+  customerId?: string; type: 'NORMAL'; priceLevel: 'RETAIL' | 'WHOLESALE' | 'VIP';
+  items: Array<{ itemId: string; quantity: number; unitPriceCents: number; discountPercent?: number }>;
   payments: Array<{ method: string; amountCents: number; reference?: string }>;
-  discountCents?: number;
-  serviceChargeCents?: number;
+  discountCents?: number; serviceChargeCents?: number; promotionId?: string;
 }
 
-const PAYMENT_METHODS: Array<{ key: PaymentMethod; label: string; icon: any; color: string }> = [
-  { key: 'CASH', label: 'Cash', icon: 'cash-outline', color: Colors.success },
-  { key: 'MPESA', label: 'M-Pesa', icon: 'phone-portrait-outline', color: '#00A651' },
-  { key: 'CARD', label: 'Card', icon: 'card-outline', color: Colors.indigo },
-  { key: 'BANK_TRANSFER', label: 'Bank', icon: 'business-outline', color: Colors.primary },
-  { key: 'SPLIT', label: 'Split', icon: 'shuffle-outline', color: Colors.warning },
+interface GiftCard { code: string; balanceCents: number; status: string; }
+interface CustomerCredit { creditLimitCents: number; balanceCents: number; creditApprovalStatus: string; }
+
+const PAYMENT_METHODS: Array<{ key: PaymentMethod; label: string; icon: string; color: string }> = [
+  { key: 'CASH',         label: 'Cash',       icon: 'cash-outline',           color: Colors.success },
+  { key: 'MPESA_STK',    label: 'M-Pesa STK', icon: 'phone-portrait-outline', color: '#00A651' },
+  { key: 'MPESA_MANUAL', label: 'M-Pesa Code',icon: 'chatbubble-outline',     color: '#00A651' },
+  { key: 'CARD',         label: 'Card',        icon: 'card-outline',           color: Colors.indigo },
+  { key: 'BANK_TRANSFER',label: 'Bank',        icon: 'business-outline',       color: Colors.primary },
+  { key: 'GIFT_CARD',    label: 'Gift Card',   icon: 'gift-outline',           color: '#7C3AED' },
+  { key: 'CREDIT',       label: 'Credit',      icon: 'book-outline',           color: Colors.warning },
+  { key: 'SPLIT',        label: 'Split',       icon: 'shuffle-outline',        color: Colors.error },
 ];
 
-function calculateTax(totalCents: number, taxType: string): { taxCents: number; exTaxCents: number; label: string } {
-  if (taxType === 'VAT') {
-    const taxCents = Math.round((totalCents * 16) / 116);
-    return { taxCents, exTaxCents: totalCents - taxCents, label: 'VAT (16%)' };
-  }
-  if (taxType === 'TOT') {
-    const taxCents = Math.round((totalCents * 3) / 103);
-    return { taxCents, exTaxCents: totalCents - taxCents, label: 'TOT (3%)' };
-  }
-  return { taxCents: 0, exTaxCents: totalCents, label: '' };
+function calculateTax(cents: number, taxType: string) {
+  if (taxType === 'VAT') { const t = Math.round((cents * 16) / 116); return { taxCents: t, exTaxCents: cents - t, label: 'VAT (16%)' }; }
+  if (taxType === 'TOT') { const t = Math.round((cents * 3) / 103);  return { taxCents: t, exTaxCents: cents - t, label: 'TOT (3%)' }; }
+  return { taxCents: 0, exTaxCents: cents, label: '' };
 }
 
-function generateOfflineId(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  return Array.from({ length: 32 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+function generateOfflineId() {
+  return Array.from({ length: 32 }, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]).join('');
 }
+
+// ─── M-Pesa STK panel ─────────────────────────────────────────────────────────
+
+function MpesaSTKPanel({ totalCents, businessId, onComplete }: {
+  totalCents: number; businessId: string;
+  onComplete: (payments: Array<{ method: string; amountCents: number; reference?: string }>) => void;
+}) {
+  const [phone, setPhone] = useState('');
+  const [status, setStatus] = useState<StkStatus>('idle');
+  const [error, setError] = useState('');
+  const [reqId, setReqId] = useState('');
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function stopPoll() { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } }
+
+  function startPoll(id: string) {
+    let attempts = 0;
+    pollRef.current = setInterval(async () => {
+      attempts++;
+      try {
+        const res = await mobileApi.get<{ status: string; resultDesc: string }>(`/payments/mpesa/stk-status/${id}`);
+        if (res.status === 'paid') {
+          stopPoll(); setStatus('paid');
+          setTimeout(() => onComplete([{ method: 'MPESA_STK', amountCents: totalCents, reference: id }]), 800);
+        } else if (res.status === 'failed') {
+          stopPoll(); setStatus('failed'); setError(res.resultDesc || 'Payment declined or timed out');
+        }
+      } catch { /* keep polling on network error */ }
+      if (attempts >= 40) { stopPoll(); setStatus('failed'); setError('Payment timed out. Please try again.'); }
+    }, 3000);
+  }
+
+  async function handleSend() {
+    const cleaned = phone.replace(/\s/g, '');
+    if (cleaned.length < 9) return;
+    setStatus('sending'); setError('');
+    try {
+      const res = await mobileApi.post<{ checkoutRequestId: string }>('/payments/mpesa/stk-push', {
+        phone: cleaned, amountCents: totalCents, reference: `POS-${Date.now()}`,
+      });
+      setReqId(res.checkoutRequestId);
+      setStatus('waiting');
+      startPoll(res.checkoutRequestId);
+    } catch (err: any) {
+      setStatus('failed'); setError(err?.message ?? 'Failed to send STK push');
+    }
+  }
+
+  function handleCancel() { stopPoll(); setStatus('idle'); setError(''); setReqId(''); }
+
+  useEffect(() => () => stopPoll(), []);
+
+  if (status === 'idle') return (
+    <View style={pStyles.panel}>
+      <Text style={pStyles.fieldLabel}>Customer Phone Number</Text>
+      <View style={pStyles.inputWrap}>
+        <Ionicons name="call-outline" size={16} color={Colors.textSecondary} />
+        <TextInput style={pStyles.input} value={phone} onChangeText={setPhone}
+          placeholder="0712 345 678" keyboardType="phone-pad" placeholderTextColor={Colors.textSecondary} autoFocus />
+      </View>
+      <View style={pStyles.infoBox}>
+        <Text style={pStyles.infoText}>Amount: <Text style={{ fontWeight: '700' }}>{formatKES(totalCents)}</Text></Text>
+        <Text style={pStyles.infoText}>Customer will receive an STK push prompt on their phone.</Text>
+      </View>
+      <TouchableOpacity
+        style={[pStyles.actionBtn, { backgroundColor: '#00A651' }, phone.replace(/\s/g,'').length < 9 && { opacity: 0.4 }]}
+        onPress={() => void handleSend()} disabled={phone.replace(/\s/g,'').length < 9}>
+        <Text style={pStyles.actionBtnText}>Send M-Pesa Request</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  if (status === 'sending') return (
+    <View style={[pStyles.panel, { alignItems: 'center', paddingVertical: 32 }]}>
+      <ActivityIndicator size="large" color="#00A651" />
+      <Text style={[pStyles.fieldLabel, { marginTop: 12 }]}>Sending STK Push…</Text>
+    </View>
+  );
+
+  if (status === 'waiting') return (
+    <View style={[pStyles.panel, { alignItems: 'center', gap: 12 }]}>
+      <ActivityIndicator size="large" color="#00A651" />
+      <Text style={pStyles.waitTitle}>Waiting for payment</Text>
+      <Text style={pStyles.waitSub}>Check: <Text style={{ fontWeight: '600' }}>{phone}</Text></Text>
+      <View style={pStyles.infoBox}>
+        <Text style={pStyles.infoText}>Customer should enter their M-Pesa PIN to complete payment.</Text>
+      </View>
+      <TouchableOpacity onPress={handleCancel}>
+        <Text style={{ color: Colors.textSecondary, fontSize: 13, textDecorationLine: 'underline' }}>Cancel request</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  if (status === 'paid') return (
+    <View style={[pStyles.panel, { alignItems: 'center', gap: 10 }]}>
+      <Ionicons name="checkmark-circle" size={56} color={Colors.success} />
+      <Text style={pStyles.waitTitle}>Payment Received!</Text>
+      <Text style={pStyles.waitSub}>{formatKES(totalCents)} via M-Pesa</Text>
+    </View>
+  );
+
+  // failed
+  return (
+    <View style={pStyles.panel}>
+      <View style={pStyles.errorBox}>
+        <Ionicons name="alert-circle-outline" size={16} color={Colors.error} />
+        <Text style={pStyles.errorText}>{error}</Text>
+      </View>
+      <TouchableOpacity style={[pStyles.actionBtn, { backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border }]} onPress={handleCancel}>
+        <Text style={[pStyles.actionBtnText, { color: Colors.text }]}>Try Again</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+// ─── Gift Card panel ──────────────────────────────────────────────────────────
+
+function GiftCardPanel({ totalCents, onComplete }: {
+  totalCents: number;
+  onComplete: (payments: Array<{ method: string; amountCents: number; reference?: string }>) => void;
+}) {
+  const [code, setCode] = useState('');
+  const [card, setCard] = useState<GiftCard | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function lookup() {
+    const c = code.trim().toUpperCase();
+    if (!c) return;
+    setLoading(true); setError(''); setCard(null);
+    try {
+      const res = await mobileApi.get<GiftCard>(`/gift-cards/${c}`);
+      if (res.status !== 'ACTIVE') { setError('This gift card is not active.'); return; }
+      setCard(res);
+    } catch (err: any) {
+      setError(err?.message ?? 'Gift card not found');
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <View style={pStyles.panel}>
+      <Text style={pStyles.fieldLabel}>Gift Card Code</Text>
+      <View style={pStyles.inputRow}>
+        <View style={[pStyles.inputWrap, { flex: 1 }]}>
+          <Ionicons name="gift-outline" size={16} color={Colors.textSecondary} />
+          <TextInput style={pStyles.input} value={code}
+            onChangeText={(t) => { setCode(t.toUpperCase()); setCard(null); setError(''); }}
+            onSubmitEditing={() => void lookup()}
+            placeholder="GC-XXXX-XXXX" autoCapitalize="characters" autoCorrect={false}
+            placeholderTextColor={Colors.textSecondary} />
+        </View>
+        <TouchableOpacity style={[pStyles.actionBtn, { paddingHorizontal: 16, paddingVertical: 0, height: 44, justifyContent: 'center' }]}
+          onPress={() => void lookup()} disabled={loading || !code.trim()}>
+          {loading ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={pStyles.actionBtnText}>Check</Text>}
+        </TouchableOpacity>
+      </View>
+
+      {error ? (
+        <View style={pStyles.errorBox}>
+          <Ionicons name="alert-circle-outline" size={14} color={Colors.error} />
+          <Text style={pStyles.errorText}>{error}</Text>
+        </View>
+      ) : null}
+
+      {card && (
+        <View style={pStyles.gcCard}>
+          <View style={pStyles.gcRow}>
+            <Text style={pStyles.gcLabel}>Card Balance</Text>
+            <Text style={pStyles.gcValue}>{formatKES(card.balanceCents)}</Text>
+          </View>
+          <View style={pStyles.gcRow}>
+            <Text style={pStyles.gcLabel}>Sale Total</Text>
+            <Text style={pStyles.gcValue}>{formatKES(totalCents)}</Text>
+          </View>
+          {card.balanceCents < totalCents && (
+            <View style={[pStyles.gcRow, { borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 8 }]}>
+              <Text style={[pStyles.gcLabel, { color: Colors.warning }]}>Remaining to pay</Text>
+              <Text style={[pStyles.gcValue, { color: Colors.warning }]}>{formatKES(totalCents - card.balanceCents)}</Text>
+            </View>
+          )}
+          {card.balanceCents >= totalCents && (
+            <View style={[pStyles.gcRow, { borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 8 }]}>
+              <Text style={[pStyles.gcLabel, { color: Colors.success }]}>Balance after</Text>
+              <Text style={[pStyles.gcValue, { color: Colors.success }]}>{formatKES(card.balanceCents - totalCents)}</Text>
+            </View>
+          )}
+          {card.balanceCents < totalCents && (
+            <View style={pStyles.infoBox}>
+              <Text style={pStyles.infoText}>Partial payment of {formatKES(card.balanceCents)} will be applied. Pay the remainder via another method.</Text>
+            </View>
+          )}
+          <TouchableOpacity
+            style={[pStyles.actionBtn, { backgroundColor: '#7C3AED' }]}
+            onPress={() => onComplete([{ method: 'GIFT_CARD', amountCents: Math.min(card.balanceCents, totalCents), reference: code.trim().toUpperCase() }])}>
+            <Text style={pStyles.actionBtnText}>
+              {card.balanceCents >= totalCents ? 'Pay with Gift Card' : `Apply ${formatKES(card.balanceCents)}`}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ─── Credit Sale panel ────────────────────────────────────────────────────────
+
+function CreditPanel({ totalCents, customerId, customerName, businessId, onComplete }: {
+  totalCents: number; customerId: string | null; customerName: string | null;
+  businessId: string;
+  onComplete: (payments: Array<{ method: string; amountCents: number; reference?: string }>) => void;
+}) {
+  const [reqLoading, setReqLoading] = useState(false);
+  const [reqSent, setReqSent] = useState(false);
+  const [reqError, setReqError] = useState('');
+
+  const { data: credit, isLoading } = useQuery<CustomerCredit>({
+    queryKey: ['customer-credit', customerId, businessId],
+    queryFn: () => mobileApi.get<CustomerCredit>(`/businesses/${businessId}/customers/${customerId}`),
+    enabled: !!customerId && !!businessId,
+  });
+
+  if (!customerId) return (
+    <View style={pStyles.panel}>
+      <View style={pStyles.infoBox}>
+        <Ionicons name="alert-circle-outline" size={16} color={Colors.warning} />
+        <Text style={pStyles.infoText}>Select a customer first before recording a credit sale.</Text>
+      </View>
+    </View>
+  );
+
+  if (isLoading) return (
+    <View style={[pStyles.panel, { alignItems: 'center', paddingVertical: 24 }]}>
+      <ActivityIndicator color={Colors.primary} />
+    </View>
+  );
+
+  const outstanding = credit ? Math.max(0, -credit.balanceCents) : 0;
+  const limit = credit?.creditLimitCents ?? 0;
+  const available = Math.max(0, limit - outstanding);
+  const noLimit = limit === 0;
+  const wouldExceed = !noLimit && (outstanding + totalCents) > limit;
+
+  async function requestIncrease() {
+    if (!customerId || !credit) return;
+    setReqLoading(true); setReqError('');
+    try {
+      await mobileApi.patch(`/businesses/${businessId}/customers/${customerId}/request-credit`, {
+        requestedLimitCents: outstanding + totalCents,
+      });
+      setReqSent(true);
+    } catch (err: any) {
+      setReqError(err?.message ?? 'Failed to send request.');
+    } finally { setReqLoading(false); }
+  }
+
+  return (
+    <View style={pStyles.panel}>
+      {credit && (
+        <View style={pStyles.creditGrid}>
+          <View style={pStyles.creditCell}>
+            <Text style={pStyles.creditCellLabel}>Limit</Text>
+            <Text style={pStyles.creditCellValue}>{noLimit ? '∞' : formatKES(limit)}</Text>
+          </View>
+          <View style={pStyles.creditCell}>
+            <Text style={pStyles.creditCellLabel}>Outstanding</Text>
+            <Text style={[pStyles.creditCellValue, outstanding > 0 && { color: Colors.error }]}>{formatKES(outstanding)}</Text>
+          </View>
+          <View style={[pStyles.creditCell, wouldExceed && { backgroundColor: Colors.error + '12' }]}>
+            <Text style={pStyles.creditCellLabel}>Available</Text>
+            <Text style={[pStyles.creditCellValue, { color: wouldExceed ? Colors.error : Colors.success }]}>
+              {noLimit ? '∞' : formatKES(available)}
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {wouldExceed && (
+        <View style={pStyles.errorBox}>
+          <Ionicons name="alert-circle-outline" size={14} color={Colors.error} />
+          <Text style={pStyles.errorText}>
+            Credit limit exceeded by {formatKES(outstanding + totalCents - limit)}.
+          </Text>
+        </View>
+      )}
+
+      {wouldExceed && !reqSent && (
+        <>
+          {reqError ? <Text style={[pStyles.errorText, { marginBottom: 4 }]}>{reqError}</Text> : null}
+          <TouchableOpacity
+            style={[pStyles.actionBtn, { backgroundColor: Colors.warning }]}
+            onPress={() => void requestIncrease()} disabled={reqLoading}>
+            {reqLoading ? <ActivityIndicator size="small" color="#FFFFFF" /> :
+              <Text style={pStyles.actionBtnText}>Request Credit Increase from Manager</Text>}
+          </TouchableOpacity>
+        </>
+      )}
+
+      {wouldExceed && reqSent && (
+        <View style={pStyles.infoBox}>
+          <Ionicons name="checkmark-circle-outline" size={14} color={Colors.success} />
+          <Text style={pStyles.infoText}>Request sent. Proceed once manager approves.</Text>
+        </View>
+      )}
+
+      {!wouldExceed && (
+        <View style={pStyles.infoBox}>
+          <Text style={pStyles.infoText}>Sale recorded as unpaid. Collect payment later via Reports → Credit Book.</Text>
+        </View>
+      )}
+
+      <TouchableOpacity
+        style={[pStyles.actionBtn, { backgroundColor: Colors.primary }, wouldExceed && { opacity: 0.4 }]}
+        onPress={() => onComplete([{ method: 'CREDIT', amountCents: totalCents }])}
+        disabled={wouldExceed}>
+        <Text style={pStyles.actionBtnText}>Record Credit Sale · {formatKES(totalCents)}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+// ─── PaymentScreen ────────────────────────────────────────────────────────────
 
 export default function PaymentScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const { user } = useAuthStore();
-  const { items: cartItems, subtotalCents, clearCart, customerId, priceLevel } = useCartStore();
-
+  const {
+    items: cartItems, subtotalCents, promoDiscountCents,
+    clearCart, customerId, customerName, priceLevel, appliedPromotion,
+  } = useCartStore();
   const { businessId, storeId } = useActiveStore();
   const cashierId = user?.id ?? '';
 
-  const { data: bizSettings } = useQuery<{ taxType?: string; serviceChargeRate?: number; serviceChargeDefault?: boolean; name?: string }>({
+  const { data: bizSettings } = useQuery<{
+    taxType?: string; serviceChargeRate?: number;
+    serviceChargeDefault?: boolean; name?: string;
+  }>({
     queryKey: ['mobile-biz-settings', businessId],
     queryFn: () => mobileApi.get(`/business/${businessId}/settings`),
     enabled: !!businessId,
     staleTime: 60_000,
-    refetchOnMount: 'always', // always reflect the business's current tax setting
+    refetchOnMount: 'always',
   });
-  // Use the business's real taxType (VAT/TOT/NONE). Until settings load — or if
-  // the fetch fails — assume NONE so we never show a phantom VAT line that the
-  // web (which reads the same setting) doesn't show. Tax is inclusive, so this
-  // never changes the amount charged, only the breakdown shown.
+
   const taxType = (bizSettings?.taxType as string | undefined) ?? 'NONE';
-
   const subtotal = subtotalCents();
-  const { taxCents, exTaxCents, label: taxLabel } = calculateTax(subtotal, taxType);
+  const promoDiscount = promoDiscountCents();
+  const subtotalAfterPromo = Math.max(0, subtotal - promoDiscount);
+  const { taxCents, exTaxCents, label: taxLabel } = calculateTax(subtotalAfterPromo, taxType);
+  const serviceChargeCents = bizSettings?.serviceChargeDefault
+    ? Math.round((subtotalAfterPromo * (bizSettings?.serviceChargeRate ?? 0)) / 100)
+    : 0;
 
+  // ── UI state ────────────────────────────────────────────────────────────────
   const [payMethod, setPayMethod] = useState<PaymentMethod>('CASH');
   const [amountTendered, setAmountTendered] = useState('');
   const [mpesaRef, setMpesaRef] = useState('');
@@ -113,45 +425,41 @@ export default function PaymentScreen() {
 
   useEffect(() => { void isPrintingEnabled().then(setPrintOn); }, []);
 
-  // Discount
+  // ── Discount ────────────────────────────────────────────────────────────────
   const discountVal = parseFloat(discountInput || '0') || 0;
-  const rawDiscount =
-    discountType === 'percent'
-      ? Math.round((subtotal * discountVal) / 100)
-      : Math.round(discountVal * 100);
-  const effectiveDiscount = Math.min(rawDiscount, subtotal);
-  const goodsAfterDiscount = subtotal - effectiveDiscount;
-  // Service charge: only when the business has it ON by default — matches the web
-  // and the backend, so a sale with the toggle OFF is never silently surcharged.
-  const serviceChargeCents = bizSettings?.serviceChargeDefault
-    ? Math.round((subtotal * (bizSettings?.serviceChargeRate ?? 0)) / 100)
-    : 0;
-  const totalAfterDiscount = goodsAfterDiscount + serviceChargeCents; // amount actually charged
-  const { taxCents: finalTax } = calculateTax(goodsAfterDiscount, taxType); // VAT extracted from goods only
+  const rawDiscount = discountType === 'percent'
+    ? Math.round((subtotalAfterPromo * discountVal) / 100)
+    : Math.round(discountVal * 100);
+  const effectiveDiscount = Math.min(rawDiscount, subtotalAfterPromo);
+  const goodsAfterDiscount = subtotalAfterPromo - effectiveDiscount;
+  const totalAfterDiscount = goodsAfterDiscount + serviceChargeCents;
+  const { taxCents: finalTax } = calculateTax(goodsAfterDiscount, taxType);
 
   const tendered = Math.round((parseFloat(amountTendered || '0') || 0) * 100);
   const change = Math.max(0, tendered - totalAfterDiscount);
 
+  const splitTotal =
+    Math.round((parseFloat(splitCash || '0') || 0) * 100) +
+    Math.round((parseFloat(splitMpesa || '0') || 0) * 100) +
+    Math.round((parseFloat(splitCard || '0') || 0) * 100);
+
+  // ── buildPayments ───────────────────────────────────────────────────────────
   function buildPayments(): Array<{ method: string; amountCents: number; reference?: string }> | null {
     if (payMethod === 'SPLIT') {
-      const cash = Math.round((parseFloat(splitCash || '0') || 0) * 100);
+      const cash  = Math.round((parseFloat(splitCash  || '0') || 0) * 100);
       const mpesa = Math.round((parseFloat(splitMpesa || '0') || 0) * 100);
-      const card = Math.round((parseFloat(splitCard || '0') || 0) * 100);
-      const splitTotal = cash + mpesa + card;
-      if (splitTotal < totalAfterDiscount) {
-        Alert.alert(
-          'Insufficient',
-          `Split total (${formatKES(splitTotal)}) is less than the order total (${formatKES(totalAfterDiscount)}).`
-        );
+      const card  = Math.round((parseFloat(splitCard  || '0') || 0) * 100);
+      if (cash + mpesa + card < totalAfterDiscount) {
+        Alert.alert('Insufficient', `Split total is less than ${formatKES(totalAfterDiscount)}.`);
         return null;
       }
-      const payments: Array<{ method: string; amountCents: number; reference?: string }> = [];
-      if (cash > 0) payments.push({ method: 'CASH', amountCents: cash });
-      if (mpesa > 0) payments.push({ method: 'MPESA', amountCents: mpesa, reference: splitMpesaRef || undefined });
-      if (card > 0) payments.push({ method: 'CARD', amountCents: card });
-      return payments;
+      const p: Array<{ method: string; amountCents: number; reference?: string }> = [];
+      if (cash  > 0) p.push({ method: 'CASH',  amountCents: cash });
+      if (mpesa > 0) p.push({ method: 'MPESA', amountCents: mpesa, reference: splitMpesaRef || undefined });
+      if (card  > 0) p.push({ method: 'CARD',  amountCents: card });
+      return p;
     }
-    if (payMethod === 'MPESA' && !mpesaRef.trim()) {
+    if (payMethod === 'MPESA_MANUAL' && !mpesaRef.trim()) {
       Alert.alert('Required', 'Please enter the M-Pesa transaction code.');
       return null;
     }
@@ -163,23 +471,21 @@ export default function PaymentScreen() {
       Alert.alert('Insufficient', 'Amount tendered is less than the total.');
       return null;
     }
-    const payment: { method: string; amountCents: number; reference?: string } = {
-      method: payMethod,
+    const p: { method: string; amountCents: number; reference?: string } = {
+      method: payMethod === 'MPESA_MANUAL' ? 'MPESA' : payMethod,
       amountCents: totalAfterDiscount,
     };
-    if (payMethod === 'MPESA') payment.reference = mpesaRef.trim();
-    if (payMethod === 'BANK_TRANSFER') payment.reference = bankRef.trim();
-    return [payment];
+    if (payMethod === 'MPESA_MANUAL') p.reference = mpesaRef.trim();
+    if (payMethod === 'BANK_TRANSFER') p.reference = bankRef.trim();
+    return [p];
   }
 
+  // ── completeSale mutation ───────────────────────────────────────────────────
   const { mutate: completeSale, isPending } = useMutation({
     mutationFn: async (payload: SalePayload) => {
       try {
         return await mobileApi.post<SaleResult>('/sales/checkout', payload);
       } catch (err) {
-        // Only queue + report "offline" for genuine network failures. A server
-        // error (e.g. 404, validation) must surface so it isn't hidden as a
-        // pending sale that can never sync.
         const msg = (err as Error)?.message ?? '';
         if (msg.includes('Network request failed')) {
           await queueSale(payload.offlineId, payload);
@@ -190,7 +496,6 @@ export default function PaymentScreen() {
     },
     onSuccess: (result: SaleResult) => {
       qc.invalidateQueries({ queryKey: ['sales'] });
-      // Snapshot the receipt before the cart is cleared (for optional printing).
       setReceiptSnap({
         businessName: bizSettings?.name ?? 'KASTRA POS',
         receiptNumber: result.receiptNumber,
@@ -209,67 +514,57 @@ export default function PaymentScreen() {
     },
     onError: (err: any) => {
       if (err?.message === '__OFFLINE__') {
-        Alert.alert(
-          'Saved Offline',
-          'No internet connection. Sale saved to the offline queue and will sync automatically when you’re back online.',
-          [{ text: 'OK', onPress: () => { clearCart(); router.replace('/(tabs)/pos' as any); } }]
-        );
+        Alert.alert('Saved Offline', 'Sale saved to offline queue and will sync when back online.', [
+          { text: 'OK', onPress: () => { clearCart(); router.replace('/(tabs)/pos' as any); } },
+        ]);
       } else {
-        // Real failure — keep the cart so the cashier can retry.
         Alert.alert('Sale Failed', err?.message ?? 'Could not complete the sale. Please try again.');
       }
     },
   });
 
-  function handleCompleteSale() {
-    if (cartItems.length === 0) {
-      Alert.alert('Empty Cart', 'No items in cart.');
-      return;
-    }
-    const payments = buildPayments();
+  function handleCompleteSale(
+    overridePayments?: Array<{ method: string; amountCents: number; reference?: string }>
+  ) {
+    if (cartItems.length === 0) { Alert.alert('Empty Cart', 'No items in cart.'); return; }
+    const payments = overridePayments ?? buildPayments();
     if (!payments) return;
-
-    const payload: SalePayload = {
+    completeSale({
       offlineId: generateOfflineId(),
-      businessId,
-      storeId,
-      cashierId,
+      businessId, storeId, cashierId,
       customerId: customerId ?? undefined,
-      type: 'NORMAL',
-      priceLevel,
-      items: cartItems.map((i) => ({ itemId: i.id, quantity: i.quantity })),
+      type: 'NORMAL', priceLevel,
+      items: cartItems.map((i) => ({
+        itemId: i.id, quantity: i.quantity,
+        unitPriceCents: i.unitPriceCents,
+        discountPercent: i.discountPercent > 0 ? i.discountPercent : undefined,
+      })),
       payments,
       discountCents: effectiveDiscount > 0 ? effectiveDiscount : undefined,
-      // Send explicitly (incl. 0) so the backend never falls back to applying it.
       serviceChargeCents,
-    };
-    completeSale(payload);
+      promotionId: appliedPromotion?.id,
+    });
   }
 
-  function handleNewSale() {
-    setShowSuccess(false);
-    setCompletedSale(null);
-    router.replace('/(tabs)/pos' as any);
-  }
-
-  const splitTotal =
-    Math.round((parseFloat(splitCash || '0') || 0) * 100) +
-    Math.round((parseFloat(splitMpesa || '0') || 0) * 100) +
-    Math.round((parseFloat(splitCard || '0') || 0) * 100);
-
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={22} color={Colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Checkout</Text>
+          <View>
+            <Text style={styles.headerTitle}>Checkout</Text>
+            {customerName ? <Text style={styles.headerSub}>{customerName}</Text> : null}
+          </View>
           <View style={{ width: 40 }} />
         </View>
 
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+
           {/* Order Summary */}
           <Text style={styles.sectionTitle}>Order Summary</Text>
           <View style={styles.card}>
@@ -281,17 +576,25 @@ export default function PaymentScreen() {
               </View>
             ))}
             <View style={styles.divider} />
-            {taxType !== 'NONE' && taxCents > 0 && (
+            {promoDiscount > 0 && (
               <View style={styles.summaryLine}>
-                <Text style={styles.summaryLabel}>Subtotal (ex-tax)</Text>
-                <Text style={styles.summaryValue}>{formatKES(exTaxCents)}</Text>
+                <Text style={[styles.summaryLabel, { color: Colors.success }]}>
+                  Promo: {appliedPromotion?.name}
+                </Text>
+                <Text style={[styles.summaryValue, { color: Colors.success }]}>-{formatKES(promoDiscount)}</Text>
               </View>
             )}
             {taxType !== 'NONE' && taxCents > 0 && (
-              <View style={styles.summaryLine}>
-                <Text style={styles.summaryLabel}>{taxLabel}</Text>
-                <Text style={styles.summaryValue}>{formatKES(taxCents)}</Text>
-              </View>
+              <>
+                <View style={styles.summaryLine}>
+                  <Text style={styles.summaryLabel}>Subtotal (ex-tax)</Text>
+                  <Text style={styles.summaryValue}>{formatKES(exTaxCents)}</Text>
+                </View>
+                <View style={styles.summaryLine}>
+                  <Text style={styles.summaryLabel}>{taxLabel}</Text>
+                  <Text style={styles.summaryValue}>{formatKES(taxCents)}</Text>
+                </View>
+              </>
             )}
             {serviceChargeCents > 0 && (
               <View style={styles.summaryLine}>
@@ -301,37 +604,26 @@ export default function PaymentScreen() {
             )}
           </View>
 
-          {/* Discount */}
+          {/* Sale-level Discount */}
           <Text style={styles.sectionTitle}>Discount (Optional)</Text>
           <View style={styles.card}>
             <View style={styles.discountTypeRow}>
-              <TouchableOpacity
-                style={[styles.discountTypeBtn, discountType === 'amount' && styles.discountTypeBtnActive]}
-                onPress={() => setDiscountType('amount')}
-              >
-                <Text style={[styles.discountTypeBtnText, discountType === 'amount' && styles.discountTypeBtnTextActive]}>
-                  KES Amount
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.discountTypeBtn, discountType === 'percent' && styles.discountTypeBtnActive]}
-                onPress={() => setDiscountType('percent')}
-              >
-                <Text style={[styles.discountTypeBtnText, discountType === 'percent' && styles.discountTypeBtnTextActive]}>
-                  Percentage %
-                </Text>
-              </TouchableOpacity>
+              {(['amount', 'percent'] as const).map((t) => (
+                <TouchableOpacity
+                  key={t}
+                  style={[styles.discountTypeBtn, discountType === t && styles.discountTypeBtnActive]}
+                  onPress={() => setDiscountType(t)}>
+                  <Text style={[styles.discountTypeBtnText, discountType === t && styles.discountTypeBtnTextActive]}>
+                    {t === 'amount' ? 'KES Amount' : 'Percentage %'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
             <View style={styles.inputWrapper}>
               <Ionicons name="pricetag-outline" size={16} color={Colors.textSecondary} />
-              <TextInput
-                style={styles.input}
-                value={discountInput}
-                onChangeText={setDiscountInput}
+              <TextInput style={styles.input} value={discountInput} onChangeText={setDiscountInput}
                 placeholder={discountType === 'amount' ? '0.00' : '0'}
-                keyboardType="decimal-pad"
-                placeholderTextColor={Colors.textSecondary}
-              />
+                keyboardType="decimal-pad" placeholderTextColor={Colors.textSecondary} />
               <Text style={styles.inputSuffix}>{discountType === 'percent' ? '%' : 'KES'}</Text>
             </View>
             {effectiveDiscount > 0 && (
@@ -345,53 +637,31 @@ export default function PaymentScreen() {
             <Text style={styles.totalValue}>{formatKES(totalAfterDiscount)}</Text>
           </View>
 
-          {/* Payment Method */}
+          {/* Payment Method tabs */}
           <Text style={styles.sectionTitle}>Payment Method</Text>
-          <View style={styles.methodGrid}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}
+            contentContainerStyle={{ gap: 8, paddingHorizontal: 0 }}>
             {PAYMENT_METHODS.map((m) => (
               <TouchableOpacity
                 key={m.key}
-                style={[
-                  styles.methodBtn,
-                  payMethod === m.key && {
-                    borderColor: m.color,
-                    borderWidth: 2,
-                    backgroundColor: m.color + '12',
-                  },
-                ]}
-                onPress={() => setPayMethod(m.key)}
-              >
-                <Ionicons
-                  name={m.icon}
-                  size={22}
-                  color={payMethod === m.key ? m.color : Colors.textSecondary}
-                />
-                <Text
-                  style={[
-                    styles.methodText,
-                    payMethod === m.key && { color: m.color, fontWeight: '700' },
-                  ]}
-                >
+                style={[styles.methodBtn, payMethod === m.key && { borderColor: m.color, borderWidth: 2, backgroundColor: m.color + '12' }]}
+                onPress={() => setPayMethod(m.key)}>
+                <Ionicons name={m.icon as any} size={20} color={payMethod === m.key ? m.color : Colors.textSecondary} />
+                <Text style={[styles.methodText, payMethod === m.key && { color: m.color, fontWeight: '700' }]}>
                   {m.label}
                 </Text>
               </TouchableOpacity>
             ))}
-          </View>
+          </ScrollView>
 
-          {/* Cash Details */}
+          {/* ── CASH ── */}
           {payMethod === 'CASH' && (
             <View style={styles.card}>
               <Text style={styles.fieldLabel}>Amount Tendered (KES)</Text>
               <View style={styles.inputWrapper}>
                 <Ionicons name="cash-outline" size={16} color={Colors.textSecondary} />
-                <TextInput
-                  style={styles.input}
-                  value={amountTendered}
-                  onChangeText={setAmountTendered}
-                  placeholder="0.00"
-                  keyboardType="decimal-pad"
-                  placeholderTextColor={Colors.textSecondary}
-                />
+                <TextInput style={styles.input} value={amountTendered} onChangeText={setAmountTendered}
+                  placeholder="0.00" keyboardType="decimal-pad" placeholderTextColor={Colors.textSecondary} />
               </View>
               {tendered >= totalAfterDiscount && tendered > 0 && (
                 <View style={styles.changeRow}>
@@ -399,63 +669,43 @@ export default function PaymentScreen() {
                   <Text style={styles.changeValue}>{formatKES(change)}</Text>
                 </View>
               )}
-              {/* Quick amount shortcuts */}
               <View style={styles.quickAmounts}>
                 {[totalAfterDiscount, 50000, 100000, 200000, 500000]
-                  .filter((amt) => amt >= totalAfterDiscount)
-                  .slice(0, 4)
-                  .map((amt) => (
-                    <TouchableOpacity
-                      key={amt}
-                      style={styles.quickBtn}
-                      onPress={() => setAmountTendered((amt / 100).toFixed(2))}
-                    >
-                      <Text style={styles.quickBtnText}>{formatKES(amt)}</Text>
+                  .filter((a) => a >= totalAfterDiscount).slice(0, 4)
+                  .map((a) => (
+                    <TouchableOpacity key={a} style={styles.quickBtn}
+                      onPress={() => setAmountTendered((a / 100).toFixed(2))}>
+                      <Text style={styles.quickBtnText}>{formatKES(a)}</Text>
                     </TouchableOpacity>
                   ))}
               </View>
             </View>
           )}
 
-          {/* M-Pesa */}
-          {payMethod === 'MPESA' && (
+          {/* ── M-PESA STK ── */}
+          {payMethod === 'MPESA_STK' && (
+            <MpesaSTKPanel
+              totalCents={totalAfterDiscount}
+              businessId={businessId}
+              onComplete={(payments) => handleCompleteSale(payments)}
+            />
+          )}
+
+          {/* ── M-PESA MANUAL ── */}
+          {payMethod === 'MPESA_MANUAL' && (
             <View style={styles.card}>
               <Text style={styles.fieldLabel}>M-Pesa Transaction Code *</Text>
               <View style={styles.inputWrapper}>
                 <Ionicons name="phone-portrait-outline" size={16} color={Colors.textSecondary} />
-                <TextInput
-                  style={styles.input}
-                  value={mpesaRef}
-                  onChangeText={setMpesaRef}
-                  placeholder="e.g. QJ12345XYZ"
-                  autoCapitalize="characters"
-                  autoCorrect={false}
-                  placeholderTextColor={Colors.textSecondary}
-                />
+                <TextInput style={styles.input} value={mpesaRef} onChangeText={setMpesaRef}
+                  placeholder="e.g. QJ12345XYZ" autoCapitalize="characters" autoCorrect={false}
+                  placeholderTextColor={Colors.textSecondary} />
               </View>
               <Text style={styles.fieldHint}>Ask customer for the M-Pesa SMS confirmation code.</Text>
             </View>
           )}
 
-          {/* Bank Transfer */}
-          {payMethod === 'BANK_TRANSFER' && (
-            <View style={styles.card}>
-              <Text style={styles.fieldLabel}>Bank Transfer Reference *</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="business-outline" size={16} color={Colors.textSecondary} />
-                <TextInput
-                  style={styles.input}
-                  value={bankRef}
-                  onChangeText={setBankRef}
-                  placeholder="Transfer reference / slip no."
-                  autoCorrect={false}
-                  placeholderTextColor={Colors.textSecondary}
-                />
-              </View>
-            </View>
-          )}
-
-          {/* Card */}
+          {/* ── CARD ── */}
           {payMethod === 'CARD' && (
             <View style={styles.card}>
               <View style={styles.infoNotice}>
@@ -467,83 +717,72 @@ export default function PaymentScreen() {
             </View>
           )}
 
-          {/* Split Payment */}
+          {/* ── BANK TRANSFER ── */}
+          {payMethod === 'BANK_TRANSFER' && (
+            <View style={styles.card}>
+              <Text style={styles.fieldLabel}>Bank Transfer Reference *</Text>
+              <View style={styles.inputWrapper}>
+                <Ionicons name="business-outline" size={16} color={Colors.textSecondary} />
+                <TextInput style={styles.input} value={bankRef} onChangeText={setBankRef}
+                  placeholder="Transfer reference / slip no." autoCorrect={false}
+                  placeholderTextColor={Colors.textSecondary} />
+              </View>
+            </View>
+          )}
+
+          {/* ── GIFT CARD ── */}
+          {payMethod === 'GIFT_CARD' && (
+            <GiftCardPanel
+              totalCents={totalAfterDiscount}
+              onComplete={(payments) => handleCompleteSale(payments)}
+            />
+          )}
+
+          {/* ── CREDIT ── */}
+          {payMethod === 'CREDIT' && (
+            <CreditPanel
+              totalCents={totalAfterDiscount}
+              customerId={customerId}
+              customerName={customerName}
+              businessId={businessId}
+              onComplete={(payments) => handleCompleteSale(payments)}
+            />
+          )}
+
+          {/* ── SPLIT ── */}
           {payMethod === 'SPLIT' && (
             <View style={styles.card}>
               <Text style={styles.fieldLabel}>Split Payment Amounts</Text>
               <Text style={styles.fieldHint}>Total to cover: {formatKES(totalAfterDiscount)}</Text>
-
-              <View style={styles.splitField}>
-                <Text style={styles.splitLabel}>Cash</Text>
-                <View style={[styles.inputWrapper, { flex: 1 }]}>
-                  <TextInput
-                    style={styles.input}
-                    value={splitCash}
-                    onChangeText={setSplitCash}
-                    placeholder="0.00"
-                    keyboardType="decimal-pad"
-                    placeholderTextColor={Colors.textSecondary}
-                  />
-                  <Text style={styles.inputSuffix}>KES</Text>
+              {[
+                { label: 'Cash', value: splitCash, setter: setSplitCash },
+                { label: 'M-Pesa', value: splitMpesa, setter: setSplitMpesa },
+                { label: 'Card', value: splitCard, setter: setSplitCard },
+              ].map(({ label, value, setter }) => (
+                <View key={label} style={styles.splitField}>
+                  <Text style={styles.splitLabel}>{label}</Text>
+                  <View style={[styles.inputWrapper, { flex: 1 }]}>
+                    <TextInput style={styles.input} value={value} onChangeText={setter}
+                      placeholder="0.00" keyboardType="decimal-pad" placeholderTextColor={Colors.textSecondary} />
+                    <Text style={styles.inputSuffix}>KES</Text>
+                  </View>
                 </View>
-              </View>
-
-              <View style={styles.splitField}>
-                <Text style={styles.splitLabel}>M-Pesa</Text>
-                <View style={[styles.inputWrapper, { flex: 1 }]}>
-                  <TextInput
-                    style={styles.input}
-                    value={splitMpesa}
-                    onChangeText={setSplitMpesa}
-                    placeholder="0.00"
-                    keyboardType="decimal-pad"
-                    placeholderTextColor={Colors.textSecondary}
-                  />
-                  <Text style={styles.inputSuffix}>KES</Text>
-                </View>
-              </View>
-
+              ))}
               {parseFloat(splitMpesa || '0') > 0 && (
                 <View style={styles.splitField}>
                   <Text style={styles.splitLabel}>M-Pesa Code</Text>
                   <View style={[styles.inputWrapper, { flex: 1 }]}>
-                    <TextInput
-                      style={styles.input}
-                      value={splitMpesaRef}
-                      onChangeText={setSplitMpesaRef}
-                      placeholder="Transaction code"
-                      autoCapitalize="characters"
-                      placeholderTextColor={Colors.textSecondary}
-                    />
+                    <TextInput style={styles.input} value={splitMpesaRef} onChangeText={setSplitMpesaRef}
+                      placeholder="Transaction code" autoCapitalize="characters"
+                      placeholderTextColor={Colors.textSecondary} />
                   </View>
                 </View>
               )}
-
-              <View style={styles.splitField}>
-                <Text style={styles.splitLabel}>Card</Text>
-                <View style={[styles.inputWrapper, { flex: 1 }]}>
-                  <TextInput
-                    style={styles.input}
-                    value={splitCard}
-                    onChangeText={setSplitCard}
-                    placeholder="0.00"
-                    keyboardType="decimal-pad"
-                    placeholderTextColor={Colors.textSecondary}
-                  />
-                  <Text style={styles.inputSuffix}>KES</Text>
-                </View>
-              </View>
-
               <View style={styles.changeRow}>
                 <Text style={styles.changeLabel}>
                   {splitTotal >= totalAfterDiscount ? 'Covered' : 'Remaining'}
                 </Text>
-                <Text
-                  style={[
-                    styles.changeValue,
-                    { color: splitTotal >= totalAfterDiscount ? Colors.success : Colors.error },
-                  ]}
-                >
+                <Text style={[styles.changeValue, { color: splitTotal >= totalAfterDiscount ? Colors.success : Colors.error }]}>
                   {splitTotal >= totalAfterDiscount
                     ? formatKES(splitTotal)
                     : `-${formatKES(totalAfterDiscount - splitTotal)}`}
@@ -551,37 +790,36 @@ export default function PaymentScreen() {
               </View>
             </View>
           )}
+
         </ScrollView>
 
-        {/* Complete Sale Button */}
-        <View style={styles.footer}>
-          <TouchableOpacity
-            style={[styles.completeBtn, isPending && { opacity: 0.7 }]}
-            onPress={handleCompleteSale}
-            disabled={isPending}
-            activeOpacity={0.85}
-          >
-            {isPending ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle" size={22} color="#FFFFFF" />
-                <Text style={styles.completeBtnText}>
-                  Complete Sale · {formatKES(totalAfterDiscount)}
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
+        {/* Complete Sale button — hidden for STK/Gift Card/Credit (they self-complete) */}
+        {!['MPESA_STK', 'GIFT_CARD', 'CREDIT'].includes(payMethod) && (
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={[styles.completeBtn, isPending && { opacity: 0.7 }]}
+              onPress={() => handleCompleteSale()}
+              disabled={isPending}
+              activeOpacity={0.85}>
+              {isPending ? <ActivityIndicator color="#FFFFFF" /> : (
+                <>
+                  <Ionicons name="checkmark-circle" size={22} color="#FFFFFF" />
+                  <Text style={styles.completeBtnText}>
+                    Complete Sale · {formatKES(totalAfterDiscount)}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+
       </KeyboardAvoidingView>
 
-      {/* Success Modal */}
+      {/* ── Success Modal ── */}
       <Modal visible={showSuccess} animationType="fade" transparent>
         <View style={styles.successOverlay}>
           <View style={styles.successCard}>
-            <View style={styles.successIconWrap}>
-              <Ionicons name="checkmark-circle" size={72} color={Colors.success} />
-            </View>
+            <Ionicons name="checkmark-circle" size={72} color={Colors.success} />
             <Text style={styles.successTitle}>Sale Complete!</Text>
             {completedSale && (
               <>
@@ -599,56 +837,46 @@ export default function PaymentScreen() {
               <TouchableOpacity
                 style={styles.printReceiptBtn}
                 onPress={() => { void printReceipt(receiptSnap).catch(() => {}); }}
-                activeOpacity={0.85}
-              >
+                activeOpacity={0.85}>
                 <Ionicons name="print-outline" size={20} color={Colors.primary} />
                 <Text style={styles.printReceiptBtnText}>Print Receipt</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={styles.newSaleBtn} onPress={handleNewSale} activeOpacity={0.85}>
+            <TouchableOpacity
+              style={styles.newSaleBtn}
+              onPress={() => { setShowSuccess(false); setCompletedSale(null); router.replace('/(tabs)/pos' as any); }}
+              activeOpacity={0.85}>
               <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
               <Text style={styles.newSaleBtnText}>New Sale</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
+
     </SafeAreaView>
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    backgroundColor: Colors.card,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 14, paddingVertical: 12,
+    backgroundColor: Colors.card, borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   backBtn: { padding: 4 },
   headerTitle: { fontSize: 18, fontWeight: '700', color: Colors.text },
+  headerSub: { fontSize: 12, color: Colors.primary, marginTop: 1 },
   content: { padding: 16, gap: 12, paddingBottom: 20 },
   sectionTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginTop: 4,
+    fontSize: 12, fontWeight: '700', color: Colors.textSecondary,
+    textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 4,
   },
   card: {
-    backgroundColor: Colors.card,
-    borderRadius: 14,
-    padding: 14,
-    gap: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
+    backgroundColor: Colors.card, borderRadius: 14, padding: 14, gap: 8,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1,
   },
   cartRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2 },
   cartItemName: { flex: 1, fontSize: 13, color: Colors.text },
@@ -659,53 +887,31 @@ const styles = StyleSheet.create({
   summaryLabel: { fontSize: 13, color: Colors.textSecondary },
   summaryValue: { fontSize: 13, fontWeight: '600', color: Colors.text },
   totalCard: {
-    backgroundColor: Colors.primary,
-    borderRadius: 14,
-    padding: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    backgroundColor: Colors.primary, borderRadius: 14, padding: 16,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
   },
   totalLabel: { fontSize: 16, color: '#FFFFFF99', fontWeight: '600' },
   totalValue: { fontSize: 28, fontWeight: '900', color: '#FFFFFF' },
   discountTypeRow: { flexDirection: 'row', gap: 8 },
   discountTypeBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: 'center',
+    flex: 1, paddingVertical: 8, borderRadius: 8,
+    borderWidth: 1, borderColor: Colors.border, alignItems: 'center',
   },
   discountTypeBtnActive: { borderColor: Colors.primary, backgroundColor: Colors.primary + '12' },
   discountTypeBtnText: { fontSize: 13, color: Colors.textSecondary },
   discountTypeBtnTextActive: { color: Colors.primary, fontWeight: '700' },
   discountPreview: { fontSize: 12, color: Colors.error, fontWeight: '600' },
-  methodGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   methodBtn: {
-    flex: 1,
-    minWidth: '28%',
-    alignItems: 'center',
-    gap: 5,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    backgroundColor: Colors.card,
+    alignItems: 'center', gap: 4, paddingVertical: 10, paddingHorizontal: 14,
+    borderRadius: 12, borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.card,
   },
-  methodText: { fontSize: 11, color: Colors.textSecondary, fontWeight: '500', textAlign: 'center' },
+  methodText: { fontSize: 11, color: Colors.textSecondary, fontWeight: '500' },
   fieldLabel: { fontSize: 13, fontWeight: '600', color: Colors.text },
   fieldHint: { fontSize: 11, color: Colors.textSecondary },
   inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    gap: 8,
-    backgroundColor: Colors.background,
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1, borderColor: Colors.border, borderRadius: 10,
+    paddingHorizontal: 12, gap: 8, backgroundColor: Colors.background,
   },
   input: { flex: 1, paddingVertical: 11, fontSize: 15, color: Colors.text },
   inputSuffix: { fontSize: 13, color: Colors.textSecondary },
@@ -714,104 +920,105 @@ const styles = StyleSheet.create({
   changeValue: { fontSize: 18, fontWeight: '800', color: Colors.success },
   quickAmounts: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
   quickBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: Colors.primary + '12',
-    borderWidth: 1,
-    borderColor: Colors.primary + '30',
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
+    backgroundColor: Colors.primary + '12', borderWidth: 1, borderColor: Colors.primary + '30',
   },
   quickBtnText: { fontSize: 12, color: Colors.primary, fontWeight: '600' },
   infoNotice: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    backgroundColor: Colors.primary + '10',
-    padding: 12,
-    borderRadius: 10,
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    backgroundColor: Colors.primary + '10', padding: 12, borderRadius: 10,
   },
   infoNoticeText: { flex: 1, fontSize: 13, color: Colors.primary },
   splitField: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  splitLabel: { fontSize: 12, color: Colors.textSecondary, width: 60 },
+  splitLabel: { fontSize: 12, color: Colors.textSecondary, width: 64 },
   footer: {
-    padding: 16,
-    backgroundColor: Colors.card,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    padding: 16, backgroundColor: Colors.card,
+    borderTopWidth: 1, borderTopColor: Colors.border,
   },
   completeBtn: {
-    backgroundColor: Colors.success,
-    borderRadius: 14,
-    paddingVertical: 16,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 10,
-    shadowColor: Colors.success,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 5,
+    backgroundColor: Colors.success, borderRadius: 14, paddingVertical: 16,
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10,
+    shadowColor: Colors.success, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 5,
   },
   completeBtnText: { color: '#FFFFFF', fontSize: 17, fontWeight: '800' },
-
-  // Success modal
   successOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center', alignItems: 'center', padding: 24,
   },
   successCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 24,
-    padding: 32,
-    width: '100%',
-    alignItems: 'center',
-    gap: 10,
+    backgroundColor: Colors.card, borderRadius: 24, padding: 32,
+    width: '100%', alignItems: 'center', gap: 10,
   },
-  successIconWrap: { marginBottom: 4 },
   successTitle: { fontSize: 24, fontWeight: '900', color: Colors.text },
   successReceipt: { fontSize: 14, color: Colors.textSecondary },
   successTotal: { fontSize: 30, fontWeight: '900', color: Colors.primary },
   changeCard: {
-    backgroundColor: Colors.success + '12',
-    borderRadius: 12,
-    padding: 14,
-    width: '100%',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
+    backgroundColor: Colors.success + '12', borderRadius: 12, padding: 14,
+    width: '100%', alignItems: 'center', gap: 4, marginTop: 4,
   },
   changeCardLabel: { fontSize: 13, color: Colors.textSecondary },
   changeCardValue: { fontSize: 26, fontWeight: '900', color: Colors.success },
   newSaleBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 8,
-    width: '100%',
-    justifyContent: 'center',
+    backgroundColor: Colors.primary, borderRadius: 12,
+    paddingVertical: 14, paddingHorizontal: 32,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginTop: 8, width: '100%', justifyContent: 'center',
   },
   newSaleBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
   printReceiptBtn: {
-    backgroundColor: Colors.card,
-    borderWidth: 1.5,
-    borderColor: Colors.primary,
-    borderRadius: 12,
-    paddingVertical: 13,
-    paddingHorizontal: 32,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 12,
-    width: '100%',
-    justifyContent: 'center',
+    backgroundColor: Colors.card, borderWidth: 1.5, borderColor: Colors.primary,
+    borderRadius: 12, paddingVertical: 13, paddingHorizontal: 32,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginTop: 12, width: '100%', justifyContent: 'center',
   },
   printReceiptBtnText: { color: Colors.primary, fontSize: 16, fontWeight: '700' },
+});
+
+// ─── Panel shared styles (used by MpesaSTKPanel, GiftCardPanel, CreditPanel) ──
+
+const pStyles = StyleSheet.create({
+  panel: {
+    backgroundColor: Colors.card, borderRadius: 14, padding: 14, gap: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1,
+  },
+  fieldLabel: { fontSize: 13, fontWeight: '600', color: Colors.text },
+  inputWrap: {
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1, borderColor: Colors.border, borderRadius: 10,
+    paddingHorizontal: 12, gap: 8, backgroundColor: Colors.background, height: 44,
+  },
+  inputRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  input: { flex: 1, fontSize: 15, color: Colors.text },
+  actionBtn: {
+    backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 13,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  actionBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  infoBox: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    backgroundColor: Colors.primary + '10', padding: 10, borderRadius: 10,
+  },
+  infoText: { flex: 1, fontSize: 12, color: Colors.text },
+  errorBox: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    backgroundColor: Colors.error + '10', padding: 10, borderRadius: 10,
+  },
+  errorText: { flex: 1, fontSize: 12, color: Colors.error },
+  waitTitle: { fontSize: 18, fontWeight: '700', color: Colors.text },
+  waitSub: { fontSize: 13, color: Colors.textSecondary },
+  gcCard: {
+    backgroundColor: '#F5F3FF', borderRadius: 12, padding: 14, gap: 8,
+    borderWidth: 1, borderColor: '#DDD6FE',
+  },
+  gcRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  gcLabel: { fontSize: 13, color: Colors.textSecondary },
+  gcValue: { fontSize: 14, fontWeight: '700', color: '#5B21B6' },
+  creditGrid: { flexDirection: 'row', gap: 8 },
+  creditCell: {
+    flex: 1, backgroundColor: Colors.background, borderRadius: 10,
+    padding: 10, alignItems: 'center', gap: 2,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  creditCellLabel: { fontSize: 11, color: Colors.textSecondary },
+  creditCellValue: { fontSize: 14, fontWeight: '800', color: Colors.text },
 });

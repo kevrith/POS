@@ -91,7 +91,7 @@ export default function CustomersScreen() {
   }
 
   function handleSelectForPOS(customer: Customer) {
-    setCustomer(customer.id);
+    setCustomer(customer.id, customer.name);
     Alert.alert(
       'Customer Selected',
       `${customer.name} has been added to the current cart.`,

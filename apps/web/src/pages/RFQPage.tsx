@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { FileText, Plus, ChevronDown, ChevronRight, Send, Award, X, Loader2, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
@@ -9,18 +10,20 @@ import { useAuthStore } from '../stores/auth';
 type RFQStatus = 'DRAFT' | 'SENT' | 'RECEIVED' | 'AWARDED' | 'CANCELLED';
 
 interface RFQItem {
-  id?: string;
+  id: string;
   itemId: string;
-  quantity: number;
+  quantityNeeded: number;
   itemName?: string;
+  itemSku?: string | null;
 }
 
 interface RFQResponse {
   id: string;
   supplierId: string;
-  supplierName: string;
-  unitPriceCents: number;
-  deliveryDays: number;
+  supplier?: { id: string; name: string };
+  quotedPriceCents: number;
+  deliveryDays?: number | null;
+  validUntil?: string | null;
   notes?: string;
   status: 'PENDING' | 'AWARDED' | 'REJECTED';
 }
@@ -37,9 +40,20 @@ interface RFQ {
   responses: RFQResponse[];
 }
 
+interface Supplier {
+  id: string;
+  name: string;
+}
+
+interface InventoryItem {
+  id: string;
+  name: string;
+  sku?: string | null;
+}
+
 interface RFQFormItem {
   itemId: string;
-  quantity: number;
+  quantityNeeded: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -65,7 +79,81 @@ function fmt(cents: number) {
   return `KES ${(cents / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
 }
 
-const emptyItem = (): RFQFormItem => ({ itemId: '', quantity: 1 });
+const emptyItem = (): RFQFormItem => ({ itemId: '', quantityNeeded: 1 });
+
+// ─── Quote entry form ─────────────────────────────────────────────────────────
+
+function QuoteForm({
+  rfqId, suppliers, onSaved,
+}: {
+  rfqId: string;
+  suppliers: Supplier[];
+  onSaved: () => void;
+}) {
+  const [supplierId, setSupplierId] = useState('');
+  const [price, setPrice] = useState('');
+  const [days, setDays] = useState('');
+  const [notes, setNotes] = useState('');
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      api.post(`/suppliers/rfq/${rfqId}/responses`, {
+        supplierId,
+        quotedPriceCents: Math.round(parseFloat(price || '0') * 100),
+        deliveryDays: days ? Number(days) : undefined,
+        notes: notes.trim() || undefined,
+      }),
+    onSuccess: () => {
+      toast.success('Quote recorded');
+      setSupplierId(''); setPrice(''); setDays(''); setNotes('');
+      onSaved();
+    },
+    onError: (err: Error) => toast.error(err.message || 'Could not save the quote'),
+  });
+
+  return (
+    <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 p-3">
+      <h4 className="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-2">
+        Record a supplier quote
+      </h4>
+      <div className="flex flex-wrap gap-2 items-end">
+        <select
+          value={supplierId}
+          onChange={(e) => setSupplierId(e.target.value)}
+          className="flex-1 min-w-40 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+        >
+          <option value="">Select supplier…</option>
+          {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        <input
+          type="number" min="0" step="0.01" value={price}
+          onChange={(e) => setPrice(e.target.value)}
+          placeholder="Quoted total (KES)"
+          className="w-44 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+        />
+        <input
+          type="number" min="0" value={days}
+          onChange={(e) => setDays(e.target.value)}
+          placeholder="Lead days"
+          className="w-28 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+        />
+        <input
+          type="text" value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Notes (optional)"
+          className="flex-1 min-w-40 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+        />
+        <button
+          onClick={() => mutation.mutate()}
+          disabled={!supplierId || !price || mutation.isPending}
+          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg disabled:opacity-50"
+        >
+          {mutation.isPending ? 'Saving…' : 'Add quote'}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -82,9 +170,21 @@ export default function RFQPage() {
 
   // ─── Queries ──────────────────────────────────────────────────────────────
 
-  const { data: rfqs = [], isLoading, refetch } = useQuery<RFQ[]>({
+  const { data: rfqs = [], isLoading, refetch, error } = useQuery<RFQ[]>({
     queryKey: ['rfqs', businessId],
     queryFn: () => api.get(`/suppliers/rfq?businessId=${businessId}`),
+    enabled: !!businessId,
+  });
+
+  const { data: suppliers = [] } = useQuery<Supplier[]>({
+    queryKey: ['suppliers', businessId],
+    queryFn: () => api.get(`/suppliers?businessId=${businessId}`),
+    enabled: !!businessId,
+  });
+
+  const { data: items = [] } = useQuery<InventoryItem[]>({
+    queryKey: ['rfq-items', businessId],
+    queryFn: () => api.get(`/items?businessId=${businessId}`),
     enabled: !!businessId,
   });
 
@@ -93,48 +193,59 @@ export default function RFQPage() {
   const createMut = useMutation({
     mutationFn: (dto: object) => api.post('/suppliers/rfq', dto),
     onSuccess: () => {
+      toast.success('RFQ created');
       qc.invalidateQueries({ queryKey: ['rfqs'] });
       setTab('list');
       setFormNotes('');
       setFormDeadline('');
       setFormItems([emptyItem()]);
     },
+    onError: (err: Error) => toast.error(err.message || 'Failed to create RFQ'),
   });
 
   const sendMut = useMutation({
     mutationFn: (id: string) => api.patch(`/suppliers/rfq/${id}/send`, {}),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['rfqs'] }),
+    onSuccess: () => {
+      toast.success('RFQ marked as sent');
+      qc.invalidateQueries({ queryKey: ['rfqs'] });
+    },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const awardMut = useMutation({
     mutationFn: ({ rfqId, rid }: { rfqId: string; rid: string }) =>
       api.patch(`/suppliers/rfq/${rfqId}/responses/${rid}/award`, {}),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['rfqs'] }),
+    onSuccess: () => {
+      toast.success('Quote awarded');
+      qc.invalidateQueries({ queryKey: ['rfqs'] });
+    },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   // ─── Form helpers ─────────────────────────────────────────────────────────
 
   function addItem() {
-    setFormItems((items) => [...items, emptyItem()]);
+    setFormItems((list) => [...list, emptyItem()]);
   }
 
   function removeItem(idx: number) {
-    setFormItems((items) => items.filter((_, i) => i !== idx));
+    setFormItems((list) => list.filter((_, i) => i !== idx));
   }
 
   function updateItem(idx: number, field: keyof RFQFormItem, value: string | number) {
-    setFormItems((items) =>
-      items.map((item, i) => i === idx ? { ...item, [field]: value } : item)
-    );
+    setFormItems((list) => list.map((item, i) => (i === idx ? { ...item, [field]: value } : item)));
   }
 
   function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     createMut.mutate({
       businessId,
+      storeId: user?.storeId,
       notes: formNotes.trim() || undefined,
       deadline: formDeadline || undefined,
-      items: formItems.filter((i) => i.itemId.trim()),
+      items: formItems
+        .filter((i) => i.itemId.trim() && i.quantityNeeded > 0)
+        .map((i) => ({ itemId: i.itemId, quantityNeeded: i.quantityNeeded })),
     });
   }
 
@@ -186,6 +297,8 @@ export default function RFQPage() {
           <div className="flex justify-center py-16">
             <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
           </div>
+        ) : error ? (
+          <div className="text-center py-16 text-red-600">{(error as Error).message}</div>
         ) : rfqs.length === 0 ? (
           <div className="text-center py-16 text-gray-400 dark:text-gray-500">
             <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
@@ -201,6 +314,9 @@ export default function RFQPage() {
           <div className="space-y-3">
             {rfqs.map((rfq) => {
               const isExpanded = expanded === rfq.id;
+              const best = rfq.responses.length
+                ? Math.min(...rfq.responses.map((r) => r.quotedPriceCents))
+                : 0;
               return (
                 <div key={rfq.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
                   {/* RFQ header row */}
@@ -224,7 +340,7 @@ export default function RFQPage() {
                       </span>
                     )}
                     <span className="text-xs text-gray-400 whitespace-nowrap">
-                      {rfq.responses.length} response{rfq.responses.length !== 1 ? 's' : ''}
+                      {rfq.responses.length} quote{rfq.responses.length !== 1 ? 's' : ''}
                     </span>
                     {rfq.status === 'DRAFT' && (
                       <button
@@ -245,11 +361,13 @@ export default function RFQPage() {
                       <div>
                         <h4 className="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-2">Items Requested</h4>
                         <div className="space-y-1">
-                          {rfq.items.map((item, i) => (
-                            <div key={i} className="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
-                              <span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">{item.itemId}</span>
-                              {item.itemName && <span>{item.itemName}</span>}
-                              <span className="text-gray-400">×{item.quantity}</span>
+                          {rfq.items.map((item) => (
+                            <div key={item.id} className="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
+                              <span className="font-medium">{item.itemName ?? item.itemId}</span>
+                              {item.itemSku && (
+                                <span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">{item.itemSku}</span>
+                              )}
+                              <span className="text-gray-400">×{item.quantityNeeded}</span>
                             </div>
                           ))}
                         </div>
@@ -258,47 +376,66 @@ export default function RFQPage() {
                       {/* Supplier responses */}
                       {rfq.responses.length > 0 && (
                         <div>
-                          <h4 className="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-2">Supplier Responses</h4>
+                          <h4 className="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-2">Supplier Quotes</h4>
                           <div className="overflow-x-auto">
                             <table className="w-full text-sm">
                               <thead>
                                 <tr className="text-xs text-gray-500 dark:text-gray-400">
                                   <th className="text-left pb-1">Supplier</th>
-                                  <th className="text-right pb-1">Unit Price</th>
+                                  <th className="text-right pb-1">Quoted</th>
                                   <th className="text-right pb-1">Delivery</th>
                                   <th className="text-center pb-1">Status</th>
                                   <th className="pb-1" />
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                                {rfq.responses.map((resp) => (
-                                  <tr key={resp.id}>
-                                    <td className="py-2 font-medium text-gray-900 dark:text-white">{resp.supplierName}</td>
-                                    <td className="py-2 text-right text-gray-700 dark:text-gray-300">{fmt(resp.unitPriceCents)}</td>
-                                    <td className="py-2 text-right text-gray-500 dark:text-gray-400">{resp.deliveryDays}d</td>
-                                    <td className="py-2 text-center">
-                                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${responseBadge(resp.status)}`}>
-                                        {resp.status}
-                                      </span>
-                                    </td>
-                                    <td className="py-2 text-right">
-                                      {resp.status === 'PENDING' && (
-                                        <button
-                                          onClick={() => awardMut.mutate({ rfqId: rfq.id, rid: resp.id })}
-                                          disabled={awardMut.isPending}
-                                          className="flex items-center gap-1 px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition-colors"
-                                        >
-                                          <Award className="w-3 h-3" />
-                                          Award
-                                        </button>
-                                      )}
-                                    </td>
-                                  </tr>
-                                ))}
+                                {[...rfq.responses]
+                                  .sort((a, b) => a.quotedPriceCents - b.quotedPriceCents)
+                                  .map((resp) => (
+                                    <tr key={resp.id}>
+                                      <td className="py-2 font-medium text-gray-900 dark:text-white">
+                                        {resp.supplier?.name ?? resp.supplierId}
+                                        {resp.quotedPriceCents === best && rfq.responses.length > 1 && (
+                                          <span className="ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">
+                                            LOWEST
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="py-2 text-right text-gray-700 dark:text-gray-300">{fmt(resp.quotedPriceCents)}</td>
+                                      <td className="py-2 text-right text-gray-500 dark:text-gray-400">
+                                        {resp.deliveryDays != null ? `${resp.deliveryDays}d` : '—'}
+                                      </td>
+                                      <td className="py-2 text-center">
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${responseBadge(resp.status)}`}>
+                                          {resp.status}
+                                        </span>
+                                      </td>
+                                      <td className="py-2 text-right">
+                                        {rfq.status !== 'AWARDED' && (
+                                          <button
+                                            onClick={() => awardMut.mutate({ rfqId: rfq.id, rid: resp.id })}
+                                            disabled={awardMut.isPending}
+                                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition-colors"
+                                          >
+                                            <Award className="w-3 h-3" />
+                                            Award
+                                          </button>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  ))}
                               </tbody>
                             </table>
                           </div>
                         </div>
+                      )}
+
+                      {rfq.status !== 'AWARDED' && (
+                        <QuoteForm
+                          rfqId={rfq.id}
+                          suppliers={suppliers}
+                          onSaved={() => qc.invalidateQueries({ queryKey: ['rfqs'] })}
+                        />
                       )}
                     </div>
                   )}
@@ -347,18 +484,23 @@ export default function RFQPage() {
             <div className="space-y-2">
               {formItems.map((item, idx) => (
                 <div key={idx} className="flex gap-2 items-center">
-                  <input
-                    type="text"
+                  <select
                     value={item.itemId}
                     onChange={(e) => updateItem(idx, 'itemId', e.target.value)}
-                    placeholder="Item ID or barcode"
                     className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  >
+                    <option value="">Select item…</option>
+                    {items.map((it) => (
+                      <option key={it.id} value={it.id}>
+                        {it.name}{it.sku ? ` (${it.sku})` : ''}
+                      </option>
+                    ))}
+                  </select>
                   <input
                     type="number"
                     min="1"
-                    value={item.quantity}
-                    onChange={(e) => updateItem(idx, 'quantity', Number(e.target.value))}
+                    value={item.quantityNeeded}
+                    onChange={(e) => updateItem(idx, 'quantityNeeded', Number(e.target.value))}
                     className="w-24 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Qty"
                   />
@@ -374,11 +516,12 @@ export default function RFQPage() {
                 </div>
               ))}
             </div>
+            {items.length === 0 && (
+              <p className="mt-2 text-xs text-amber-600">
+                No inventory items found — add items first so they can be requested.
+              </p>
+            )}
           </div>
-
-          {createMut.isError && (
-            <p className="text-sm text-red-500">Failed to create RFQ. Please try again.</p>
-          )}
 
           <div className="flex gap-3 pt-2">
             <button

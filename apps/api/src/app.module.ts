@@ -103,6 +103,7 @@ import { DbBackupModule } from './backup/db-backup.module';
     BundleModule,
     RecipeModule,
     CashDrawerModule,
+    RFQModule,   // must precede SupplierModule: `suppliers/rfq` vs `suppliers/:id`
     SupplierModule,
     ExpenseModule,
     HrModule,
@@ -141,7 +142,6 @@ import { DbBackupModule } from './backup/db-backup.module';
     ChannelManagerModule,
     HousekeepingModule,
     DisciplinaryModule,
-    RFQModule,
     ChequeModule,
     LedgerModule,
     PaymentLinksModule,

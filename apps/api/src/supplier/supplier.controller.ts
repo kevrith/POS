@@ -180,29 +180,6 @@ export class SupplierController {
     return this.supplierService.getOutstandingPOs(businessId);
   }
 
-  // ── Supplier by ID (parameterised — must be LAST) ─────────────────────────────
-
-  @Get(':id')
-  async findOne(@Param('id') id: string) {
-    return this.supplierService.findOne(id);
-  }
-
-  @Patch(':id')
-  async update(@Param('id') id: string, @Body() data: Partial<{
-    name: string;
-    contact: string;
-    address: string;
-    paymentTerms: string;
-    creditLimitCents: number;
-  }>) {
-    return this.supplierService.update(id, data);
-  }
-
-  @Get(':id/ledger')
-  async getLedger(@Param('id') id: string) {
-    return this.supplierService.getLedger(id);
-  }
-
   @Post('auto-reorder')
   async autoReorder(
     @Body() body: { businessId: string; storeId: string; supplierId?: string },
@@ -237,16 +214,6 @@ export class SupplierController {
   }
 
   // ── Price Agreements ──────────────────────────────────────────────────────
-
-  @Get(':id/price-agreements')
-  async listPriceAgreements(@Param('id') id: string, @Query('businessId') businessId: string) {
-    return this.supplierService.listPriceAgreements(id, businessId);
-  }
-
-  @Post(':id/price-agreements')
-  async createPriceAgreement(@Param('id') id: string, @Body() dto: any) {
-    return this.supplierService.createPriceAgreement(id, dto);
-  }
 
   @Delete('price-agreements/:id')
   async deactivatePriceAgreement(@Param('id') id: string) {
@@ -286,5 +253,40 @@ export class SupplierController {
     } catch (err) {
       throw new BadRequestException((err as Error).message);
     }
+  }
+
+  // ── Parameterised supplier routes — MUST stay last ────────────────────────────
+  // Express matches in registration order, so `@Get(':id')` declared earlier would
+  // swallow every literal path below it (`/suppliers/catalogue`, `/suppliers/rfq`, …).
+
+  @Get(':id')
+  async findOne(@Param('id') id: string) {
+    return this.supplierService.findOne(id);
+  }
+
+  @Patch(':id')
+  async update(@Param('id') id: string, @Body() data: Partial<{
+    name: string;
+    contact: string;
+    address: string;
+    paymentTerms: string;
+    creditLimitCents: number;
+  }>) {
+    return this.supplierService.update(id, data);
+  }
+
+  @Get(':id/ledger')
+  async getLedger(@Param('id') id: string) {
+    return this.supplierService.getLedger(id);
+  }
+
+  @Get(':id/price-agreements')
+  async listPriceAgreements(@Param('id') id: string, @Query('businessId') businessId: string) {
+    return this.supplierService.listPriceAgreements(id, businessId);
+  }
+
+  @Post(':id/price-agreements')
+  async createPriceAgreement(@Param('id') id: string, @Body() dto: any) {
+    return this.supplierService.createPriceAgreement(id, dto);
   }
 }

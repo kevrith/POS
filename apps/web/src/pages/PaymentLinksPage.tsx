@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link2, Plus, X, Loader2, RefreshCw, Copy, Check, Ban } from 'lucide-react';
+import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 
@@ -74,25 +75,34 @@ export default function PaymentLinksPage() {
   // ─── Mutations ────────────────────────────────────────────────────────────
 
   const createMut = useMutation({
-    mutationFn: (dto: CreateLinkDto) => api.post('/payments/links', dto),
+    mutationFn: (dto: CreateLinkDto) => api.post('/payments/links', { ...dto, createdBy: user?.id }),
     onSuccess: () => {
+      toast.success('Payment link created');
       qc.invalidateQueries({ queryKey: ['payment-links'] });
       setShowModal(false);
       setForm({ description: '', amount: '', currency: 'KES', expiresAt: '', maxUses: '' });
     },
+    onError: (err: Error) => toast.error(err.message || 'Could not create the payment link'),
   });
 
   const disableMut = useMutation({
     mutationFn: (id: string) => api.patch(`/payments/links/${id}/disable`, {}),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['payment-links'] }),
+    onSuccess: () => {
+      toast.success('Link disabled');
+      qc.invalidateQueries({ queryKey: ['payment-links'] });
+    },
+    onError: (err: Error) => toast.error(err.message || 'Could not disable the link'),
   });
 
+  /** The checkout page is served by this same app at /pay/:code. */
+  function payUrl(code: string) {
+    return `${window.location.origin}/pay/${code}`;
+  }
+
   function copyLink(code: string) {
-    const base = window.location.hostname === 'localhost'
-      ? `${window.location.origin}/pay/${code}`
-      : `https://pay.kastrapos.com/${code}`;
-    navigator.clipboard.writeText(base);
+    void navigator.clipboard.writeText(payUrl(code));
     setCopiedCode(code);
+    toast.success('Link copied');
     setTimeout(() => setCopiedCode(null), 2000);
   }
 
@@ -317,9 +327,7 @@ export default function PaymentLinksPage() {
         </thead>
         <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
           {rows.map((link) => {
-            const url = window.location.hostname === 'localhost'
-                    ? `${window.location.origin}/pay/${link.code}`
-                    : `https://pay.kastrapos.com/${link.code}`;
+            const url = payUrl(link.code);
             const copied = copiedCode === link.code;
             return (
               <tr key={link.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">

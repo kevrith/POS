@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Loader2, CheckCircle2, XCircle, Smartphone, AlertTriangle } from 'lucide-react';
+import { getApiUrl } from '../lib/api';
 
 interface LinkDetails {
   id: string;
@@ -30,7 +31,7 @@ export default function PayCheckoutPage() {
 
   useEffect(() => {
     if (!code) { setStage('invalid'); return; }
-    fetch(`/api/v1/payments/links/public/${code}`)
+    fetch(`${getApiUrl()}/payments/links/public/${code}`)
       .then(async (r) => {
         if (!r.ok) {
           const body = await r.json().catch(() => ({}));
@@ -48,7 +49,7 @@ export default function PayCheckoutPage() {
     if (!amount || amount <= 0) { setErrorMsg('Please enter a valid amount'); return; }
     setStage('paying');
     try {
-      const res = await fetch(`/api/v1/payments/links/public/${code}/pay`, {
+      const res = await fetch(`${getApiUrl()}/payments/links/public/${code}/pay`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: phone.trim(), amountCents: amount }),

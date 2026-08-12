@@ -64,6 +64,7 @@ const OnlineOrderPage = lazy(() => import('./pages/OnlineOrderPage'));
 const OnlineOrdersPage = lazy(() => import('./pages/OnlineOrdersPage'));
 const ShopPage = lazy(() => import('./pages/ShopPage'));
 const AffiliatePortalPage = lazy(() => import('./pages/AffiliatePortalPage'));
+const DeliveryTrackingPage = lazy(() => import('./pages/DeliveryTrackingPage'));
 const FuelPumpPage = lazy(() => import('./pages/FuelPumpPage'));
 const CybercafePage = lazy(() => import('./pages/CybercafePage'));
 const CyberKioskPage = lazy(() => import('./pages/CyberKioskPage'));
@@ -233,6 +234,13 @@ export default function App() {
     return (
       <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
         <Routes><Route path="/affiliate" element={<AffiliatePortalPage />} /></Routes>
+      </Suspense>
+    );
+  }
+  if (window.location.pathname.startsWith('/track/')) {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+        <Routes><Route path="/track/:orderNumber" element={<DeliveryTrackingPage />} /></Routes>
       </Suspense>
     );
   }

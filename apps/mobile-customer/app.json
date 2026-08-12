@@ -39,7 +39,8 @@
           "color": "#030712"
         }
       ],
-      "./plugins/with-cleartext-traffic"
+      "./plugins/with-cleartext-traffic",
+      "./plugins/with-gradle-properties"
     ],
     "experiments": {
       "typedRoutes": false

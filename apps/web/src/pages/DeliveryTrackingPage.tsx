@@ -209,21 +209,31 @@ export default function DeliveryTrackingPage() {
           </div>
         </div>
 
-        {/* Live Location (if driver assigned) */}
-        {delivery.status === 'ASSIGNED' && delivery.driverLocations.length > 0 && (
-          <div className="bg-white rounded-2xl p-6 shadow-sm">
-            <h3 className="font-semibold text-gray-900 mb-4">Driver Location</h3>
-            <div className="bg-gray-100 rounded-lg h-48 flex items-center justify-center">
-              <div className="text-center">
-                <MapPin className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                <p className="text-sm text-gray-600">Live tracking map</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  Last updated: {formatTime(delivery.driverLocations[0].timestamp)}
-                </p>
+        {/* Live driver location (OpenStreetMap — no API key) */}
+        {['ASSIGNED', 'IN_TRANSIT', 'ARRIVING'].includes(delivery.status) && delivery.driverLocations.length > 0 && (() => {
+          const loc = delivery.driverLocations[0];
+          const d = 0.006; // ~600m box around the driver
+          const bbox = `${loc.lng - d},${loc.lat - d},${loc.lng + d},${loc.lat + d}`;
+          const src = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${loc.lat},${loc.lng}`;
+          return (
+            <div className="bg-white rounded-2xl p-6 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-gray-900">Driver Location</h3>
+                <span className="flex items-center gap-1.5 text-xs font-medium text-green-600">
+                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" /> Live
+                </span>
+              </div>
+              <div className="rounded-lg overflow-hidden border border-gray-200">
+                <iframe title="Driver location" src={src} className="w-full h-56" loading="lazy" />
+              </div>
+              <div className="flex items-center justify-between mt-2">
+                <p className="text-xs text-gray-500">Updated {formatTime(loc.timestamp)}</p>
+                <a href={`https://www.openstreetmap.org/?mlat=${loc.lat}&mlon=${loc.lng}#map=16/${loc.lat}/${loc.lng}`}
+                  target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline">Open in maps →</a>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Contact Support */}
         <div className="bg-blue-50 rounded-2xl p-6">

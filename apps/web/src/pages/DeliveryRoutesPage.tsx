@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import { selectDrivers, NO_DRIVERS_HINT } from '../lib/staff';
 import { useAuthStore } from '../stores/auth';
 import { useDialog } from '../components/Dialog';
 import { toast } from 'sonner';
@@ -334,6 +335,7 @@ function RouteModal({
   const [name, setName] = useState(route?.name ?? '');
   const [deliveryDays, setDeliveryDays] = useState<Day[]>(route?.deliveryDays ?? []);
   const [driverUserId, setDriverUserId] = useState(route?.driverUserId ?? '');
+  const driverOptions = selectDrivers(users);
   const [color, setColor] = useState(route?.color ?? PRESET_COLORS[0]);
   const [isActive, setIsActive] = useState(route?.isActive ?? true);
 
@@ -398,8 +400,11 @@ function RouteModal({
               className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none"
             >
               <option value="">No driver assigned</option>
-              {users.map((u) => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
+              {driverOptions.users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
+            {driverOptions.usingFallback && (
+              <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">{NO_DRIVERS_HINT}</p>
+            )}
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">Color</label>
@@ -452,6 +457,7 @@ function CreateRunModal({
   const [routeId, setRouteId] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [driverUserId, setDriverUserId] = useState('');
+  const driverOptions = selectDrivers(users);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
 
   const { data: packedOrders = [] } = useQuery<FieldOrder[]>({
@@ -505,8 +511,11 @@ function CreateRunModal({
               className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none"
             >
               <option value="">No driver assigned</option>
-              {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              {driverOptions.users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
+            {driverOptions.usingFallback && (
+              <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">{NO_DRIVERS_HINT}</p>
+            )}
           </div>
           {routeId && (
             <div>

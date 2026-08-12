@@ -10,8 +10,15 @@ export class HrController {
   ) {}
 
   @Get('employees')
-  async getEmployees(@Query('businessId') businessId: string) {
-    return this.hrService.getEmployees(businessId);
+  async getEmployees(
+    @Query('businessId') businessId: string,
+    @Query('role') role?: string,
+    @Query('onlyWithHrRecord') onlyWithHrRecord?: string,
+  ) {
+    return this.hrService.getEmployees(businessId, {
+      role,
+      onlyWithHrRecord: onlyWithHrRecord === 'true',
+    });
   }
 
   @Post('employees')

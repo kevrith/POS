@@ -94,6 +94,8 @@ const ROLE_LABELS: Record<string, string> = {
   CASHIER: 'Cashier',
   WAITER: 'Waiter',
   KITCHEN: 'Kitchen Staff',
+  DRIVER: 'Driver',
+  SALES_AGENT: 'Sales Agent',
 };
 
 const ROLE_COLORS: Record<string, string> = {
@@ -103,6 +105,8 @@ const ROLE_COLORS: Record<string, string> = {
   CASHIER: 'bg-yellow-100 text-yellow-700',
   WAITER: 'bg-orange-100 text-orange-700',
   KITCHEN: 'bg-gray-100 text-gray-700',
+  DRIVER: 'bg-teal-100 text-teal-700',
+  SALES_AGENT: 'bg-indigo-100 text-indigo-700',
 };
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
@@ -141,7 +145,7 @@ function AddUserModal({
     },
   });
 
-  const needsPassword = ['OWNER', 'MANAGER', 'ACCOUNTANT'].includes(form.role);
+  const needsPassword = ['OWNER', 'MANAGER', 'ACCOUNTANT', 'DRIVER', 'SALES_AGENT'].includes(form.role);
   const needsPin = ['CASHIER', 'WAITER', 'KITCHEN'].includes(form.role);
 
   return (
@@ -177,7 +181,16 @@ function AddUserModal({
               <option value="CASHIER">Cashier — POS + PIN login</option>
               <option value="WAITER">Waiter — Hospitality + PIN login</option>
               <option value="KITCHEN">Kitchen Staff — KDS only + PIN</option>
+              <option value="DRIVER">Driver — Kastra Driver app (email + password)</option>
+              <option value="SALES_AGENT">Sales Agent — Kastra Agent app (email + password)</option>
             </select>
+            {['DRIVER', 'SALES_AGENT'].includes(form.role) && (
+              <p className="mt-1.5 text-xs text-gray-500">
+                {form.role === 'DRIVER'
+                  ? 'Drivers sign in on the Kastra Driver app and will appear in the driver picker for delivery runs.'
+                  : 'Sales agents sign in on the Kastra Agent app and can raise field orders on their route.'}
+              </p>
+            )}
           </div>
 
           <div>

@@ -11,13 +11,68 @@ export class HrService {
     private notifications: NotificationsService,
   ) {}
 
-  async getEmployees(businessId: string) {
-    return this.prisma.employee.findMany({
+  /**
+   * The team roster. Staff are `User` rows; the `Employee` row only exists once
+   * HR details (salary, ID number, commission) have been captured. Returning only
+   * Employee rows made a business with staff show "0 employees", so every user is
+   * listed and those without an HR record are flagged with `hasHrRecord: false`.
+   */
+  async getEmployees(businessId: string, opts?: { role?: string; onlyWithHrRecord?: boolean }) {
+    const employees = await this.prisma.employee.findMany({
       where: { businessId },
       include: {
-        user: { select: { name: true, email: true, role: true } },
+        user: { select: { name: true, email: true, role: true, phone: true } },
       },
       orderBy: { createdAt: 'asc' },
+    });
+
+    if (opts?.onlyWithHrRecord) {
+      return employees
+        .filter((e) => !opts.role || e.user.role === opts.role)
+        .map((e) => ({ ...e, hasHrRecord: true }));
+    }
+
+    const users = await this.prisma.user.findMany({
+      where: { businessId, ...(opts?.role ? { role: opts.role } : {}) },
+      select: { id: true, name: true, email: true, role: true, phone: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const byUserId = new Map(employees.map((e) => [e.userId, e]));
+
+    return users.map((u) => {
+      const emp = byUserId.get(u.id);
+      if (emp) return { ...emp, hasHrRecord: true };
+      // Placeholder row so the person is visible and can be completed in-place.
+      // `id` is null — the UI uses that to offer "Complete HR record".
+      return {
+        id: null,
+        userId: u.id,
+        businessId,
+        hasHrRecord: false,
+        idNumber: null,
+        emergencyContact: null,
+        employmentType: 'PERMANENT',
+        contractType: 'PERMANENT',
+        contractEndDate: null,
+        commissionRate: 0,
+        commissionBasis: 'SALES_VALUE',
+        salesTargetCents: 0,
+        commissionMilestonePercent: 0,
+        salaryBaseCents: 0,
+        housingAllowanceCents: 0,
+        transportAllowanceCents: 0,
+        otherAllowancesCents: 0,
+        saccoDeductionCents: 0,
+        loanDeductionCents: 0,
+        otherDeductionsCents: 0,
+        bankAccountNumber: null,
+        bankName: null,
+        startDate: u.createdAt,
+        createdAt: u.createdAt,
+        updatedAt: u.createdAt,
+        user: { name: u.name, email: u.email, role: u.role, phone: u.phone },
+      };
     });
   }
 

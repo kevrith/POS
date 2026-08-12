@@ -111,7 +111,14 @@ export enum UserRole {
   CASHIER = 'CASHIER',
   WAITER = 'WAITER',
   KITCHEN = 'KITCHEN',
+  /** Delivery driver — signs in on the Kastra Driver app with email + password. */
+  DRIVER = 'DRIVER',
+  /** Field sales agent — signs in on the Kastra Agent app with email + password. */
+  SALES_AGENT = 'SALES_AGENT',
 }
+
+/** Roles whose staff work exclusively in a companion mobile app. */
+export const FIELD_ROLES: UserRole[] = [UserRole.DRIVER, UserRole.SALES_AGENT];
 
 export enum ExpenseApprovalStatus {
   PENDING = 'PENDING',
@@ -192,6 +199,19 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   [UserRole.KITCHEN]: [
     'hospitality.kds.read',
     'hospitality.kds.update',
+  ],
+  [UserRole.DRIVER]: [
+    'delivery.own.*',
+    'delivery.runs.read',
+    'delivery.proof.create',
+    'customers.read',
+  ],
+  [UserRole.SALES_AGENT]: [
+    'field-sales.own.*',
+    'field-sales.orders.create',
+    'field-sales.customers.*',
+    'customers.read', 'customers.create',
+    'inventory.read',
   ],
 };
 

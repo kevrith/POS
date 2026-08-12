@@ -12,7 +12,7 @@ function makeAttendance(overrides: Record<string, any> = {}) {
 function makePrisma() {
   return {
     employee: { findMany: jest.fn(), create: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
-    user: { findFirst: jest.fn(), update: jest.fn() },
+    user: { findFirst: jest.fn(), update: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
     attendanceRecord: { findMany: jest.fn(), create: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
     leave: { findMany: jest.fn(), create: jest.fn(), update: jest.fn(), findUnique: jest.fn().mockResolvedValue({ id: 'leave-1', startDate: new Date(), endDate: new Date(), employeeId: 'emp-1', leaveType: 'ANNUAL' }) },
     leaveBalance: { findFirst: jest.fn().mockResolvedValue({ id: 'lb-1', used: 0, allocated: 20 }), create: jest.fn().mockResolvedValue({}), update: jest.fn().mockResolvedValue({}), upsert: jest.fn().mockResolvedValue({}) },
@@ -31,14 +31,50 @@ function makeService(overrides = {}) {
 
 describe('HrService', () => {
   describe('getEmployees', () => {
-    it('returns employees for businessId', async () => {
+    it('lists every staff member, not only those with an HR record', async () => {
       const { svc, prisma } = makeService();
       prisma.employee.findMany.mockResolvedValue([makeEmployee()]);
+      prisma.user.findMany.mockResolvedValue([
+        { id: 'user-1', name: 'Alice', email: 'alice@cafe.co.ke', role: 'CASHIER', phone: null, createdAt: new Date() },
+        { id: 'user-2', name: 'Brian', email: 'brian@cafe.co.ke', role: 'DRIVER', phone: null, createdAt: new Date() },
+      ]);
+
       const result = await svc.getEmployees('biz-1');
-      expect(result).toHaveLength(1);
+
+      // Returning only Employee rows is what made HR report "0 employees" for a
+      // business whose staff were added under Settings → Users.
+      expect(result).toHaveLength(2);
+      expect(result[0]).toMatchObject({ id: 'emp-1', hasHrRecord: true });
+      expect(result[1]).toMatchObject({ id: null, userId: 'user-2', hasHrRecord: false });
       expect(prisma.employee.findMany).toHaveBeenCalledWith(expect.objectContaining({
         where: { businessId: 'biz-1' },
       }));
+    });
+
+    it('filters by role so a driver picker never lists cashiers', async () => {
+      const { svc, prisma } = makeService();
+      prisma.employee.findMany.mockResolvedValue([]);
+      prisma.user.findMany.mockResolvedValue([
+        { id: 'user-2', name: 'Brian', email: null, role: 'DRIVER', phone: null, createdAt: new Date() },
+      ]);
+
+      const result = await svc.getEmployees('biz-1', { role: 'DRIVER' });
+
+      expect(result).toHaveLength(1);
+      expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { businessId: 'biz-1', role: 'DRIVER' },
+      }));
+    });
+
+    it('onlyWithHrRecord returns just the real Employee rows', async () => {
+      const { svc, prisma } = makeService();
+      prisma.employee.findMany.mockResolvedValue([makeEmployee()]);
+
+      const result = await svc.getEmployees('biz-1', { onlyWithHrRecord: true });
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({ id: 'emp-1', hasHrRecord: true });
+      expect(prisma.user.findMany).not.toHaveBeenCalled();
     });
   });
 

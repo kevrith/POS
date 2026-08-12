@@ -11,7 +11,9 @@ import { useAuthStore } from '../stores/auth';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Employee {
-  id: string;
+  /** null for staff who exist as users but have no HR record yet. */
+  id: string | null;
+  hasHrRecord?: boolean;
   userId: string;
   businessId: string;
   commissionRate: number;
@@ -22,7 +24,7 @@ interface Employee {
   employmentType: string;
   idNumber?: string;
   emergencyContact?: string;
-  user: { name: string; email: string | null; role: string };
+  user: { name: string; email: string | null; role: string; phone?: string | null };
 }
 
 interface BizUser {
@@ -202,7 +204,7 @@ function LeaveModal({ employeeId, onClose, onSuccess }: LeaveModalProps) {
 interface AddShiftModalProps {
   businessId: string;
   storeId: string;
-  employees: Employee[];
+  employees: Array<Employee & { id: string }>;
   onClose: () => void;
   onSuccess: () => void;
   onShiftError?: (msg: string) => void;
@@ -663,7 +665,7 @@ function EditEmployeePanel({ employee, businessId, onClose, onSuccess }: {
                 <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Current Record</h3>
                 <div className="grid grid-cols-2 gap-y-2 text-sm">
                   <span className="text-gray-500">Employee ID</span>
-                  <span className="font-mono text-gray-800 text-xs">{employee.id.substring(0, 12)}…</span>
+                  <span className="font-mono text-gray-800 text-xs">{(employee.id ?? '').substring(0, 12)}…</span>
                   <span className="text-gray-500">Joined</span>
                   <span className="text-gray-800">
                     {employee.startDate
@@ -822,15 +824,24 @@ function EditEmployeePanel({ employee, businessId, onClose, onSuccess }: {
                     const gross = (Number(basicSalary) || 0) + (Number(housingAllowance) || 0) + (Number(transportAllowance) || 0) + (Number(otherAllowances) || 0);
                     const extraDeductions = (Number(saccoDeduction) || 0) + (Number(loanDeduction) || 0) + (Number(otherDeductions) || 0);
                     const grossCents = Math.round(gross * 100);
-                    // Rough PAYE for preview (simplified brackets)
-                    const paye = grossCents <= 2400000 ? 0 : grossCents <= 3200000 ? Math.round((grossCents - 2400000) * 0.25) : Math.round(800000 * 0.25 + (grossCents - 3200000) * 0.30);
-                    const nhif = grossCents <= 600000 ? 15000 : grossCents <= 1500000 ? 25000 : 35000;
-                    const totalDeductions = paye + nhif + Math.round(extraDeductions * 100);
+                    // Preview only — the authoritative figures come from the payroll run.
+                    // SHIF: 2.75% of gross, min KES 300. Housing levy 1.5%. Both, with NSSF,
+                    // are deducted before PAYE (Tax Laws (Amendment) Act 2024).
+                    const shif = grossCents > 0 ? Math.max(30000, Math.round(grossCents * 0.0275)) : 0;
+                    const housingLevy = Math.round(grossCents * 0.015);
+                    const nssf = grossCents > 0
+                      ? Math.round(Math.min(grossCents, 700000) * 0.06) +
+                        (grossCents > 700000 ? Math.round(Math.min(grossCents - 700000, 2900000) * 0.06) : 0)
+                      : 0;
+                    const taxable = Math.max(0, grossCents - shif - housingLevy - nssf);
+                    const paye = taxable <= 2400000 ? 0 : taxable <= 3200000 ? Math.round((taxable - 2400000) * 0.25) : Math.round(800000 * 0.25 + (taxable - 3200000) * 0.30);
+                    const statutory = paye + shif + housingLevy + nssf;
+                    const totalDeductions = statutory + Math.round(extraDeductions * 100);
                     const net = Math.max(0, grossCents - totalDeductions);
                     return (
                       <div className="grid grid-cols-2 gap-y-1 text-sm">
                         <span className="text-gray-600">Gross Pay</span><span className="font-bold">KES {gross.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</span>
-                        <span className="text-gray-600">Est. PAYE + NHIF</span><span className="text-red-600">− KES {((paye + nhif) / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</span>
+                        <span className="text-gray-600">Est. statutory (PAYE, SHIF, NSSF, levy)</span><span className="text-red-600">− KES {(statutory / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</span>
                         {extraDeductions > 0 && <><span className="text-gray-600">Other Deductions</span><span className="text-red-600">− KES {extraDeductions.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</span></>}
                         <span className="font-semibold text-gray-800 border-t pt-1">Est. Net Pay</span><span className="font-bold text-green-700 border-t pt-1">KES {(net / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</span>
                       </div>
@@ -1131,7 +1142,10 @@ export default function HRPage() {
     enabled: !!businessId && showAddEmployee,
   });
 
-  const myEmployee = employees.find((e) => e.userId === userId);
+  const myEmployee = employees.find((e) => e.userId === userId && !!e.id) as (Employee & { id: string }) | undefined;
+  // Shifts, leave, disciplinary and payroll all key off Employee.id, so those
+  // pickers must exclude staff who only exist as users.
+  const hrEmployees = employees.filter((e): e is Employee & { id: string } => !!e.id);
 
   const { data: allAttendance = [], isLoading: attLoading, refetch: refetchAtt } = useQuery<AttendanceRecord[]>({
     queryKey: ['all-attendance', businessId, storeId, attendanceDate],
@@ -1401,8 +1415,8 @@ export default function HRPage() {
             ) : employees.length === 0 ? (
               <div className="text-center py-20">
                 <Users className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-                <p className="text-gray-500 font-medium text-lg">No employee records</p>
-                <p className="text-gray-400 text-sm mt-2">Click "Add Employee" above to link a user as an employee</p>
+                <p className="text-gray-500 font-medium text-lg">No staff yet</p>
+                <p className="text-gray-400 text-sm mt-2">Add staff in Settings → Users, then complete their HR record here</p>
               </div>
             ) : (
               <div className="bg-white rounded-2xl border overflow-hidden shadow-sm">
@@ -1419,9 +1433,16 @@ export default function HRPage() {
                   </thead>
                   <tbody>
                     {employees.map((emp) => (
-                      <tr key={emp.id} className="border-t hover:bg-gray-50 transition-colors">
+                      <tr key={emp.id ?? emp.userId} className="border-t hover:bg-gray-50 transition-colors">
                         <td className="px-6 py-4">
-                          <div className="font-semibold text-gray-800">{emp.user.name}</div>
+                          <div className="font-semibold text-gray-800 flex items-center gap-2">
+                            {emp.user.name}
+                            {emp.hasHrRecord === false && (
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">
+                                NO HR RECORD
+                              </span>
+                            )}
+                          </div>
                           <div className="text-xs text-gray-400">{emp.user.email}</div>
                         </td>
                         <td className="px-4 py-4">
@@ -1449,12 +1470,18 @@ export default function HRPage() {
                           {emp.startDate ? fmtDate(emp.startDate) : '—'}
                         </td>
                         <td className="px-4 py-4">
-                          {isManager && (
+                          {isManager && (emp.hasHrRecord === false ? (
+                            <button onClick={() => setShowAddEmployee(true)}
+                              title="Create HR record for this user"
+                              className="p-1.5 rounded-lg hover:bg-amber-50 text-amber-500 hover:text-amber-700 transition-colors">
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          ) : (
                             <button onClick={() => setEditingEmployee(emp)}
                               className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors">
                               <Edit2 className="w-4 h-4" />
                             </button>
-                          )}
+                          ))}
                         </td>
                       </tr>
                     ))}
@@ -1613,7 +1640,7 @@ export default function HRPage() {
                 <select value={selectedEmployee} onChange={e => setSelectedEmployee(e.target.value)}
                   className="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
                   <option value="">Select employee...</option>
-                  {employees.map(e => (
+                  {hrEmployees.map(e => (
                     <option key={e.id} value={e.id}>{e.user.name} ({e.user.role})</option>
                   ))}
                 </select>
@@ -2007,7 +2034,7 @@ export default function HRPage() {
                   <select value={disciplinaryEmpId} onChange={e => setDisciplinaryEmpId(e.target.value)}
                     className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                     <option value="">All employees</option>
-                    {employees.map(e => <option key={e.id} value={e.id}>{e.user.name}</option>)}
+                    {hrEmployees.map(e => <option key={e.id} value={e.id}>{e.user.name}</option>)}
                   </select>
                 </div>
                 <div>
@@ -2033,7 +2060,7 @@ export default function HRPage() {
                     className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
                 </div>
                 <button
-                  onClick={() => createDiscMutation.mutate({ businessId, employeeId: disciplinaryEmpId || employees[0]?.id, ...discForm, issuedBy: user?.id })}
+                  onClick={() => createDiscMutation.mutate({ businessId, employeeId: disciplinaryEmpId || hrEmployees[0]?.id, ...discForm, issuedBy: user?.id })}
                   disabled={!discForm.description || !discForm.actionTaken || createDiscMutation.isPending}
                   className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold disabled:opacity-40 flex items-center justify-center gap-2">
                   {createDiscMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
@@ -2115,7 +2142,7 @@ export default function HRPage() {
                     <select value={advanceForm.employeeId} onChange={e => setAdvanceForm(f => ({ ...f, employeeId: e.target.value }))}
                       className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                       <option value="">Select employee</option>
-                      {employees.map(e => <option key={e.id} value={e.id}>{e.user.name}</option>)}
+                      {hrEmployees.map(e => <option key={e.id} value={e.id}>{e.user.name}</option>)}
                     </select>
                   </div>
                 )}
@@ -2223,7 +2250,7 @@ export default function HRPage() {
         <AddShiftModal
           businessId={businessId}
           storeId={storeId}
-          employees={employees}
+          employees={hrEmployees}
           onClose={() => setShowAddShiftModal(false)}
           onSuccess={() => void refetchShifts()}
           onShiftError={(msg) => { setShiftError(msg); setShowAddShiftModal(false); }}
@@ -2255,7 +2282,7 @@ export default function HRPage() {
                 <select value={selectedEmployee} onChange={e => setSelectedEmployee(e.target.value)}
                   className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                   <option value="">Select employee...</option>
-                  {employees.map(e => (
+                  {hrEmployees.map(e => (
                     <option key={e.id} value={e.id}>{e.user.name} ({e.user.role})</option>
                   ))}
                 </select>

@@ -108,11 +108,15 @@ interface ExpenseReport {
 }
 
 interface XReport {
+  session: { id: string; openingBalanceCents: number; openedAt: string } | null;
   salesCount: number;
   totalSalesCents: number;
   totalVatCents: number;
-  paymentBreakdown: Array<{ method: string; totalCents: number; count: number }>;
+  openingBalanceCents: number;
+  expectedCashCents: number;
+  paymentBreakdown: Array<{ method: string; amountCents: number; count: number }>;
   generatedAt: string;
+  error?: string;
 }
 
 interface RecipeVarianceRow {
@@ -5109,7 +5113,11 @@ export default function ReportsPage() {
                       </p>
                     </div>
                     <div className="p-5">
-                      {xReport ? (
+                      {xReport?.error ? (
+                        <div className="text-center py-6 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg">
+                          {xReport.error}
+                        </div>
+                      ) : xReport?.session ? (
                         <div className="space-y-3 text-sm">
                           <div className="flex justify-between">
                             <span className="text-gray-600">Transactions</span>
@@ -5123,15 +5131,23 @@ export default function ReportsPage() {
                             <span className="text-gray-600">VAT</span>
                             <span className="font-semibold text-purple-600">{formatKES(xReport.totalVatCents)}</span>
                           </div>
-                          {xReport.paymentBreakdown.length > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Opening Float</span>
+                            <span className="font-semibold">{formatKES(xReport.openingBalanceCents)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Expected Cash in Drawer</span>
+                            <span className="font-semibold text-green-700">{formatKES(xReport.expectedCashCents)}</span>
+                          </div>
+                          {(xReport.paymentBreakdown ?? []).length > 0 && (
                             <div className="border-t pt-3">
                               <p className="text-xs text-gray-400 font-semibold uppercase mb-2">
                                 By Payment Method
                               </p>
-                              {xReport.paymentBreakdown.map((pm) => (
+                              {(xReport.paymentBreakdown ?? []).map((pm) => (
                                 <div key={pm.method} className="flex justify-between py-1">
-                                  <span className="text-gray-600">{pm.method}</span>
-                                  <span>{formatKES(pm.totalCents)}</span>
+                                  <span className="text-gray-600">{pm.method} ({pm.count})</span>
+                                  <span>{formatKES(pm.amountCents)}</span>
                                 </div>
                               ))}
                             </div>

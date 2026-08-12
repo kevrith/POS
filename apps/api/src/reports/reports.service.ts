@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CashDrawerService } from '../cash-drawer/cash-drawer.service';
 
 /** Always extract VAT from inclusive amount (16/116). Fixes old data stored with exclusive formula. */
 function recalcVat(subtotalCents: number, discountCents = 0): number {
@@ -13,7 +14,10 @@ function recalcTot(subtotalCents: number, discountCents = 0): number {
 
 @Injectable()
 export class ReportsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private cashDrawer: CashDrawerService,
+  ) {}
 
   async salesReport(businessId: string, storeId?: string, startDate?: Date, endDate?: Date) {
     const where: any = { businessId, status: { in: ['PAID', 'AMENDED'] } };
@@ -360,33 +364,23 @@ export class ReportsService {
     });
 
     if (!session) {
-      return { error: 'No open cash drawer session' };
+      return { error: 'No open cash drawer session', session: null, summary: null };
     }
 
-    const sales = await this.prisma.sale.findMany({
-      where: {
-        businessId,
-        storeId,
-        cashierId,
-        status: { in: ['PAID', 'AMENDED'] },
-        createdAt: { gte: session.openedAt },
-      },
-      include: { payments: true },
-    });
-
-    const totalSales = sales.length;
-    const totalRevenueCents = sales.reduce((sum, s) => sum + s.totalCents, 0);
-    const cashPayments = sales.flatMap(s => s.payments).filter(p => p.method === 'CASH');
-    const totalCashCents = cashPayments.reduce((sum, p) => sum + p.amountCents, 0);
+    // Same builder the drawer screen uses, so an X-report and the live session
+    // totals can never disagree.
+    const summary = await this.cashDrawer.buildSummary(session);
 
     return {
+      session,
+      summary,
+      // Flattened for callers that read the totals directly.
+      ...summary,
       sessionId: session.id,
       openedAt: session.openedAt,
-      totalSales,
-      totalRevenueCents,
-      totalCashCents,
       openingBalanceCents: session.openingBalanceCents,
-      expectedCashCents: session.openingBalanceCents + totalCashCents,
+      expectedCashCents: summary.expectedClosingCents,
+      generatedAt: new Date().toISOString(),
     };
   }
 
@@ -1910,9 +1904,9 @@ export class ReportsService {
     return lines.join('\n');
   }
 
-  // ─── NHIF/SHA Return File (CSV) ───────────────────────────────────────────────
+  // ─── SHIF Return File (CSV) ───────────────────────────────────────────────────
 
-  async nhifReturnFile(businessId: string, month: number, year: number): Promise<string> {
+  async shifReturnFile(businessId: string, month: number, year: number): Promise<string> {
     const run = await (this.prisma as any).payrollRun.findFirst({
       where: { businessId, month, year, status: { in: ['APPROVED', 'PAID'] } },
       include: {
@@ -1926,20 +1920,20 @@ export class ReportsService {
     const monthName = MONTHS[(month - 1) % 12];
 
     const lines: string[] = [];
-    lines.push('Employee Name,Employee Number,Gross Salary (KES),NHIF/SHA Deduction (KES)');
+    lines.push('Employee Name,Employee Number,Gross Salary (KES),SHIF Deduction (KES)');
 
     if (run && run.payslips) {
       for (const slip of run.payslips as any[]) {
         const gross = (slip.grossPay ?? 0) / 100;
-        const nhif = (slip.nhifAmount ?? 0) / 100;
+        const shif = (slip.shifAmount ?? 0) / 100;
         const empNum = slip.employeeId ?? '';
         const name = (slip.employeeName ?? '').replace(/,/g, ' ');
-        lines.push(`"${name}","${empNum}",${gross.toFixed(2)},${nhif.toFixed(2)}`);
+        lines.push(`"${name}","${empNum}",${gross.toFixed(2)},${shif.toFixed(2)}`);
       }
     }
 
     lines.push('');
-    lines.push(`# NHIF/SHA Return — ${monthName} ${year}`);
+    lines.push(`# SHIF Return — ${monthName} ${year}`);
     lines.push(`# Generated: ${new Date().toISOString()}`);
     if (!run) lines.push('# WARNING: No APPROVED/PAID payroll run found for this period');
 

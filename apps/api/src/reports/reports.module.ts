@@ -6,9 +6,10 @@ import { ForecastingController } from './forecasting.controller';
 import { ForecastingService } from './forecasting.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
+import { CashDrawerModule } from '../cash-drawer/cash-drawer.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule],
+  imports: [PrismaModule, AuthModule, CashDrawerModule],
   controllers: [ReportsController, ForecastingController],
   providers: [ReportsService, PdfService, ForecastingService],
   exports: [ReportsService, PdfService, ForecastingService],

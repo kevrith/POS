@@ -29,15 +29,17 @@ interface SessionSummary {
   mpesaSalesCents: number;
   otherPaymentsCents: number;
   refundsCents: number;
+  expensesCents: number;
   transactionCount: number;
   paymentBreakdown: Array<{ method: string; amountCents: number; count: number }>;
   expectedClosingCents: number;
 }
 
 interface XReport {
-  session: CashDrawerSession;
-  summary: SessionSummary;
+  session: CashDrawerSession | null;
+  summary: SessionSummary | null;
   generatedAt: string;
+  error?: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -116,7 +118,7 @@ function ZReportModal({
                 <span className="text-gray-600">Total Sales</span>
                 <span className="font-semibold">{fmt(summary.totalSalesCents)}</span>
               </div>
-              {summary.paymentBreakdown.map((p) => (
+              {(summary.paymentBreakdown ?? []).map((p) => (
                 <div key={p.method} className="flex justify-between text-sm pl-4">
                   <span className="text-gray-500 flex items-center gap-1">
                     <PaymentIcon method={p.method} />
@@ -676,6 +678,8 @@ export default function CashDrawerPage() {
     enabled: false,
   });
 
+  const [openError, setOpenError] = useState('');
+
   // Open drawer
   const openDrawer = useMutation({
     mutationFn: (openingBalanceCents: number) =>
@@ -683,18 +687,17 @@ export default function CashDrawerPage() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['cash-drawer-session'] });
       setOpeningInput('');
+      setOpenError('');
     },
+    onError: (err) => setOpenError(err instanceof Error ? err.message : 'Failed to open drawer'),
   });
 
-  // Close drawer (Z-Report)
+  // Close drawer (Z-Report). The server recomputes the expected balance — sending a
+  // stale or missing value here is what made every close report a full-count variance.
   const closeDrawer = useMutation({
     mutationFn: async (closingBalanceCents: number) => {
       if (!session) throw new Error('No session');
-      const expected = summary?.expectedClosingCents ?? 0;
-      return api.patch(`/cash-drawer/${session.id}/close`, {
-        closingBalanceCents,
-        expectedBalanceCents: expected,
-      });
+      return api.patch(`/cash-drawer/${session.id}/close`, { closingBalanceCents });
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['cash-drawer-session'] });
@@ -790,9 +793,23 @@ export default function CashDrawerPage() {
               </div>
             </div>
 
+            {!storeId && (
+              <div className="mt-4 flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                No store is selected for your session. Pick a store (Settings → Stores) or sign in
+                again — the drawer cannot be opened without one.
+              </div>
+            )}
+            {openError && (
+              <div className="mt-4 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                {openError}
+              </div>
+            )}
+
             <button
               onClick={() => openDrawer.mutate(openingCents)}
-              disabled={openingInput === '' || openDrawer.isPending}
+              disabled={openingInput === '' || openDrawer.isPending || !storeId}
               className="mt-6 w-full py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl disabled:opacity-40 flex items-center justify-center gap-2 text-lg transition-colors"
             >
               {openDrawer.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Unlock className="w-5 h-5" />}
@@ -873,10 +890,10 @@ export default function CashDrawerPage() {
                 {/* Payment breakdown */}
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Payment Methods</h3>
                 <div className="space-y-2">
-                  {summary.paymentBreakdown.length === 0 ? (
+                  {(summary.paymentBreakdown ?? []).length === 0 ? (
                     <p className="text-gray-400 text-sm text-center py-4">No transactions yet</p>
                   ) : (
-                    summary.paymentBreakdown.map((p) => (
+                    (summary.paymentBreakdown ?? []).map((p) => (
                       <div key={p.method} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
                         <div className="flex items-center gap-3">
                           <PaymentIcon method={p.method} />
@@ -910,7 +927,13 @@ export default function CashDrawerPage() {
                 </button>
               </div>
 
-              {xReport && (
+              {xReport?.error && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800">
+                  {xReport.error}
+                </div>
+              )}
+
+              {xReport?.session && (
                 <div className="bg-gray-50 rounded-xl p-4 font-mono text-sm space-y-1 border">
                   <div className="text-center font-bold text-base border-b pb-2 mb-2">X-REPORT</div>
                   <div className="flex justify-between">

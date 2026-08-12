@@ -82,20 +82,29 @@ export class DeliveryService {
     if (businessId) where.businessId = businessId;
     const order = await this.prisma.deliveryOrder.findFirst({
       where,
-      // Line items live on the linked Sale, not the DeliveryOrder — include them
-      // so the driver app's detail screen / printed receipt can show what's inside.
-      include: { sale: { include: { items: true } } },
+      // Items can come from either side: portal/field orders carry their own
+      // DeliveryOrderItem rows, while POS deliveries reference the Sale.
+      include: { items: true, sale: { include: { items: true } } },
     });
     if (!order) return null;
+
+    const ownItems = order.items.map((i) => ({
+      name: i.name,
+      quantity: i.quantity,
+      unitPriceCents: i.unitPriceCents,
+      totalCents: i.totalCents,
+    }));
+    const saleItems = order.sale?.items?.map((i) => ({
+      name: i.name,
+      quantity: i.quantity,
+      unitPriceCents: i.unitPriceCents,
+      totalCents: i.totalCents,
+    })) ?? [];
+
     return {
       ...order,
-      items: order.sale?.items?.map((i) => ({
-        name: i.name,
-        quantity: i.quantity,
-        unitPriceCents: i.unitPriceCents,
-        totalCents: i.totalCents,
-      })) ?? [],
-      totalCents: order.sale?.totalCents ?? null,
+      items: ownItems.length > 0 ? ownItems : saleItems,
+      totalCents: order.totalCents > 0 ? order.totalCents : order.sale?.totalCents ?? null,
     };
   }
 
@@ -276,6 +285,35 @@ export class DeliveryService {
     return delivery;
   }
 
+
+  /**
+   * A delivery raised from a field/agent order has a twin on `FieldOrder` +
+   * `DeliveryRunOrder`. When the driver closes it out in the app, push the same
+   * outcome back so the field-sales board and the run sheet agree.
+   */
+  private async syncFieldOrderFromDelivery(
+    delivery: { fieldOrderId: string | null; receivedBy?: string | null; lat?: number | null; lng?: number | null },
+    status: string,
+  ): Promise<void> {
+    if (!delivery.fieldOrderId) return;
+
+    if (status === 'DELIVERED') {
+      await this.prisma.fieldOrder.updateMany({
+        where: { id: delivery.fieldOrderId, status: { notIn: ['DELIVERED', 'INVOICED', 'CANCELLED'] } },
+        data: { status: 'DELIVERED', deliveredAt: new Date() },
+      });
+      await this.prisma.deliveryRunOrder.updateMany({
+        where: { fieldOrderId: delivery.fieldOrderId, status: { not: 'DELIVERED' } },
+        data: { status: 'DELIVERED', deliveredAt: new Date() },
+      });
+    } else if (status === 'FAILED') {
+      await this.prisma.deliveryRunOrder.updateMany({
+        where: { fieldOrderId: delivery.fieldOrderId, status: 'PENDING' },
+        data: { status: 'FAILED' },
+      });
+    }
+  }
+
   async markDelivered(deliveryOrderId: string, businessId: string, proofPhotoUrl?: string) {
     const delivery = await this.prisma.deliveryOrder.update({
       where: { id: deliveryOrderId },
@@ -297,6 +335,8 @@ export class DeliveryService {
           : 0,
       },
     });
+
+    await this.syncFieldOrderFromDelivery(delivery, 'DELIVERED');
 
     return delivery;
   }
@@ -355,29 +395,41 @@ export class DeliveryService {
     });
   }
 
-  async getDeliverySLAReport(businessId: string, startDate: string, endDate: string) {
+  async getDeliverySLAReport(businessId: string, startDate?: string, endDate?: string) {
+    // The report screen may open with no range selected — default to the last 30 days
+    // instead of handing Prisma an Invalid Date.
+    const parse = (value: string | undefined, fallback: Date) => {
+      if (!value) return fallback;
+      const d = new Date(value);
+      return Number.isNaN(d.getTime()) ? fallback : d;
+    };
+    const end = parse(endDate, new Date());
+    const defaultStart = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const start = parse(startDate, defaultStart);
+
     const slas = await this.prisma.deliverySLA.findMany({
-      where: {
-        businessId,
-        createdAt: {
-          gte: new Date(startDate),
-          lte: new Date(endDate),
-        },
-      },
+      where: { businessId, createdAt: { gte: start, lte: end } },
     });
 
     const totalDeliveries = slas.length;
     const onTimeDeliveries = slas.filter(sla => sla.isOnTime).length;
-    const avgDeliveryTime = slas.reduce((sum, sla) => {
-      if (sla.actualDeliveredAt) {
-        return sum + (new Date(sla.actualDeliveredAt).getTime() - new Date(sla.promisedAt).getTime());
-      }
-      return sum;
-    }, 0) / slas.filter(sla => sla.actualDeliveredAt).length;
+    const completed = slas.filter(sla => sla.actualDeliveredAt);
+    // Guard the divide — with no completed deliveries this produced NaN.
+    const avgDeliveryTime = completed.length
+      ? completed.reduce(
+          (sum, sla) =>
+            sum +
+            (new Date(sla.actualDeliveredAt!).getTime() - new Date(sla.promisedAt).getTime()),
+          0,
+        ) / completed.length
+      : 0;
 
     return {
+      startDate: start.toISOString(),
+      endDate: end.toISOString(),
       totalDeliveries,
       onTimeDeliveries,
+      lateDeliveries: totalDeliveries - onTimeDeliveries,
       onTimeRate: totalDeliveries > 0 ? (onTimeDeliveries / totalDeliveries) * 100 : 0,
       avgDeliveryTimeMinutes: avgDeliveryTime / 60000,
       slas,
@@ -482,6 +534,10 @@ export class DeliveryService {
         ...(dto.status === 'DELIVERED' && { deliveredAt: dto.deliveredAt ? new Date(dto.deliveredAt) : new Date() }),
       },
     });
+
+    if (dto.status && dto.status !== delivery.status) {
+      await this.syncFieldOrderFromDelivery(updated, dto.status);
+    }
 
     // Keep the customer's self-service app in the loop on status changes.
     if (dto.status && dto.status !== delivery.status && delivery.customerPhone) {

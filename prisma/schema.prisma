@@ -1464,6 +1464,9 @@ model DeliveryOrder {
   storeId             String
   orderNumber         String    @unique
   saleId              String?
+  // Set when this delivery was generated from a field/agent order dispatched onto a
+  // delivery run, so the driver app and the field-sales board stay in sync.
+  fieldOrderId        String?
   customerId          String?
   customerName        String
   customerPhone       String?
@@ -1508,6 +1511,8 @@ model DeliveryOrder {
   items               DeliveryOrderItem[]
 
   @@index([businessId, storeId, status])
+  @@index([fieldOrderId])
+  @@index([driverId, status])
 }
 
 model DeliveryOrderItem {

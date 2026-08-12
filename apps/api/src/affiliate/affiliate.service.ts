@@ -214,7 +214,7 @@ export class AffiliateService {
 
     // Email the affiliate the first time they're approved.
     if (status === 'ACTIVE' && before?.status !== 'ACTIVE') {
-      const link = `${process.env.APP_URL ?? 'https://app.kastrapos.co.ke'}/?mode=register&aff=${updated.code}`;
+      const link = `${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/?mode=register&aff=${updated.code}`;
       this.email
         .sendAffiliateApproved({ to: updated.email, name: updated.name, code: updated.code, link, commissionPercent: updated.commissionPercent })
         .catch(() => {});

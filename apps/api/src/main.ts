@@ -105,6 +105,27 @@ async function bootstrap() {
     const httpAdapter = app.getHttpAdapter();
     httpAdapter.get('/api/v1/health', (_req: any, res: any) => res.json({ status: 'ok' }));
 
+    // Config presence check — reports which env vars are SET (booleans only, never
+    // values), so you can verify a deploy at a glance. Safe to expose: no secrets.
+    const has = (k: string) => !!process.env[k]?.trim();
+    httpAdapter.get('/api/v1/health/config', (_req: any, res: any) => res.json({
+      env: process.env.NODE_ENV ?? 'development',
+      database: has('DATABASE_URL'),
+      jwtSecret: has('JWT_SECRET'),
+      encryptionKey: has('ENCRYPTION_KEY') && process.env.ENCRYPTION_KEY?.length === 64,
+      urls: { frontend: has('FRONTEND_URL'), admin: has('ADMIN_URL') },
+      email: { resend: has('RESEND_API_KEY'), from: has('EMAIL_FROM') },
+      payments: {
+        paystackSecret: has('PAYSTACK_SECRET_KEY'),
+        paystackWebhook: has('PAYSTACK_WEBHOOK_SECRET'),
+        paystackPlans: has('PAYSTACK_STARTER_PLAN') && has('PAYSTACK_GROWTH_PLAN') && has('PAYSTACK_PRO_PLAN') && has('PAYSTACK_ENTERPRISE_PLAN'),
+        mpesaEnv: process.env.MPESA_ENV ?? 'sandbox',
+      },
+      superAdmin: { email: has('SUPER_ADMIN_EMAIL'), password: has('SUPER_ADMIN_PASSWORD'), secret: has('SUPER_ADMIN_SECRET') },
+      etimsEnv: process.env.ETIMS_ENV ?? 'test',
+      redis: has('REDIS_HOST'),
+    }));
+
     const port = process.env.PORT ?? 3010;
     await app.listen(port);
 

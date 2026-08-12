@@ -104,11 +104,49 @@ export class SecurityService {
   }
 
   async getAllPermissions() {
+    const existing = await this.prisma.permission.findMany({
+      where: { isActive: true },
+      orderBy: [{ category: 'asc' }, { name: 'asc' }],
+    });
+    if (existing.length > 0) return existing;
+
+    // The catalogue is reference data, not tenant data, and nothing seeds it — so the
+    // Security screen's permission matrix rendered empty and custom roles could not be
+    // configured at all. Populate it on first read.
+    await this.prisma.permission.createMany({
+      data: SecurityService.PERMISSION_CATALOGUE,
+      skipDuplicates: true,
+    });
+
     return this.prisma.permission.findMany({
       where: { isActive: true },
       orderBy: [{ category: 'asc' }, { name: 'asc' }],
     });
   }
+
+  /** Canonical permission list. Ids match the codes used by `getBasicRolePermissions`. */
+  private static readonly PERMISSION_CATALOGUE = [
+    { id: 'perm_sales_create',     name: 'Create sales',            category: 'Sales',      description: 'Ring up and complete transactions at the POS' },
+    { id: 'perm_sales_view',       name: 'View sales',              category: 'Sales',      description: 'Browse the sales history and receipts' },
+    { id: 'perm_sales_void',       name: 'Void / refund sales',     category: 'Sales',      description: 'Void a sale or process a refund' },
+    { id: 'perm_sales_discount',   name: 'Apply discounts',         category: 'Sales',      description: 'Apply manual discounts at checkout' },
+    { id: 'perm_inventory_view',   name: 'View inventory',          category: 'Inventory',  description: 'See stock levels and item details' },
+    { id: 'perm_inventory_adjust', name: 'Adjust stock',            category: 'Inventory',  description: 'Write off, adjust or transfer stock' },
+    { id: 'perm_inventory_price',  name: 'Change prices',           category: 'Inventory',  description: 'Edit selling and cost prices' },
+    { id: 'perm_purchasing',       name: 'Purchasing',              category: 'Suppliers',  description: 'Raise purchase orders, RFQs and receive goods' },
+    { id: 'perm_reports_view',     name: 'View reports',            category: 'Reports',    description: 'Open the reports section' },
+    { id: 'perm_reports_finance',  name: 'View financial reports',  category: 'Reports',    description: 'P&L, ledger, tax and margin reports' },
+    { id: 'perm_cash_drawer',      name: 'Operate cash drawer',     category: 'Cash',       description: 'Open and close drawer sessions' },
+    { id: 'perm_cash_reconcile',   name: 'Reconcile cash',          category: 'Cash',       description: 'Approve variances and reconcile takings' },
+    { id: 'perm_customers_manage', name: 'Manage customers',        category: 'Customers',  description: 'Create and edit customer records and credit limits' },
+    { id: 'perm_delivery_manage',  name: 'Manage deliveries',       category: 'Delivery',   description: 'Dispatch, assign drivers and close deliveries' },
+    { id: 'perm_field_sales',      name: 'Field sales',             category: 'Field',      description: 'Raise and confirm field/agent orders' },
+    { id: 'perm_hr_manage',        name: 'Manage HR',               category: 'HR',         description: 'Employee records, leave and disciplinary' },
+    { id: 'perm_payroll_run',      name: 'Run payroll',             category: 'HR',         description: 'Create, approve and pay payroll runs' },
+    { id: 'perm_users_manage',     name: 'Manage users',            category: 'Admin',      description: 'Add, edit and deactivate staff accounts' },
+    { id: 'perm_settings_manage',  name: 'Manage settings',         category: 'Admin',      description: 'Business, tax, receipt and integration settings' },
+    { id: 'perm_audit_view',       name: 'View audit log',          category: 'Admin',      description: 'Read the tamper-evident audit trail' },
+  ];
 
   async updateRolePermissions(roleId: string, permissions: string[], businessId: string) {
     // Verify role belongs to business

@@ -53,7 +53,7 @@ const TIER_BENEFITS: Record<SubscriptionTier, string[]> = {
     'Everything in GROWTH',
     '5 stores, up to 30 users',
     'Full HR (shifts, leave, commissions)',
-    'Kenya payroll (PAYE/NHIF/NSSF)',
+    'Kenya payroll (PAYE/SHIF/NSSF)',
     'Multi-store stock transfers',
     'Bank reconciliation',
     'Budget & expense approvals',

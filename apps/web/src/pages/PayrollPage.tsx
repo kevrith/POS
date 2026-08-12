@@ -22,7 +22,7 @@ interface Payslip {
   otherAllowances: number;
   grossPay: number;
   payeAmount: number;
-  nhifAmount: number;
+  shifAmount: number;
   nssf1Amount: number;
   nssf2Amount: number;
   housingLevyAmount: number;
@@ -145,12 +145,12 @@ function printPayslips(run: PayrollRun) {
 
           <tr class="section-header"><td colspan="2">DEDUCTIONS</td></tr>
           <tr><td>PAYE (Income Tax)</td><td class="right">${fmt(p.payeAmount)}</td></tr>
-          <tr><td>NHIF</td><td class="right">${fmt(p.nhifAmount)}</td></tr>
+          <tr><td>SHIF</td><td class="right">${fmt(p.shifAmount)}</td></tr>
           <tr><td>NSSF Tier 1</td><td class="right">${fmt(p.nssf1Amount)}</td></tr>
           <tr><td>NSSF Tier 2</td><td class="right">${fmt(p.nssf2Amount)}</td></tr>
           <tr><td>Affordable Housing Levy (1.5%)</td><td class="right">${fmt(p.housingLevyAmount)}</td></tr>
           ${p.otherDeductions > 0 ? `<tr><td>Other Deductions</td><td class="right">${fmt(p.otherDeductions)}</td></tr>` : ''}
-          <tr class="total-row"><td>TOTAL DEDUCTIONS</td><td class="right">${fmt(p.payeAmount + p.nhifAmount + p.nssf1Amount + p.nssf2Amount + p.housingLevyAmount + p.otherDeductions)}</td></tr>
+          <tr class="total-row"><td>TOTAL DEDUCTIONS</td><td class="right">${fmt(p.payeAmount + p.shifAmount + p.nssf1Amount + p.nssf2Amount + p.housingLevyAmount + p.otherDeductions)}</td></tr>
 
           <tr class="net-row"><td>NET PAY</td><td class="right">${fmt(p.netPay)}</td></tr>
         </table>
@@ -182,13 +182,13 @@ function PayslipTable({ payslips, month, year }: { payslips: Payslip[]; month: n
       commission: acc.commission + p.commissionCents,
       gross: acc.gross + p.grossPay,
       paye: acc.paye + p.payeAmount,
-      nhif: acc.nhif + p.nhifAmount,
+      shif: acc.shif + p.shifAmount,
       nssf1: acc.nssf1 + p.nssf1Amount,
       nssf2: acc.nssf2 + p.nssf2Amount,
       housing_levy: acc.housing_levy + p.housingLevyAmount,
       net: acc.net + p.netPay,
     }),
-    { basic: 0, housing: 0, transport: 0, commission: 0, gross: 0, paye: 0, nhif: 0, nssf1: 0, nssf2: 0, housing_levy: 0, net: 0 },
+    { basic: 0, housing: 0, transport: 0, commission: 0, gross: 0, paye: 0, shif: 0, nssf1: 0, nssf2: 0, housing_levy: 0, net: 0 },
   );
 
   return (
@@ -202,7 +202,7 @@ function PayslipTable({ payslips, month, year }: { payslips: Payslip[]; month: n
             <th className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-300 text-right">Commission</th>
             <th className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-300 text-right">Gross</th>
             <th className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-300 text-right">PAYE</th>
-            <th className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-300 text-right">NHIF</th>
+            <th className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-300 text-right">SHIF</th>
             <th className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-300 text-right">NSSF</th>
             <th className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-300 text-right">Hse Levy</th>
             <th className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-300 text-right">Net Pay</th>
@@ -219,7 +219,7 @@ function PayslipTable({ payslips, month, year }: { payslips: Payslip[]; month: n
               <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-400">{fmt(p.commissionCents)}</td>
               <td className="px-3 py-2 text-right font-medium text-gray-900 dark:text-white">{fmt(p.grossPay)}</td>
               <td className="px-3 py-2 text-right text-red-600 dark:text-red-400">{fmt(p.payeAmount)}</td>
-              <td className="px-3 py-2 text-right text-red-600 dark:text-red-400">{fmt(p.nhifAmount)}</td>
+              <td className="px-3 py-2 text-right text-red-600 dark:text-red-400">{fmt(p.shifAmount)}</td>
               <td className="px-3 py-2 text-right text-red-600 dark:text-red-400">{fmt(p.nssf1Amount + p.nssf2Amount)}</td>
               <td className="px-3 py-2 text-right text-red-600 dark:text-red-400">{fmt(p.housingLevyAmount)}</td>
               <td className="px-3 py-2 text-right font-bold text-green-700 dark:text-green-400">{fmt(p.netPay)}</td>
@@ -261,7 +261,7 @@ function PayslipTable({ payslips, month, year }: { payslips: Payslip[]; month: n
             <td className="px-3 py-2 text-right text-gray-900 dark:text-white">{fmt(totals.commission)}</td>
             <td className="px-3 py-2 text-right text-gray-900 dark:text-white">{fmt(totals.gross)}</td>
             <td className="px-3 py-2 text-right text-red-700 dark:text-red-400">{fmt(totals.paye)}</td>
-            <td className="px-3 py-2 text-right text-red-700 dark:text-red-400">{fmt(totals.nhif)}</td>
+            <td className="px-3 py-2 text-right text-red-700 dark:text-red-400">{fmt(totals.shif)}</td>
             <td className="px-3 py-2 text-right text-red-700 dark:text-red-400">{fmt(totals.nssf1 + totals.nssf2)}</td>
             <td className="px-3 py-2 text-right text-red-700 dark:text-red-400">{fmt(totals.housing_levy)}</td>
             <td className="px-3 py-2 text-right text-green-700 dark:text-green-400">{fmt(totals.net)}</td>
@@ -912,7 +912,7 @@ export default function PayrollPage() {
         </div>
 
         <div className="mt-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-xs text-blue-700 dark:text-blue-400">
-          <strong>Kenya 2024 Tax Rates Applied:</strong> PAYE (10%–35% brackets, KES 2,400 personal relief) · NHIF (income-based bands) · NSSF Tier 1 (6% of KES 7,000) + Tier 2 (6% of excess up to KES 29,000) · Affordable Housing Levy (1.5% of gross)
+          <strong>Kenya 2024 Tax Rates Applied:</strong> PAYE (10%–35% brackets, KES 2,400 personal relief, charged on pay after allowable deductions) · SHIF (2.75% of gross, min KES 300) · NSSF Tier 1 (6% of KES 7,000) + Tier 2 (6% of excess up to KES 29,000) · Affordable Housing Levy (1.5% of gross). SHIF, NSSF and the housing levy are deducted before PAYE per the Tax Laws (Amendment) Act 2024.
         </div>
       </div>
     );
@@ -1067,7 +1067,7 @@ export default function PayrollPage() {
           )}
 
           <div className="mt-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-xs text-amber-700 dark:text-amber-400">
-            <strong>Note:</strong> Employee salary details (basic salary, housing allowance, transport allowance) must be configured on each employee record. Commissions are automatically calculated from sales data for the selected period. Generated payslips use Kenya 2024 statutory deduction rates (PAYE, NHIF, NSSF, Housing Levy).
+            <strong>Note:</strong> Employee salary details (basic salary, housing allowance, transport allowance) must be configured on each employee record. Commissions are automatically calculated from sales data for the selected period. Generated payslips use current Kenyan statutory rates (PAYE, SHIF, NSSF, Housing Levy).
           </div>
         </>
       )}

@@ -16,11 +16,13 @@ describe('PayrollService.calculatePayslip', () => {
     const result = svc.calculatePayslip({ salaryBaseCents: 0, housingCents: 0, transportCents: 0, commissionCents: 0 });
     expect(result.grossPay).toBe(0);
     expect(result.payeAmount).toBe(0);
-    expect(result.nhifAmount).toBe(15000); // minimum NHIF bracket (≤ 5,999 KES = 150 KES)
+    // No pay means no statutory liability at all — not a KES 300 SHIF floor.
+    expect(result.shifAmount).toBe(0);
     expect(result.nssf1Amount).toBe(0);
     expect(result.nssf2Amount).toBe(0);
     expect(result.housingLevyAmount).toBe(0);
-    expect(result.netPay).toBe(0); // clamped to 0
+    expect(result.totalDeductions).toBe(0);
+    expect(result.netPay).toBe(0);
   });
 
   // ─── PAYE personal relief absorbs first bracket ────────────────────────────
@@ -36,15 +38,24 @@ describe('PayrollService.calculatePayslip', () => {
     expect(result.payeAmount).toBe(0);
   });
 
-  it('PAYE is non-zero when gross exceeds KES 24,000 (enters second bracket)', () => {
-    // KES 30,000 gross: tax = 2400 + (30000-24000)*0.25 = 2400+1500=3900, relief=2400, PAYE=1500
+  it('PAYE is charged on pay after allowable deductions, not on gross', () => {
+    // KES 30,000 gross.
+    //   SHIF   = 30,000 * 2.75%        =   825
+    //   NSSF   = 420 + (23,000 * 6%)   = 1,800
+    //   levy   = 30,000 * 1.5%         =   450
+    //   taxable = 30,000 - 3,075       = 26,925
+    //   tax    = 2,400 + (2,925 * 25%) = 3,131.25 → less relief 2,400 → PAYE 731.25
     const result = svc.calculatePayslip({
-      salaryBaseCents: 3_000_000, // KES 30,000
+      salaryBaseCents: 3_000_000,
       housingCents: 0,
       transportCents: 0,
       commissionCents: 0,
     });
-    expect(result.payeAmount).toBe(150_000); // KES 1,500 in cents
+    expect(result.shifAmount).toBe(82_500);
+    expect(result.taxablePay).toBe(3_000_000 - result.shifAmount - result.nssf1Amount - result.nssf2Amount - result.housingLevyAmount);
+    expect(result.payeAmount).toBe(73_125);
+    // Charging PAYE on gross (the old behaviour) would have produced KES 1,500.
+    expect(result.payeAmount).toBeLessThan(150_000);
   });
 
   it('PAYE uses 30% bracket above KES 32,333', () => {
@@ -84,27 +95,34 @@ describe('PayrollService.calculatePayslip', () => {
     expect(result.payeAmount).toBeGreaterThan(25_000_000);
   });
 
-  // ─── NHIF tiers ────────────────────────────────────────────────────────────
+  // ─── SHIF (2.75% of gross, min KES 300, no cap) ───────────────────────────
 
-  // NHIF brackets use strict ≤ comparisons, so boundary values are: 5999, 7999, 11999…
-  const nhifCases: [number, number, string][] = [
-    [500_000,   15_000, 'KES 5,000 (≤5,999) → KES 150'],
-    [700_000,   30_000, 'KES 7,000 (≤7,999) → KES 300'],
-    [1_000_000, 40_000, 'KES 10,000 (≤11,999) → KES 400'],
-    [1_200_000, 50_000, 'KES 12,000 (≤14,999) → KES 500'],
-    [1_500_000, 60_000, 'KES 15,000 (≤19,999) → KES 600'],
-    [2_000_000, 75_000, 'KES 20,000 (≤24,999) → KES 750'],
-    [10_000_000, 170_000, 'KES 100,000 → KES 1,700 (max)'],
+  const shifCases: [number, number, string][] = [
+    [500_000,     30_000, 'KES 5,000 → 137.50 raised to the KES 300 floor'],
+    [1_000_000,   30_000, 'KES 10,000 → 275 raised to the KES 300 floor'],
+    [1_100_000,   30_250, 'KES 11,000 → KES 302.50 (just above the floor)'],
+    [5_000_000,  137_500, 'KES 50,000 → KES 1,375'],
+    [10_000_000, 275_000, 'KES 100,000 → KES 2,750 (no NHIF-style cap)'],
+    [50_000_000, 1_375_000, 'KES 500,000 → KES 13,750 (uncapped)'],
   ];
 
-  test.each(nhifCases)('NHIF: gross %i cents → %i cents (%s)', (grossCents, expectedNhif) => {
+  test.each(shifCases)('SHIF: gross %i cents → %i cents (%s)', (grossCents, expectedShif) => {
     const result = svc.calculatePayslip({
       salaryBaseCents: grossCents,
       housingCents: 0,
       transportCents: 0,
       commissionCents: 0,
     });
-    expect(result.nhifAmount).toBe(expectedNhif);
+    expect(result.shifAmount).toBe(expectedShif);
+  });
+
+  it('SHIF is uncapped, unlike the NHIF bands it replaced', () => {
+    const high = svc.calculatePayslip({
+      salaryBaseCents: 100_000_000, // KES 1,000,000
+      housingCents: 0, transportCents: 0, commissionCents: 0,
+    });
+    // NHIF capped at KES 1,700; SHIF is a flat 2.75% with no ceiling.
+    expect(high.shifAmount).toBe(2_750_000); // KES 27,500
   });
 
   // ─── NSSF tiers ────────────────────────────────────────────────────────────
@@ -205,15 +223,17 @@ describe('PayrollService.calculatePayslip', () => {
 
   // ─── Net pay is never negative ────────────────────────────────────────────
 
-  it('netPay is clamped to 0 when deductions exceed gross', () => {
-    // Very low gross (KES 100) but NHIF is KES 150 → net should be 0, not negative
+  it('deductions are capped at gross so netPay is never negative', () => {
+    // Gross KES 100 but the SHIF floor alone is KES 300.
     const result = svc.calculatePayslip({
       salaryBaseCents: 10_000, // KES 100
       housingCents: 0,
       transportCents: 0,
       commissionCents: 0,
     });
-    expect(result.netPay).toBeGreaterThanOrEqual(0);
+    expect(result.netPay).toBe(0);
+    expect(result.totalDeductions).toBeLessThanOrEqual(result.grossPay);
+    expect(result.deductionsCapped).toBe(true);
   });
 
   // ─── Realistic payslip for a KES 50,000 employee ─────────────────────────
@@ -226,11 +246,16 @@ describe('PayrollService.calculatePayslip', () => {
       commissionCents: 0,
     });
 
-    const totalDeductions = result.payeAmount + result.nhifAmount + result.nssf1Amount + result.nssf2Amount + result.housingLevyAmount;
+    const totalDeductions = result.payeAmount + result.shifAmount + result.nssf1Amount + result.nssf2Amount + result.housingLevyAmount;
     expect(result.netPay).toBe(Math.max(0, result.grossPay - totalDeductions));
     expect(result.grossPay).toBe(5_000_000);
-    // NHIF for KES 50,000 = KES 1,200 = 120,000 cents (≤ 59,999)
-    expect(result.nhifAmount).toBe(120_000);
+    // SHIF for KES 50,000 = 2.75% = KES 1,375
+    expect(result.shifAmount).toBe(137_500);
+    // NSSF 420 + 1,740 = 2,160; levy 750; SHIF 1,375 → taxable 45,715
+    expect(result.taxablePay).toBe(4_571_500);
+    // Brackets on 45,715 → 8,497.85 less 2,400 relief = KES 6,097.85
+    expect(result.payeAmount).toBe(609_785);
+    expect(result.netPay).toBe(3_961_715); // KES 39,617.15
   });
 
   // ─── Mid-month proration ──────────────────────────────────────────────────
@@ -287,7 +312,7 @@ describe('PayrollService.calculatePayslip', () => {
     });
     const expectedGross = Math.round((5_000_000 + 500_000 + 300_000) * (10 / 30));
     expect(result.grossPay).toBe(expectedGross);
-    const totalDeductions = result.payeAmount + result.nhifAmount + result.nssf1Amount + result.nssf2Amount + result.housingLevyAmount;
+    const totalDeductions = result.payeAmount + result.shifAmount + result.nssf1Amount + result.nssf2Amount + result.housingLevyAmount;
     expect(result.netPay).toBe(Math.max(0, result.grossPay - totalDeductions));
   });
 

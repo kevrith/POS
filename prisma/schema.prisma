@@ -1590,7 +1590,8 @@ model Payslip {
   otherAllowances    Int        @default(0)
   grossPay           Int
   payeAmount         Int        @default(0)
-  nhifAmount         Int        @default(0)
+  // SHIF (Social Health Insurance Fund) — replaced NHIF on 1 Oct 2024.
+  shifAmount         Int        @default(0)
   nssf1Amount        Int        @default(0)
   nssf2Amount        Int        @default(0)
   housingLevyAmount  Int        @default(0)

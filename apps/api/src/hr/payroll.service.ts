@@ -1,7 +1,12 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
-// ─── Kenya 2024 Tax Constants ─────────────────────────────────────────────────
+// ─── Kenya statutory constants ────────────────────────────────────────────────
+//
+// Current as at the Social Health Insurance Act 2023 (SHIF live 1 Oct 2024, replacing
+// NHIF) and the Tax Laws (Amendment) Act 2024 (in force 27 Dec 2024), which made SHIF,
+// the Affordable Housing Levy and NSSF *allowable deductions* against taxable pay
+// rather than tax reliefs.
 
 const PAYE_PERSONAL_RELIEF = 240000; // KES 2,400/month in cents
 const NSSF_LEL_CENTS = 700000;       // Lower Earnings Limit: KES 7,000 in cents
@@ -9,25 +14,31 @@ const NSSF_UEL_CENTS = 3600000;      // Upper Earnings Limit: KES 36,000 in cent
 const NSSF_TIER1_RATE = 0.06;        // 6% employee contribution
 const NSSF_TIER2_RATE = 0.06;        // 6% employee contribution
 const HOUSING_LEVY_RATE = 0.015;     // 1.5% of gross pay
+const SHIF_RATE = 0.0275;            // 2.75% of gross pay
+const SHIF_MINIMUM_CENTS = 30000;    // KES 300/month floor
 
-// ─── PAYE Calculation (Kenya 2024) ───────────────────────────────────────────
+// ─── PAYE Calculation ─────────────────────────────────────────────────────────
 
-function calcPAYE(grossCents: number): number {
+/**
+ * PAYE on **taxable** pay, not gross. Callers must subtract the allowable
+ * deductions (NSSF + SHIF + housing levy) before calling this.
+ */
+function calcPAYE(taxableCents: number): number {
   // Convert to KES whole units for bracket calculation
-  const gross = grossCents / 100;
+  const taxable = Math.max(0, taxableCents) / 100;
 
   let tax = 0;
 
-  if (gross <= 24000) {
-    tax = gross * 0.10;
-  } else if (gross <= 32333) {
-    tax = 24000 * 0.10 + (gross - 24000) * 0.25;
-  } else if (gross <= 500000) {
-    tax = 24000 * 0.10 + (32333 - 24000) * 0.25 + (gross - 32333) * 0.30;
-  } else if (gross <= 800000) {
-    tax = 24000 * 0.10 + (32333 - 24000) * 0.25 + (500000 - 32333) * 0.30 + (gross - 500000) * 0.325;
+  if (taxable <= 24000) {
+    tax = taxable * 0.10;
+  } else if (taxable <= 32333) {
+    tax = 24000 * 0.10 + (taxable - 24000) * 0.25;
+  } else if (taxable <= 500000) {
+    tax = 24000 * 0.10 + (32333 - 24000) * 0.25 + (taxable - 32333) * 0.30;
+  } else if (taxable <= 800000) {
+    tax = 24000 * 0.10 + (32333 - 24000) * 0.25 + (500000 - 32333) * 0.30 + (taxable - 500000) * 0.325;
   } else {
-    tax = 24000 * 0.10 + (32333 - 24000) * 0.25 + (500000 - 32333) * 0.30 + (800000 - 500000) * 0.325 + (gross - 800000) * 0.35;
+    tax = 24000 * 0.10 + (32333 - 24000) * 0.25 + (500000 - 32333) * 0.30 + (800000 - 500000) * 0.325 + (taxable - 800000) * 0.35;
   }
 
   // Personal relief: KES 2,400/month = 240000 cents
@@ -37,28 +48,16 @@ function calcPAYE(grossCents: number): number {
   return Math.round(payeKes * 100); // return in cents
 }
 
-// ─── NHIF Calculation ─────────────────────────────────────────────────────────
+// ─── SHIF Calculation ─────────────────────────────────────────────────────────
 
-function calcNHIF(grossCents: number): number {
-  const gross = grossCents / 100;
-
-  if (gross <= 5999)   return 15000;  // KES 150
-  if (gross <= 7999)   return 30000;  // KES 300
-  if (gross <= 11999)  return 40000;  // KES 400
-  if (gross <= 14999)  return 50000;  // KES 500
-  if (gross <= 19999)  return 60000;  // KES 600
-  if (gross <= 24999)  return 75000;  // KES 750
-  if (gross <= 29999)  return 85000;  // KES 850
-  if (gross <= 34999)  return 90000;  // KES 900
-  if (gross <= 39999)  return 95000;  // KES 950
-  if (gross <= 44999)  return 100000; // KES 1,000
-  if (gross <= 49999)  return 110000; // KES 1,100
-  if (gross <= 59999)  return 120000; // KES 1,200
-  if (gross <= 69999)  return 130000; // KES 1,300
-  if (gross <= 79999)  return 140000; // KES 1,400
-  if (gross <= 89999)  return 150000; // KES 1,500
-  if (gross <= 99999)  return 160000; // KES 1,600
-  return 170000; // KES 1,700 for >= 100,000
+/**
+ * Social Health Insurance Fund — 2.75% of gross pay, minimum KES 300/month,
+ * with no upper cap. Replaced NHIF's income bands (which capped at KES 1,700)
+ * from 1 October 2024 under the Social Health Insurance Act 2023.
+ */
+function calcSHIF(grossCents: number): number {
+  if (grossCents <= 0) return 0;
+  return Math.max(SHIF_MINIMUM_CENTS, Math.round(grossCents * SHIF_RATE));
 }
 
 // ─── NSSF Calculation (new 2024 scheme) ──────────────────────────────────────
@@ -101,11 +100,18 @@ interface PayslipInput {
 
 interface PayslipResult {
   grossPay: number;
+  /** Gross less the allowable deductions (SHIF + NSSF + housing levy). PAYE base. */
+  taxablePay: number;
   payeAmount: number;
-  nhifAmount: number;
+  /** Social Health Insurance Fund — replaced NHIF on 1 Oct 2024. */
+  shifAmount: number;
   nssf1Amount: number;
   nssf2Amount: number;
   housingLevyAmount: number;
+  /** Statutory total actually applied (capped at gross pay). */
+  totalDeductions: number;
+  /** True when statutory deductions exceeded gross and had to be capped. */
+  deductionsCapped: boolean;
   netPay: number;
   overtimeCents: number;
   overtimeHours: number;
@@ -147,24 +153,46 @@ export class PayrollService {
       overtimeCents = Math.round(overtimeCents * ratio);
     }
 
-    const payeAmount = calcPAYE(grossPay);
-    const nhifAmount = calcNHIF(grossPay);
-    // Directors under old NSSF Act: flat KES 200/month (employee share)
-    const { tier1: nssf1Amount, tier2: nssf2Amount } = isDirector
-      ? { tier1: 20000, tier2: 0 }
-      : calcNSSF(grossPay);
-    const housingLevyAmount = calcHousingLevy(grossPay);
+    // No pay, no statutory deductions. Without this an employee whose salary has not
+    // been captured yet gets a payslip showing ~KES 750 of SHIF/NSSF/levy against a
+    // zero gross, and net pay clamps to 0 — which is not a real payslip.
+    const hasEarnings = grossPay > 0;
 
-    const totalDeductions = payeAmount + nhifAmount + nssf1Amount + nssf2Amount + housingLevyAmount;
-    const netPay = Math.max(0, grossPay - totalDeductions);
+    // Order matters: SHIF, NSSF and the housing levy are all charged on gross and are
+    // then *deducted from taxable pay* before PAYE (Tax Laws (Amendment) Act 2024).
+    // Computing PAYE on gross, as this used to, over-taxes every employee.
+    const shifAmount = hasEarnings ? calcSHIF(grossPay) : 0;
+    // Directors under old NSSF Act: flat KES 200/month (employee share)
+    const { tier1: nssf1Amount, tier2: nssf2Amount } = !hasEarnings
+      ? { tier1: 0, tier2: 0 }
+      : isDirector
+        ? { tier1: 20000, tier2: 0 }
+        : calcNSSF(grossPay);
+    const housingLevyAmount = hasEarnings ? calcHousingLevy(grossPay) : 0;
+
+    const allowableDeductions = shifAmount + nssf1Amount + nssf2Amount + housingLevyAmount;
+    const taxablePay = Math.max(0, grossPay - allowableDeductions);
+    const payeAmount = hasEarnings ? calcPAYE(taxablePay) : 0;
+
+    const totalDeductions = payeAmount + allowableDeductions;
+    // Statutory deductions can never exceed what was actually earned. Without this a
+    // token amount of commission on an employee with no basic salary produced a
+    // payslip showing more deducted than earned.
+    const cappedDeductions = Math.min(totalDeductions, grossPay);
+    const netPay = grossPay - cappedDeductions;
+    /** True when the statutory calculation had to be capped — surface it in HR. */
+    const deductionsCapped = cappedDeductions < totalDeductions;
 
     return {
       grossPay,
+      taxablePay,
       payeAmount,
-      nhifAmount,
+      shifAmount,
       nssf1Amount,
       nssf2Amount,
       housingLevyAmount,
+      totalDeductions: cappedDeductions,
+      deductionsCapped,
       netPay,
       overtimeCents,
       overtimeHours,
@@ -208,7 +236,7 @@ export class PayrollService {
       otherAllowances: number;
       grossPay: number;
       payeAmount: number;
-      nhifAmount: number;
+      shifAmount: number;
       nssf1Amount: number;
       nssf2Amount: number;
       housingLevyAmount: number;
@@ -287,7 +315,8 @@ export class PayrollService {
       }, overtimeHours);
 
       const netPayAfterExtra = Math.max(0, calc.netPay - totalExtraDeductions);
-      const deductions = calc.payeAmount + calc.nhifAmount + calc.nssf1Amount + calc.nssf2Amount + calc.housingLevyAmount + totalExtraDeductions;
+      // Use the capped statutory total so the run's deductions never exceed its gross.
+      const deductions = calc.totalDeductions + Math.min(totalExtraDeductions, calc.netPay);
 
       totalGrossCents += calc.grossPay;
       totalNetCents += netPayAfterExtra;
@@ -303,7 +332,7 @@ export class PayrollService {
         otherAllowances: otherAllowances + calc.overtimeCents,
         grossPay: calc.grossPay,
         payeAmount: calc.payeAmount,
-        nhifAmount: calc.nhifAmount,
+        shifAmount: calc.shifAmount,
         nssf1Amount: calc.nssf1Amount,
         nssf2Amount: calc.nssf2Amount,
         housingLevyAmount: calc.housingLevyAmount,

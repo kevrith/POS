@@ -568,6 +568,8 @@ function EditEmployeePanel({ employee, businessId, onClose, onSuccess }: {
                   <option value="KITCHEN">Kitchen Staff — KDS only</option>
                   <option value="MANAGER">Manager — Full access (no billing)</option>
                   <option value="ACCOUNTANT">Accountant — Reports + Expenses</option>
+                  <option value="DRIVER">Driver — Delivery app</option>
+                  <option value="SALES_AGENT">Sales Agent — Field sales app</option>
                   <option value="OWNER">Owner — Full admin</option>
                 </select>
                 <p className="text-xs text-gray-400 mt-1">
@@ -977,6 +979,8 @@ function AddEmployeeModal({ businessId, onClose, onSuccess }: {
                 <option value="KITCHEN">Kitchen Staff — KDS only</option>
                 <option value="MANAGER">Manager — Full access (no billing)</option>
                 <option value="ACCOUNTANT">Accountant — Reports + Expenses</option>
+                <option value="DRIVER">Driver — Delivery app</option>
+                <option value="SALES_AGENT">Sales Agent — Field sales app</option>
               </select>
             </div>
 

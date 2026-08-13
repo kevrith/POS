@@ -28,7 +28,35 @@ interface BizUser {
   role: string;
 }
 
-const ASSIGNABLE_ROLES = ['MANAGER', 'CASHIER', 'WAITER', 'ACCOUNTANT', 'KITCHEN'];
+/**
+ * Roles that can be assigned from the phone.
+ *
+ * Matches the web Staff & HR list except for OWNER, which is deliberately
+ * left out — minting a second full-admin account is a privilege escalation
+ * that belongs on the web app, behind a bigger screen and a deliberate visit.
+ *
+ * DRIVER and SALES_AGENT sign in to the *other* apps rather than this one, so
+ * the hint below the picker says which app each role actually gets, and a
+ * manager does not sit waiting for a driver to appear on a till.
+ */
+const ASSIGNABLE_ROLES = [
+  'MANAGER', 'CASHIER', 'WAITER', 'ACCOUNTANT', 'KITCHEN', 'DRIVER', 'SALES_AGENT',
+];
+
+const ROLE_HINT: Record<string, string> = {
+  MANAGER: 'Full access on this app, except billing.',
+  CASHIER: 'Sells on this app. Sees only their own sales.',
+  WAITER: 'Takes table orders on this app.',
+  KITCHEN: 'Kitchen display only — no till access.',
+  ACCOUNTANT: 'Reports and expenses. No stock or staff.',
+  DRIVER: 'Signs in to the KASTRA Driver app, not this one.',
+  SALES_AGENT: 'Signs in to the KASTRA Agent app, not this one.',
+};
+
+/** Shown on the chip so a long role name still fits on a phone. */
+const ROLE_LABEL: Record<string, string> = {
+  SALES_AGENT: 'AGENT',
+};
 
 const ROLE_COLOR: Record<string, string> = {
   OWNER: Colors.indigo,
@@ -37,6 +65,8 @@ const ROLE_COLOR: Record<string, string> = {
   WAITER: Colors.success,
   ACCOUNTANT: '#8B5CF6',
   KITCHEN: '#0EA5E9',
+  DRIVER: '#F97316',
+  SALES_AGENT: '#0D9488',
 };
 
 export default function ManageUsersScreen() {
@@ -173,10 +203,11 @@ export default function ManageUsersScreen() {
             <View style={styles.roleRow}>
               {ASSIGNABLE_ROLES.map((r) => (
                 <TouchableOpacity key={r} style={[styles.roleChip, role === r && styles.roleChipActive]} onPress={() => setRole(r)}>
-                  <Text style={[styles.roleChipText, role === r && { color: '#FFFFFF' }]}>{r}</Text>
+                  <Text style={[styles.roleChipText, role === r && { color: '#FFFFFF' }]}>{ROLE_LABEL[r] ?? r}</Text>
                 </TouchableOpacity>
               ))}
             </View>
+            {ROLE_HINT[role] ? <Text style={styles.roleHint}>{ROLE_HINT[role]}</Text> : null}
             <Field label={editing ? 'New PIN (leave blank to keep)' : 'PIN (4 digits)'}>
               <TextInput style={styles.input} value={pin} onChangeText={(v) => setPin(v.replace(/[^0-9]/g, '').slice(0, 6))} keyboardType="numeric" placeholder="0000" placeholderTextColor={Colors.textSecondary} />
             </Field>
@@ -257,6 +288,7 @@ const styles = StyleSheet.create({
   roleChip: { borderWidth: 1, borderColor: Colors.border, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 7 },
   roleChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   roleChipText: { fontSize: 12, fontWeight: '600', color: Colors.text },
+  roleHint: { fontSize: 12, color: Colors.textSecondary, lineHeight: 17, marginTop: 8 },
   saveBtn: {
     marginTop: 8,
     backgroundColor: Colors.primary,

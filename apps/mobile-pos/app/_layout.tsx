@@ -93,7 +93,12 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        <StatusBar style="dark" />
+        {/* Dark icons on a white bar. app.json used to declare the app as
+            userInterfaceStyle "dark" while the theme is light, so Android drew
+            white icons over the light grey background and the clock and battery
+            were unreadable. backgroundColor is set here too because the app.json
+            value alone does not apply on every Android version. */}
+        <StatusBar style="dark" backgroundColor="#FFFFFF" />
         <DeepLinkHandler />
         <PushHandler />
         <SessionGuard />

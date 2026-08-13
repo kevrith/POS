@@ -6,7 +6,11 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "kastra-driver",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
+    "androidStatusBar": {
+      "barStyle": "dark-content",
+      "backgroundColor": "#FFFFFF"
+    },
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",

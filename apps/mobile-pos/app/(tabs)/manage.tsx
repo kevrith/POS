@@ -16,7 +16,10 @@ import { mobileApi, formatKES } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth';
 import { useActiveStore } from '../../lib/useActiveStore';
 import { useActiveStoreOverride } from '../../stores/activeStore';
-import { canManageBusiness } from '../../lib/roles';
+import { canManage, canManageBusiness, canSeeFinance } from '../../lib/roles';
+import { usePosMode } from '../../lib/usePosMode';
+import { useApprovals } from '../../lib/useApprovals';
+import { isVisibleForMode, type PosMode } from '../../lib/posMode';
 import { Colors } from '../../constants/theme';
 
 interface SalesReportResp {
@@ -34,28 +37,59 @@ function todayRange() {
   return { startDate: start.toISOString(), endDate: end.toISOString() };
 }
 
+type CardGroup = 'Money' | 'Stock' | 'Service' | 'People';
+
+/** Order the groups render in — money first, it's what gets checked most. */
+const GROUP_ORDER: CardGroup[] = ['Money', 'Stock', 'Service', 'People'];
+
 interface NavCard {
   key: string;
+  group: CardGroup;
   title: string;
   desc: string;
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
   route: string;
+  /** OWNER/ADMIN only (staff accounts, business-wide settings). */
   ownerOnly?: boolean;
+  /** Visible to ACCOUNTANT too, who is not in MANAGE_ROLES. */
+  finance?: boolean;
+  /** Business types this belongs to; omitted = every vertical. */
+  modes?: readonly PosMode[];
 }
 
 const NAV_CARDS: NavCard[] = [
-  { key: 'stock', title: 'Stock', desc: 'View levels, receive & adjust', icon: 'cube-outline', color: Colors.primary, route: '/manage-stock' },
-  { key: 'stocktake', title: 'Stock Take', desc: 'Count shelves & reconcile', icon: 'clipboard-outline', color: Colors.indigo, route: '/manage-stocktake' },
-  { key: 'batches', title: 'Batches & Expiry', desc: 'Track and write off expiry', icon: 'time-outline', color: Colors.warning, route: '/manage-batches' },
-  { key: 'transfers', title: 'Stock Transfers', desc: 'Move stock between stores', icon: 'swap-horizontal-outline', color: Colors.success, route: '/manage-transfers' },
-  { key: 'users', title: 'Staff', desc: 'Add & manage team members', icon: 'people-outline', color: '#0EA5E9', route: '/manage-users', ownerOnly: true },
-  { key: 'settings', title: 'Business Settings', desc: 'Receipt, tax & store config', icon: 'options-outline', color: '#8B5CF6', route: '/manage-settings', ownerOnly: true },
+  // ── Money ──
+  { key: 'drawer', group: 'Money', title: 'Cash Drawer', desc: 'Open, count & close your till', icon: 'wallet-outline', color: Colors.success, route: '/cash-drawer' },
+  { key: 'daily', group: 'Money', title: 'Day Close', desc: 'X reading & end-of-day Z report', icon: 'newspaper-outline', color: '#0891B2', route: '/manage-day-close', finance: true },
+  { key: 'expenses', group: 'Money', title: 'Expenses', desc: 'Record petty cash & approve', icon: 'receipt-outline', color: '#DB2777', route: '/manage-expenses', finance: true },
+  { key: 'approvals', group: 'Money', title: 'Approvals', desc: 'Everything waiting on you', icon: 'checkmark-done-outline', color: '#7C3AED', route: '/manage-approvals' },
+  { key: 'rollup', group: 'Money', title: 'All Stores', desc: 'Compare every branch', icon: 'stats-chart-outline', color: '#F59E0B', route: '/manage-rollup', ownerOnly: true },
+
+  // ── Stock ──
+  { key: 'stock', group: 'Stock', title: 'Stock', desc: 'View levels, receive & adjust', icon: 'cube-outline', color: Colors.primary, route: '/manage-stock' },
+  { key: 'stocktake', group: 'Stock', title: 'Stock Take', desc: 'Count shelves & reconcile', icon: 'clipboard-outline', color: Colors.indigo, route: '/manage-stocktake' },
+  { key: 'batches', group: 'Stock', title: 'Batches & Expiry', desc: 'Track and write off expiry', icon: 'time-outline', color: Colors.warning, route: '/manage-batches' },
+  { key: 'transfers', group: 'Stock', title: 'Stock Transfers', desc: 'Move stock between stores', icon: 'swap-horizontal-outline', color: Colors.success, route: '/manage-transfers' },
+  { key: 'purchase', group: 'Stock', title: 'Purchase Orders', desc: 'Order & receive from suppliers', icon: 'document-text-outline', color: '#0EA5E9', route: '/manage-purchase-orders' },
+  { key: 'suppliers', group: 'Stock', title: 'Suppliers', desc: 'Contacts & payment terms', icon: 'business-outline', color: '#64748B', route: '/manage-suppliers' },
+  { key: 'damaged', group: 'Stock', title: 'Damaged Goods', desc: 'Log breakages & write-offs', icon: 'trash-outline', color: Colors.error, route: '/manage-damaged' },
+
+  // ── Service (mode-specific) ──
+  { key: 'tables', group: 'Service', title: 'Tables', desc: 'Floor status & open bills', icon: 'grid-outline', color: '#F97316', route: '/manage-tables', modes: ['HOSPITALITY', 'FAST_FOOD', 'BAR_TAB'] },
+  { key: 'kitchen', group: 'Service', title: 'Kitchen Display', desc: 'Live tickets & mark ready', icon: 'restaurant-outline', color: '#EA580C', route: '/manage-kitchen', modes: ['HOSPITALITY', 'FAST_FOOD', 'BAR_TAB'] },
+
+  // ── People ──
+  { key: 'hr', group: 'People', title: 'Team & Attendance', desc: 'Who is clocked in today', icon: 'time-outline', color: '#0D9488', route: '/manage-attendance' },
+  { key: 'users', group: 'People', title: 'Staff', desc: 'Add & manage team members', icon: 'people-outline', color: '#0EA5E9', route: '/manage-users', ownerOnly: true },
+  { key: 'settings', group: 'People', title: 'Business Settings', desc: 'Receipt, tax & store config', icon: 'options-outline', color: '#8B5CF6', route: '/manage-settings', ownerOnly: true },
 ];
 
 export default function ManageScreen() {
   const router = useRouter();
   const role = useAuthStore((s) => s.user?.role);
+  const { mode, label: modeLabel } = usePosMode();
+  const { items: approvals } = useApprovals();
   const { businessId, storeId, stores } = useActiveStore();
   const setOverride = useActiveStoreOverride((s) => s.setOverride);
   const [showStorePicker, setShowStorePicker] = useState(false);
@@ -98,13 +132,26 @@ export default function ManageScreen() {
   const lowStockCount = lowStockQ.data?.length ?? 0;
   const expiringCount = expiringQ.data?.length ?? 0;
 
-  const cards = NAV_CARDS.filter((c) => !c.ownerOnly || canManageBusiness(role));
+  /**
+   * Two independent gates: the business type (does this vertical have tables at
+   * all?) and the role. An ACCOUNTANT reaches this tab via `canSeeFinance` but
+   * must only ever see the money tiles — never stock or staff.
+   */
+  const cards = NAV_CARDS.filter((c) => {
+    if (!isVisibleForMode(c.modes, mode)) return false;
+    if (c.ownerOnly) return canManageBusiness(role);
+    if (!canManage(role)) return !!c.finance && canSeeFinance(role);
+    return true;
+  });
+
+  const groups = GROUP_ORDER.map((g) => ({ group: g, items: cards.filter((c) => c.group === g) }))
+    .filter((g) => g.items.length > 0);
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Manage</Text>
-        <Text style={styles.headerSub}>Run your business from the floor</Text>
+        <Text style={styles.headerSub}>{modeLabel} · run it from the floor</Text>
       </View>
 
       <ScrollView
@@ -150,24 +197,35 @@ export default function ManageScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Navigation cards */}
-        <Text style={styles.sectionTitle}>Tools</Text>
-        <View style={styles.cardGrid}>
-          {cards.map((card) => (
-            <TouchableOpacity
-              key={card.key}
-              style={styles.navCard}
-              onPress={() => router.push(card.route as any)}
-              activeOpacity={0.85}
-            >
-              <View style={[styles.navIcon, { backgroundColor: card.color + '18' }]}>
-                <Ionicons name={card.icon} size={22} color={card.color} />
-              </View>
-              <Text style={styles.navTitle}>{card.title}</Text>
-              <Text style={styles.navDesc}>{card.desc}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        {/* Navigation cards, grouped */}
+        {groups.map(({ group, items }) => (
+          <View key={group}>
+            <Text style={styles.sectionTitle}>{group}</Text>
+            <View style={styles.cardGrid}>
+              {items.map((card) => (
+                <TouchableOpacity
+                  key={card.key}
+                  style={styles.navCard}
+                  onPress={() => router.push(card.route as any)}
+                  activeOpacity={0.85}
+                >
+                  <View style={[styles.navIcon, { backgroundColor: card.color + '18' }]}>
+                    <Ionicons name={card.icon} size={22} color={card.color} />
+                    {card.key === 'approvals' && approvals.length > 0 && (
+                      <View style={styles.tileBadge}>
+                        <Text style={styles.tileBadgeText}>
+                          {approvals.length > 99 ? '99+' : approvals.length}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.navTitle}>{card.title}</Text>
+                  <Text style={styles.navDesc}>{card.desc}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        ))}
       </ScrollView>
 
       <Modal visible={showStorePicker} animationType="slide" transparent onRequestClose={() => setShowStorePicker(false)}>
@@ -276,6 +334,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 2,
   },
+  tileBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 5,
+    borderRadius: 10,
+    backgroundColor: Colors.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: Colors.card,
+  },
+  tileBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800' },
   navTitle: { fontSize: 15, fontWeight: '700', color: Colors.text },
   navDesc: { fontSize: 12, color: Colors.textSecondary, lineHeight: 16 },
 });

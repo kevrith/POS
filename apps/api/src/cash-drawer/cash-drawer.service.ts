@@ -161,9 +161,18 @@ export class CashDrawerService {
     return { session, ...summary, summary, generatedAt: new Date().toISOString() };
   }
 
+  /**
+   * Every till currently open, with the cashier's name and live expected cash.
+   *
+   * CashDrawerSession has no `cashier` relation, so names are resolved with one
+   * extra User query rather than a join. The running summary is attached here
+   * instead of being fetched per-session by the caller — the mobile oversight
+   * screen lists all tills at once, and N+1 requests over a phone connection is
+   * the difference between instant and unusable.
+   */
   async getActiveSessions(storeId: string | undefined, businessId?: string) {
     if (!storeId && !businessId) return [];
-    return this.prisma.cashDrawerSession.findMany({
+    const sessions = await this.prisma.cashDrawerSession.findMany({
       where: {
         status: 'OPEN',
         ...(storeId ? { storeId } : {}),
@@ -171,6 +180,22 @@ export class CashDrawerService {
       },
       orderBy: { tillNumber: 'asc' },
     });
+    if (sessions.length === 0) return [];
+
+    const cashiers = await this.prisma.user.findMany({
+      where: { id: { in: [...new Set(sessions.map((s) => s.cashierId))] } },
+      select: { id: true, name: true },
+    });
+    const nameById = new Map(cashiers.map((c) => [c.id, c.name]));
+
+    const summaries = await Promise.all(sessions.map((s) => this.buildSummary(s)));
+
+    return sessions.map((session, i) => ({
+      ...session,
+      cashierName: nameById.get(session.cashierId) ?? 'Unknown',
+      summary: summaries[i],
+      expectedCashCents: summaries[i].expectedClosingCents,
+    }));
   }
 
   /**

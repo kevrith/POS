@@ -145,6 +145,21 @@ export default function SettingsScreen() {
           </View>
         </TouchableOpacity>
 
+        {/* My HR — self-service, every role. Cashiers and waiters never see the
+            Manage tab, so clock-in has to live here. */}
+        <TouchableOpacity style={styles.card} onPress={() => router.push('/my-hr' as never)} activeOpacity={0.7}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#0D9488' + '18', justifyContent: 'center', alignItems: 'center' }}>
+              <Ionicons name="time-outline" size={20} color="#0D9488" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: Colors.text }}>My HR</Text>
+              <Text style={{ fontSize: 12, color: Colors.textSecondary, marginTop: 1 }}>Clock in/out, leave, advances & shifts</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={Colors.textSecondary} />
+          </View>
+        </TouchableOpacity>
+
         {/* User Profile */}
         <Text style={styles.sectionTitle}>Account</Text>
         <View style={styles.card}>

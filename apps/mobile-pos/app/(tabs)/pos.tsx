@@ -18,6 +18,7 @@ import { useState, useMemo } from 'react';
 import { mobileApi, formatKES } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth';
 import { useActiveStore } from '../../lib/useActiveStore';
+import { usePosMode } from '../../lib/usePosMode';
 import { useCartStore } from '../../stores/cart';
 import { useHeldSalesStore } from '../../stores/heldSales';
 import { Colors } from '../../constants/theme';
@@ -85,6 +86,8 @@ export default function POSScreen() {
   const qc = useQueryClient();
   const { user } = useAuthStore();
   const { businessId, storeId } = useActiveStore();
+  const { can } = usePosMode();
+  const hasDineIn = can('tables');
 
   const {
     items: cartItems,
@@ -288,6 +291,13 @@ export default function POSScreen() {
           <TouchableOpacity style={[styles.iconBtn, { backgroundColor: Colors.indigo }]} onPress={() => setShowCustomerPicker(true)}>
             <Ionicons name="person" size={20} color="#FFFFFF" />
           </TouchableOpacity>
+          {/* Dine-in floor. Waiters never see the Manage tab, so the table
+              picker has to hang off the POS screen for them. */}
+          {hasDineIn && (
+            <TouchableOpacity style={[styles.iconBtn, { backgroundColor: '#F97316' }]} onPress={() => router.push('/manage-tables' as any)}>
+              <Ionicons name="grid" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Customer chip */}

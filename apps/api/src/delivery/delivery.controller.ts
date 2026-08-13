@@ -1,7 +1,9 @@
-import { Controller, Post, Get, Put, Body, Param, Query, UseGuards, Patch, Delete } from '@nestjs/common';
+import { Controller, Post, Get, Put, Body, Param, Query, Req, UseGuards, Patch, Delete } from '@nestjs/common';
 import { DeliveryService } from './delivery.service';
 import { JwtAuthGuard, Public } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../auth/tenant.guard';
+import type { Request } from 'express';
+import type { AuthUser } from '../auth/auth.service';
 
 @UseGuards(JwtAuthGuard, TenantGuard)
 @Controller('delivery')
@@ -99,12 +101,28 @@ export class DeliveryController {
     return this.deliveryService.updateDriverLocation(dto);
   }
 
+  /** Latest position of every driver reporting in — the dispatch map reads this.
+   *  Business comes from the token, not the query: TenantGuard rejects a MISMATCHED
+   *  businessId but lets a missing one through, and a missing one here would widen
+   *  the query to every tenant's drivers. */
+  @Get('driver-locations')
+  async getActiveDriverLocations(
+    @Req() req: Request & { user: AuthUser },
+    @Query('sinceMinutes') sinceMinutes?: string,
+  ) {
+    return this.deliveryService.getActiveDriverLocations(
+      req.user.businessId,
+      sinceMinutes ? Number(sinceMinutes) : undefined,
+    );
+  }
+
   @Get('driver-locations/:driverId')
   async getDriverLocations(
     @Param('driverId') driverId: string,
+    @Req() req: Request & { user: AuthUser },
     @Query('since') since?: string,
   ) {
-    return this.deliveryService.getDriverLocations(driverId, since);
+    return this.deliveryService.getDriverLocations(driverId, req.user.businessId, since);
   }
 
   @Post('zones')

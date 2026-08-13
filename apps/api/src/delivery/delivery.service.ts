@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -183,7 +184,18 @@ export class DeliveryService {
     return location;
   }
 
-  async getDriverLocations(driverId: string, since?: string) {
+  /**
+   * A driver's recent pings. `businessId` is required and checked against the driver's
+   * own business — location history is about the most sensitive thing here, and without
+   * the check anyone holding a driver's UUID could read another tenant's movements.
+   */
+  async getDriverLocations(driverId: string, businessId: string, since?: string) {
+    const driver = await this.prisma.user.findFirst({
+      where: { id: driverId, businessId },
+      select: { id: true },
+    });
+    if (!driver) throw new NotFoundException('Driver not found in this business');
+
     const where: any = { driverId };
     if (since) {
       where.timestamp = { gte: new Date(since) };
@@ -194,6 +206,81 @@ export class DeliveryService {
       orderBy: { timestamp: 'desc' },
       take: 100,
     });
+  }
+
+  /**
+   * Last known position of every driver in the business, for the dispatch map. One
+   * query instead of the browser looping per driver, and it carries the driver's name
+   * and open-delivery count so the map can label the pin.
+   *
+   * There is deliberately no time cut-off. The driver app only reports while it is
+   * open, so a driver who locks their phone stops pinging — dropping them from the
+   * response would erase the very thing dispatch needs ("last seen off Ngong Road at
+   * 14:05"). The age of the fix goes to the client, which greys out and labels it.
+   * `sinceMinutes` is there for callers that genuinely only want live drivers.
+   */
+  async getActiveDriverLocations(businessId: string, sinceMinutes?: number) {
+    const drivers = await this.prisma.user.findMany({
+      where: { businessId, role: 'DRIVER' },
+      select: { id: true, name: true, phone: true },
+    });
+    if (drivers.length === 0) return [];
+
+    const driverIds = drivers.map((d) => d.id);
+
+    // DISTINCT ON walks the (driverId, timestamp) index and stops at the newest row
+    // per driver, so this stays cheap however long the location history grows.
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        driverId: string; lat: number; lng: number;
+        heading: number | null; speed: number | null; accuracy: number | null;
+        timestamp: Date;
+      }>
+    >(Prisma.sql`
+      SELECT DISTINCT ON ("driverId")
+        "driverId", "lat", "lng", "heading", "speed", "accuracy", "timestamp"
+      FROM "DriverLocation"
+      WHERE "driverId" IN (${Prisma.join(driverIds)})
+      ${sinceMinutes
+        // The cut-off is computed in SQL, not bound as a JS Date: `timestamp` is
+        // `timestamp without time zone` holding UTC, so a bound instant gets compared
+        // in the session's zone and the window lands hours off.
+        // ::int because Prisma binds JS numbers as bigint, which make_interval rejects.
+        ? Prisma.sql`AND "timestamp" >= (now() AT TIME ZONE 'utc') - make_interval(mins => ${sinceMinutes}::int)`
+        : Prisma.empty}
+      ORDER BY "driverId", "timestamp" DESC
+    `);
+    const latest = new Map(rows.map((r) => [r.driverId, r]));
+
+    const openCounts = await this.prisma.deliveryOrder.groupBy({
+      by: ['driverId'],
+      where: {
+        businessId,
+        driverId: { in: driverIds },
+        status: { in: ['ASSIGNED', 'IN_TRANSIT', 'ARRIVING'] },
+      },
+      _count: { _all: true },
+    });
+    const openByDriver = new Map(openCounts.map((c) => [c.driverId, c._count._all]));
+
+    return drivers
+      .map((d) => {
+        const ping = latest.get(d.id);
+        if (!ping) return null;
+        return {
+          driverId: d.id,
+          name: d.name,
+          phone: d.phone ?? null,
+          lat: ping.lat,
+          lng: ping.lng,
+          heading: ping.heading,
+          speed: ping.speed,
+          accuracy: ping.accuracy,
+          timestamp: ping.timestamp,
+          activeDeliveries: openByDriver.get(d.id) ?? 0,
+        };
+      })
+      .filter((d): d is NonNullable<typeof d> => d !== null);
   }
 
   async getDeliveryTracking(orderNumber: string) {

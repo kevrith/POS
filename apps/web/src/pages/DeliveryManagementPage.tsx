@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
+import LiveMap, { type MapPoint } from '../components/LiveMap';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -32,7 +33,16 @@ interface CourierIntegration {
   id: string; provider: string; apiKey: string; webhookUrl?: string; isActive: boolean;
 }
 interface DriverLocation {
-  driverId: string; lat: number; lng: number; heading?: number; timestamp: string;
+  driverId: string;
+  name: string;
+  phone?: string | null;
+  lat: number;
+  lng: number;
+  heading?: number;
+  speed?: number | null;
+  accuracy?: number | null;
+  timestamp: string;
+  activeDeliveries: number;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -53,27 +63,112 @@ const fmtTime = (d: string) => new Date(d).toLocaleString('en-KE', { hour: '2-di
 
 // ─── Live GPS Map (simple canvas-based) ──────────────────────────────────────
 
+/** The driver app only reports while it is open, so positions go stale the moment a
+ *  driver locks their phone. The last known fix is still the useful answer — it is kept
+ *  and labelled with its age rather than hidden, since a stale pin mistaken for a live
+ *  one is the only genuinely bad outcome. */
+const LIVE_WITHIN_MS  = 2 * 60 * 1000;
+const STALE_AFTER_MS  = 10 * 60 * 1000;
+
+function minutesAgo(iso: string) {
+  return Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+}
+
+/** "just now" / "6m ago" / "3h ago" / "13 Aug 14:05" — an owner should never have to
+ *  work out whether a position is minutes or days old. */
+function formatAge(iso: string): string {
+  const mins = minutesAgo(iso);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return new Date(iso).toLocaleString('en-KE', {
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+  });
+}
+
+type Freshness = 'live' | 'recent' | 'stale';
+function freshnessOf(iso: string): Freshness {
+  const age = Date.now() - new Date(iso).getTime();
+  if (age <= LIVE_WITHIN_MS) return 'live';
+  if (age <= STALE_AFTER_MS) return 'recent';
+  return 'stale';
+}
+
 function LiveGPSMap({ deliveries, driverLocations }: { deliveries: DeliveryOrder[]; driverLocations: DriverLocation[] }) {
-  const activeDeliveries = deliveries.filter(d => ['ASSIGNED', 'ARRIVING'].includes(d.status));
+  const activeDeliveries = deliveries.filter(d => ['ASSIGNED', 'IN_TRANSIT', 'ARRIVING'].includes(d.status));
+
+  const points: MapPoint[] = driverLocations.map(d => {
+    const fresh = freshnessOf(d.timestamp);
+    return {
+      id: d.driverId,
+      lat: d.lat,
+      lng: d.lng,
+      label: d.name,
+      // Stale pins say "last seen" outright so nobody reads an old fix as live.
+      sublabel: fresh === 'stale' ? `last seen ${formatAge(d.timestamp)}` : formatAge(d.timestamp),
+      color: fresh === 'stale' ? '#6b7280' : d.activeDeliveries > 0 ? '#2563eb' : '#16a34a',
+      muted: fresh === 'stale',
+    };
+  });
+  const staleCount = driverLocations.filter(d => freshnessOf(d.timestamp) === 'stale').length;
+
   return (
-    <div className="bg-gray-900 rounded-xl h-64 flex flex-col items-center justify-center relative overflow-hidden">
-      <div className="absolute inset-0 opacity-10"
-        style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
-      <div className="relative z-10 text-center">
-        <MapPin className="w-10 h-10 text-blue-400 mx-auto mb-2" />
-        <p className="text-white font-semibold">{activeDeliveries.length} Active Deliveries</p>
-        <p className="text-gray-400 text-sm mt-1">{driverLocations.length} drivers reporting location</p>
-        <div className="mt-3 flex flex-wrap gap-2 justify-center">
-          {activeDeliveries.slice(0, 4).map(d => (
-            <span key={d.id} className={`px-2 py-0.5 rounded-full text-xs ${STATUS_COLORS[d.status]}`}>
-              #{d.orderNumber} — {d.status}
-            </span>
-          ))}
+    <div className="space-y-2">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-3 text-sm">
+          <span className="font-semibold text-gray-900 dark:text-white">
+            {activeDeliveries.length} active {activeDeliveries.length === 1 ? 'delivery' : 'deliveries'}
+          </span>
+          <span className="text-gray-500 dark:text-gray-400">
+            {driverLocations.length} {driverLocations.length === 1 ? 'driver' : 'drivers'} reporting
+          </span>
         </div>
-        <p className="text-gray-500 text-xs mt-3">
-          Integrate Google Maps/Leaflet for full live map
-        </p>
+        <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-600" /> on a delivery</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-600" /> free</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-500" /> last known</span>
+        </div>
       </div>
+
+      <LiveMap
+        points={points}
+        height={320}
+        emptyMessage="No driver has reported a position yet. Drivers appear here once they sign in to the Kastra Driver app."
+      />
+
+      {staleCount > 0 && (
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          {staleCount} {staleCount === 1 ? 'driver has' : 'drivers have'} gone quiet — the app
+          only reports while it is open, so this is their last known position, not where they are now.
+        </p>
+      )}
+
+      {driverLocations.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {driverLocations.map(d => {
+            const stale = freshnessOf(d.timestamp) === 'stale';
+            return (
+              <a
+                key={d.driverId}
+                href={`https://www.openstreetmap.org/?mlat=${d.lat}&mlon=${d.lng}#map=16/${d.lat}/${d.lng}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-xs hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                title="Open this position in OpenStreetMap"
+              >
+                <MapPin className={`w-3.5 h-3.5 ${stale ? 'text-gray-400' : 'text-blue-600'}`} />
+                <span className="font-medium text-gray-900 dark:text-white">{d.name}</span>
+                <span className="text-gray-500 dark:text-gray-400">
+                  {d.activeDeliveries > 0 ? `${d.activeDeliveries} stop${d.activeDeliveries === 1 ? '' : 's'}` : 'free'}
+                  {' · '}
+                  {stale ? `last seen ${formatAge(d.timestamp)}` : formatAge(d.timestamp)}
+                </span>
+              </a>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -136,17 +231,8 @@ export default function DeliveryManagementPage() {
 
   const { data: driverLocations = [] } = useQuery<DriverLocation[]>({
     queryKey: ['driver-locations', businessId],
-    queryFn: async () => {
-      const res: DriverLocation[] = [];
-      for (const d of drivers) {
-        try {
-          const locs = await api.get<DriverLocation[]>(`/delivery/driver-locations/${d.id}?since=${new Date(Date.now() - 600000).toISOString()}`);
-          if (locs?.length) res.push(locs[0]);
-        } catch { /* ignore */ }
-      }
-      return res;
-    },
-    enabled: !!businessId && drivers.length > 0 && tab === 'dispatch',
+    queryFn: () => api.get<DriverLocation[]>(`/delivery/driver-locations?businessId=${businessId}`),
+    enabled: !!businessId && tab === 'dispatch',
     refetchInterval: 15000,
   });
 

@@ -22,6 +22,19 @@ interface DeliveryTracking {
   trackingUrl: string;
 }
 
+/** A position stops being "live" once the driver's app has been quiet this long. */
+const LIVE_WITHIN_MS = 2 * 60 * 1000;
+
+function timeAgo(iso: string): string {
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return days === 1 ? 'yesterday' : `${days}d ago`;
+}
+
 const statusConfig = {
   PENDING: { label: 'Order Confirmed', color: 'bg-blue-500', icon: Package },
   ASSIGNED: { label: 'Driver Assigned', color: 'bg-yellow-500', icon: Truck },
@@ -209,25 +222,39 @@ export default function DeliveryTrackingPage() {
           </div>
         </div>
 
-        {/* Live driver location (OpenStreetMap — no API key) */}
+        {/* Driver location (OpenStreetMap — no API key) */}
         {['ASSIGNED', 'IN_TRANSIT', 'ARRIVING'].includes(delivery.status) && delivery.driverLocations.length > 0 && (() => {
           const loc = delivery.driverLocations[0];
           const d = 0.006; // ~600m box around the driver
           const bbox = `${loc.lng - d},${loc.lat - d},${loc.lng + d},${loc.lat + d}`;
           const src = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${loc.lat},${loc.lng}`;
+          // The driver app only reports while it is open, so the newest fix can be
+          // hours old. Calling that "Live" misleads the customer into waiting at the
+          // door — show the age instead once it stops being current.
+          const isLive = Date.now() - new Date(loc.timestamp).getTime() <= LIVE_WITHIN_MS;
           return (
             <div className="bg-white rounded-2xl p-6 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-gray-900">Driver Location</h3>
-                <span className="flex items-center gap-1.5 text-xs font-medium text-green-600">
-                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" /> Live
-                </span>
+                {isLive ? (
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-green-600">
+                    <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" /> Live
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-gray-500">
+                    <span className="w-2 h-2 bg-gray-400 rounded-full" /> Last seen {timeAgo(loc.timestamp)}
+                  </span>
+                )}
               </div>
               <div className="rounded-lg overflow-hidden border border-gray-200">
                 <iframe title="Driver location" src={src} className="w-full h-56" loading="lazy" />
               </div>
               <div className="flex items-center justify-between mt-2">
-                <p className="text-xs text-gray-500">Updated {formatTime(loc.timestamp)}</p>
+                <p className="text-xs text-gray-500">
+                  {isLive
+                    ? `Updated ${formatTime(loc.timestamp)}`
+                    : `Position from ${formatTime(loc.timestamp)} — the driver's app is not reporting right now`}
+                </p>
                 <a href={`https://www.openstreetmap.org/?mlat=${loc.lat}&mlon=${loc.lng}#map=16/${loc.lat}/${loc.lng}`}
                   target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline">Open in maps →</a>
               </div>

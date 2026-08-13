@@ -398,10 +398,32 @@ export default function PaymentScreen() {
     refetchOnMount: 'always',
   });
 
+  // Loyalty — points balance + program value (only when a customer is selected)
+  const { data: loyalty } = useQuery<{ points?: number; loyaltyPoints?: number }>({
+    queryKey: ['loyalty-customer', customerId],
+    queryFn: () => mobileApi.get(`/loyalty/customer/${customerId}`),
+    enabled: !!customerId,
+    staleTime: 30_000,
+  });
+  const { data: loyaltyProgram } = useQuery<{ pointValueCents?: number; minRedemption?: number }>({
+    queryKey: ['loyalty-program', businessId],
+    queryFn: () => mobileApi.get(`/loyalty/program?businessId=${businessId}`),
+    enabled: !!businessId && !!customerId,
+    staleTime: 5 * 60_000,
+  });
+  const [redeemLoyalty, setRedeemLoyalty] = useState(false);
+
   const taxType = (bizSettings?.taxType as string | undefined) ?? 'NONE';
   const subtotal = subtotalCents();
   const promoDiscount = promoDiscountCents();
   const subtotalAfterPromo = Math.max(0, subtotal - promoDiscount);
+
+  // Loyalty redeem: use as many points as possible without over-discounting.
+  const pointValueCents = loyaltyProgram?.pointValueCents ?? 0;
+  const availablePoints = loyalty?.points ?? loyalty?.loyaltyPoints ?? 0;
+  const maxRedeemPoints = pointValueCents > 0 ? Math.min(availablePoints, Math.floor(subtotalAfterPromo / pointValueCents)) : 0;
+  const redeemPoints = redeemLoyalty ? maxRedeemPoints : 0;
+  const loyaltyDiscountCents = redeemPoints * pointValueCents;
   const { taxCents, exTaxCents, label: taxLabel } = calculateTax(subtotalAfterPromo, taxType);
   const serviceChargeCents = bizSettings?.serviceChargeDefault
     ? Math.round((subtotalAfterPromo * (bizSettings?.serviceChargeRate ?? 0)) / 100)
@@ -430,7 +452,7 @@ export default function PaymentScreen() {
   const rawDiscount = discountType === 'percent'
     ? Math.round((subtotalAfterPromo * discountVal) / 100)
     : Math.round(discountVal * 100);
-  const effectiveDiscount = Math.min(rawDiscount, subtotalAfterPromo);
+  const effectiveDiscount = Math.min(rawDiscount + loyaltyDiscountCents, subtotalAfterPromo);
   const goodsAfterDiscount = subtotalAfterPromo - effectiveDiscount;
   const totalAfterDiscount = goodsAfterDiscount + serviceChargeCents;
   const { taxCents: finalTax } = calculateTax(goodsAfterDiscount, taxType);
@@ -496,6 +518,10 @@ export default function PaymentScreen() {
     },
     onSuccess: (result: SaleResult) => {
       qc.invalidateQueries({ queryKey: ['sales'] });
+      // Deduct redeemed loyalty points against the created sale.
+      if (customerId && redeemPoints > 0) {
+        void mobileApi.post('/loyalty/redeem', { customerId, points: redeemPoints, saleId: result.id }).catch(() => {});
+      }
       setReceiptSnap({
         businessName: bizSettings?.name ?? 'KASTRA POS',
         receiptNumber: result.receiptNumber,
@@ -603,6 +629,26 @@ export default function PaymentScreen() {
               </View>
             )}
           </View>
+
+          {/* Loyalty redeem */}
+          {customerId && availablePoints > 0 && pointValueCents > 0 && maxRedeemPoints > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>Loyalty Points</Text>
+              <TouchableOpacity style={styles.card} activeOpacity={0.8} onPress={() => setRedeemLoyalty((v) => !v)}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <Ionicons name={redeemLoyalty ? 'checkbox' : 'square-outline'} size={22} color={Colors.primary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: Colors.text }}>
+                      Redeem {maxRedeemPoints} pts → −{formatKES(loyaltyDiscountCents || maxRedeemPoints * pointValueCents)}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: Colors.textSecondary, marginTop: 1 }}>
+                      {availablePoints} points available{customerName ? ` · ${customerName}` : ''}
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            </>
+          )}
 
           {/* Sale-level Discount */}
           <Text style={styles.sectionTitle}>Discount (Optional)</Text>

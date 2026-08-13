@@ -209,14 +209,14 @@ export class DeliveryService {
       throw new NotFoundException('Delivery order not found');
     }
 
-    // Get driver locations if assigned
-    let driverLocations = [];
+    // Get the assigned driver's latest positions. We match by driverId (not by
+    // deliveryOrderId) because the driver app broadcasts foreground location that
+    // isn't always tagged to a specific order — a driver is in one physical place
+    // at a time, so their newest pings are what the customer wants to see.
+    let driverLocations: Array<{ lat: number; lng: number; timestamp: Date }> = [];
     if (delivery.driverId) {
       driverLocations = await this.prisma.driverLocation.findMany({
-        where: {
-          driverId: delivery.driverId,
-          deliveryOrderId: delivery.id,
-        },
+        where: { driverId: delivery.driverId },
         orderBy: { timestamp: 'desc' },
         take: 10,
       });

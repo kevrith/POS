@@ -1,14 +1,63 @@
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, RefreshControl,
+  View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, RefreshControl, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import { apiGet, formatKES } from '../../lib/api';
 import { useSessionStore } from '../../stores/session';
 import { useCartStore } from '../../stores/cart';
 import { Colors, STATUS_COLORS } from '../../constants/theme';
+
+interface TrackData {
+  status: string;
+  driverLocations: Array<{ lat: number; lng: number; timestamp: string }>;
+}
+
+/** Live driver-location map (OpenStreetMap embed — no API key). */
+function TrackDriverModal({ orderNumber, onClose }: { orderNumber: string; onClose: () => void }) {
+  const { data, isLoading } = useQuery<TrackData>({
+    queryKey: ['track', orderNumber],
+    queryFn: () => apiGet<TrackData>(`/delivery/orders/${encodeURIComponent(orderNumber)}/track`),
+    refetchInterval: 15_000,
+  });
+  const loc = data?.driverLocations?.[0];
+  const d = 0.006;
+  const html = loc
+    ? `<html><body style="margin:0"><iframe width="100%" height="100%" frameborder="0" style="border:0"
+        src="https://www.openstreetmap.org/export/embed.html?bbox=${loc.lng - d},${loc.lat - d},${loc.lng + d},${loc.lat + d}&layer=mapnik&marker=${loc.lat},${loc.lng}"></iframe></body></html>`
+    : '';
+
+  return (
+    <Modal visible animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: Colors.background }}>
+        <View style={s.modalHeader}>
+          <Text style={s.modalTitle}>Track driver · {orderNumber}</Text>
+          <TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={Colors.text} /></TouchableOpacity>
+        </View>
+        {isLoading ? (
+          <View style={s.center}><ActivityIndicator size="large" color={Colors.primary} /></View>
+        ) : loc ? (
+          <>
+            <WebView source={{ html }} style={{ flex: 1 }} />
+            <View style={s.trackFoot}>
+              <View style={s.liveDot} />
+              <Text style={s.trackFootText}>Live · updated {new Date(loc.timestamp).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}</Text>
+            </View>
+          </>
+        ) : (
+          <View style={s.center}>
+            <Ionicons name="location-outline" size={48} color={Colors.border} />
+            <Text style={s.emptySub}>The driver hasn't shared their location yet. Check back shortly.</Text>
+          </View>
+        )}
+      </SafeAreaView>
+    </Modal>
+  );
+}
 
 interface UnifiedItem { itemId?: string; name: string; quantity: number; unitPriceCents: number; totalCents: number }
 interface UnifiedOrder {
@@ -40,6 +89,7 @@ export default function OrdersScreen() {
   const router = useRouter();
   const customerName = useSessionStore((s) => s.customerName);
   const { addItem, updateQty, clearCart } = useCartStore();
+  const [trackingOrder, setTrackingOrder] = useState<string | null>(null);
 
   const { data: orders = [], isLoading, refetch, isRefetching } = useQuery<UnifiedOrder[]>({
     queryKey: ['my-orders'],
@@ -119,12 +169,20 @@ export default function OrdersScreen() {
                     </View>
                     {o.etaMinutes ? <Text style={s.eta}>ETA {o.etaMinutes}m</Text> : null}
                   </View>
-                  {o.items.some((i) => i.itemId) ? (
-                    <TouchableOpacity style={s.reorderBtn} onPress={() => reorder(o)}>
-                      <Ionicons name="repeat" size={14} color={Colors.primary} />
-                      <Text style={s.reorderText}>Reorder</Text>
-                    </TouchableOpacity>
-                  ) : null}
+                  <View style={s.rowGap}>
+                    {o.channel === 'ONLINE' && ['ASSIGNED', 'IN_TRANSIT'].includes(o.status) ? (
+                      <TouchableOpacity style={s.trackBtn} onPress={() => setTrackingOrder(o.orderNumber)}>
+                        <Ionicons name="navigate" size={14} color="#FFFFFF" />
+                        <Text style={s.trackBtnText}>Track</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                    {o.items.some((i) => i.itemId) ? (
+                      <TouchableOpacity style={s.reorderBtn} onPress={() => reorder(o)}>
+                        <Ionicons name="repeat" size={14} color={Colors.primary} />
+                        <Text style={s.reorderText}>Reorder</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
                 </View>
 
                 {o.invoiceNumber ? (
@@ -135,6 +193,7 @@ export default function OrdersScreen() {
           }}
         />
       )}
+      {trackingOrder ? <TrackDriverModal orderNumber={trackingOrder} onClose={() => setTrackingOrder(null)} /> : null}
     </SafeAreaView>
   );
 }
@@ -171,6 +230,13 @@ const s = StyleSheet.create({
   payText: { fontSize: 10, fontWeight: '700' },
   eta: { fontSize: 11, color: Colors.textSecondary },
   reorderBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9, borderWidth: 1, borderColor: Colors.primary },
+  trackBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9, backgroundColor: Colors.primary },
+  trackBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: Colors.border, backgroundColor: Colors.card },
+  modalTitle: { fontSize: 16, fontWeight: '700', color: Colors.text },
+  trackFoot: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 14, backgroundColor: Colors.card, borderTopWidth: 1, borderTopColor: Colors.border },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E' },
+  trackFootText: { fontSize: 13, color: Colors.textSecondary },
   reorderText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
   invoice: { fontSize: 11, color: Colors.textSecondary },
 });

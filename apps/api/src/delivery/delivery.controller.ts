@@ -1,6 +1,6 @@
 import { Controller, Post, Get, Put, Body, Param, Query, UseGuards, Patch, Delete } from '@nestjs/common';
 import { DeliveryService } from './delivery.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtAuthGuard, Public } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../auth/tenant.guard';
 
 @UseGuards(JwtAuthGuard, TenantGuard)
@@ -64,6 +64,7 @@ export class DeliveryController {
     return this.deliveryService.cancelDeliveryOrder(id);
   }
 
+  @Public() // customer-facing tracking link — no login required
   @Get('orders/:orderNumber/track')
   async getDeliveryTracking(@Param('orderNumber') orderNumber: string) {
     return this.deliveryService.getDeliveryTracking(orderNumber);

@@ -2,11 +2,13 @@ import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import { useAuthStore } from '../../stores/auth';
-import { canManage } from '../../lib/roles';
+import { canManage, canSeeFinance } from '../../lib/roles';
 
 export default function TabsLayout() {
   const role = useAuthStore((s) => s.user?.role);
-  const showManage = canManage(role);
+  // ACCOUNTANT is not a manager but still needs the money tiles (expenses, day
+  // close); the Manage screen itself filters the grid down for them.
+  const showManage = canManage(role) || canSeeFinance(role);
 
   return (
     <Tabs

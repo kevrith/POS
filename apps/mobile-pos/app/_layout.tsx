@@ -10,6 +10,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '../stores/auth';
 import { usePushNotifications } from '@pos/mobile-push';
 import { routeForTap } from '../lib/push';
+import { Colors } from '../constants/theme';
 
 /** Watches the auth token. If it gets cleared while the app is open (e.g. the
  *  API wrapper detected an expired session on a 401), bounce to the login
@@ -93,19 +94,17 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        {/* White icons on a solid blue bar.
+        {/* Dark icons on the app's own light surface.
 
-            Asking Android for DARK icons did not work on the target device: the
-            system kept drawing white ones over the light grey background, so the
-            clock and battery were invisible. Rather than keep fighting an API
-            the device ignores, this goes the other way — keep the white icons
-            the device insists on and put a dark background behind them. Legible
-            regardless of whether windowLightStatusBar is honoured.
+            The blue bar this used to ask for never appeared on device: every
+            screen wraps in SafeAreaView edges={['top']} painted Colors.background,
+            so the strip behind the clock is light grey no matter what colour the
+            bar is set to. White icons on light grey are invisible — hence dark
+            ones, matching the driver app, which is legible on the same device.
 
-            `translucent: false` in app.json stops the app drawing underneath the
-            bar, so the system paints it and every screen's top inset collapses
-            to zero instead of showing Colors.background grey. */}
-        <StatusBar style="light" backgroundColor="#1D4ED8" translucent={false} />
+            backgroundColor is kept in step so the bar still matches if a device
+            does paint it itself. */}
+        <StatusBar style="dark" backgroundColor={Colors.background} translucent={false} />
         <DeepLinkHandler />
         <PushHandler />
         <SessionGuard />

@@ -8,6 +8,7 @@ import { useOfflineSync } from '../lib/useOfflineSync';
 import { useAuthStore } from '../stores/auth';
 import { usePushNotifications } from '@pos/mobile-push';
 import { routeForTap } from '../lib/push';
+import { Colors } from '../constants/theme';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 60_000 } },
@@ -50,8 +51,11 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        {/* dark icons — the app uses light backgrounds, keeps battery/clock legible */}
-        <StatusBar style="dark" />
+        {/* Dark icons — every screen paints its top inset Colors.background (orange-50),
+            so white icons disappear into it. backgroundColor and translucent are set
+            explicitly to match app.json; without them Android keeps its theme default
+            (light icons) until the first runtime paint. */}
+        <StatusBar style="dark" backgroundColor={Colors.background} translucent={false} />
         <OfflineSyncRunner />
         <PushHandler />
         <SessionGuard />

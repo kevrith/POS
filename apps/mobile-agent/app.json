@@ -65,6 +65,11 @@
         "origin": false
       }
     },
-    "owner": "kevrith"
+    "owner": "kevrith",
+    "androidStatusBar": {
+      "barStyle": "dark-content",
+      "backgroundColor": "#FFF7ED",
+      "translucent": false
+    }
   }
 }

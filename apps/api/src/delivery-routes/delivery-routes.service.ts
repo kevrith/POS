@@ -33,15 +33,24 @@ export class DeliveryRoutesService {
   constructor(private prisma: PrismaService) {}
 
   async createRun(businessId: string, dto: CreateRunDto) {
+    // A bad/foreign routeId would otherwise surface as an opaque FK 500.
+    const route = await this.prisma.salesRoute.findFirst({
+      where: { id: dto.routeId ?? '', businessId },
+      select: { id: true },
+    });
+    if (!route) throw new BadRequestException('Select a valid route for this run');
+
+    const orderIds = dto.orderIds ?? [];
+
     const run = await this.prisma.deliveryRun.create({
       data: {
         businessId,
-        routeId: dto.routeId,
-        date: new Date(dto.date),
-        driverUserId: dto.driverUserId,
+        routeId: route.id,
+        date: DeliveryRoutesService.startOfDay(dto.date),
+        driverUserId: dto.driverUserId || null,
         status: 'PLANNED',
         orders: {
-          create: dto.orderIds.map((fieldOrderId, idx) => ({
+          create: orderIds.map((fieldOrderId, idx) => ({
             fieldOrderId,
             sortOrder: idx,
             status: 'PENDING',
@@ -52,10 +61,12 @@ export class DeliveryRoutesService {
     });
 
     // Update field orders to DISPATCHED
-    await this.prisma.fieldOrder.updateMany({
-      where: { id: { in: dto.orderIds } },
-      data: { status: 'DISPATCHED', dispatchedAt: new Date() },
-    });
+    if (orderIds.length > 0) {
+      await this.prisma.fieldOrder.updateMany({
+        where: { id: { in: orderIds }, businessId },
+        data: { status: 'DISPATCHED', dispatchedAt: new Date() },
+      });
+    }
 
     await this.syncDeliveryOrders(run.id);
 
@@ -64,27 +75,51 @@ export class DeliveryRoutesService {
 
   async getRuns(
     businessId: string,
-    filters: { routeId?: string; date?: string; status?: string },
+    filters: {
+      routeId?: string;
+      date?: string;
+      startDate?: string;
+      endDate?: string;
+      status?: string;
+    },
   ) {
     const where: Record<string, unknown> = { businessId };
     if (filters.routeId) where.routeId = filters.routeId;
     if (filters.status) where.status = filters.status;
-    if (filters.date) {
-      const d = new Date(filters.date);
-      const next = new Date(d);
-      next.setDate(next.getDate() + 1);
-      where.date = { gte: d, lt: next };
+
+    // `date` is a single day; startDate/endDate are an inclusive range (the runs
+    // board sends the range, the driver app sends a single day).
+    const from = filters.startDate ?? filters.date;
+    const to = filters.endDate ?? filters.date;
+    if (from || to) {
+      const range: { gte?: Date; lt?: Date } = {};
+      if (from) range.gte = DeliveryRoutesService.startOfDay(from);
+      if (to) range.lt = DeliveryRoutesService.startOfNextDay(to);
+      where.date = range;
     }
 
-    return this.prisma.deliveryRun.findMany({
+    const runs = await this.prisma.deliveryRun.findMany({
       where,
       orderBy: { date: 'desc' },
       include: {
         route: { select: { id: true, name: true, color: true } },
         driver: { select: { id: true, name: true } },
-        _count: { select: { orders: true } },
+        orders: { select: { fieldOrder: { select: { totalCents: true } } } },
+        expenses: { select: { amountCents: true } },
       },
     });
+
+    // Clients render a flat card (route name, driver, order count, value) — keep the
+    // nested relations too so existing callers reading `run.route` keep working.
+    return runs.map(({ orders, expenses, ...run }) => ({
+      ...run,
+      routeName: run.route?.name ?? null,
+      driverName: run.driver?.name ?? null,
+      orderCount: orders.length,
+      totalCents: orders.reduce((s, o) => s + (o.fieldOrder?.totalCents ?? 0), 0),
+      expenseTotalCents: expenses.reduce((s, e) => s + e.amountCents, 0),
+      _count: { orders: orders.length },
+    }));
   }
 
   async getRun(id: string, businessId: string) {
@@ -118,7 +153,23 @@ export class DeliveryRoutesService {
       },
     });
     if (!run) throw new NotFoundException('Delivery run not found');
-    return run;
+
+    const orders = run.orders.map((o) => ({
+      ...o,
+      orderNumber: o.fieldOrder?.orderNumber ?? null,
+      customerName: o.fieldOrder?.customer?.name ?? null,
+      totalCents: o.fieldOrder?.totalCents ?? 0,
+    }));
+
+    return {
+      ...run,
+      routeName: run.route?.name ?? null,
+      driverName: run.driver?.name ?? null,
+      orders,
+      orderCount: orders.length,
+      totalCents: orders.reduce((s, o) => s + o.totalCents, 0),
+      expenseTotalCents: run.expenses.reduce((s, e) => s + e.amountCents, 0),
+    };
   }
 
   /**
@@ -325,21 +376,36 @@ export class DeliveryRoutesService {
     });
     if (!run) throw new NotFoundException('Delivery run not found');
 
+    if (!dto.recordedBy) {
+      throw new BadRequestException('recordedBy is required');
+    }
+    const amountCents = Math.round(Number(dto.amountCents));
+    if (!Number.isFinite(amountCents) || amountCents <= 0) {
+      throw new BadRequestException('Expense amount must be greater than zero');
+    }
+    if (!dto.category) {
+      throw new BadRequestException('Expense category is required');
+    }
+
     return this.prisma.routeExpense.create({
       data: {
         businessId,
         deliveryRunId,
         category: dto.category,
-        amountCents: dto.amountCents,
-        description: dto.description,
+        amountCents,
+        description: dto.description ?? null,
         recordedBy: dto.recordedBy,
       },
     });
   }
 
-  async captureProof(deliveryRunOrderId: string, dto: CaptureProofDto) {
-    const runOrder = await this.prisma.deliveryRunOrder.findUnique({
-      where: { id: deliveryRunOrderId },
+  async captureProof(
+    deliveryRunOrderId: string,
+    businessId: string,
+    dto: CaptureProofDto,
+  ) {
+    const runOrder = await this.prisma.deliveryRunOrder.findFirst({
+      where: { id: deliveryRunOrderId, deliveryRun: { businessId } },
       include: { fieldOrder: { select: { id: true } } },
     });
     if (!runOrder) throw new NotFoundException('Delivery run order not found');
@@ -501,6 +567,19 @@ export class DeliveryRoutesService {
     );
 
     return results;
+  }
+
+  /** `DeliveryRun.date` is a DATE column — compare against day boundaries, not timestamps. */
+  private static startOfDay(raw: string): Date {
+    const d = new Date(raw);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  private static startOfNextDay(raw: string): Date {
+    const d = DeliveryRoutesService.startOfDay(raw);
+    d.setDate(d.getDate() + 1);
+    return d;
   }
 
   /** `SalesRoute.deliveryDays` is a JSON-encoded string array — never let a bad value throw. */

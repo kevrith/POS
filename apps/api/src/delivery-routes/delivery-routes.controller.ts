@@ -15,6 +15,8 @@ import { DeliveryRoutesService } from './delivery-routes.service';
 import type { Request } from 'express';
 import type { AuthUser } from '../auth/auth.service';
 
+type AuthedRequest = Request & { user: AuthUser };
+
 @Controller('delivery-routes')
 @UseGuards(JwtAuthGuard)
 export class DeliveryRoutesController {
@@ -22,80 +24,85 @@ export class DeliveryRoutesController {
 
   @Post('runs')
   createRun(
+    @Req() req: AuthedRequest,
     @Body()
     body: {
-      businessId: string;
+      businessId?: string;
       routeId: string;
       date: string;
       driverUserId?: string;
       orderIds: string[];
     },
   ) {
-    const { businessId, ...dto } = body;
-    return this.service.createRun(businessId, dto);
+    const { businessId: _ignored, ...dto } = body;
+    return this.service.createRun(req.user.businessId, dto);
   }
 
   @Get('runs')
   getRuns(
-    @Query('businessId') businessId: string,
+    @Req() req: AuthedRequest,
     @Query('routeId') routeId?: string,
     @Query('date') date?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
     @Query('status') status?: string,
   ) {
-    return this.service.getRuns(businessId, { routeId, date, status });
+    return this.service.getRuns(req.user.businessId, {
+      routeId,
+      date,
+      startDate,
+      endDate,
+      status,
+    });
   }
 
   @Get('runs/:id')
-  getRun(
-    @Param('id') id: string,
-    @Query('businessId') businessId: string,
-  ) {
-    return this.service.getRun(id, businessId);
+  getRun(@Param('id') id: string, @Req() req: AuthedRequest) {
+    return this.service.getRun(id, req.user.businessId);
   }
 
   @Post('runs/:id/orders')
   addOrderToRun(
     @Param('id') id: string,
-    @Req() req: Request & { user: AuthUser },
+    @Req() req: AuthedRequest,
     @Body() body: { fieldOrderId: string; businessId?: string },
   ) {
     return this.service.addOrderToRun(id, req.user.businessId, body.fieldOrderId);
   }
 
   @Delete('run-orders/:id')
-  removeOrderFromRun(
-    @Param('id') id: string,
-    @Req() req: Request & { user: AuthUser },
-  ) {
+  removeOrderFromRun(@Param('id') id: string, @Req() req: AuthedRequest) {
     return this.service.removeOrderFromRun(id, req.user.businessId);
   }
 
   @Post('runs/:id/expenses')
   addExpense(
     @Param('id') id: string,
-    @Query('businessId') businessId: string,
+    @Req() req: AuthedRequest,
     @Body()
     dto: {
       category: string;
       amountCents: number;
       description?: string;
-      recordedBy: string;
+      recordedBy?: string;
     },
   ) {
-    return this.service.addExpense(id, businessId, dto);
+    // Clients don't send recordedBy — the expense belongs to whoever is logged in.
+    return this.service.addExpense(id, req.user.businessId, {
+      ...dto,
+      recordedBy: req.user.id,
+    });
   }
 
   @Patch('runs/:id/complete')
-  markComplete(
-    @Param('id') id: string,
-    @Body() body: { businessId: string },
-  ) {
-    return this.service.markRunComplete(id, body.businessId);
+  markComplete(@Param('id') id: string, @Req() req: AuthedRequest) {
+    return this.service.markRunComplete(id, req.user.businessId);
   }
 
   @Post('run-orders/:id/proof')
   captureProof(
     @Param('id') id: string,
+    @Req() req: AuthedRequest,
     @Body()
     dto: {
       signatureBase64?: string;
@@ -106,15 +113,18 @@ export class DeliveryRoutesController {
       notes?: string;
     },
   ) {
-    return this.service.captureProof(id, dto);
+    return this.service.captureProof(id, req.user.businessId, dto);
   }
 
   @Get('profitability')
   getRouteProfitability(
-    @Query('businessId') businessId: string,
+    @Req() req: AuthedRequest,
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
   ) {
-    return this.service.getRouteProfitability(businessId, { startDate, endDate });
+    return this.service.getRouteProfitability(req.user.businessId, {
+      startDate,
+      endDate,
+    });
   }
 }

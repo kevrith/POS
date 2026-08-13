@@ -2908,6 +2908,8 @@ model CustomerPortalSession {
   sessionToken String   @unique // hashed SHA-256
   otpHash      String?  // hashed OTP for verification
   otpExpiresAt DateTime?
+  otpAttempts  Int      @default(0) // failed verifies against the current OTP
+  otpSentAt    DateTime? // last time a code went out — enforces the resend cooldown
   expiresAt    DateTime
   createdAt    DateTime @default(now())
   customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)

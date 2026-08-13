@@ -9,6 +9,7 @@ import {
   UseGuards,
   Request,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Public } from '../auth/jwt-auth.guard';
 import { PortalAuthGuard } from './portal-auth.guard';
 import { CustomerPortalService } from './customer-portal.service';
@@ -25,11 +26,17 @@ export class CustomerPortalController {
 
   // ─── Public auth routes ───────────────────────────────────────────────────
 
+  /* The per-phone cooldown and attempt cap live in the service; these throttles are the
+     other axis — one caller walking through many phone numbers, which no per-phone
+     counter can see. Each request-otp also creates a Customer row and spends an SMS. */
+
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('auth/request-otp')
   requestOtp(@Body() body: { phone: string; businessId: string; name?: string }) {
     return this.service.requestOtp(body.phone, body.businessId, body.name);
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('auth/verify-otp')
   verifyOtp(@Body() body: { phone: string; otp: string; businessId: string; name?: string }) {
     return this.service.verifyOtp(body.phone, body.otp, body.businessId, body.name);

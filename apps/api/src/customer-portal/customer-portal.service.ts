@@ -9,6 +9,11 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { createHash, randomBytes } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 
+/** Wrong codes allowed against a single OTP before it is burned. */
+const OTP_MAX_ATTEMPTS = 5;
+/** Minimum gap between two codes to the same phone — one SMS credit each. */
+const OTP_RESEND_COOLDOWN_MS = 60_000;
+
 @Injectable()
 export class CustomerPortalService {
   constructor(
@@ -37,15 +42,35 @@ export class CustomerPortalService {
       isNew = true;
     }
 
+    // A resend costs an SMS credit and resets the guess counter, so it must not be
+    // free to spam. Anyone hammering this is either a bot or a customer tapping twice.
+    const pending = await this.prisma.customerPortalSession.findUnique({
+      where: { sessionToken: `otp-placeholder-${customer.id}` },
+      select: { otpSentAt: true },
+    });
+    if (pending?.otpSentAt) {
+      const waited = Date.now() - pending.otpSentAt.getTime();
+      if (waited < OTP_RESEND_COOLDOWN_MS) {
+        const seconds = Math.ceil((OTP_RESEND_COOLDOWN_MS - waited) / 1000);
+        throw new BadRequestException(
+          `A code was just sent. Please wait ${seconds}s before asking for another.`,
+        );
+      }
+    }
+
     // Generate 6-digit OTP
     const otp = String(Math.floor(100000 + Math.random() * 900000));
     const otpHash = createHash('sha256').update(otp).digest('hex');
     const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
 
-    // Upsert the OTP-placeholder session for this customer
+    // Upsert the OTP-placeholder session for this customer. A fresh code resets the
+    // attempt counter — the limit is per code, not a permanent lockout of the phone.
     await this.prisma.customerPortalSession.upsert({
       where: { sessionToken: `otp-placeholder-${customer.id}` },
-      update: { otpHash, otpExpiresAt, expiresAt: otpExpiresAt },
+      update: {
+        otpHash, otpExpiresAt, expiresAt: otpExpiresAt,
+        otpAttempts: 0, otpSentAt: new Date(),
+      },
       create: {
         customerId: customer.id,
         phone,
@@ -53,6 +78,8 @@ export class CustomerPortalService {
         otpHash,
         otpExpiresAt,
         expiresAt: otpExpiresAt,
+        otpAttempts: 0,
+        otpSentAt: new Date(),
       },
     });
 
@@ -96,12 +123,46 @@ export class CustomerPortalService {
     });
 
     if (!session) {
-      throw new UnauthorizedException('OTP has expired or not found');
+      // A burned code is expired, so it lands here too. Tell a customer who simply
+      // mistyped five times what to do, instead of "expired or not found".
+      const burned = await this.prisma.customerPortalSession.findFirst({
+        where: { customerId: customer.id, phone, otpAttempts: { gte: OTP_MAX_ATTEMPTS } },
+        select: { id: true },
+      });
+      throw new UnauthorizedException(
+        burned
+          ? 'Too many incorrect codes. Please request a new one.'
+          : 'OTP has expired or not found',
+      );
+    }
+
+    // Six digits is only a million guesses — trivial to script without a cap. Burn the
+    // code once the limit is hit so the attacker has to trigger a new SMS (which the
+    // cooldown then paces) rather than carrying on against the same one.
+    if (session.otpAttempts >= OTP_MAX_ATTEMPTS) {
+      throw new UnauthorizedException(
+        'Too many incorrect codes. Please request a new one.',
+      );
     }
 
     const inputHash = createHash('sha256').update(otp).digest('hex');
     if (inputHash !== session.otpHash) {
-      throw new UnauthorizedException('Invalid OTP');
+      const attempts = session.otpAttempts + 1;
+      await this.prisma.customerPortalSession.update({
+        where: { id: session.id },
+        // Expiring the code on the last strike stops a slow grinder from sitting on
+        // one OTP; the row stays so the attempt count is not wiped by retrying.
+        data: {
+          otpAttempts: attempts,
+          ...(attempts >= OTP_MAX_ATTEMPTS ? { otpExpiresAt: new Date() } : {}),
+        },
+      });
+      const left = OTP_MAX_ATTEMPTS - attempts;
+      throw new UnauthorizedException(
+        left > 0
+          ? `Invalid code. ${left} attempt${left === 1 ? '' : 's'} left.`
+          : 'Too many incorrect codes. Please request a new one.',
+      );
     }
 
     // First verified login for this phone → treat as a brand-new registration.

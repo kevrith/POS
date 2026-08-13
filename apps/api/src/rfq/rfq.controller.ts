@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -11,6 +12,8 @@ import {
 } from '@nestjs/common';
 import { RFQService } from './rfq.service';
 import { TenantGuard } from '../auth/tenant.guard';
+import { Public } from '../auth/jwt-auth.guard';
+import { SkipSubscriptionCheck } from '../auth/subscription.guard';
 import type { Request } from 'express';
 import type { AuthUser } from '../auth/auth.service';
 
@@ -21,6 +24,7 @@ interface CreateRFQDto {
   notes?: string;
   deadline?: string;
   items: Array<{ itemId: string; quantityNeeded: number }>;
+  supplierIds?: string[];
 }
 
 @UseGuards(TenantGuard)
@@ -48,6 +52,29 @@ export class RFQController {
   @Patch(':id/send')
   send(@Param('id') id: string, @Req() req: Request & { user: AuthUser }) {
     return this.svc.send(id, req.user.businessId);
+  }
+
+  @Get(':id/recipients')
+  getRecipients(@Param('id') id: string, @Req() req: Request & { user: AuthUser }) {
+    return this.svc.getRecipients(id, req.user.businessId);
+  }
+
+  @Post(':id/invites')
+  invite(
+    @Param('id') id: string,
+    @Body() body: { supplierIds: string[] },
+    @Req() req: Request & { user: AuthUser },
+  ) {
+    return this.svc.invite(id, req.user.businessId, body.supplierIds);
+  }
+
+  @Delete(':id/invites/:rid')
+  removeInvite(
+    @Param('id') id: string,
+    @Param('rid') responseId: string,
+    @Req() req: Request & { user: AuthUser },
+  ) {
+    return this.svc.removeInvite(id, responseId, req.user.businessId);
   }
 
   @Post(':id/responses')
@@ -81,5 +108,36 @@ export class RFQController {
     @Req() req: Request & { user: AuthUser },
   ) {
     return this.svc.getComparison(rfqId, req.user.businessId);
+  }
+}
+
+/**
+ * The supplier-facing half. No JWT: suppliers are not users of the system, so the
+ * unguessable token in the link is the credential. Registered separately because the
+ * authed controller sits behind TenantGuard.
+ */
+@Public()
+@SkipSubscriptionCheck()
+@Controller('rfq-quote')
+export class PublicRFQQuoteController {
+  constructor(private readonly svc: RFQService) {}
+
+  @Get(':token')
+  get(@Param('token') token: string) {
+    return this.svc.getPublicQuote(token);
+  }
+
+  @Post(':token')
+  submit(
+    @Param('token') token: string,
+    @Body()
+    dto: {
+      quotedPriceCents: number;
+      deliveryDays?: number;
+      validUntil?: string;
+      notes?: string;
+    },
+  ) {
+    return this.svc.submitPublicQuote(token, dto);
   }
 }

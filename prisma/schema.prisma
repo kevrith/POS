@@ -668,7 +668,9 @@ model Supplier {
   id                      String                   @id @default(uuid())
   businessId              String
   name                    String
-  contact                 String?
+  contact                 String?                  // legacy free-text "phone / email" — prefer phone/email below
+  phone                   String?                  // E.164-ish, used for WhatsApp
+  email                   String?
   address                 String?
   paymentTerms            String?
   creditLimitCents        Int?
@@ -1927,12 +1929,16 @@ model RFQResponse {
   deliveryDays     Int?
   validUntil       DateTime?
   notes            String?
-  status           String    @default("PENDING")
+  status           String    @default("PENDING") // INVITED | PENDING | AWARDED | REJECTED
+  token            String?   @unique // opaque link the supplier uses to quote themselves
+  invitedAt        DateTime?
+  respondedAt      DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   rfq              RFQ       @relation(fields: [rfqId], references: [id], onDelete: Cascade)
   supplier         Supplier  @relation(fields: [supplierId], references: [id])
 
+  @@unique([rfqId, supplierId])
   @@index([rfqId])
   @@index([supplierId])
 }

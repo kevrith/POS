@@ -65,6 +65,7 @@ const OnlineOrdersPage = lazy(() => import('./pages/OnlineOrdersPage'));
 const ShopPage = lazy(() => import('./pages/ShopPage'));
 const AffiliatePortalPage = lazy(() => import('./pages/AffiliatePortalPage'));
 const DeliveryTrackingPage = lazy(() => import('./pages/DeliveryTrackingPage'));
+const SupplierQuotePage = lazy(() => import('./pages/SupplierQuotePage'));
 const FuelPumpPage = lazy(() => import('./pages/FuelPumpPage'));
 const CybercafePage = lazy(() => import('./pages/CybercafePage'));
 const CyberKioskPage = lazy(() => import('./pages/CyberKioskPage'));
@@ -241,6 +242,14 @@ export default function App() {
     return (
       <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
         <Routes><Route path="/track/:orderNumber" element={<DeliveryTrackingPage />} /></Routes>
+      </Suspense>
+    );
+  }
+  // Suppliers quoting on an RFQ — no login, the token in the link is the credential.
+  if (window.location.pathname.startsWith('/quote/')) {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+        <Routes><Route path="/quote/:token" element={<SupplierQuotePage />} /></Routes>
       </Suspense>
     );
   }

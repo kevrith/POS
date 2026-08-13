@@ -61,6 +61,8 @@ export class SupplierService {
     businessId: string;
     name: string;
     contact?: string;
+    phone?: string;
+    email?: string;
     address?: string;
     paymentTerms?: string;
     creditLimitCents?: number;
@@ -90,6 +92,8 @@ export class SupplierService {
   async update(id: string, data: Partial<{
     name: string;
     contact: string;
+    phone: string;
+    email: string;
     address: string;
     paymentTerms: string;
     creditLimitCents: number;

@@ -15,6 +15,8 @@ interface Supplier {
   id: string;
   name: string;
   contact?: string;
+  phone?: string;
+  email?: string;
   address?: string;
   paymentTerms?: string;
   creditLimitCents?: number;
@@ -1214,7 +1216,7 @@ export default function SuppliersPage() {
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
   const [poStatusFilter, setPOStatusFilter] = useState('ALL');
   const [supplierForm, setSupplierForm] = useState({
-    name: '', contact: '', address: '', paymentTerms: '', creditLimit: '',
+    name: '', contact: '', phone: '', email: '', address: '', paymentTerms: '', creditLimit: '',
   });
   const [formError, setFormError] = useState('');
 
@@ -1414,6 +1416,8 @@ export default function SuppliersPage() {
         businessId,
         name: supplierForm.name,
         contact: supplierForm.contact || undefined,
+        phone: supplierForm.phone || undefined,
+        email: supplierForm.email || undefined,
         address: supplierForm.address || undefined,
         paymentTerms: supplierForm.paymentTerms || undefined,
         creditLimitCents: supplierForm.creditLimit
@@ -1423,7 +1427,7 @@ export default function SuppliersPage() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['suppliers'] });
       setShowAddSupplier(false);
-      setSupplierForm({ name: '', contact: '', address: '', paymentTerms: '', creditLimit: '' });
+      setSupplierForm({ name: '', contact: '', phone: '', email: '', address: '', paymentTerms: '', creditLimit: '' });
       setFormError('');
     },
     onError: (err) => setFormError(err instanceof Error ? err.message : 'Failed'),
@@ -1434,6 +1438,8 @@ export default function SuppliersPage() {
       api.patch(`/suppliers/${editingSupplier!.id}`, {
         name: supplierForm.name,
         contact: supplierForm.contact || undefined,
+        phone: supplierForm.phone || undefined,
+        email: supplierForm.email || undefined,
         address: supplierForm.address || undefined,
         paymentTerms: supplierForm.paymentTerms || undefined,
         creditLimitCents: supplierForm.creditLimit
@@ -1443,7 +1449,7 @@ export default function SuppliersPage() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['suppliers'] });
       setEditingSupplier(null);
-      setSupplierForm({ name: '', contact: '', address: '', paymentTerms: '', creditLimit: '' });
+      setSupplierForm({ name: '', contact: '', phone: '', email: '', address: '', paymentTerms: '', creditLimit: '' });
       setFormError('');
     },
     onError: (err) => setFormError(err instanceof Error ? err.message : 'Failed'),
@@ -1581,7 +1587,7 @@ export default function SuppliersPage() {
                     <Pencil className="w-4 h-4 text-blue-600" />
                     Edit Supplier — {editingSupplier.name}
                   </h2>
-                  <button onClick={() => { setEditingSupplier(null); setFormError(''); setSupplierForm({ name: '', contact: '', address: '', paymentTerms: '', creditLimit: '' }); }} className="p-1 hover:bg-gray-100 rounded-lg">
+                  <button onClick={() => { setEditingSupplier(null); setFormError(''); setSupplierForm({ name: '', contact: '', phone: '', email: '', address: '', paymentTerms: '', creditLimit: '' }); }} className="p-1 hover:bg-gray-100 rounded-lg">
                     <X className="w-5 h-5 text-gray-500" />
                   </button>
                 </div>
@@ -1601,11 +1607,22 @@ export default function SuppliersPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Contact</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
                     <input
-                      value={supplierForm.contact}
-                      onChange={(e) => setSupplierForm({ ...supplierForm, contact: e.target.value })}
-                      placeholder="Phone / email"
+                      value={supplierForm.phone}
+                      onChange={(e) => setSupplierForm({ ...supplierForm, phone: e.target.value })}
+                      placeholder="07XX XXX XXX"
+                      className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Used to send RFQs on WhatsApp.</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={supplierForm.email}
+                      onChange={(e) => setSupplierForm({ ...supplierForm, email: e.target.value })}
+                      placeholder="sales@supplier.co.ke"
                       className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
@@ -1655,7 +1672,7 @@ export default function SuppliersPage() {
                     Save Changes
                   </button>
                   <button
-                    onClick={() => { setEditingSupplier(null); setFormError(''); setSupplierForm({ name: '', contact: '', address: '', paymentTerms: '', creditLimit: '' }); }}
+                    onClick={() => { setEditingSupplier(null); setFormError(''); setSupplierForm({ name: '', contact: '', phone: '', email: '', address: '', paymentTerms: '', creditLimit: '' }); }}
                     className="px-6 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50"
                   >
                     Cancel
@@ -1688,11 +1705,22 @@ export default function SuppliersPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Contact</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
                     <input
-                      value={supplierForm.contact}
-                      onChange={(e) => setSupplierForm({ ...supplierForm, contact: e.target.value })}
-                      placeholder="Phone / email"
+                      value={supplierForm.phone}
+                      onChange={(e) => setSupplierForm({ ...supplierForm, phone: e.target.value })}
+                      placeholder="07XX XXX XXX"
+                      className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Used to send RFQs on WhatsApp.</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={supplierForm.email}
+                      onChange={(e) => setSupplierForm({ ...supplierForm, email: e.target.value })}
+                      placeholder="sales@supplier.co.ke"
                       className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
@@ -1789,7 +1817,9 @@ export default function SuppliersPage() {
                           <div className="font-semibold text-gray-800">{s.name}</div>
                           {s.address && <div className="text-xs text-gray-400 mt-0.5">{s.address}</div>}
                         </td>
-                        <td className="px-4 py-4 text-sm text-gray-600 hidden sm:table-cell">{s.contact ?? '—'}</td>
+                        <td className="px-4 py-4 text-sm text-gray-600 hidden sm:table-cell">
+                          {[s.phone, s.email].filter(Boolean).join(' · ') || s.contact || '—'}
+                        </td>
                         <td className="px-4 py-4 text-sm text-gray-600 hidden md:table-cell">{s.paymentTerms ?? '—'}</td>
                         <td className="px-4 py-4 text-right">
                           <span className={`font-semibold text-sm ${s.outstandingBalanceCents > 0 ? 'text-red-600' : 'text-gray-400'}`}>
@@ -1803,6 +1833,8 @@ export default function SuppliersPage() {
                               setSupplierForm({
                                 name: s.name,
                                 contact: s.contact ?? '',
+                                phone: s.phone ?? '',
+                                email: s.email ?? '',
                                 address: s.address ?? '',
                                 paymentTerms: s.paymentTerms ?? '',
                                 creditLimit: s.creditLimitCents ? String(s.creditLimitCents / 100) : '',

@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { FileText, Plus, ChevronDown, ChevronRight, Send, Award, X, Loader2, RefreshCw } from 'lucide-react';
+import {
+  FileText, Plus, ChevronDown, ChevronRight, Send, Award, X, Loader2, RefreshCw,
+  MessageCircle, Mail, Link2,
+} from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 
@@ -25,7 +28,24 @@ interface RFQResponse {
   deliveryDays?: number | null;
   validUntil?: string | null;
   notes?: string;
-  status: 'PENDING' | 'AWARDED' | 'REJECTED';
+  status: 'INVITED' | 'PENDING' | 'AWARDED' | 'REJECTED';
+  respondedAt?: string | null;
+}
+
+/** Everything needed to hand the RFQ to one supplier — built server-side so the
+ *  WhatsApp text and the emailed copy stay identical. */
+interface Recipient {
+  responseId: string;
+  supplierId: string;
+  supplierName: string;
+  phone: string | null;
+  email: string | null;
+  status: string;
+  invitedAt?: string | null;
+  respondedAt?: string | null;
+  quoteUrl: string | null;
+  message: string;
+  whatsappUrl: string | null;
 }
 
 interface RFQ {
@@ -43,6 +63,8 @@ interface RFQ {
 interface Supplier {
   id: string;
   name: string;
+  phone?: string | null;
+  email?: string | null;
 }
 
 interface InventoryItem {
@@ -72,6 +94,7 @@ function statusBadge(status: RFQStatus) {
 function responseBadge(status: string) {
   if (status === 'AWARDED') return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
   if (status === 'REJECTED') return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
+  if (status === 'INVITED') return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300';
   return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400';
 }
 
@@ -80,6 +103,153 @@ function fmt(cents: number) {
 }
 
 const emptyItem = (): RFQFormItem => ({ itemId: '', quantityNeeded: 1 });
+
+// ─── Supplier invitations / share panel ───────────────────────────────────────
+
+/**
+ * WhatsApp goes out through a wa.me deep link rather than an API: it opens the user's
+ * own WhatsApp with the text filled in, which needs no Meta Business approval and lands
+ * on the number suppliers already reply to. Email is sent server-side on Send RFQ.
+ */
+function RecipientsPanel({
+  rfq, suppliers, onChanged,
+}: {
+  rfq: RFQ;
+  suppliers: Supplier[];
+  onChanged: () => void;
+}) {
+  const [adding, setAdding] = useState('');
+
+  const { data: recipients = [], isLoading, refetch } = useQuery<Recipient[]>({
+    queryKey: ['rfq-recipients', rfq.id],
+    queryFn: () => api.get(`/suppliers/rfq/${rfq.id}/recipients`),
+  });
+
+  const inviteMut = useMutation({
+    mutationFn: (supplierId: string) =>
+      api.post(`/suppliers/rfq/${rfq.id}/invites`, { supplierIds: [supplierId] }),
+    onSuccess: () => {
+      toast.success('Supplier invited');
+      setAdding('');
+      void refetch();
+      onChanged();
+    },
+    onError: (err: Error) => toast.error(err.message || 'Could not invite supplier'),
+  });
+
+  const removeMut = useMutation({
+    mutationFn: (responseId: string) =>
+      api.delete(`/suppliers/rfq/${rfq.id}/invites/${responseId}`),
+    onSuccess: () => { void refetch(); onChanged(); },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const invitedIds = new Set(recipients.map((r) => r.supplierId));
+  const available = suppliers.filter((s) => !invitedIds.has(s.id));
+
+  async function copyLink(url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success('Quote link copied');
+    } catch {
+      toast.error('Could not copy — long-press the link to copy it manually');
+    }
+  }
+
+  return (
+    <div>
+      <h4 className="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-2">
+        Suppliers Invited
+      </h4>
+
+      {isLoading ? (
+        <p className="text-xs text-gray-400">Loading…</p>
+      ) : recipients.length === 0 ? (
+        <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">
+          No suppliers invited yet. Add one below, then hit Send RFQ.
+        </p>
+      ) : (
+        <div className="space-y-2 mb-3">
+          {recipients.map((r) => (
+            <div
+              key={r.responseId}
+              className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-800 px-3 py-2"
+            >
+              <span className="text-sm font-medium text-gray-900 dark:text-white">{r.supplierName}</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${responseBadge(r.status)}`}>
+                {r.status === 'INVITED' ? 'AWAITING QUOTE' : r.status}
+              </span>
+
+              <div className="flex items-center gap-1.5 ml-auto">
+                {r.whatsappUrl ? (
+                  <a
+                    href={r.whatsappUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition-colors"
+                  >
+                    <MessageCircle className="w-3 h-3" /> WhatsApp
+                  </a>
+                ) : (
+                  <span
+                    className="text-[11px] text-amber-600 dark:text-amber-400"
+                    title="Add a phone number on the supplier to enable WhatsApp"
+                  >
+                    No phone
+                  </span>
+                )}
+                {r.email && (
+                  <span className="text-[11px] text-gray-400" title={r.email}>
+                    <Mail className="w-3 h-3 inline" /> emailed on send
+                  </span>
+                )}
+                {r.quoteUrl && (
+                  <button
+                    onClick={() => void copyLink(r.quoteUrl!)}
+                    className="inline-flex items-center gap-1 px-2 py-1 border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 text-xs rounded-lg transition-colors"
+                    title="Copy the supplier's quote link"
+                  >
+                    <Link2 className="w-3 h-3" /> Link
+                  </button>
+                )}
+                {r.status === 'INVITED' && (
+                  <button
+                    onClick={() => removeMut.mutate(r.responseId)}
+                    disabled={removeMut.isPending}
+                    className="p-1 text-gray-400 hover:text-red-600 rounded"
+                    title="Remove invitation"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {rfq.status !== 'AWARDED' && available.length > 0 && (
+        <div className="flex gap-2">
+          <select
+            value={adding}
+            onChange={(e) => setAdding(e.target.value)}
+            className="flex-1 px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">Invite a supplier…</option>
+            {available.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+          <button
+            onClick={() => adding && inviteMut.mutate(adding)}
+            disabled={!adding || inviteMut.isPending}
+            className="inline-flex items-center gap-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors"
+          >
+            <Plus className="w-3 h-3" /> Invite
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── Quote entry form ─────────────────────────────────────────────────────────
 
@@ -166,6 +336,7 @@ export default function RFQPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [formNotes, setFormNotes] = useState('');
   const [formDeadline, setFormDeadline] = useState('');
+  const [formSupplierIds, setFormSupplierIds] = useState<string[]>([]);
   const [formItems, setFormItems] = useState<RFQFormItem[]>([emptyItem()]);
 
   // ─── Queries ──────────────────────────────────────────────────────────────
@@ -198,16 +369,31 @@ export default function RFQPage() {
       setTab('list');
       setFormNotes('');
       setFormDeadline('');
+      setFormSupplierIds([]);
       setFormItems([emptyItem()]);
     },
     onError: (err: Error) => toast.error(err.message || 'Failed to create RFQ'),
   });
 
   const sendMut = useMutation({
-    mutationFn: (id: string) => api.patch(`/suppliers/rfq/${id}/send`, {}),
-    onSuccess: () => {
-      toast.success('RFQ marked as sent');
+    mutationFn: (id: string) =>
+      api.patch<{ emailed?: string[]; recipients?: Recipient[] }>(`/suppliers/rfq/${id}/send`, {}),
+    onSuccess: (res, id) => {
+      const emailed = res?.emailed?.length ?? 0;
+      const waiting = (res?.recipients ?? []).filter((r) => r.status === 'INVITED');
+      toast.success(
+        emailed > 0
+          ? `RFQ sent — emailed ${emailed} supplier${emailed !== 1 ? 's' : ''}`
+          : 'RFQ marked as sent',
+        {
+          description: waiting.some((r) => r.whatsappUrl)
+            ? 'Open the RFQ to send it on WhatsApp too.'
+            : undefined,
+        },
+      );
       qc.invalidateQueries({ queryKey: ['rfqs'] });
+      qc.invalidateQueries({ queryKey: ['rfq-recipients', id] });
+      setExpanded(id);
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -243,6 +429,7 @@ export default function RFQPage() {
       storeId: user?.storeId,
       notes: formNotes.trim() || undefined,
       deadline: formDeadline || undefined,
+      supplierIds: formSupplierIds,
       items: formItems
         .filter((i) => i.itemId.trim() && i.quantityNeeded > 0)
         .map((i) => ({ itemId: i.itemId, quantityNeeded: i.quantityNeeded })),
@@ -342,14 +529,15 @@ export default function RFQPage() {
                     <span className="text-xs text-gray-400 whitespace-nowrap">
                       {rfq.responses.length} quote{rfq.responses.length !== 1 ? 's' : ''}
                     </span>
-                    {rfq.status === 'DRAFT' && (
+                    {rfq.status !== 'AWARDED' && rfq.status !== 'CANCELLED' && (
                       <button
                         onClick={(e) => { e.stopPropagation(); sendMut.mutate(rfq.id); }}
                         disabled={sendMut.isPending}
                         className="flex items-center gap-1.5 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors ml-auto"
+                        title="Emails invited suppliers who have an email address, and marks the RFQ as sent"
                       >
                         <Send className="w-3 h-3" />
-                        Send RFQ
+                        {rfq.status === 'DRAFT' ? 'Send RFQ' : 'Resend'}
                       </button>
                     )}
                   </div>
@@ -373,6 +561,13 @@ export default function RFQPage() {
                         </div>
                       </div>
 
+                      {/* Who it goes to */}
+                      <RecipientsPanel
+                        rfq={rfq}
+                        suppliers={suppliers}
+                        onChanged={() => qc.invalidateQueries({ queryKey: ['rfqs'] })}
+                      />
+
                       {/* Supplier responses */}
                       {rfq.responses.length > 0 && (
                         <div>
@@ -389,7 +584,8 @@ export default function RFQPage() {
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                                {[...rfq.responses]
+                                {rfq.responses
+                                  .filter((r) => r.status !== 'INVITED')
                                   .sort((a, b) => a.quotedPriceCents - b.quotedPriceCents)
                                   .map((resp) => (
                                     <tr key={resp.id}>
@@ -467,6 +663,51 @@ export default function RFQPage() {
               onChange={(e) => setFormDeadline(e.target.value)}
               className="w-48 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+          </div>
+
+          {/* Suppliers to invite */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Send to suppliers
+            </label>
+            {suppliers.length === 0 ? (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                No suppliers yet — add them under Suppliers &amp; POs first. You can also invite
+                them after creating the RFQ.
+              </p>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  {suppliers.map((s) => {
+                    const on = formSupplierIds.includes(s.id);
+                    const reachable = Boolean(s.phone || s.email);
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() =>
+                          setFormSupplierIds((prev) =>
+                            on ? prev.filter((id) => id !== s.id) : [...prev, s.id],
+                          )
+                        }
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                          on
+                            ? 'bg-purple-600 border-purple-600 text-white'
+                            : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-purple-400'
+                        }`}
+                        title={reachable ? undefined : 'No phone or email on this supplier'}
+                      >
+                        {s.name}
+                        {!reachable && <span className="ml-1 opacity-60">⚠</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-gray-400 mt-1.5">
+                  Each supplier gets their own link to enter a price — you never retype a quote.
+                </p>
+              </>
+            )}
           </div>
 
           {/* Items */}

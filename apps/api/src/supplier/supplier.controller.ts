@@ -13,6 +13,8 @@ export class SupplierController {
     businessId: string;
     name: string;
     contact?: string;
+    phone?: string;
+    email?: string;
     address?: string;
     paymentTerms?: string;
     creditLimitCents?: number;
@@ -268,6 +270,8 @@ export class SupplierController {
   async update(@Param('id') id: string, @Body() data: Partial<{
     name: string;
     contact: string;
+    phone: string;
+    email: string;
     address: string;
     paymentTerms: string;
     creditLimitCents: number;

@@ -8,8 +8,9 @@
     "scheme": "kastra-pos",
     "userInterfaceStyle": "light",
     "androidStatusBar": {
-      "barStyle": "dark-content",
-      "backgroundColor": "#FFFFFF"
+      "barStyle": "light-content",
+      "backgroundColor": "#1D4ED8",
+      "translucent": false
     },
     "splash": {
       "image": "./assets/splash.png",

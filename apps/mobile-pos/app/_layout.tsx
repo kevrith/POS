@@ -93,12 +93,19 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        {/* Dark icons on a white bar. app.json used to declare the app as
-            userInterfaceStyle "dark" while the theme is light, so Android drew
-            white icons over the light grey background and the clock and battery
-            were unreadable. backgroundColor is set here too because the app.json
-            value alone does not apply on every Android version. */}
-        <StatusBar style="dark" backgroundColor="#FFFFFF" />
+        {/* White icons on a solid blue bar.
+
+            Asking Android for DARK icons did not work on the target device: the
+            system kept drawing white ones over the light grey background, so the
+            clock and battery were invisible. Rather than keep fighting an API
+            the device ignores, this goes the other way — keep the white icons
+            the device insists on and put a dark background behind them. Legible
+            regardless of whether windowLightStatusBar is honoured.
+
+            `translucent: false` in app.json stops the app drawing underneath the
+            bar, so the system paints it and every screen's top inset collapses
+            to zero instead of showing Colors.background grey. */}
+        <StatusBar style="light" backgroundColor="#1D4ED8" translucent={false} />
         <DeepLinkHandler />
         <PushHandler />
         <SessionGuard />

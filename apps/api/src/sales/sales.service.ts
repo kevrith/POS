@@ -22,6 +22,8 @@ interface FindAllOptions {
   status?: string;
   etimsSubmitted?: boolean;
   receiptNumber?: string;
+  /** Restrict to one cashier's own sales (mobile scopes non-managers to self). */
+  cashierId?: string;
   limit: number;
   offset: number;
 }
@@ -720,6 +722,7 @@ export class SalesService {
     };
 
     if (opts.storeId) where['storeId'] = opts.storeId;
+    if (opts.cashierId) where['cashierId'] = opts.cashierId;
     if (opts.status) where['status'] = opts.status;
     if (opts.etimsSubmitted !== undefined) where['etimsSubmitted'] = opts.etimsSubmitted;
     if (opts.receiptNumber) {

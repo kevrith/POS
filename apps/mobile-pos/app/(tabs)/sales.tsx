@@ -18,6 +18,7 @@ import { useState } from 'react';
 import { mobileApi, formatKES } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth';
 import { useActiveStore } from '../../lib/useActiveStore';
+import { canSeeAllSales } from '../../lib/roles';
 import { Colors } from '../../constants/theme';
 
 interface SaleItem {
@@ -55,8 +56,8 @@ interface Sale {
 interface SalesResponse {
   data: Sale[];
   total: number;
-  page: number;
   limit: number;
+  offset: number;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -112,12 +113,27 @@ export default function SalesScreen() {
   });
   const LIMIT = 20;
 
+  /**
+   * Cashiers and waiters see only their OWN sales; managers, owners and
+   * accountants see the whole store — the same line web draws on `/sales-list`.
+   * Scoped server-side via `cashierId` rather than filtered after fetching, so
+   * a colleague's takings never travel to the device at all.
+   */
+  const seesAllSales = canSeeAllSales(user?.role);
+  const ownCashierId = seesAllSales ? '' : user?.id ?? '';
+
   const { data, isLoading, refetch, isRefetching } = useQuery<SalesResponse>({
-    queryKey: ['sales', businessId, storeId, page],
+    queryKey: ['sales', businessId, storeId, page, ownCashierId],
     queryFn: () =>
       mobileApi.get<SalesResponse>(
-        `/sales?businessId=${businessId}&storeId=${storeId}&page=${page}&limit=${LIMIT}`
+        // The API paginates by `offset`, not `page` — sending `page` left every
+        // page showing the same first 20 rows.
+        `/sales?businessId=${businessId}&storeId=${storeId}&offset=${(page - 1) * LIMIT}&limit=${LIMIT}` +
+          (ownCashierId ? `&cashierId=${ownCashierId}` : '')
       ),
+    // Without an id we would silently fall back to the whole store, so hold the
+    // query until the restored session actually provides one.
+    enabled: !!businessId && !!storeId && (seesAllSales || !!ownCashierId),
     staleTime: 30_000,
   });
 
@@ -149,7 +165,7 @@ export default function SalesScreen() {
     <SafeAreaView edges={['top']} style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Sales History</Text>
+        <Text style={styles.headerTitle}>{seesAllSales ? 'Sales History' : 'My Sales'}</Text>
         <View style={styles.searchBox}>
           <Ionicons name="search" size={16} color={Colors.textSecondary} />
           <TextInput

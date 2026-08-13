@@ -66,6 +66,7 @@ export class SalesController {
     @Query('status') status?: string,
     @Query('etimsSubmitted') etimsSubmitted?: string,
     @Query('receiptNumber') receiptNumber?: string,
+    @Query('cashierId') cashierId?: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ) {
@@ -77,6 +78,7 @@ export class SalesController {
       status,
       etimsSubmitted: etimsSubmitted !== undefined ? etimsSubmitted === 'true' : undefined,
       receiptNumber,
+      cashierId,
       limit: limit ? parseInt(limit) : 50,
       offset: offset ? parseInt(offset) : 0,
     });

@@ -616,11 +616,24 @@ export interface BillData {
   totalCents: number;
   date: string;
   footer?: string;
+  /**
+   * Tax included in the total, as charged by this business. A bill is printed
+   * before the sale exists, so the caller has to supply it from the business
+   * tax settings — omit both for a business with tax turned off.
+   */
+  vatCents?: number;
+  totCents?: number;
 }
 
 export function generateBillHTML(bill: BillData): string {
-  // VAT is inclusive — extract from total (16/116)
-  const vatCents = Math.round(bill.totalCents * 16 / 116);
+  // Tax is whatever the caller charges. This used to hardcode 16/116 of the
+  // total, so a business with tax turned off (or on TOT) still printed a VAT
+  // line it never charged.
+  const vatCents = bill.vatCents ?? 0;
+  const totCents = bill.totCents ?? 0;
+  const taxLabel = totCents > 0 ? 'TOT (3%) included' : 'VAT (16%) included';
+  const taxCents = totCents > 0 ? totCents : vatCents;
+  const totalLabel = taxCents > 0 ? `TOTAL (${totCents > 0 ? 'TOT' : 'VAT'} incl.):` : 'TOTAL:';
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -655,8 +668,8 @@ export function generateBillHTML(bill: BillData): string {
     </div>
   `).join('')}
   <div class="line"></div>
-  <div class="row bold large" style="margin-bottom:4px"><span>TOTAL (VAT incl.):</span><span>KES ${(bill.totalCents / 100).toFixed(2)}</span></div>
-  <div class="row small muted"><span>  VAT (16%) included:</span><span>KES ${(vatCents / 100).toFixed(2)}</span></div>
+  <div class="row bold large" style="margin-bottom:4px"><span>${totalLabel}</span><span>KES ${(bill.totalCents / 100).toFixed(2)}</span></div>
+  ${taxCents > 0 ? `<div class="row small muted"><span>  ${taxLabel}:</span><span>KES ${(taxCents / 100).toFixed(2)}</span></div>` : ''}
   <div class="line"></div>
   ${bill.footer ? `<div class="center small" style="margin-top:6px">${bill.footer}</div>` : ''}
   <div class="center small" style="margin-top:6px">Please check your bill and inform staff of any errors.</div>

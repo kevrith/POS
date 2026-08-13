@@ -13,6 +13,7 @@ import { useAuthStore } from '../stores/auth';
 import PaymentModal from '../components/PaymentModal';
 import { printKOT, printBill, printKOTWithRouting } from '../lib/printer';
 import type { KOTData } from '../lib/printer';
+import { calculateVAT, calculateTOT } from '@pos/shared';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1318,11 +1319,24 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
     refetchInterval: 8000,
   });
 
-  const { data: bizSettings } = useQuery<{ name?: string; receiptHeader?: string; receiptFooter?: string; tablePrefix?: string | null }>({
+  const { data: bizSettings } = useQuery<{ name?: string; receiptHeader?: string; receiptFooter?: string; tablePrefix?: string | null; taxType?: 'VAT' | 'TOT' | 'NONE'; totRate?: number }>({
     queryKey: ['biz-settings', businessId],
     queryFn: () => api.get(`/business/${businessId}/settings`),
     enabled: !!businessId,
     staleTime: 60_000,
+  });
+
+  /**
+   * Tax included in a printed bill, per the business tax setting.
+   *
+   * A bill is a pre-receipt printed before the sale exists, so nothing is
+   * stored yet to read back — it has to be derived here, the same way
+   * SalesService derives it at checkout. Returns zeroes for taxType NONE so a
+   * business with tax turned off never sees a tax line.
+   */
+  const billTax = (subtotalCents: number) => ({
+    vatCents: bizSettings?.taxType === 'VAT' ? calculateVAT(subtotalCents) : 0,
+    totCents: bizSettings?.taxType === 'TOT' ? calculateTOT(subtotalCents, bizSettings?.totRate ?? 3) : 0,
   });
 
   const createOrder = useMutation({
@@ -1410,6 +1424,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
           items: billItems,
           subtotalCents: subtotal,
           totalCents: subtotal,
+          ...billTax(subtotal),
           date: new Date().toISOString(),
           footer: bizSettings?.receiptFooter || undefined,
         });
@@ -1906,6 +1921,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
                   })),
                   subtotalCents: subtotal,
                   totalCents: subtotal,
+                  ...billTax(subtotal),
                   date: new Date().toISOString(),
                   footer: bizSettings?.receiptFooter || undefined,
                 });

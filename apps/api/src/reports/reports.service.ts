@@ -2,12 +2,26 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CashDrawerService } from '../cash-drawer/cash-drawer.service';
 
-/** Always extract VAT from inclusive amount (16/116). Fixes old data stored with exclusive formula. */
-function recalcVat(subtotalCents: number, discountCents = 0): number {
+/**
+ * Repair the magnitude of historically mis-stored tax WITHOUT inventing tax
+ * that was never charged.
+ *
+ * Old sales stored VAT with an exclusive formula (base × 0.16) rather than the
+ * inclusive one (base × 16/116), so the figure is wrong but non-zero. The fix
+ * used to recompute unconditionally, which also fabricated VAT for businesses
+ * on taxType NONE or TOT — a KES 20 sale with tax turned off reported KES 2.76
+ * of VAT, and that figure fed the KRA VAT return.
+ *
+ * Gating on the stored value keeps the repair and drops the fabrication: a sale
+ * that genuinely carried no VAT stored 0, and stays 0.
+ */
+function recalcVat(storedVatCents: number | null | undefined, subtotalCents: number, discountCents = 0): number {
+  if (!storedVatCents || storedVatCents <= 0) return 0;
   const taxBase = Math.max(0, subtotalCents - discountCents);
   return Math.round(taxBase * 16 / 116);
 }
-function recalcTot(subtotalCents: number, discountCents = 0): number {
+function recalcTot(storedTotCents: number | null | undefined, subtotalCents: number, discountCents = 0): number {
+  if (!storedTotCents || storedTotCents <= 0) return 0;
   const taxBase = Math.max(0, subtotalCents - discountCents);
   return Math.round(taxBase * 3 / 103);
 }
@@ -45,8 +59,8 @@ export class ReportsService {
     // Recalculate tax using inclusive formula (fixes historical data stored with exclusive formula)
     const sales = rawSales.map(s => ({
       ...s,
-      vatCents: s.totCents > 0 ? 0 : recalcVat(s.subtotalCents, s.discountCents),
-      totCents: s.totCents > 0 ? recalcTot(s.subtotalCents, s.discountCents) : 0,
+      vatCents: recalcVat(s.vatCents, s.subtotalCents, s.discountCents),
+      totCents: recalcTot(s.totCents, s.subtotalCents, s.discountCents),
     }));
 
     return {
@@ -105,8 +119,8 @@ export class ReportsService {
     // Recalculate using inclusive formula
     const sales = rawSales.map(s => ({
       ...s,
-      vatCents: recalcVat(s.subtotalCents, s.discountCents),
-      netCents: Math.max(0, s.subtotalCents - s.discountCents) - recalcVat(s.subtotalCents, s.discountCents),
+      vatCents: recalcVat(s.vatCents, s.subtotalCents, s.discountCents),
+      netCents: Math.max(0, s.subtotalCents - s.discountCents) - recalcVat(s.vatCents, s.subtotalCents, s.discountCents),
     }));
 
     const totalVat = sales.reduce((sum, s) => sum + s.vatCents, 0);
@@ -137,7 +151,7 @@ export class ReportsService {
     // Recalculate using inclusive formula
     const sales = rawSales.map(s => ({
       ...s,
-      totCents: recalcTot(s.subtotalCents, s.discountCents),
+      totCents: recalcTot(s.totCents, s.subtotalCents, s.discountCents),
     }));
 
     const totalTot = sales.reduce((sum, s) => sum + s.totCents, 0);
@@ -162,6 +176,8 @@ export class ReportsService {
           subtotalCents: true,
           discountCents: true,
           totalCents: true,
+          // Needed to tell a sale that carried VAT from one made with tax off.
+          vatCents: true,
         },
       }),
       this.prisma.expense.findMany({
@@ -183,7 +199,7 @@ export class ReportsService {
 
     // Output VAT from sales (extracted inclusive 16/116)
     const salesWithVat = rawSales.map(s => {
-      const vatCents = recalcVat(s.subtotalCents, s.discountCents);
+      const vatCents = recalcVat(s.vatCents, s.subtotalCents, s.discountCents);
       return { ...s, vatCents };
     });
 
@@ -1096,14 +1112,14 @@ export class ReportsService {
       summary: {
         totalTransactions: sales.length,
         totalRevenueCents: sales.reduce((s, sale) => s + sale.totalCents, 0),
-        totalVatCents: sales.reduce((s, sale) => s + recalcVat(sale.subtotalCents, sale.discountCents), 0),
-        totalTotCents: sales.reduce((s, sale) => s + recalcTot(sale.subtotalCents, sale.discountCents), 0),
+        totalVatCents: sales.reduce((s, sale) => s + recalcVat(sale.vatCents, sale.subtotalCents, sale.discountCents), 0),
+        totalTotCents: sales.reduce((s, sale) => s + recalcTot(sale.totCents, sale.subtotalCents, sale.discountCents), 0),
         etimsSubmittedCount: sales.filter((s) => s.etimsSubmitted).length,
         etimsPendingCount: sales.filter((s) => !s.etimsSubmitted).length,
       },
       transactions: sales.map((sale) => {
-        const vatCents = recalcVat(sale.subtotalCents, sale.discountCents);
-        const totCents = sale.totCents > 0 ? recalcTot(sale.subtotalCents, sale.discountCents) : 0;
+        const vatCents = recalcVat(sale.vatCents, sale.subtotalCents, sale.discountCents);
+        const totCents = recalcTot(sale.totCents, sale.subtotalCents, sale.discountCents);
         return {
         receiptNumber: sale.receiptNumber,
         date: sale.createdAt.toISOString(),
@@ -2414,16 +2430,19 @@ export class ReportsService {
       },
     });
 
-    // Recalc using inclusive formula for consistency
-    const vatSales = sales.filter(s => s.vatCents > 0 || s.totCents === 0);
-    const totalOutputVAT = vatSales.reduce((s, sale) => s + recalcVat(sale.subtotalCents, sale.discountCents), 0);
+    // Only sales that actually carried VAT belong on a VAT return. The filter
+    // used to be `vatCents > 0 || totCents === 0`, whose second clause swept in
+    // every sale from a business with tax turned off (both fields 0) and then
+    // recomputed 16/116 on it — overstating output VAT on a statutory return.
+    const vatSales = sales.filter(s => s.vatCents > 0);
+    const totalOutputVAT = vatSales.reduce((s, sale) => s + recalcVat(sale.vatCents, sale.subtotalCents, sale.discountCents), 0);
     const vatableValue = vatSales.reduce((s, sale) => {
-      const vat = recalcVat(sale.subtotalCents, sale.discountCents);
+      const vat = recalcVat(sale.vatCents, sale.subtotalCents, sale.discountCents);
       return s + (sale.totalCents - vat);
     }, 0);
 
     const totSales = sales.filter(s => s.totCents > 0);
-    const totalTOT = totSales.reduce((s, sale) => s + recalcTot(sale.subtotalCents, sale.discountCents), 0);
+    const totalTOT = totSales.reduce((s, sale) => s + recalcTot(sale.totCents, sale.subtotalCents, sale.discountCents), 0);
     const zeroRatedSales = totSales.reduce((s, sale) => s + sale.totalCents, 0);
 
     // Input VAT from approved VAT-reclaimable expenses

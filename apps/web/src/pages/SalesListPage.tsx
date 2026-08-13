@@ -333,8 +333,12 @@ export default function SalesListPage() {
         })),
         subtotalCents: detail.subtotalCents,
         serviceChargeCents: detail.serviceChargeCents,
-        vatCents: detail.totCents > 0 ? 0 : Math.round(Math.max(0, detail.subtotalCents - detail.discountCents) * 16 / 116),
-        totCents: detail.totCents > 0 ? Math.round(Math.max(0, detail.subtotalCents - detail.discountCents) * 3 / 103) : 0,
+        // Print the tax that was actually charged at checkout. This used to
+        // re-derive VAT as 16/116 of the subtotal whenever totCents was 0,
+        // which has no NONE branch — so a business with tax turned off
+        // reprinted receipts showing VAT it never charged (KES 20 → 2.76).
+        vatCents: detail.vatCents,
+        totCents: detail.totCents,
         totalCents: detail.totalCents,
         payments: detail.payments,
         kraControlNumber: detail.etimsControlNumber,

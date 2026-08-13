@@ -146,7 +146,10 @@ function AddUserModal({
   });
 
   const needsPassword = ['OWNER', 'MANAGER', 'ACCOUNTANT', 'DRIVER', 'SALES_AGENT'].includes(form.role);
-  const needsPin = ['CASHIER', 'WAITER', 'KITCHEN'].includes(form.role);
+  // Drivers and agents sign in to their phones by PIN — a PIN login lasts 12 hours
+  // against 15 minutes for email, which is what keeps them signed in out in the field.
+  const needsPin = ['CASHIER', 'WAITER', 'KITCHEN', 'DRIVER', 'SALES_AGENT'].includes(form.role);
+  const pinIsField = ['DRIVER', 'SALES_AGENT'].includes(form.role);
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -246,7 +249,9 @@ function AddUserModal({
                 </button>
               </div>
               <p className="text-xs text-gray-400 mt-1">
-                Used for quick PIN login at the POS terminal
+                {pinIsField
+                  ? 'Used to sign in on the mobile app — without a PIN this person cannot appear in the app’s staff list'
+                  : 'Used for quick PIN login at the POS terminal'}
               </p>
             </div>
           )}

@@ -121,7 +121,9 @@ function fmtDate(s?: string) {
   return new Date(s).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-const STATUS_ORDER: OrderStatus[] = ['SUBMITTED', 'CONFIRMED', 'PACKED', 'DISPATCHED', 'DELIVERED'];
+// INVOICED is a real resting state, not an end-of-life one — an invoiced order still
+// needs to be reachable to reprint its invoice and to record payment against it.
+const STATUS_ORDER: OrderStatus[] = ['SUBMITTED', 'CONFIRMED', 'PACKED', 'DISPATCHED', 'DELIVERED', 'INVOICED'];
 
 const STATUS_STYLES: Record<OrderStatus, { bg: string; text: string; border: string }> = {
   DRAFT:      { bg: 'bg-gray-100 dark:bg-gray-700',    text: 'text-gray-600 dark:text-gray-300',   border: 'border-gray-200 dark:border-gray-600' },

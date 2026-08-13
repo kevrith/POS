@@ -9,10 +9,11 @@ import {
   ScrollView,
   RefreshControl,
   TextInput,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { mobileApi, formatKES } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth';
@@ -87,6 +88,28 @@ export default function SalesScreen() {
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const qc = useQueryClient();
+  const [showVoidForm, setShowVoidForm] = useState(false);
+  const [voidReason, setVoidReason] = useState('');
+  const [voidPin, setVoidPin] = useState('');
+
+  const voidMut = useMutation({
+    mutationFn: async () => {
+      if (!selectedSale) return;
+      // Manager PIN gate → resolve managerId → void.
+      const mgr = await mobileApi.post<{ userId: string; name: string }>('/sales/verify-manager-pin', { pin: voidPin, businessId });
+      return mobileApi.post(`/sales/${selectedSale.id}/void?businessId=${businessId}`, {
+        managerId: mgr.userId,
+        reason: voidReason.trim() || 'Voided at POS',
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sales'] });
+      Alert.alert('Voided', 'The sale has been voided.');
+      setShowVoidForm(false); setVoidReason(''); setVoidPin(''); setSelectedSale(null);
+    },
+    onError: (e: any) => Alert.alert('Could not void', e?.message ?? 'Check the manager PIN and try again.'),
+  });
   const LIMIT = 20;
 
   const { data, isLoading, refetch, isRefetching } = useQuery<SalesResponse>({
@@ -316,6 +339,36 @@ export default function SalesScreen() {
                   </View>
                 ))}
               </View>
+
+              {/* Void (manager PIN) */}
+              {!['VOIDED', 'REFUNDED', 'PARTIALLY_REFUNDED'].includes(selectedSale.status) && (
+                <>
+                  {!showVoidForm ? (
+                    <TouchableOpacity style={styles.voidBtn} onPress={() => setShowVoidForm(true)}>
+                      <Ionicons name="close-circle-outline" size={18} color={Colors.error} />
+                      <Text style={styles.voidBtnText}>Void Sale</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={styles.detailCard}>
+                      <Text style={styles.sectionTitle}>Void this sale</Text>
+                      <Text style={styles.voidHint}>Requires a manager PIN. This reverses stock and marks the sale VOIDED.</Text>
+                      <TextInput style={styles.voidInput} value={voidReason} onChangeText={setVoidReason}
+                        placeholder="Reason (optional)" placeholderTextColor={Colors.textSecondary} />
+                      <TextInput style={styles.voidInput} value={voidPin} onChangeText={setVoidPin}
+                        placeholder="Manager PIN" placeholderTextColor={Colors.textSecondary}
+                        keyboardType="number-pad" secureTextEntry maxLength={6} />
+                      <TouchableOpacity style={[styles.voidConfirm, voidMut.isPending && { opacity: 0.7 }]}
+                        onPress={() => voidMut.mutate()} disabled={voidMut.isPending || voidPin.length < 4}>
+                        {voidMut.isPending ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.voidConfirmText}>Confirm Void</Text>}
+                      </TouchableOpacity>
+                      <TouchableOpacity style={{ paddingVertical: 8, alignItems: 'center' }}
+                        onPress={() => { setShowVoidForm(false); setVoidReason(''); setVoidPin(''); }}>
+                        <Text style={{ color: Colors.textSecondary, fontSize: 13 }}>Cancel</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </>
+              )}
             </ScrollView>
           </SafeAreaView>
         )}
@@ -436,6 +489,12 @@ const styles = StyleSheet.create({
   detailLabel: { fontSize: 13, color: Colors.textSecondary },
   detailValue: { fontSize: 13, fontWeight: '600', color: Colors.text },
   refText: { fontSize: 11, color: Colors.textSecondary, textAlign: 'right' },
+  voidBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 14, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: Colors.error },
+  voidBtnText: { color: Colors.error, fontSize: 15, fontWeight: '700' },
+  voidHint: { fontSize: 12, color: Colors.textSecondary, lineHeight: 18, marginBottom: 6 },
+  voidInput: { borderWidth: 1, borderColor: Colors.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11, fontSize: 15, color: Colors.text, backgroundColor: Colors.background, marginTop: 8 },
+  voidConfirm: { backgroundColor: Colors.error, borderRadius: 12, paddingVertical: 13, alignItems: 'center', marginTop: 12 },
+  voidConfirmText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   itemRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
   itemRowBorder: { borderTopWidth: 1, borderTopColor: Colors.border },
   itemRowName: { flex: 1, fontSize: 13, color: Colors.text },

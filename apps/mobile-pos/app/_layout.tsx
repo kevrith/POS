@@ -1,6 +1,6 @@
 import { Stack, useRouter } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { StatusBar } from 'expo-status-bar';
+import { StatusBar, setStatusBarStyle } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
@@ -85,9 +85,37 @@ function DeepLinkHandler() {
   return null;
 }
 
-export default function RootLayout() {
+/**
+ * Re-assert the status bar icon colour after the first frame.
+ *
+ * `<StatusBar style="dark" />` alone is not enough on Android here: it applies during
+ * the very first render, while the splash screen is still being torn down and the RN
+ * root view attached, and that teardown resets the window's light-status-bar flag —
+ * leaving white icons on this app's light background. The driver app escapes this only
+ * by accident: it returns null until its fonts load, so its StatusBar mounts after the
+ * teardown has finished.
+ *
+ * Re-applying on later ticks makes the setting stick regardless of that timing. This
+ * deliberately does NOT re-apply on foreground: screens with a dark top (the camera
+ * scanners) set their own light style, and stomping on it every time the app resumed
+ * would break them.
+ */
+function useStickyStatusBar(style: 'dark' | 'light' = 'dark') {
   useEffect(() => {
-    SplashScreen.hideAsync();
+    const apply = () => setStatusBarStyle(style);
+    apply();
+    const timers = [setTimeout(apply, 100), setTimeout(apply, 600)];
+    return () => timers.forEach(clearTimeout);
+  }, [style]);
+}
+
+export default function RootLayout() {
+  useStickyStatusBar();
+
+  useEffect(() => {
+    // Hiding the splash is itself one of the things that resets the bar, so
+    // re-assert once it is gone.
+    SplashScreen.hideAsync().finally(() => setStatusBarStyle('dark'));
   }, []);
 
   return (

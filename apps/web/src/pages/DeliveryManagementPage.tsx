@@ -366,6 +366,12 @@ export default function DeliveryManagementPage() {
                     )}
 
                     <div className="flex flex-wrap items-center gap-2">
+                      {d.driver && ['ASSIGNED', 'ARRIVING', 'IN_TRANSIT'].includes(d.status) && (
+                        <a href={`/track/${d.orderNumber}`} target="_blank" rel="noreferrer"
+                          className="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 inline-flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5" /> Track
+                        </a>
+                      )}
                       {d.status === 'PENDING' && (
                         <button onClick={() => setShowAssignDriver(d.id)}
                           className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700">

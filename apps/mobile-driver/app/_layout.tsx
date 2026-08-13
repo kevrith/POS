@@ -7,6 +7,7 @@ import * as Font from 'expo-font';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '../stores/auth';
+import { useActiveDelivery } from '../stores/activeDelivery';
 import { usePushNotifications } from '@pos/mobile-push';
 import { routeForTap } from '../lib/push';
 import { useOfflineSync } from '../lib/useOfflineSync';
@@ -20,8 +21,9 @@ const queryClient = new QueryClient();
 /** Flushes the offline action queue + broadcasts live location while logged in. */
 function DriverBackgroundTasks() {
   const driverId = useAuthStore((s) => s.user?.id);
+  const activeDeliveryId = useActiveDelivery((s) => s.deliveryId);
   useOfflineSync();
-  useLocationBroadcast(driverId);
+  useLocationBroadcast(driverId, activeDeliveryId ?? undefined);
   return null;
 }
 

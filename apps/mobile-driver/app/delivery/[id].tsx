@@ -11,10 +11,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Print from 'expo-print';
 import { driverApi, formatKES } from '../../lib/api';
 import { enqueue, flushQueue, uuid } from '../../lib/offline';
+import { useActiveDelivery } from '../../stores/activeDelivery';
 import { Colors, STATUS_COLORS } from '../../constants/theme';
 
 interface DeliveryDetail {
@@ -44,6 +46,16 @@ export default function DeliveryDetailScreen() {
     queryKey: ['delivery', id],
     queryFn: () => driverApi.get<DeliveryDetail>(`/delivery/${id}`),
   });
+
+  // Tag this order as the active delivery while it's in transit, so the root
+  // layout's location pings carry the order id (enables the arrival check).
+  const setActive = useActiveDelivery((s) => s.setActive);
+  const activeId = useActiveDelivery((s) => s.deliveryId);
+  useEffect(() => {
+    if (!data) return;
+    if (data.status === 'IN_TRANSIT') setActive(id);
+    else if (['DELIVERED', 'CANCELLED', 'FAILED'].includes(data.status) && activeId === id) setActive(null);
+  }, [data?.status, id, activeId, setActive]);
 
   const updateMutation = useMutation({
     // Offline-first: queue the status change (survives dead zones), update the

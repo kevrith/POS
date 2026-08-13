@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Receipt, Ban, Eye, RotateCcw, Printer, MessageSquare, TrendingUp, CheckCircle2, Clock, Calendar, X, Search, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
+import { Receipt, Ban, Eye, RotateCcw, Printer, MessageSquare, MessageCircle, TrendingUp, CheckCircle2, Clock, Calendar, X, Search, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
+import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
+import { openWhatsApp, buildReceiptMessage, normalisePhone } from '../lib/whatsapp';
 import VoidModal from '../components/VoidModal';
 import ReturnModal from '../components/ReturnModal';
 import PrintModal from '../components/PrintModal';
@@ -245,6 +247,7 @@ export default function SalesListPage() {
   const [reprintData, setReprintData] = useState<ReceiptData | null>(null);
   const [reprintLoading, setReprintLoading] = useState<string | null>(null);
   const [sendingWhatsApp, setSendingWhatsApp] = useState<string | null>(null);
+  const [sendingSms, setSendingSms] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
   const [expandedVoid, setExpandedVoid] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<SalesRange>('month');
@@ -357,19 +360,62 @@ export default function SalesListPage() {
     }
   };
 
-  const handleSendWhatsApp = async (sale: Sale) => {
+  /** Africa's Talking, i.e. an actual SMS — its WhatsApp channel needs a Meta
+   *  business approval the account does not have, so it silently falls back to SMS.
+   *  Labelled SMS here so nobody thinks a WhatsApp message went out. */
+  const handleSendSms = async (sale: Sale) => {
     if (!sale.customer?.phone) return;
-    setSendingWhatsApp(sale.id);
+    setSendingSms(sale.id);
     try {
-      await api.post('/notifications/send-receipt', {
+      const res = await api.post<{ success?: boolean; error?: string }>('/notifications/send-receipt', {
         businessId,
         phone: sale.customer.phone,
         receiptNumber: sale.receiptNumber,
         totalCents: sale.totalCents,
-        channel: 'whatsapp',
+        channel: 'sms',
       });
+      // The endpoint answers 200 with success:false when messaging is unconfigured,
+      // so a silent "sent" would be a lie.
+      if (res?.success === false) {
+        toast.error(res.error === 'Messaging not configured'
+          ? 'SMS is not set up — add Africa’s Talking credentials in Settings.'
+          : res.error ?? 'Could not send the SMS.');
+      } else {
+        toast.success(`Receipt sent to ${sale.customer.phone}`);
+      }
     } catch (err) {
-      console.error('WhatsApp send failed:', err);
+      toast.error((err as Error).message || 'Could not send the SMS.');
+    } finally {
+      setSendingSms(null);
+    }
+  };
+
+  /** Opens the till's own WhatsApp with the receipt filled in — the cashier taps send.
+   *  Nothing to configure, and it arrives from the number the customer already knows. */
+  const handleSendWhatsApp = async (sale: Sale) => {
+    const phone = sale.customer?.phone;
+    if (!phone) return;
+    setSendingWhatsApp(sale.id);
+    try {
+      const [detail, biz] = await Promise.all([
+        api.get<SaleDetail>(`/sales/${sale.id}?businessId=${businessId}`),
+        api.get<{ name?: string }>(`/business/${businessId}/settings`).catch(() => ({})),
+      ]);
+      const message = buildReceiptMessage({
+        businessName: (biz as { name?: string })?.name ?? 'KASTRA POS',
+        receiptNumber: detail.receiptNumber,
+        date: detail.createdAt,
+        customerName: detail.customer?.name ?? sale.customer?.name,
+        items: detail.items.map((i) => ({ name: i.name, quantity: i.quantity, totalCents: i.totalCents })),
+        discountCents: detail.discountCents,
+        taxCents: (detail.vatCents ?? 0) + (detail.totCents ?? 0),
+        totalCents: detail.totalCents,
+      });
+      if (!openWhatsApp(phone, message)) {
+        toast.error('Could not open WhatsApp — allow pop-ups for this site, or check the customer’s number.');
+      }
+    } catch (err) {
+      toast.error((err as Error).message || 'Could not build the receipt.');
     } finally {
       setSendingWhatsApp(null);
     }
@@ -685,10 +731,18 @@ export default function SalesListPage() {
                               className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors disabled:opacity-50">
                               <Printer className="w-3.5 h-3.5" />{reprintLoading === sale.id ? '...' : 'Print'}
                             </button>
-                            {sale.customer?.phone && (
+                            {sale.customer?.phone && normalisePhone(sale.customer.phone) && (
                               <button onClick={() => void handleSendWhatsApp(sale)} disabled={sendingWhatsApp === sale.id}
+                                title="Open WhatsApp with the receipt ready to send"
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors disabled:opacity-50">
+                                <MessageCircle className="w-3.5 h-3.5" />{sendingWhatsApp === sale.id ? '...' : 'WhatsApp'}
+                              </button>
+                            )}
+                            {sale.customer?.phone && (
+                              <button onClick={() => void handleSendSms(sale)} disabled={sendingSms === sale.id}
+                                title="Text the receipt to the customer"
                                 className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-teal-600 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20 rounded-lg transition-colors disabled:opacity-50">
-                                <MessageSquare className="w-3.5 h-3.5" />{sendingWhatsApp === sale.id ? '...' : 'WA'}
+                                <MessageSquare className="w-3.5 h-3.5" />{sendingSms === sale.id ? '...' : 'SMS'}
                               </button>
                             )}
                             <button onClick={() => { setSelectedSale(sale); setShowReturnModal(true); }}

@@ -11,6 +11,33 @@ import { MpesaService } from '../payments/mpesa.service';
  * "pay" actually charged the customer both depended on module ordering.
  */
 
+/**
+ * The status a link really has right now, as opposed to the one stored.
+ *
+ * Expiry is applied lazily: `status` stays ACTIVE in the database until a
+ * customer actually opens the link, and only then does getByCode flip it. That
+ * keeps payment safe — an expired link is always rejected at pay time — but it
+ * left the owner's list claiming ACTIVE for links that died weeks earlier, and
+ * the "Active" count on the dashboard along with it.
+ *
+ * Deriving on read rather than writing during a list keeps a GET free of side
+ * effects; getByCode still persists the change when someone visits.
+ *
+ * Exported for unit tests.
+ */
+export function effectiveStatus(
+  link: { status: string; expiresAt?: Date | null; maxUses?: number | null; usesCount: number },
+  now: Date = new Date(),
+): string {
+  // A disabled link stays disabled — that was a deliberate act by the owner and
+  // outranks any automatic transition.
+  if (link.status !== 'ACTIVE') return link.status;
+  if (link.expiresAt && link.expiresAt < now) return 'EXPIRED';
+  // Used up is just as dead as out of date; the Uses column shows which it was.
+  if (link.maxUses != null && link.usesCount >= link.maxUses) return 'EXPIRED';
+  return 'ACTIVE';
+}
+
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no O/0/I/1 — these get read aloud
 
 function randomCode(): string {
@@ -70,10 +97,11 @@ export class PaymentLinksService {
   }
 
   async list(businessId: string) {
-    return this.prisma.paymentLink.findMany({
+    const links = await this.prisma.paymentLink.findMany({
       where: { businessId },
       orderBy: { createdAt: 'desc' },
     });
+    return links.map((link) => ({ ...link, status: effectiveStatus(link) }));
   }
 
   /** Loads a link for public use, lazily expiring it when it is past its window. */

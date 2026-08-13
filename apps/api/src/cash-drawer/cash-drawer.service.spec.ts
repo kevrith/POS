@@ -13,6 +13,9 @@ function makePrisma() {
     sale: { findMany: jest.fn().mockResolvedValue([]) },
     return: { findMany: jest.fn().mockResolvedValue([]) },
     expense: { aggregate: jest.fn().mockResolvedValue({ _sum: { amountCents: null } }) },
+    // CashDrawerSession has no `cashier` relation, so getActiveSessions
+    // resolves names with a separate User query.
+    user: { findMany: jest.fn().mockResolvedValue([]) },
   };
 }
 
@@ -122,6 +125,65 @@ describe('CashDrawerService', () => {
       expect(result).toHaveLength(1);
       const where = prisma.cashDrawerSession.findMany.mock.calls[0][0].where;
       expect(where.status).toBe('OPEN');
+    });
+
+    it('attaches the cashier name and a running summary to each till', async () => {
+      const { svc, prisma } = makeService();
+      prisma.cashDrawerSession.findMany.mockResolvedValue([makeSession()]);
+      prisma.user.findMany.mockResolvedValue([{ id: 'user-1', name: 'Grace' }]);
+      prisma.sale.findMany.mockResolvedValue([
+        { id: 's1', totalCents: 50000, vatCents: 6897, payments: [{ method: 'CASH', amountCents: 50000 }] },
+      ]);
+
+      const [till] = await svc.getActiveSessions('store-1');
+
+      expect(till.cashierName).toBe('Grace');
+      // Opening float 100000 + 50000 cash in.
+      expect(till.expectedCashCents).toBe(150000);
+      expect(till.summary.expectedClosingCents).toBe(150000);
+      expect(till.summary.salesCount).toBe(1);
+    });
+
+    it('asks for each distinct cashier exactly once', async () => {
+      const { svc, prisma } = makeService();
+      prisma.cashDrawerSession.findMany.mockResolvedValue([
+        makeSession({ id: 'a', cashierId: 'user-1' }),
+        makeSession({ id: 'b', cashierId: 'user-1' }),
+        makeSession({ id: 'c', cashierId: 'user-2' }),
+      ]);
+      prisma.user.findMany.mockResolvedValue([
+        { id: 'user-1', name: 'Grace' },
+        { id: 'user-2', name: 'Otieno' },
+      ]);
+
+      const result = await svc.getActiveSessions('store-1');
+
+      expect(prisma.user.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.user.findMany.mock.calls[0][0].where.id.in).toEqual(['user-1', 'user-2']);
+      expect(result.map((t) => t.cashierName)).toEqual(['Grace', 'Grace', 'Otieno']);
+    });
+
+    it('falls back to Unknown rather than dropping a till whose user is missing', async () => {
+      const { svc, prisma } = makeService();
+      prisma.cashDrawerSession.findMany.mockResolvedValue([makeSession()]);
+      prisma.user.findMany.mockResolvedValue([]);
+      const [till] = await svc.getActiveSessions('store-1');
+      expect(till.cashierName).toBe('Unknown');
+    });
+
+    it('short-circuits with no follow-up queries when every till is closed', async () => {
+      const { svc, prisma } = makeService();
+      prisma.cashDrawerSession.findMany.mockResolvedValue([]);
+      const result = await svc.getActiveSessions('store-1');
+      expect(result).toEqual([]);
+      expect(prisma.user.findMany).not.toHaveBeenCalled();
+      expect(prisma.sale.findMany).not.toHaveBeenCalled();
+    });
+
+    it('returns nothing when neither a store nor a business is given', async () => {
+      const { svc, prisma } = makeService();
+      expect(await svc.getActiveSessions(undefined)).toEqual([]);
+      expect(prisma.cashDrawerSession.findMany).not.toHaveBeenCalled();
     });
   });
 

@@ -10,7 +10,6 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '../stores/auth';
 import { usePushNotifications } from '@pos/mobile-push';
 import { routeForTap } from '../lib/push';
-import { Colors } from '../constants/theme';
 
 /** Watches the auth token. If it gets cleared while the app is open (e.g. the
  *  API wrapper detected an expired session on a 401), bounce to the login
@@ -94,17 +93,18 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        {/* Dark icons on the app's own light surface.
+        {/* Dark icons over a translucent bar — same setup as the driver app.
 
-            The blue bar this used to ask for never appeared on device: every
-            screen wraps in SafeAreaView edges={['top']} painted Colors.background,
-            so the strip behind the clock is light grey no matter what colour the
-            bar is set to. White icons on light grey are invisible — hence dark
-            ones, matching the driver app, which is legible on the same device.
+            Leave translucent alone (expo-status-bar defaults it to true). It is
+            what makes the window draw under the status bar, which in turn gives
+            SafeAreaView edges={['top']} a real top inset to paint Colors.background
+            into. Passing translucent={false} collapses that inset to 0, the app's
+            light surface never reaches behind the clock, and the strip falls back
+            to the dark native theme colour — dark icons on dark = invisible.
 
-            backgroundColor is kept in step so the bar still matches if a device
-            does paint it itself. */}
-        <StatusBar style="dark" backgroundColor={Colors.background} translucent={false} />
+            Screens with a dark top (the camera scanners) opt out locally with
+            their own <StatusBar style="light" />. */}
+        <StatusBar style="dark" />
         <DeepLinkHandler />
         <PushHandler />
         <SessionGuard />

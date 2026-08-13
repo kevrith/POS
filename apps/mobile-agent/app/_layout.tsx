@@ -8,7 +8,6 @@ import { useOfflineSync } from '../lib/useOfflineSync';
 import { useAuthStore } from '../stores/auth';
 import { usePushNotifications } from '@pos/mobile-push';
 import { routeForTap } from '../lib/push';
-import { Colors } from '../constants/theme';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 60_000 } },
@@ -51,11 +50,16 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        {/* Dark icons — every screen paints its top inset Colors.background (orange-50),
-            so white icons disappear into it. backgroundColor and translucent are set
-            explicitly to match app.json; without them Android keeps its theme default
-            (light icons) until the first runtime paint. */}
-        <StatusBar style="dark" backgroundColor={Colors.background} translucent={false} />
+        {/* Dark icons over a translucent bar — same setup as the driver app.
+
+            Leave translucent alone (expo-status-bar defaults it to true). It is
+            what makes the window draw under the status bar, which in turn gives
+            the tabs layout's SafeAreaView edges={['top']} a real top inset to paint
+            Colors.background (orange-50) into. Passing translucent={false} collapses
+            that inset to 0, the app's light surface never reaches behind the clock,
+            and the strip falls back to the dark native theme colour — dark icons on
+            dark = invisible. */}
+        <StatusBar style="dark" />
         <OfflineSyncRunner />
         <PushHandler />
         <SessionGuard />

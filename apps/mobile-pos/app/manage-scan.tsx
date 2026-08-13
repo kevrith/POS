@@ -1,5 +1,6 @@
 import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
@@ -74,6 +75,9 @@ export default function ManageScanScreen() {
 
   return (
     <View style={styles.scanContainer}>
+      {/* Camera feed sits behind the status bar here, not the light background —
+          white icons stay readable over it. Reverts on leaving the screen. */}
+      <StatusBar style="light" />
       <CameraView
         style={StyleSheet.absoluteFillObject}
         barcodeScannerSettings={{ barcodeTypes: ['qr', 'ean13', 'ean8', 'code128', 'code39', 'upc_a', 'upc_e', 'itf14'] }}

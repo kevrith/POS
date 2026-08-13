@@ -7,6 +7,10 @@
     "icon": "./assets/icon.png",
     "scheme": "kastra-agent",
     "userInterfaceStyle": "light",
+    "androidStatusBar": {
+      "barStyle": "dark-content",
+      "backgroundColor": "#FFF7ED"
+    },
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -65,11 +69,6 @@
         "origin": false
       }
     },
-    "owner": "kevrith",
-    "androidStatusBar": {
-      "barStyle": "dark-content",
-      "backgroundColor": "#FFF7ED",
-      "translucent": false
-    }
+    "owner": "kevrith"
   }
 }

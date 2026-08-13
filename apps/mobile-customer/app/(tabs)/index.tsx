@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
@@ -84,6 +85,9 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
+      {/* This screen's top inset is the indigo hero, not the usual light
+          background — flip to white icons so the clock stays readable. */}
+      <StatusBar style="light" />
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         {/* Header */}
         <View style={styles.header}>

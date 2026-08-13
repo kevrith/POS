@@ -7,6 +7,10 @@
     "icon": "./assets/icon.png",
     "scheme": "kastra-order",
     "userInterfaceStyle": "light",
+    "androidStatusBar": {
+      "barStyle": "dark-content",
+      "backgroundColor": "#F9FAFB"
+    },
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",

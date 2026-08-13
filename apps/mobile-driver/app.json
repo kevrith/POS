@@ -9,7 +9,7 @@
     "userInterfaceStyle": "light",
     "androidStatusBar": {
       "barStyle": "dark-content",
-      "backgroundColor": "#FFFFFF"
+      "backgroundColor": "#F0FDF4"
     },
     "splash": {
       "image": "./assets/splash.png",

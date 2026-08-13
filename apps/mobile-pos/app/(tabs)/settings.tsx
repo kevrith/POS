@@ -131,6 +131,20 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        {/* Cash Drawer / Shift quick action */}
+        <TouchableOpacity style={styles.card} onPress={() => router.push('/cash-drawer' as never)} activeOpacity={0.7}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.primary + '18', justifyContent: 'center', alignItems: 'center' }}>
+              <Ionicons name="cash-outline" size={20} color={Colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: Colors.text }}>Cash Drawer / Shift</Text>
+              <Text style={{ fontSize: 12, color: Colors.textSecondary, marginTop: 1 }}>Open your till, count cash, close your shift</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={Colors.textSecondary} />
+          </View>
+        </TouchableOpacity>
+
         {/* User Profile */}
         <Text style={styles.sectionTitle}>Account</Text>
         <View style={styles.card}>

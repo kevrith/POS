@@ -17,6 +17,7 @@ import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { mobileApi } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth';
+import { buildLabel } from '../../lib/buildInfo';
 import { useActiveStore } from '../../lib/useActiveStore';
 import { useCartStore } from '../../stores/cart';
 import { Colors } from '../../constants/theme';
@@ -316,7 +317,7 @@ export default function SettingsScreen() {
         <View style={styles.card}>
           <View style={styles.aboutRow}>
             <Text style={styles.aboutLabel}>App Version</Text>
-            <Text style={styles.aboutValue}>1.0.0</Text>
+            <Text style={styles.aboutValue}>{buildLabel()}</Text>
           </View>
           <View style={[styles.aboutRow, styles.infoRowBorder]}>
             <Text style={styles.aboutLabel}>Business ID</Text>

@@ -11,6 +11,7 @@ import * as SecureStore from 'expo-secure-store';
 import { useState, useEffect } from 'react';
 import { agentApi, formatKES, SERVER_URL_KEY } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth';
+import { buildLabel } from '../../lib/buildInfo';
 import { Colors } from '../../constants/theme';
 
 interface AgentStats {
@@ -96,7 +97,7 @@ export default function ProfileScreen() {
           <Text style={st.logoutText}>Sign Out</Text>
         </TouchableOpacity>
 
-        <Text style={st.version}>KASTRA Agent v1.0.0</Text>
+        <Text style={st.version}>KASTRA Agent v{buildLabel()}</Text>
       </ScrollView>
     </View>
   );

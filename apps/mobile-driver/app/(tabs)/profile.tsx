@@ -7,12 +7,20 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/auth';
+import { buildLabel } from '../../lib/buildInfo';
+import { getBaseUrl } from '../../lib/api';
 import { clearPushToken } from '../../lib/push';
 import { Colors } from '../../constants/theme';
 
 export default function ProfileScreen() {
+  // Reads the URL the app is actually pointed at, rather than a hardcoded string
+  // that stayed "localhost:3010" no matter where the app was talking to.
+  const [serverUrl, setServerUrl] = useState('…');
+  useEffect(() => { void getBaseUrl().then(setServerUrl); }, []);
+
   const router = useRouter();
   const { user, clearAuth } = useAuthStore();
 
@@ -101,7 +109,7 @@ export default function ProfileScreen() {
               <Ionicons name="information-circle-outline" size={18} color={Colors.textSecondary} />
               <Text style={styles.infoLabel}>Version</Text>
             </View>
-            <Text style={styles.infoValue}>1.0.0</Text>
+            <Text style={styles.infoValue}>{buildLabel()}</Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.infoRow}>
@@ -109,7 +117,7 @@ export default function ProfileScreen() {
               <Ionicons name="server-outline" size={18} color={Colors.textSecondary} />
               <Text style={styles.infoLabel}>Server</Text>
             </View>
-            <Text style={styles.infoValue}>localhost:3010</Text>
+            <Text style={styles.infoValue} numberOfLines={1}>{serverUrl}</Text>
           </View>
         </View>
 

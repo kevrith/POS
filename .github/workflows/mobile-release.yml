@@ -71,6 +71,9 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          # Inlined into the bundle so a phone can say which commit it is running.
+          EXPO_PUBLIC_BUILD_SHA: ${{ github.sha }}
+          EXPO_PUBLIC_BUILD_TIME: ${{ github.run_started_at }}
         run: |
           mkdir -p build
           eas build \
@@ -142,6 +145,9 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          # Inlined into the bundle so a phone can say which commit it is running.
+          EXPO_PUBLIC_BUILD_SHA: ${{ github.sha }}
+          EXPO_PUBLIC_BUILD_TIME: ${{ github.run_started_at }}
         run: |
           mkdir -p build
           eas build \
@@ -210,6 +216,9 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          # Inlined into the bundle so a phone can say which commit it is running.
+          EXPO_PUBLIC_BUILD_SHA: ${{ github.sha }}
+          EXPO_PUBLIC_BUILD_TIME: ${{ github.run_started_at }}
         run: |
           mkdir -p build
           eas build \
@@ -294,6 +303,9 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          # Inlined into the bundle so a phone can say which commit it is running.
+          EXPO_PUBLIC_BUILD_SHA: ${{ github.sha }}
+          EXPO_PUBLIC_BUILD_TIME: ${{ github.run_started_at }}
         run: |
           mkdir -p build
           eas build \

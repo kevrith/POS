@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiGet, apiPatch, apiPost } from '../../lib/api';
 import { useSessionStore } from '../../stores/session';
 import { Colors } from '../../constants/theme';
+import { buildLabel } from '../../lib/buildInfo';
 
 interface Profile {
   id: string;
@@ -125,6 +126,7 @@ export default function ProfileScreen() {
             <Text style={[s.rowText, { color: Colors.error }]}>Delete my data (KDPA)</Text>
             <Ionicons name="chevron-forward" size={18} color={Colors.textSecondary} />
           </TouchableOpacity>
+          <Text style={s.buildLine}>KASTRA Order v{buildLabel()}</Text>
         </ScrollView>
       )}
     </SafeAreaView>
@@ -144,6 +146,7 @@ const s = StyleSheet.create({
   loyaltyPill: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#FEF3C7', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, marginTop: 4 },
   loyaltyText: { fontSize: 13, fontWeight: '700', color: '#92400E' },
   bizText: { fontSize: 12, color: Colors.textSecondary, marginTop: 4 },
+  buildLine: { textAlign: 'center', fontSize: 11, color: Colors.textSecondary, marginTop: 8, marginBottom: 4 },
   card: { backgroundColor: Colors.card, borderRadius: 16, padding: 16, gap: 8 },
   cardTitle: { fontSize: 15, fontWeight: '700', color: Colors.text, marginBottom: 4 },
   label: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' },

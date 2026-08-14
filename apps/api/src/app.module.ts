@@ -1,5 +1,6 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { TenantGuard } from './auth/tenant.guard';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { AppThrottlerGuard } from './throttler.guard';
@@ -156,6 +157,12 @@ import { DbBackupModule } from './backup/db-backup.module';
   providers: [
     { provide: APP_GUARD, useClass: AppThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    // Tenant isolation is global, not opt-in. Only 23 of 64 controllers had
+    // remembered @UseGuards(TenantGuard), so the rest accepted any businessId a
+    // caller sent — or none, which is worse, because Prisma drops an undefined
+    // `where` key and the query stops being scoped to a business at all. Runs
+    // after JwtAuthGuard so req.user exists; @Public routes are skipped.
+    { provide: APP_GUARD, useClass: TenantGuard },
     { provide: APP_GUARD, useClass: SubscriptionGuard },
     TenantMiddleware,
   ],

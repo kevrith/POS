@@ -319,9 +319,12 @@ jobs:
   publish:
     name: Publish mobile-latest GitHub Release
     needs: [build-pos, build-customer, build-driver, build-agent]
+    # Publishes whenever ANY app built. It used to require app=all or a tag, so a
+    # single-app run produced an APK that never reached the release — the download
+    # link kept serving the old build and the fix looked like it had not shipped.
+    # Safe now that uploads replace only the assets this run rebuilt.
     if: >
       always() &&
-      (startsWith(github.ref, 'refs/tags/') || github.event.inputs.app == 'all') &&
       (needs.build-pos.result == 'success' || needs.build-customer.result == 'success' || needs.build-driver.result == 'success' || needs.build-agent.result == 'success')
     runs-on: ubuntu-latest
 
@@ -337,18 +340,39 @@ jobs:
       - name: List downloaded artifacts
         run: find downloaded-apks -name '*.apk' | sort
 
-      - name: Delete existing mobile-latest release (if any)
+      # Deleting the release first meant a partial run wiped the APKs it did not
+      # rebuild: if one app failed, the other three published and the failed app's
+      # download link 404'd until the next fully green run. Create it only when it
+      # is missing, then overwrite asset by asset, so untouched apps keep the last
+      # good APK.
+      - name: Ensure mobile-latest release exists
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release delete mobile-latest --repo kevrith/POS --yes 2>/dev/null || true
-          git push origin :refs/tags/mobile-latest 2>/dev/null || true
-
-      - name: Create mobile-latest GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
+          gh release view mobile-latest --repo kevrith/POS >/dev/null 2>&1 && exit 0
+          echo "mobile-latest does not exist yet — creating it"
           gh release create mobile-latest \
+            --repo kevrith/POS \
+            --title "KASTRA Mobile Apps — Latest Build" \
+            --notes "Populated by the Mobile Apps Release workflow." \
+            --latest=false
+
+      - name: Upload APKs, replacing only what this run rebuilt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          found=$(find downloaded-apks -name '*.apk')
+          if [ -z "$found" ]; then
+            echo "::error::No APKs were produced — leaving the existing release untouched"
+            exit 1
+          fi
+          echo "$found" | xargs gh release upload mobile-latest --repo kevrith/POS --clobber
+
+      - name: Refresh the release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit mobile-latest \
             --repo kevrith/POS \
             --title "KASTRA Mobile Apps — Latest Build" \
             --notes "$(cat <<'EOF'
@@ -371,9 +395,7 @@ jobs:
 
           > iOS builds require TestFlight. Contact support for enterprise distribution.
           EOF
-          )" \
-            --latest=false \
-            $(find downloaded-apks -name '*.apk' | xargs -I{} echo {})
+          )"
 
       - name: Write job summary
         run: |

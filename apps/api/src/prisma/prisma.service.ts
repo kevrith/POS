@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit, Logger, NotFoundException } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { tenantContext } from './tenant-context';
 
 /**
@@ -15,16 +15,22 @@ const TENANT_MODELS = new Set<string>();
 const SCOPED_OPS = new Set(['findMany', 'count', 'aggregate', 'groupBy']);
 
 /**
- * Models where a record belongs to exactly one business and may never be read by
- * another. Deliberately a short, hand-picked list rather than every tenant model:
- * a blanket net was tried before and reverted because it threw on legitimate
- * queries that filter by itemId/storeId/poId. This one does not throw — it adds
- * the missing filter — and covers only records whose leakage actually matters.
+ * Every model that carries a businessId, read straight from the generated schema
+ * rather than hand-listed — a new tenant model is then protected the day it is
+ * added, instead of the day someone remembers this file.
+ *
+ * Safe to apply broadly because this adds a filter rather than throwing (the
+ * earlier blanket net threw, which is why it was reverted), and because it only
+ * acts on single-record reads and writes while a request context is active.
+ * Callers that legitimately span businesses are unaffected: franchise rollups use
+ * aggregate/count, and affiliate and super-admin tokens carry no businessId, so
+ * no context exists for them at all.
  */
-const SINGLE_TENANT_MODELS = new Set([
-  'Sale', 'Customer', 'Expense', 'Supplier', 'Item',
-  'DeliveryOrder', 'Prescription', 'PurchaseOrder', 'Shift',
-]);
+const SINGLE_TENANT_MODELS = new Set<string>(
+  Prisma.dmmf.datamodel.models
+    .filter((m) => m.fields.some((f) => f.name === 'businessId'))
+    .map((m) => m.name),
+);
 
 /**
  * Single-record reads, mapped to the operation that accepts a non-unique filter.

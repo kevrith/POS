@@ -32,7 +32,24 @@ export default defineConfig({
         clientsClaim: true,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api\//, /^\/offline\.html$/],
+        // Links we hand to customers and suppliers must always fetch a fresh shell.
+        // navigateFallback answers every navigation from the precache, so a device
+        // that has the app cached can open /track/... on a months-old bundle — which
+        // is how a public page ends up showing the staff login instead. First-time
+        // visitors have no service worker and were never affected; the operator's
+        // own browser was.
+        navigateFallbackDenylist: [
+          /^\/api\//,
+          /^\/offline\.html$/,
+          /^\/track\//,
+          /^\/quote\//,
+          /^\/shop\//,
+          /^\/pay\//,
+          /^\/menu\//,
+          /^\/order\//,
+          /^\/portal/,
+          /^\/affiliate/,
+        ],
         runtimeCaching: [
           {
             urlPattern: /^\/api\/v1\/(items|customers)/,

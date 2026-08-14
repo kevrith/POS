@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
+import { Injectable, OnModuleInit, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { tenantContext } from './tenant-context';
 
@@ -38,6 +38,20 @@ const SINGLE_READ_OPS = new Map<string, string>([
   ['findFirstOrThrow', 'findFirstOrThrow'],
 ]);
 
+/**
+ * Single-record writes. These cannot be filtered the way reads can — Prisma's
+ * `update`/`delete` take a unique `where`, and rewriting them to updateMany
+ * would change what the caller gets back from a record to a count. So ownership
+ * is checked first instead, and a record belonging to someone else is reported
+ * as missing rather than forbidden: confirming it exists is itself a leak.
+ */
+const SINGLE_WRITE_OPS = new Set(['update', 'delete']);
+
+/** `Supplier` → `supplier`: model name to the client's delegate property. */
+function delegateOf(model: string): string {
+  return model.charAt(0).toLowerCase() + model.slice(1);
+}
+
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit {
   private readonly logger = new Logger(PrismaService.name);
@@ -67,6 +81,28 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
         if (where['businessId'] === undefined) {
           params.action = SINGLE_READ_OPS.get(params.action as string);
           params.args = { ...args, where: { ...where, businessId: ctx.businessId } };
+        }
+      }
+
+      /**
+       * Same hole on the write side: `update({ where: { id } })` edits the record
+       * whoever owns it. Verify ownership first — the check itself carries a
+       * businessId, so it skips the injection above and cannot recurse.
+       */
+      if (ctx && SINGLE_TENANT_MODELS.has(model) && SINGLE_WRITE_OPS.has(params.action as string)) {
+        const args = (params.args ?? {}) as { where?: Record<string, unknown> };
+        const where = args.where ?? {};
+        if (where['businessId'] === undefined && where['id'] !== undefined) {
+          const delegate = (this as unknown as Record<string, {
+            findFirst: (a: unknown) => Promise<unknown>;
+          }>)[delegateOf(model)];
+          const owned = await delegate.findFirst({
+            where: { id: where['id'], businessId: ctx.businessId },
+            select: { id: true },
+          });
+          if (!owned) {
+            throw new NotFoundException(`${model} not found`);
+          }
         }
       }
 

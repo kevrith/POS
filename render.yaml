@@ -26,7 +26,9 @@ services:
         sync: false           # 64 hex chars — generate with: openssl rand -hex 32
       - key: FRONTEND_URL
         sync: false           # web app origin, e.g. https://pos-web-sigma.vercel.app
-                              # (used for CORS + affiliate/referral email links)
+                              # REQUIRED. Used for CORS, affiliate/referral emails, customer
+                              # delivery tracking links and supplier RFQ quote links. If it is
+                              # unset those links are handed to customers as localhost.
       - key: ADMIN_URL
         sync: false           # admin console origin, e.g. https://kastra-admin.vercel.app
       - key: EXTRA_ORIGINS

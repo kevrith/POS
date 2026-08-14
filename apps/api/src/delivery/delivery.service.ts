@@ -18,6 +18,10 @@ interface CreateDeliveryOrderDto {
   lng?: number;
   scheduledAt?: string;
   notes?: string;
+  /** Explicit fee from the delivery form. Overrides zone pricing when supplied. */
+  deliveryFeeCents?: number;
+  /** Driver chosen on the create form — assigns the delivery in one step. */
+  driverId?: string;
 }
 
 interface UpdateDriverLocationDto {
@@ -110,9 +114,18 @@ export class DeliveryService {
   }
 
   async createDeliveryOrder(dto: CreateDeliveryOrderDto) {
-    // Calculate delivery zone and pricing
+    // Zone pricing needs coordinates AND a zone whose polygon contains them, so it
+    // yields 0 for most orders. The delivery form has its own fee field — honour it
+    // when given, or the number the user typed silently becomes zero and the driver's
+    // earnings read 0 for a delivery they actually made.
     const zone = await this.findDeliveryZone(dto.businessId, dto.lat, dto.lng);
-    const deliveryFeeCents = zone ? await this.calculateDeliveryFee(zone, dto.lat, dto.lng) : 0;
+    const typedFee = Math.round(Number(dto.deliveryFeeCents));
+    const deliveryFeeCents =
+      Number.isFinite(typedFee) && typedFee > 0
+        ? typedFee
+        : zone
+          ? await this.calculateDeliveryFee(zone, dto.lat, dto.lng)
+          : 0;
 
     const orderNumber = `DEL-${Date.now()}`;
     
@@ -133,9 +146,23 @@ export class DeliveryService {
         zoneId: zone?.id,
         estimatedDeliveryAt: zone ? new Date(Date.now() + zone.estimatedMinutes * 60000) : null,
         notes: dto.notes,
-        status: 'PENDING',
+        // The create form has a driver picker; dropping it left the delivery
+        // unassigned, so it never reached that driver's app or their earnings.
+        driverId: dto.driverId || null,
+        status: dto.driverId ? 'ASSIGNED' : 'PENDING',
       },
     });
+
+    // Assigning on the form should notify exactly like the Assign action does.
+    if (dto.driverId) {
+      this.push
+        .sendToUser(dto.driverId, {
+          title: 'New delivery assigned',
+          body: `Order #${orderNumber} · ${dto.deliveryAddress ?? 'tap to view'}`,
+          data: { type: 'delivery', id: deliveryOrder.id },
+        })
+        .catch(() => {});
+    }
 
     // Create SLA tracking
     if (zone) {
@@ -160,6 +187,31 @@ export class DeliveryService {
     });
 
     return deliveryOrder;
+  }
+
+  /**
+   * Public web origin for customer-facing links.
+   *
+   * These links were built three different ways: one read WEB_URL — a variable that was
+   * never defined anywhere, so it always fell back to localhost in production — one read
+   * FRONTEND_URL with a localhost fallback, and one read FRONTEND_URL with no fallback at
+   * all, which renders "undefined/track/..." when unset. One resolver now, so a tracking
+   * link cannot silently point at a developer's laptop.
+   */
+  private static webBase(): string {
+    const base = process.env.FRONTEND_URL ?? process.env.WEB_URL;
+    if (!base) {
+      if (process.env.NODE_ENV === 'production') {
+        // Loud, because the symptom is a link that looks fine to us and is dead to them.
+        console.error('[delivery] FRONTEND_URL is not set — customer tracking links will point at localhost');
+      }
+      return 'http://localhost:3001';
+    }
+    return base.replace(/\/$/, '');
+  }
+
+  private static trackingUrlFor(orderNumber: string): string {
+    return `${DeliveryService.webBase()}/track/${orderNumber}`;
   }
 
   async updateDriverLocation(dto: UpdateDriverLocationDto) {
@@ -312,7 +364,7 @@ export class DeliveryService {
     return {
       ...delivery,
       driverLocations,
-      trackingUrl: `${process.env.FRONTEND_URL}/track/${orderNumber}`,
+      trackingUrl: DeliveryService.trackingUrlFor(orderNumber),
     };
   }
 
@@ -356,7 +408,7 @@ export class DeliveryService {
       this.notifications.sendSMS(
         businessId,
         delivery.customerPhone,
-        `Your order #${delivery.orderNumber} has been assigned a driver. Track: ${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/track/${delivery.orderNumber}`,
+        `Your order #${delivery.orderNumber} has been assigned a driver. Track: ${DeliveryService.trackingUrlFor(delivery.orderNumber)}`,
       ).catch(() => {});
     }
 
@@ -667,7 +719,7 @@ export class DeliveryService {
   async sendCustomerTrackingLink(deliveryOrderId: string) {
     const delivery = await this.prisma.deliveryOrder.findUnique({ where: { id: deliveryOrderId } });
     if (!delivery) throw new NotFoundException('Delivery not found');
-    const trackingUrl = `${process.env.WEB_URL ?? 'http://localhost:3001'}/track/${delivery.orderNumber}`;
+    const trackingUrl = DeliveryService.trackingUrlFor(delivery.orderNumber);
     if (delivery.customerPhone) {
       await this.notifications.sendSMS(
         delivery.businessId,

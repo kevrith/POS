@@ -25,27 +25,27 @@ interface DeliveryOrder {
   customerPhone?: string;
   address?: string;
   deliveryAddress?: string;
+  lat?: number | null;
+  lng?: number | null;
   driverId?: string;
   notes?: string;
   deliveryFeeCents?: number;
   createdAt: string;
 }
 
-function openGoogleMaps(address: string) {
-  const encoded = encodeURIComponent(address);
-  // Try Google Maps first, fallback to browser maps
-  const googleUrl = `comgooglemaps://?q=${encoded}`;
-  const mapsUrl = `https://maps.google.com/?q=${encoded}`;
+function openGoogleMaps(address: string, lat?: number | null, lng?: number | null) {
+  // Prefer GPS coordinates for precise navigation; fall back to address text
+  const dest = lat && lng ? `${lat},${lng}` : encodeURIComponent(address);
+  const googleUrl = `comgooglemaps://?daddr=${dest}&directionsmode=driving`;
+  const mapsUrl = lat && lng
+    ? `https://maps.google.com/?q=${lat},${lng}&travelmode=driving`
+    : `https://maps.google.com/?q=${encodeURIComponent(address)}&travelmode=driving`;
 
   Linking.canOpenURL(googleUrl)
-    .then((supported) => {
-      return Linking.openURL(supported ? googleUrl : mapsUrl);
-    })
-    .catch(() => {
-      Linking.openURL(mapsUrl).catch(() =>
-        Alert.alert('Error', 'Could not open maps application.')
-      );
-    });
+    .then((supported) => Linking.openURL(supported ? googleUrl : mapsUrl))
+    .catch(() => Linking.openURL(mapsUrl).catch(() =>
+      Alert.alert('Error', 'Could not open maps application.')
+    ));
 }
 
 function callPhone(phone: string) {
@@ -54,20 +54,19 @@ function callPhone(phone: string) {
   );
 }
 
-function openWaze(address: string) {
-  const encoded = encodeURIComponent(address);
-  const wazeUrl = `waze://?q=${encoded}`;
+function openWaze(address: string, lat?: number | null, lng?: number | null) {
+  const wazeUrl = lat && lng
+    ? `waze://?ll=${lat},${lng}&navigate=yes`
+    : `waze://?q=${encodeURIComponent(address)}&navigate=yes`;
   Linking.canOpenURL(wazeUrl)
     .then((supported) => {
       if (supported) return Linking.openURL(wazeUrl);
       Alert.alert('Waze not installed', 'Please use Google Maps instead.');
     })
-    .catch(() =>
-      Alert.alert('Error', 'Could not open Waze.')
-    );
+    .catch(() => Alert.alert('Error', 'Could not open Waze.'));
 }
 
-function DeliveryCard({ item }: { item: DeliveryOrder }) {
+function DeliveryCard({ item, stopNumber, totalStops }: { item: DeliveryOrder; stopNumber: number; totalStops: number }) {
   const router = useRouter();
   const address = item.address ?? item.deliveryAddress ?? '';
   const statusColor = STATUS_COLORS[item.status] ?? Colors.textSecondary;
@@ -77,6 +76,9 @@ function DeliveryCard({ item }: { item: DeliveryOrder }) {
       {/* Order Header */}
       <View style={styles.cardHeader}>
         <View style={styles.orderRef}>
+          <View style={styles.stopBadge}>
+            <Text style={styles.stopBadgeText}>{stopNumber}/{totalStops}</Text>
+          </View>
           <Ionicons name="receipt-outline" size={16} color={Colors.primary} />
           <Text style={styles.orderNumber}>#{item.orderNumber}</Text>
         </View>
@@ -108,7 +110,7 @@ function DeliveryCard({ item }: { item: DeliveryOrder }) {
           <View style={styles.mapBtns}>
             <TouchableOpacity
               style={[styles.mapBtn, { backgroundColor: Colors.primary }]}
-              onPress={() => openGoogleMaps(address)}
+              onPress={() => openGoogleMaps(address, item.lat, item.lng)}
               activeOpacity={0.85}
             >
               <Ionicons name="map" size={16} color="#FFFFFF" />
@@ -116,7 +118,7 @@ function DeliveryCard({ item }: { item: DeliveryOrder }) {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.mapBtn, { backgroundColor: '#00B2FF' }]}
-              onPress={() => openWaze(address)}
+              onPress={() => openWaze(address, item.lat, item.lng)}
               activeOpacity={0.85}
             >
               <Ionicons name="navigate" size={16} color="#FFFFFF" />
@@ -239,7 +241,7 @@ export default function MapScreen() {
             </Text>
           </View>
         }
-        renderItem={({ item }) => <DeliveryCard item={item} />}
+        renderItem={({ item, index }) => <DeliveryCard item={item} stopNumber={index + 1} totalStops={deliveries.length} />}
       />
     </SafeAreaView>
   );
@@ -369,4 +371,6 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.border,
   },
   detailsLinkText: { fontSize: 13, color: Colors.primary, fontWeight: '600' },
+  stopBadge: { backgroundColor: Colors.primary, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2, marginRight: 4 },
+  stopBadgeText: { color: '#FFF', fontSize: 11, fontWeight: '800' },
 });

@@ -700,8 +700,8 @@ export class DeliveryService {
 
     const distance = this.calculateDistance(driverLat, driverLng, delivery.lat, delivery.lng);
     
-    // If driver is within 100m of destination, notify customer
-    if (distance < 0.1 && delivery.status === 'ASSIGNED') {
+    // If driver is within 200m of destination, set ARRIVING and notify customer
+    if (distance < 0.2 && ['ASSIGNED', 'IN_TRANSIT'].includes(delivery.status)) {
       await this.prisma.deliveryOrder.update({
         where: { id: deliveryOrderId },
         data: { status: 'ARRIVING' },

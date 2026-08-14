@@ -4,7 +4,7 @@
  */
 import {
   View, Text, TextInput, StyleSheet, FlatList,
-  TouchableOpacity, ActivityIndicator, Alert, Modal, Switch,
+  TouchableOpacity, ActivityIndicator, Alert, Modal, Switch, Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -56,6 +56,7 @@ interface Item {
   sku: string | null;
   category: string | null;
   retailPriceCents: number;
+  quantity: number; // current stock level
 }
 
 interface Customer { id: string; name: string; }
@@ -73,7 +74,7 @@ export default function OrderScreen() {
 
   const items = useQuery<Item[]>({
     queryKey: ['catalog', businessId],
-    queryFn: () => agentApi.get<Item[]>(`/items?businessId=${businessId}`),
+    queryFn: () => agentApi.get<Item[]>(`/items?businessId=${businessId}&activeOnly=true`),
     enabled: !!businessId,
   });
 
@@ -137,28 +138,32 @@ export default function OrderScreen() {
       void qc.invalidateQueries({ queryKey: ['agent-stats'] });
       void qc.invalidateQueries({ queryKey: ['call-plan'] });
       const queued = (res as { queued?: boolean })?.queued;
-      // Snapshot the cart before clearing so the agent can print/share a copy.
       const snap: OrderSnapshot = {
         orderNumber: (res as { orderNumber?: string })?.orderNumber,
         customerName: cart.customerName,
         lines: cart.lines.map((l) => ({ itemName: l.itemName, quantity: l.quantity, unitPriceCents: l.unitPriceCents })),
         subtotalCents: cart.subtotalCents(),
       };
+      const date = new Date().toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' });
+      const itemLines = snap.lines.map((l) => `  - ${l.itemName} x${l.quantity}  ${formatKES(l.unitPriceCents * l.quantity)}`).join('\n');
+      const waMsg = `ORDER CONFIRMATION\nOrder: ${snap.orderNumber ?? 'OFFLINE'}\nDate: ${date}\nCustomer: ${snap.customerName ?? '-'}\n---\n${itemLines}\n---\nTotal: ${formatKES(snap.subtotalCents)}\n\nThank you for your order!`;
+      const waUrl = `https://wa.me/?text=${encodeURIComponent(waMsg)}`;
       const done = () => { cart.clear(); router.replace('/(tabs)/today'); };
       Alert.alert(
-        queued ? 'Order Saved Offline' : 'Order Saved',
-        queued
-          ? 'No connection right now — the order is saved on your phone and will sync automatically when you’re back online.'
-          : 'The order has been submitted for processing.',
+        queued ? 'Order Saved Offline' : 'Order Submitted!',
+        queued ? 'Saved on your phone - will sync when back online.' : `Order ${snap.orderNumber ?? ''} submitted.`,
         [
-          { text: 'Print / Share', onPress: async () => { try { await printOrderConfirmation(snap); } catch { /* user cancelled */ } done(); } },
+          { text: 'WhatsApp', onPress: async () => { try { await Linking.openURL(waUrl); } catch (_) { /* ignore */ } done(); } },
+          { text: 'Print', onPress: async () => { try { await printOrderConfirmation(snap); } catch (_) { /* cancelled */ } done(); } },
           { text: 'OK', onPress: done },
         ],
       );
     },
-    onError: (e) => {
+        onError: (e) => {
       const msg = (e as Error)?.message ?? '';
-      if (msg.includes('CREDIT_LIMIT') || msg.toLowerCase().includes('credit limit')) {
+      if (msg.includes('INSUFFICIENT_STOCK') || msg.toLowerCase().includes('insufficient stock')) {
+        Alert.alert('Not Enough Stock', msg);
+      } else if (msg.includes('CREDIT_LIMIT') || msg.toLowerCase().includes('credit limit')) {
         Alert.alert('Credit Limit Exceeded', 'This order would push the customer over their credit limit. Collect a payment first, or request a credit increase.');
       } else {
         Alert.alert('Could not save order', msg || 'Please try again.');
@@ -224,11 +229,21 @@ export default function OrderScreen() {
         ListEmptyComponent={items.isLoading ? <ActivityIndicator color={Colors.primary} style={{ marginTop: 16 }} /> : <Text style={st.noItems}>No items in catalog.</Text>}
         renderItem={({ item }) => {
           const line = cart.lines.find((l) => l.itemId === item.id);
+          const cartQty = line?.quantity ?? 0;
+          const outOfStock = item.quantity <= 0;
+          const lowStock = !outOfStock && item.quantity <= 5;
+          const stockLabel = outOfStock
+            ? 'Out of stock'
+            : lowStock
+            ? `Low: ${item.quantity} left${cartQty > 0 ? ` (${cartQty} in cart)` : ''}`
+            : `Stock: ${item.quantity}${cartQty > 0 ? ` (${cartQty} in cart)` : ''}`;
+          const stockColor = outOfStock ? Colors.error : lowStock ? Colors.warning : Colors.textSecondary;
           return (
-            <View style={st.itemRow}>
+            <View style={[st.itemRow, outOfStock && { opacity: 0.5 }]}>
               <View style={{ flex: 1 }}>
                 <Text style={st.itemName} numberOfLines={1}>{item.name}</Text>
                 <Text style={st.itemPrice}>{formatKES(item.retailPriceCents)}</Text>
+                <Text style={[st.stockLabel, { color: stockColor }]}>{stockLabel}</Text>
               </View>
               {line ? (
                 <View style={st.qtyControls}>
@@ -239,16 +254,20 @@ export default function OrderScreen() {
                     <Ionicons name="remove" size={18} color={Colors.primary} />
                   </TouchableOpacity>
                   <Text style={st.qtyText}>{line.quantity}</Text>
-                  <TouchableOpacity style={st.qtyBtn} onPress={() => {
-                    const idx = cart.lines.findIndex((l) => l.itemId === item.id);
-                    cart.updateQty(idx, line.quantity + 1);
-                  }}>
+                  <TouchableOpacity
+                    style={[st.qtyBtn, cartQty >= item.quantity && !cart.isSampleOrder && { opacity: 0.4 }]}
+                    disabled={cartQty >= item.quantity && !cart.isSampleOrder}
+                    onPress={() => {
+                      const idx = cart.lines.findIndex((l) => l.itemId === item.id);
+                      cart.updateQty(idx, line.quantity + 1);
+                    }}>
                     <Ionicons name="add" size={18} color={Colors.primary} />
                   </TouchableOpacity>
                 </View>
               ) : (
                 <TouchableOpacity
-                  style={st.addItemBtn}
+                  style={[st.addItemBtn, outOfStock && !cart.isSampleOrder && { backgroundColor: Colors.textSecondary }]}
+                  disabled={outOfStock && !cart.isSampleOrder}
                   onPress={() => cart.addLine({ itemId: item.id, itemName: item.name, itemSku: item.sku ?? undefined, quantity: 1, unitPriceCents: item.retailPriceCents })}
                 >
                   <Ionicons name="add" size={18} color="#FFF" />
@@ -264,7 +283,7 @@ export default function OrderScreen() {
         <View style={st.bottomBar}>
           <View style={{ flex: 1 }}>
             <Text style={st.summaryItems}>{cart.lines.reduce((n, l) => n + l.quantity, 0)} items</Text>
-            <Text style={st.summaryTotal}>{formatKES(subtotal)} <Text style={st.exVat}>+ VAT</Text></Text>
+            <Text style={st.summaryTotal}>{formatKES(subtotal)}</Text>
           </View>
           <TouchableOpacity style={[st.submitBtn, submit.isPending && { opacity: 0.7 }]} onPress={handleSubmit} disabled={submit.isPending}>
             {submit.isPending ? <ActivityIndicator color="#FFF" /> : <><Ionicons name="checkmark-circle" size={20} color="#FFF" /><Text style={st.submitText}>Save Order</Text></>}
@@ -323,6 +342,7 @@ const st = StyleSheet.create({
   },
   itemName: { fontSize: 15, fontWeight: '600', color: Colors.text },
   itemPrice: { fontSize: 13, color: Colors.primary, fontWeight: '600', marginTop: 2 },
+  stockLabel: { fontSize: 11, marginTop: 2 },
   addItemBtn: { width: 38, height: 38, borderRadius: 10, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center' },
   qtyControls: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   qtyBtn: { width: 34, height: 34, borderRadius: 8, backgroundColor: Colors.background, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.border },

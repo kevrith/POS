@@ -289,6 +289,39 @@ function OrderDetailModal({
             {order.isSampleOrder && <span className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 px-2 py-0.5 rounded-full">Sample</span>}
           </div>
 
+          {/* Order progress timeline */}
+          {(() => {
+            const steps = ['SUBMITTED', 'CONFIRMED', 'PACKED', 'DISPATCHED', 'DELIVERED'];
+            const currentIdx = steps.indexOf(order.status);
+            return (
+              <div className="flex items-center gap-1">
+                {steps.map((step, i) => {
+                  const done = i <= currentIdx;
+                  const active = i === currentIdx;
+                  return (
+                    <div key={step} className="flex items-center flex-1">
+                      <div className="flex flex-col items-center flex-1">
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold ${
+                          done ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-400'
+                        } ${active ? 'ring-2 ring-blue-400 ring-offset-1' : ''}`}>
+                          {done ? '✓' : i + 1}
+                        </div>
+                        <div className={`text-[9px] mt-0.5 text-center leading-tight ${
+                          done ? 'text-blue-600 dark:text-blue-400 font-semibold' : 'text-gray-400'
+                        }`}>{step.charAt(0) + step.slice(1).toLowerCase()}</div>
+                      </div>
+                      {i < steps.length - 1 && (
+                        <div className={`h-0.5 flex-1 mb-3 ${
+                          i < currentIdx ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'
+                        }`} />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
           {/* Invoice info — shown when office has generated an invoice */}
           {order.invoiceNumber && (
             <div className="flex items-start gap-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 rounded-xl p-3">
@@ -520,8 +553,7 @@ function NewOrderPanel({
   });
 
   const subtotal = cart.reduce((s, i) => s + i.unitPriceCents * i.quantity, 0);
-  const vatCents = Math.round(subtotal * 16 / 116);
-  const totalCents = subtotal;
+  const totalCents = subtotal; // VAT is calculated server-side based on business tax settings
   const exceedsCredit = customer.creditLimitCents > 0 && totalCents > customer.creditLimitCents;
 
   function addItem(item: InventoryItem) {
@@ -578,8 +610,10 @@ function NewOrderPanel({
       setNotes('');
       onSuccess({ orderNumber: res.orderNumber, totalCents, items: snapshot });
     } catch (err: unknown) {
-      const e = err as { code?: string };
-      if (e?.code === 'CREDIT_LIMIT_EXCEEDED') {
+      const e = err as { code?: string; available?: number; requested?: number; itemName?: string };
+      if (e?.code === 'INSUFFICIENT_STOCK') {
+        toast.error(`Not enough stock for "${e.itemName}". Available: ${e.available}, you ordered: ${e.requested}`);
+      } else if (e?.code === 'CREDIT_LIMIT_EXCEEDED') {
         if (confirm('Credit limit exceeded. Submit a credit increase request?')) {
           await api.post('/field-sales/credit-requests', { customerId: customer.id, businessId, requestedBy: agentId, fieldOrderId: null, currentLimitCents: customer.creditLimitCents, requestedLimitCents: customer.creditLimitCents * 2 });
           toast.success('Credit increase request submitted');
@@ -617,13 +651,23 @@ function NewOrderPanel({
           <input className="w-full pl-9 pr-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white" placeholder="Search items..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
-          {items.slice(0, 20).map(item => (
-            <button key={item.id} onClick={() => addItem(item)} className="text-left p-2.5 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors">
-              <div className="text-xs font-medium text-gray-900 dark:text-white truncate">{item.name}</div>
-              <div className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">{fmtKES(item.retailPriceCents)}</div>
-              <div className="text-xs text-gray-400">Stk: {item.quantity}</div>
-            </button>
-          ))}
+          {items.slice(0, 20).map(item => {
+            const cartQty = cart.find(c => c.itemId === item.id)?.quantity ?? 0;
+            const lowStock = item.quantity > 0 && item.quantity <= 5;
+            const outOfStock = item.quantity <= 0;
+            return (
+              <button key={item.id} onClick={() => !outOfStock && addItem(item)} disabled={outOfStock} className={`text-left p-2.5 rounded-lg border transition-colors ${
+                outOfStock ? 'opacity-40 cursor-not-allowed bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700'
+                : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+              }`}>
+                <div className="text-xs font-medium text-gray-900 dark:text-white truncate">{item.name}</div>
+                <div className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">{fmtKES(item.retailPriceCents)}</div>
+                <div className={`text-xs mt-0.5 ${outOfStock ? 'text-red-500' : lowStock ? 'text-amber-500' : 'text-gray-400'}`}>
+                  {outOfStock ? 'Out of stock' : `Stk: ${item.quantity}${cartQty > 0 ? ` (${cartQty} in cart)` : ''}`}
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -663,13 +707,7 @@ function NewOrderPanel({
             ))}
           </div>
           <div className="mt-3 space-y-1 text-sm">
-            <div className="flex justify-between text-gray-600 dark:text-gray-400">
-              <span>Subtotal (incl. VAT)</span><span>{fmtKES(subtotal)}</span>
-            </div>
-            <div className="flex justify-between text-gray-600 dark:text-gray-400">
-              <span>VAT (16%)</span><span>{fmtKES(vatCents)}</span>
-            </div>
-            <div className="flex justify-between font-bold text-base text-gray-900 dark:text-white border-t border-gray-200 dark:border-gray-700 pt-2 mt-2">
+            <div className="flex justify-between font-bold text-base text-gray-900 dark:text-white border-t border-gray-200 dark:border-gray-700 pt-2">
               <span>Total</span><span>{fmtKES(totalCents)}</span>
             </div>
           </div>

@@ -58,20 +58,27 @@ export default function DeliveryDetailScreen() {
   }, [data?.status, id, activeId, setActive]);
 
   const updateMutation = useMutation({
-    // Offline-first: queue the status change (survives dead zones), update the
-    // UI optimistically, then try to flush. The PATCH is idempotent so a replay
-    // is harmless.
     mutationFn: async (status: string) => {
-      await enqueue({
-        offlineId: uuid(),
-        method: 'PATCH',
-        path: `/delivery/${id}`,
-        body: { status },
-        label: `Set order to ${status.replace('_', ' ').toLowerCase()}`,
-      });
-      void flushQueue();
+      try {
+        // Try direct API first for immediate feedback
+        return await driverApi.patch(`/delivery/${id}`, { status });
+      } catch (e) {
+        const msg = (e as Error)?.message ?? '';
+        if (!msg.includes('Network request failed')) throw e;
+        // Offline fallback: queue and flush
+        await enqueue({
+          offlineId: uuid(),
+          method: 'PATCH',
+          path: `/delivery/${id}`,
+          body: { status },
+          label: `Set order to ${status.replace('_', ' ').toLowerCase()}`,
+        });
+        void flushQueue();
+        return { status };
+      }
     },
     onMutate: (status: string) => {
+      // Optimistic update so button changes immediately
       queryClient.setQueryData<DeliveryDetail>(['delivery', id], (prev) =>
         prev ? { ...prev, status } : prev,
       );
@@ -79,6 +86,10 @@ export default function DeliveryDetailScreen() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['delivery', id] });
       queryClient.invalidateQueries({ queryKey: ['deliveries'] });
+    },
+    onError: (_err, status) => {
+      // Rollback optimistic update on real error
+      queryClient.invalidateQueries({ queryKey: ['delivery', id] });
     },
   });
 
@@ -110,6 +121,14 @@ export default function DeliveryDetailScreen() {
       'Mark as Delivered',
       'Confirm this order has been successfully delivered?',
       () => updateMutation.mutate('DELIVERED')
+    );
+  }
+
+  function handleNotifyArriving() {
+    confirmAction(
+      'Notify Customer',
+      'Send the customer an "I am arriving" notification?',
+      () => updateMutation.mutate('ARRIVING')
     );
   }
 
@@ -465,6 +484,15 @@ export default function DeliveryDetailScreen() {
                 </>
               )}
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnArriving]}
+              onPress={handleNotifyArriving}
+              disabled={isBusy}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="location" size={18} color="#FFFFFF" />
+              <Text style={styles.actionBtnText}>Notify Customer I'm Arriving</Text>
+            </TouchableOpacity>
             <View style={styles.secondaryBtns}>
               <TouchableOpacity
                 style={[styles.actionBtn, styles.actionBtnWarning, { flex: 1 }]}
@@ -608,6 +636,7 @@ const styles = StyleSheet.create({
   actionBtnSuccess: { backgroundColor: Colors.success },
   actionBtnDanger: { backgroundColor: Colors.error },
   actionBtnWarning: { backgroundColor: Colors.warning },
+  actionBtnArriving: { backgroundColor: '#F97316' },
   actionBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   completedBanner: {
     flexDirection: 'row',

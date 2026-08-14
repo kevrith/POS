@@ -249,12 +249,16 @@ export class FieldSalesService {
     });
     if (!customer) throw new NotFoundException('Customer not found');
 
-    // Calculate totals
+    // Calculate totals — respect business tax setting
+    const businessSettings = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { taxType: true },
+    });
     const subtotalCents = dto.items.reduce(
       (sum, item) => sum + item.quantity * item.unitPriceCents,
       0,
     );
-    const vatCents = Math.round(subtotalCents * 0.16);
+    const vatCents = businessSettings?.taxType === 'VAT' ? Math.round(subtotalCents * 0.16) : 0;
     const totalCents = subtotalCents + vatCents;
 
     // Check credit limit (only for non-sample orders)
@@ -293,6 +297,27 @@ export class FieldSalesService {
       if (!isNaN(num)) nextNum = num + 1;
     }
     const orderNumber = `FO-${String(nextNum).padStart(4, '0')}`;
+
+    // Stock availability check
+    if (!dto.isSampleOrder) {
+      for (const item of dto.items) {
+        if (!item.itemId) continue;
+        const inv = await this.prisma.inventoryMovement.aggregate({
+          where: { itemId: item.itemId, businessId },
+          _sum: { quantity: true },
+        });
+        const available = inv._sum.quantity ?? 0;
+        if (available < item.quantity) {
+          throw new BadRequestException({
+            code: 'INSUFFICIENT_STOCK',
+            message: `Insufficient stock for "${item.itemName}". Available: ${available}, Requested: ${item.quantity}`,
+            itemName: item.itemName,
+            available,
+            requested: item.quantity,
+          });
+        }
+      }
+    }
 
     const order = await this.prisma.fieldOrder.create({
       data: {
@@ -443,6 +468,24 @@ export class FieldSalesService {
       updateData.packedAt = new Date();
     } else if (status === 'DISPATCHED') {
       updateData.dispatchedAt = new Date();
+      // Deduct stock when order is dispatched
+      if (order.storeId) {
+        const items = await this.prisma.fieldOrderItem.findMany({ where: { fieldOrderId: id } });
+        for (const item of items) {
+          if (!item.itemId || item.isSample) continue;
+          await this.prisma.inventoryMovement.create({
+            data: {
+              offlineId: uuidv4(),
+              businessId,
+              itemId: item.itemId,
+              storeId: order.storeId,
+              type: 'SALE',
+              quantity: -item.quantity,
+              source: 'FIELD_ORDER',
+            },
+          });
+        }
+      }
     } else if (status === 'DELIVERED') {
       updateData.deliveredAt = new Date();
     } else if (status === 'CANCELLED') {
@@ -625,13 +668,18 @@ export class FieldSalesService {
     const ordersToday = todayOrders.length;
     const valueTodayCents = todayOrders.reduce((s, o) => s + o.totalCents, 0);
 
-    // Commission: 3% of delivered + paid orders
+    // Commission: use agent's Employee commissionRate, fall back to 3%
+    const employee = await this.prisma.employee.findFirst({
+      where: { userId: agentId, businessId },
+      select: { commissionRate: true, salesTargetCents: true },
+    });
+    const commissionRate = (employee?.commissionRate ?? 3) / 100;
     const paidDeliveredValueCents = monthOrders
       .filter((o) => o.status === 'DELIVERED' && o.paymentStatus === 'PAID')
       .reduce((s, o) => s + o.totalCents, 0);
-    const commissionEarnedCents = Math.round(paidDeliveredValueCents * 0.03);
+    const commissionEarnedCents = Math.round(paidDeliveredValueCents * commissionRate);
 
-    const commissionTargetCents = 10_000_000; // KES 100,000 default target
+    const commissionTargetCents = employee?.salesTargetCents ?? 10_000_000;
 
     const recentOrders = monthOrders.slice(0, 10).map((o) => ({
       id: o.id,
@@ -825,7 +873,12 @@ export class FieldSalesService {
       });
       const totalValue = orders.reduce((s, o) => s + o.totalCents, 0);
       const deliveredPaid = orders.filter((o) => o.status === 'DELIVERED' && o.paymentStatus === 'PAID');
-      const commission = Math.round(deliveredPaid.reduce((s, o) => s + o.totalCents, 0) * 0.03);
+      const agentEmployee = await this.prisma.employee.findFirst({
+        where: { userId: agent.id, businessId },
+        select: { commissionRate: true },
+      });
+      const agentCommissionRate = (agentEmployee?.commissionRate ?? 3) / 100;
+      const commission = Math.round(deliveredPaid.reduce((s, o) => s + o.totalCents, 0) * agentCommissionRate);
       const visitCount = await this.prisma.agentVisit.count({ where: { agentId: agent.id, businessId, visitedAt: { gte: startDate, lte: endDate } } });
       return { agentId: agent.id, agentName: agent.name, avatarUrl: agent.avatarUrl, ordersCount: orders.length, totalValueCents: totalValue, commissionCents: commission, visitCount };
     }));

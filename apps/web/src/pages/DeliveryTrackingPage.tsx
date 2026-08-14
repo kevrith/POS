@@ -38,9 +38,11 @@ function timeAgo(iso: string): string {
 const statusConfig = {
   PENDING: { label: 'Order Confirmed', color: 'bg-blue-500', icon: Package },
   ASSIGNED: { label: 'Driver Assigned', color: 'bg-yellow-500', icon: Truck },
+  IN_TRANSIT: { label: 'Out for Delivery', color: 'bg-blue-600', icon: Truck },
   ARRIVING: { label: 'Driver Arriving', color: 'bg-orange-500', icon: MapPin },
   DELIVERED: { label: 'Delivered', color: 'bg-green-500', icon: CheckCircle },
   RESCHEDULED: { label: 'Rescheduled', color: 'bg-gray-500', icon: Clock },
+  CANCELLED: { label: 'Cancelled', color: 'bg-red-500', icon: Package },
 };
 
 export default function DeliveryTrackingPage() {
@@ -188,16 +190,16 @@ export default function DeliveryTrackingPage() {
           <h3 className="font-semibold text-gray-900 mb-4">Order Progress</h3>
           <div className="space-y-4">
             {[
-              { key: 'PENDING', label: 'Order Confirmed', time: delivery.scheduledAt },
-              { key: 'ASSIGNED', label: 'Driver Assigned', time: delivery.pickedUpAt },
-              { key: 'ARRIVING', label: 'Driver Arriving', time: null },
-              { key: 'DELIVERED', label: 'Delivered', time: delivery.deliveredAt },
+              { key: 'PENDING',    label: 'Order Confirmed',    time: delivery.scheduledAt },
+              { key: 'ASSIGNED',   label: 'Driver Assigned',    time: delivery.pickedUpAt },
+              { key: 'IN_TRANSIT', label: 'Out for Delivery',   time: delivery.pickedUpAt },
+              { key: 'ARRIVING',   label: 'Driver Arriving',    time: null },
+              { key: 'DELIVERED',  label: 'Delivered',          time: delivery.deliveredAt },
             ].map((step) => {
-              const isCompleted = delivery.status === step.key || 
-                (step.key === 'PENDING') ||
-                (step.key === 'ASSIGNED' && ['ASSIGNED', 'ARRIVING', 'DELIVERED'].includes(delivery.status)) ||
-                (step.key === 'ARRIVING' && ['ARRIVING', 'DELIVERED'].includes(delivery.status));
-              
+              const ORDER = ['PENDING', 'ASSIGNED', 'IN_TRANSIT', 'ARRIVING', 'DELIVERED'];
+              const currentIdx = ORDER.indexOf(delivery.status);
+              const stepIdx = ORDER.indexOf(step.key);
+              const isCompleted = stepIdx !== -1 && stepIdx <= currentIdx;
               const isCurrent = delivery.status === step.key;
               
               return (

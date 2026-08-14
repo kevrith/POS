@@ -5,6 +5,7 @@ import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PushService, deliveryStatusMessage } from '../push/push.service';
 import { v4 as uuidv4 } from 'uuid';
+import { newDeliveryOrderNumber } from './order-number';
 
 interface CreateDeliveryOrderDto {
   businessId: string;
@@ -127,7 +128,7 @@ export class DeliveryService {
           ? await this.calculateDeliveryFee(zone, dto.lat, dto.lng)
           : 0;
 
-    const orderNumber = `DEL-${Date.now()}`;
+    const orderNumber = newDeliveryOrderNumber();
     
     const deliveryOrder = await this.prisma.deliveryOrder.create({
       data: {

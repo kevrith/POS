@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { newDeliveryOrderNumber } from '../delivery/order-number';
 
 interface CreateRunDto {
   routeId: string;
@@ -307,7 +308,9 @@ export class DeliveryRoutesService {
 
       await this.prisma.deliveryOrder.create({
         data: {
-          orderNumber: `DEL-${fo.orderNumber ?? fo.id.slice(-8).toUpperCase()}`,
+          // Derived from the field order's number before, which is sequential and
+          // therefore enumerable on the public tracking page.
+          orderNumber: newDeliveryOrderNumber(),
           businessId: fo.businessId,
           storeId,
           fieldOrderId: fo.id,

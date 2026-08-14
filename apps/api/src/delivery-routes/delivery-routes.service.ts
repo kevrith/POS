@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { DeliveryService } from '../delivery/delivery.service';
 import { newDeliveryOrderNumber } from '../delivery/order-number';
 
 interface CreateRunDto {
@@ -31,7 +32,10 @@ interface CaptureProofDto {
 
 @Injectable()
 export class DeliveryRoutesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private delivery: DeliveryService,
+  ) {}
 
   async createRun(businessId: string, dto: CreateRunDto) {
     // A bad/foreign routeId would otherwise surface as an opaque FK 500.
@@ -295,6 +299,13 @@ export class DeliveryRoutesService {
         continue;
       }
 
+      const lat = fo.customer?.gpsLat ?? fo.customer?.addresses?.[0]?.lat ?? undefined;
+      const lng = fo.customer?.gpsLng ?? fo.customer?.addresses?.[0]?.lng ?? undefined;
+      const feeCents =
+        lat != null && lng != null
+          ? (await this.delivery.calcDeliveryFee(fo.businessId, lat, lng)).feeCents
+          : 0;
+
       const storeId =
         fo.storeId ??
         (
@@ -329,6 +340,10 @@ export class DeliveryRoutesService {
           subtotalCents: fo.subtotalCents,
           taxCents: fo.vatCents,
           totalCents: fo.totalCents,
+          // Projected deliveries never carried a fee, so every field-order delivery
+          // showed KES 0 on the dispatch board. Priced the same way a POS delivery
+          // is — by zone, when the customer has coordinates.
+          deliveryFeeCents: feeCents,
           paymentStatus: fo.paymentStatus === 'PAID' ? 'PAID' : 'UNPAID',
           notes: fo.notes ?? undefined,
           items: {

@@ -12,9 +12,10 @@ function makePrisma() {
   };
 }
 
-function makeService(overrides: Record<string, any> = {}) {
+function makeService(overrides: Record<string, any> = {}, feeCents = 0) {
   const prisma: any = { ...makePrisma(), ...overrides };
-  return { svc: new DeliveryRoutesService(prisma), prisma };
+  const delivery: any = { calcDeliveryFee: jest.fn().mockResolvedValue({ feeCents }) };
+  return { svc: new DeliveryRoutesService(prisma, delivery), prisma, delivery };
 }
 
 describe('DeliveryRoutesService', () => {
@@ -175,5 +176,52 @@ describe('DeliveryRoutesService', () => {
         svc.captureProof('ro-1', 'biz-2', { receivedByName: 'Jane' }),
       ).rejects.toThrow('Delivery run order not found');
     });
+  });
+});
+
+describe('DeliveryRoutesService — projected delivery pricing', () => {
+  function runWithStop(customer: any) {
+    const prisma: any = {
+      deliveryRun: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'run-1',
+          driverUserId: 'drv-1',
+          date: new Date(),
+          orders: [{
+            fieldOrder: {
+              id: 'fo-1', businessId: 'biz-1', storeId: 'store-1',
+              orderNumber: 'FO-0001', customerId: 'c-1', customer,
+              subtotalCents: 1000, vatCents: 160, totalCents: 1160,
+              paymentStatus: 'UNPAID', notes: null, items: [],
+            },
+          }],
+        }),
+      },
+      deliveryOrder: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn(), update: jest.fn() },
+      store: { findFirst: jest.fn().mockResolvedValue({ id: 'store-1' }) },
+    };
+    return prisma;
+  }
+
+  it('prices the delivery by zone when the customer has coordinates', async () => {
+    const prisma = runWithStop({ name: 'Kev', phone: '2547', gpsLat: -1.29, gpsLng: 36.82, addresses: [] });
+    const delivery: any = { calcDeliveryFee: jest.fn().mockResolvedValue({ feeCents: 25000 }) };
+    const svc = new DeliveryRoutesService(prisma as any, delivery);
+
+    await (svc as any).syncDeliveryOrders('run-1');
+
+    expect(delivery.calcDeliveryFee).toHaveBeenCalledWith('biz-1', -1.29, 36.82);
+    expect(prisma.deliveryOrder.create.mock.calls[0][0].data.deliveryFeeCents).toBe(25000);
+  });
+
+  it('charges nothing when the customer has no location to price against', async () => {
+    const prisma = runWithStop({ name: 'Kev', phone: '2547', gpsLat: null, gpsLng: null, addresses: [] });
+    const delivery: any = { calcDeliveryFee: jest.fn() };
+    const svc = new DeliveryRoutesService(prisma as any, delivery);
+
+    await (svc as any).syncDeliveryOrders('run-1');
+
+    expect(delivery.calcDeliveryFee).not.toHaveBeenCalled();
+    expect(prisma.deliveryOrder.create.mock.calls[0][0].data.deliveryFeeCents).toBe(0);
   });
 });

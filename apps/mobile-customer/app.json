@@ -19,7 +19,6 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "co.ke.kastra.order",
-      "buildNumber": "1",
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true,
@@ -32,8 +31,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#030712"
       },
-      "package": "co.ke.kastra.order",
-      "versionCode": 1
+      "package": "co.ke.kastra.order"
     },
     "plugins": [
       "expo-router",

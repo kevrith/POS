@@ -19,7 +19,6 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "co.ke.kastra.pos",
-      "buildNumber": "1",
       "infoPlist": {
         "NSCameraUsageDescription": "Camera is used to scan product barcodes at point of sale.",
         "NSPhotoLibraryUsageDescription": "Used to attach receipt photos to expense records.",
@@ -35,7 +34,6 @@
         "backgroundColor": "#030712"
       },
       "package": "co.ke.kastra.pos",
-      "versionCode": 1,
       "permissions": [
         "CAMERA",
         "VIBRATE",

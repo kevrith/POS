@@ -19,7 +19,6 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "co.ke.kastra.agent",
-      "buildNumber": "1",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Location is used to record where customers are registered and visited.",
         "NSAppTransportSecurity": {
@@ -34,7 +33,6 @@
         "backgroundColor": "#7C2D12"
       },
       "package": "co.ke.kastra.agent",
-      "versionCode": 1,
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",

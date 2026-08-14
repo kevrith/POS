@@ -85,6 +85,8 @@ interface StaffUser {
   role: string;
   createdAt: string;
   assignedStores?: Array<{ storeId: string }>;
+  deliveryRateCents?: number | null;
+  deliveryCommissionPercent?: number | null;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -355,20 +357,53 @@ function EditUserModal({
   const [pin, setPin] = useState('');
   const [showPin, setShowPin] = useState(false);
 
+  // Driver pay was only settable when creating a user, so an existing driver could
+  // never be given a rate — and their earnings screen stayed at zero with no way to
+  // fix it from the UI. Prefilled from the current values so saving does not wipe them.
+  const isDriver = user.role === 'DRIVER';
+  const [deliveryRate, setDeliveryRate] = useState(
+    user.deliveryRateCents ? String(user.deliveryRateCents / 100) : '',
+  );
+  const [deliveryCommission, setDeliveryCommission] = useState(
+    user.deliveryCommissionPercent ? String(user.deliveryCommissionPercent) : '',
+  );
+
   const mutation = useMutation({
-    mutationFn: (data: { pin?: string }) =>
-      api.patch(`/business/${businessId}/users/${user.id}`, data),
+    mutationFn: (data: {
+      pin?: string;
+      deliveryRateCents?: number;
+      deliveryCommissionPercent?: number;
+    }) => api.patch(`/business/${businessId}/users/${user.id}`, data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['business-users', businessId] });
       onClose();
     },
   });
 
+  function save() {
+    const data: {
+      pin?: string;
+      deliveryRateCents?: number;
+      deliveryCommissionPercent?: number;
+    } = {};
+    // A blank PIN means "leave it alone", not "clear it".
+    if (pin.length >= 4) data.pin = pin;
+    if (isDriver) {
+      data.deliveryRateCents = deliveryRate ? Math.round(Number(deliveryRate) * 100) : 0;
+      data.deliveryCommissionPercent = deliveryCommission ? Number(deliveryCommission) : 0;
+    }
+    mutation.mutate(data);
+  }
+
+  const nothingToSave = pin.length < 4 && !isDriver;
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
         <div className="flex items-center justify-between p-5 border-b">
-          <h3 className="text-lg font-semibold">Update PIN — {user.name}</h3>
+          <h3 className="text-lg font-semibold">
+            {isDriver ? 'Edit' : 'Update PIN'} — {user.name}
+          </h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X className="w-5 h-5" />
           </button>
@@ -396,7 +431,40 @@ function EditUserModal({
                 {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
+            {isDriver && <p className="text-xs text-gray-400 mt-1">Leave blank to keep the current PIN.</p>}
           </div>
+
+          {isDriver && (
+            <div className="rounded-lg border border-gray-200 p-3 space-y-3">
+              <p className="text-sm font-medium text-gray-700">Delivery pay</p>
+              <p className="text-xs text-gray-400">
+                What this driver earns — not the delivery fee charged to the customer.
+                Leave both blank and their earnings screen will show zero.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Per delivery (KES)</label>
+                  <input
+                    type="number" min="0" step="10"
+                    value={deliveryRate}
+                    onChange={(e) => setDeliveryRate(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g. 150"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">% of delivery fee</label>
+                  <input
+                    type="number" min="0" max="100"
+                    value={deliveryCommission}
+                    onChange={(e) => setDeliveryCommission(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="optional"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
         <div className="flex gap-3 p-5 border-t">
           <button
@@ -406,11 +474,11 @@ function EditUserModal({
             Cancel
           </button>
           <button
-            onClick={() => mutation.mutate({ pin })}
-            disabled={pin.length < 4 || mutation.isPending}
+            onClick={save}
+            disabled={nothingToSave || mutation.isPending}
             className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
           >
-            {mutation.isPending ? 'Updating...' : 'Update PIN'}
+            {mutation.isPending ? 'Saving...' : isDriver ? 'Save' : 'Update PIN'}
           </button>
         </div>
       </div>

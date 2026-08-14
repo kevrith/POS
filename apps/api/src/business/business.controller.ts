@@ -116,6 +116,10 @@ export class BusinessController {
       role?: UserRole;
       pin?: string;
       password?: string;
+      // Driver pay. Declared so the shape is honest — nothing strips undeclared
+      // properties at runtime, so their absence here was invisible until read.
+      deliveryRateCents?: number;
+      deliveryCommissionPercent?: number;
     },
   ) {
     return this.businessService.updateUser(businessId, userId, dto);

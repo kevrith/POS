@@ -4,11 +4,12 @@ import { toast } from 'sonner';
 import {
   MapPin, Clock, User, Package, Truck, Plus, Search,
   AlertTriangle, BarChart2, Loader2, Link, CheckCircle2,
-  RefreshCw, X, Zap,
+  RefreshCw, X, Zap, MessageCircle,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import LiveMap, { type MapPoint } from '../components/LiveMap';
+import { openWhatsApp, normalisePhone } from '../lib/whatsapp';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -59,6 +60,15 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const fmt = (cents: number) => `KES ${(cents / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
+
+/** The public tracking page for an order, on whatever origin this app is served from. */
+const trackingUrlFor = (orderNumber: string) =>
+  `${window.location.origin}/track/${orderNumber}`;
+
+function trackingMessage(d: { orderNumber: string; customerName?: string }) {
+  const hello = d.customerName ? `Hi ${d.customerName.split(' ')[0]}, ` : '';
+  return `${hello}your order *${d.orderNumber}* is on its way.\n\nFollow it live here:\n${trackingUrlFor(d.orderNumber)}`;
+}
 const fmtTime = (d: string) => new Date(d).toLocaleString('en-KE', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
 
 // ─── Live GPS Map (simple canvas-based) ──────────────────────────────────────
@@ -483,10 +493,23 @@ export default function DeliveryManagementPage() {
                           </button>
                         </>
                       )}
+                      {normalisePhone(d.customerPhone) && (
+                        <button
+                          onClick={() => {
+                            if (!openWhatsApp(d.customerPhone, trackingMessage(d))) {
+                              toast.error('Could not open WhatsApp — allow pop-ups, or check the customer’s number.');
+                            }
+                          }}
+                          title="Send the tracking link on WhatsApp"
+                          className="px-3 py-1.5 text-xs border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 inline-flex items-center gap-1">
+                          <MessageCircle className="w-3 h-3" /> WhatsApp
+                        </button>
+                      )}
                       <button onClick={() => sendTrackingMut.mutate(d.id)}
                         disabled={sendTrackingMut.isPending}
+                        title="Text the link to the customer and copy it"
                         className="px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 inline-flex items-center gap-1">
-                        <Link className="w-3 h-3" /> Tracking Link
+                        <Link className="w-3 h-3" /> SMS / Copy
                       </button>
                       {d.status !== 'DELIVERED' && !d.courierProvider && (
                         <button onClick={() => pushCourierMut.mutate({ id: d.id, provider: 'GLOVO' })}

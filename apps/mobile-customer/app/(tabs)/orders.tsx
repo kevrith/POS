@@ -17,7 +17,22 @@ interface TrackData {
   driverLocations: Array<{ lat: number; lng: number; timestamp: string }>;
 }
 
-/** Live driver-location map (OpenStreetMap embed — no API key). */
+/** A position stops being "live" once the driver's app has been quiet this long. */
+const LIVE_WITHIN_MS = 2 * 60 * 1000;
+
+/** "just now" / "6m ago" / "3h ago" / "yesterday" — a bare clock time tells a customer
+ *  nothing about whether the driver is actually moving. */
+function timeAgo(iso: string): string {
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return days === 1 ? 'yesterday' : `${days}d ago`;
+}
+
+/** Driver-location map (OpenStreetMap embed — no API key). */
 function TrackDriverModal({ orderNumber, onClose }: { orderNumber: string; onClose: () => void }) {
   const { data, isLoading } = useQuery<TrackData>({
     queryKey: ['track', orderNumber],
@@ -25,6 +40,7 @@ function TrackDriverModal({ orderNumber, onClose }: { orderNumber: string; onClo
     refetchInterval: 15_000,
   });
   const loc = data?.driverLocations?.[0];
+  const isLive = !!loc && Date.now() - new Date(loc.timestamp).getTime() <= LIVE_WITHIN_MS;
   const d = 0.006;
   const html = loc
     ? `<html><body style="margin:0"><iframe width="100%" height="100%" frameborder="0" style="border:0"
@@ -44,8 +60,14 @@ function TrackDriverModal({ orderNumber, onClose }: { orderNumber: string; onClo
           <>
             <WebView source={{ html }} style={{ flex: 1 }} />
             <View style={s.trackFoot}>
-              <View style={s.liveDot} />
-              <Text style={s.trackFootText}>Live · updated {new Date(loc.timestamp).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}</Text>
+              {/* The driver app only reports while it is open, so this fix can be hours
+                  old. Calling that "Live" sends a customer to wait at the gate. */}
+              <View style={[s.liveDot, !isLive && s.staleDot]} />
+              <Text style={s.trackFootText}>
+                {isLive
+                  ? `Live · updated ${new Date(loc.timestamp).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}`
+                  : `Last seen ${timeAgo(loc.timestamp)} — the driver's app is not reporting right now`}
+              </Text>
             </View>
           </>
         ) : (
@@ -236,6 +258,7 @@ const s = StyleSheet.create({
   modalTitle: { fontSize: 16, fontWeight: '700', color: Colors.text },
   trackFoot: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 14, backgroundColor: Colors.card, borderTopWidth: 1, borderTopColor: Colors.border },
   liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E' },
+  staleDot: { backgroundColor: '#9CA3AF' },
   trackFootText: { fontSize: 13, color: Colors.textSecondary },
   reorderText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
   invoice: { fontSize: 11, color: Colors.textSecondary },

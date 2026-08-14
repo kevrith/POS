@@ -126,6 +126,8 @@ function AddUserModal({
     role: UserRole.CASHIER as string,
     pin: '',
     password: '',
+    deliveryRate: '',
+    deliveryCommission: '',
   });
   const [showPin, setShowPin] = useState(false);
 
@@ -138,6 +140,8 @@ function AddUserModal({
         role: data.role,
         pin: data.pin || undefined,
         password: data.password || undefined,
+        deliveryRateCents: data.deliveryRate ? Math.round(Number(data.deliveryRate) * 100) : undefined,
+        deliveryCommissionPercent: data.deliveryCommission ? Number(data.deliveryCommission) : undefined,
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['business-users', businessId] });
@@ -150,6 +154,7 @@ function AddUserModal({
   // against 15 minutes for email, which is what keeps them signed in out in the field.
   const needsPin = ['CASHIER', 'WAITER', 'KITCHEN', 'DRIVER', 'SALES_AGENT'].includes(form.role);
   const pinIsField = ['DRIVER', 'SALES_AGENT'].includes(form.role);
+  const isDriver = form.role === 'DRIVER';
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -253,6 +258,38 @@ function AddUserModal({
                   ? 'Used to sign in on the mobile app — without a PIN this person cannot appear in the app’s staff list'
                   : 'Used for quick PIN login at the POS terminal'}
               </p>
+            </div>
+          )}
+
+          {isDriver && (
+            <div className="rounded-lg border border-gray-200 p-3 space-y-3">
+              <p className="text-sm font-medium text-gray-700">Delivery pay</p>
+              <p className="text-xs text-gray-400">
+                What this driver earns — not the delivery fee charged to the customer.
+                Leave both blank and their earnings screen will show zero.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Per delivery (KES)</label>
+                  <input
+                    type="number" min="0" step="10"
+                    value={form.deliveryRate}
+                    onChange={(e) => setForm((f) => ({ ...f, deliveryRate: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g. 150"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">% of delivery fee</label>
+                  <input
+                    type="number" min="0" max="100"
+                    value={form.deliveryCommission}
+                    onChange={(e) => setForm((f) => ({ ...f, deliveryCommission: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="optional"
+                  />
+                </div>
+              </div>
             </div>
           )}
 

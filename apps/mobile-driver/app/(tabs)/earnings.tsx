@@ -37,36 +37,44 @@ function isWithinDays(date: Date, days: number): boolean {
   return date >= cutoff;
 }
 
+interface EarnedDelivery {
+  id: string;
+  orderNumber: string;
+  customerName?: string;
+  deliveryAddress?: string;
+  deliveryFeeCents: number;
+  earnedCents: number;
+  earnedAt: string;
+}
+
+interface DriverEarnings {
+  rateConfigured: boolean;
+  ratePerDeliveryCents: number;
+  commissionPercent: number;
+  todayCents: number;
+  weekCents: number;
+  totalCents: number;
+  deliveryCount: number;
+  deliveries: EarnedDelivery[];
+}
+
 export default function EarningsScreen() {
   const { user, businessId } = useAuthStore();
 
-  const { data, isLoading, refetch, isRefetching } = useQuery<DeliveryOrder[]>({
-    queryKey: ['earnings', businessId],
-    queryFn: () =>
-      driverApi.get<DeliveryOrder[]>(
-        `/delivery?businessId=${businessId}&status=ALL`
-      ),
-    select: (orders) =>
-      orders.filter(
-        (o) => o.status === 'DELIVERED' && o.driverId === user?.id
-      ),
+  // The server computes pay from this driver's rate. Summing deliveryFeeCents here
+  // showed the customer's delivery charge instead — business revenue, unrelated to
+  // what the driver is owed, and zero for any order that carried no fee.
+  const { data, isLoading, refetch, isRefetching } = useQuery<DriverEarnings>({
+    queryKey: ['earnings', user?.id],
+    queryFn: () => driverApi.get<DriverEarnings>(`/delivery/driver-earnings/${user?.id}`),
+    enabled: !!user?.id,
   });
 
-  const delivered = data ?? [];
-  const today = new Date();
-
-  const todayEarnings = delivered
-    .filter((o) => isSameDay(new Date(o.createdAt), today))
-    .reduce((sum, o) => sum + (o.deliveryFeeCents ?? 0), 0);
-
-  const weeklyEarnings = delivered
-    .filter((o) => isWithinDays(new Date(o.createdAt), 7))
-    .reduce((sum, o) => sum + (o.deliveryFeeCents ?? 0), 0);
-
-  const totalEarnings = delivered.reduce(
-    (sum, o) => sum + (o.deliveryFeeCents ?? 0),
-    0
-  );
+  const delivered = data?.deliveries ?? [];
+  const todayEarnings = data?.todayCents ?? 0;
+  const weeklyEarnings = data?.weekCents ?? 0;
+  const totalEarnings = data?.totalCents ?? 0;
+  const rateConfigured = data?.rateConfigured ?? true;
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
@@ -91,6 +99,15 @@ export default function EarningsScreen() {
           }
           ListHeaderComponent={
             <>
+              {!rateConfigured && (
+                <View style={styles.noRateBanner}>
+                  <Ionicons name="information-circle" size={18} color="#92400E" />
+                  <Text style={styles.noRateText}>
+                    No delivery rate set for you yet — ask your manager to add one in
+                    Settings. Your completed deliveries are still recorded below.
+                  </Text>
+                </View>
+              )}
               {/* Stats Cards */}
               <View style={styles.statsRow}>
                 <View style={[styles.statCard, styles.statCardToday]}>
@@ -141,7 +158,7 @@ export default function EarningsScreen() {
                     <Text style={styles.earningCustomer}>{item.customerName}</Text>
                   ) : null}
                   <Text style={styles.earningDate}>
-                    {new Date(item.createdAt).toLocaleDateString('en-KE', {
+                    {new Date(item.earnedAt).toLocaleDateString('en-KE', {
                       day: 'numeric',
                       month: 'short',
                       hour: '2-digit',
@@ -164,6 +181,11 @@ export default function EarningsScreen() {
 }
 
 const styles = StyleSheet.create({
+  noRateBanner: {
+    flexDirection: 'row', gap: 8, alignItems: 'flex-start',
+    backgroundColor: '#FEF3C7', borderRadius: 12, padding: 12, marginBottom: 12,
+  },
+  noRateText: { flex: 1, fontSize: 12, color: '#92400E', lineHeight: 17 },
   safe: { flex: 1, backgroundColor: Colors.background },
   headerBar: {
     backgroundColor: Colors.card,

@@ -101,6 +101,16 @@ export class DeliveryController {
     return this.deliveryService.updateDriverLocation(dto);
   }
 
+  /** A driver's own pay. Drivers hit this with their own id; managers may pass any
+   *  driver in their business — the service checks the driver belongs to it. */
+  @Get('driver-earnings/:driverId')
+  async getDriverEarnings(
+    @Param('driverId') driverId: string,
+    @Req() req: Request & { user: AuthUser },
+  ) {
+    return this.deliveryService.getDriverEarnings(driverId, req.user.businessId);
+  }
+
   /** Latest position of every driver reporting in — the dispatch map reads this.
    *  Business comes from the token, not the query: TenantGuard rejects a MISMATCHED
    *  businessId but lets a missing one through, and a missing one here would widen

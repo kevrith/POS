@@ -108,6 +108,11 @@ model User {
   role               String
   passwordHash       String?
   pin                String?
+  // Driver pay. Earnings are what the driver is owed, which is not the delivery
+  // fee charged to the customer — that is revenue. A flat rate per completed
+  // delivery, and/or a percentage of the fee for value-based routes.
+  deliveryRateCents         Int?
+  deliveryCommissionPercent Int?
   pinHash            String?
   totpSecret         String?
   googleId           String?       @unique

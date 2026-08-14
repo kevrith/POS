@@ -50,6 +50,8 @@ interface CreateUserDto {
   phone?: string;
   role: UserRole;
   pin?: string;
+  deliveryRateCents?: number;
+  deliveryCommissionPercent?: number;
   password?: string;
 }
 
@@ -58,6 +60,8 @@ interface UpdateUserDto {
   phone?: string;
   role?: UserRole;
   pin?: string;
+  deliveryRateCents?: number;
+  deliveryCommissionPercent?: number;
   password?: string;
 }
 
@@ -143,6 +147,10 @@ export class BusinessService {
         email: true,
         role: true,
         createdAt: true,
+        phone: true,
+        // Needed so the staff form can show a driver's existing pay rate.
+        deliveryRateCents: true,
+        deliveryCommissionPercent: true,
         assignedStores: {
           select: { storeId: true },
         },
@@ -200,6 +208,8 @@ export class BusinessService {
         role: dto.role,
         passwordHash,
         pinHash,
+        deliveryRateCents: dto.deliveryRateCents ?? null,
+        deliveryCommissionPercent: dto.deliveryCommissionPercent ?? null,
       },
       select: { id: true, name: true, email: true, phone: true, role: true, createdAt: true },
     });
@@ -234,8 +244,17 @@ export class BusinessService {
         ...(dto.role !== undefined && { role: dto.role }),
         ...(passwordHash !== undefined && { passwordHash }),
         ...(pinHash !== undefined && { pinHash }),
+        ...(dto.deliveryRateCents !== undefined && {
+          deliveryRateCents: dto.deliveryRateCents || null,
+        }),
+        ...(dto.deliveryCommissionPercent !== undefined && {
+          deliveryCommissionPercent: dto.deliveryCommissionPercent || null,
+        }),
       },
-      select: { id: true, name: true, email: true, phone: true, role: true, createdAt: true },
+      select: {
+        id: true, name: true, email: true, phone: true, role: true, createdAt: true,
+        deliveryRateCents: true, deliveryCommissionPercent: true,
+      },
     });
   }
 

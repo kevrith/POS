@@ -336,6 +336,69 @@ export class DeliveryService {
       .filter((d): d is NonNullable<typeof d> => d !== null);
   }
 
+
+  /**
+   * What a driver has actually earned, as opposed to what customers were charged.
+   *
+   * The app used to sum DeliveryOrder.deliveryFeeCents, which is the business's
+   * delivery revenue — a driver on a flat rate sees no relation between the two,
+   * and a driver whose orders carry no fee saw zero for a full day's work. Pay
+   * comes from the driver's own rate: a flat amount per completed delivery, plus
+   * an optional percentage of the fee for value-based routes.
+   */
+  async getDriverEarnings(driverId: string, businessId: string) {
+    const driver = await this.prisma.user.findFirst({
+      where: { id: driverId, businessId },
+      select: { id: true, name: true, deliveryRateCents: true, deliveryCommissionPercent: true },
+    });
+    if (!driver) throw new NotFoundException('Driver not found in this business');
+
+    const deliveries = await this.prisma.deliveryOrder.findMany({
+      where: { businessId, driverId, status: 'DELIVERED' },
+      select: {
+        id: true, orderNumber: true, customerName: true, deliveryAddress: true,
+        deliveryFeeCents: true, deliveredAt: true, createdAt: true,
+      },
+      orderBy: { deliveredAt: 'desc' },
+      take: 500,
+    });
+
+    const rate = driver.deliveryRateCents ?? 0;
+    const percent = driver.deliveryCommissionPercent ?? 0;
+    const configured = rate > 0 || percent > 0;
+
+    const rows = deliveries.map((d) => {
+      const commission = percent > 0 ? Math.round((d.deliveryFeeCents * percent) / 100) : 0;
+      return {
+        ...d,
+        // Fall back to the delivered timestamp; older rows may not have one.
+        earnedAt: d.deliveredAt ?? d.createdAt,
+        earnedCents: rate + commission,
+      };
+    });
+
+    const since = (days: number) => {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() - days);
+      return d;
+    };
+    const sum = (from: Date) =>
+      rows.filter((r) => new Date(r.earnedAt) >= from).reduce((t, r) => t + r.earnedCents, 0);
+
+    return {
+      // Surfaced so the app can say "no rate set" rather than an unexplained zero.
+      rateConfigured: configured,
+      ratePerDeliveryCents: rate,
+      commissionPercent: percent,
+      todayCents: sum(since(0)),
+      weekCents: sum(since(6)),
+      totalCents: rows.reduce((t, r) => t + r.earnedCents, 0),
+      deliveryCount: rows.length,
+      deliveries: rows,
+    };
+  }
+
   async getDeliveryTracking(orderNumber: string) {
     const delivery = await this.prisma.deliveryOrder.findUnique({
       where: { orderNumber },

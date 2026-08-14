@@ -18,11 +18,77 @@ on:
         default: 'all'
         type: choice
         options: [all, mobile-pos, mobile-customer, mobile-driver, mobile-agent]
+      version:
+        description: 'Set app version, e.g. 1.1.0 (leave blank to keep the current one)'
+        required: false
+        type: string
 
 permissions:
   contents: write  # needed to create/update GitHub releases
 
 jobs:
+
+  # ── Version ───────────────────────────────────────────────────────────────────
+  # Sets expo.version when — and only when — you ask for it: a mobile-v* tag, or a
+  # version typed into the manual run. It is never bumped automatically, because
+  # runtimeVersion follows appVersion: changing it stops OTA updates reaching every
+  # install on the old version, which is right for a release and wrong for a build.
+  #
+  # The bump is committed to main so the repo and the APK agree on what shipped;
+  # every build job then checks out that exact commit.
+  version:
+    name: Resolve app version
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve and commit
+        id: resolve
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          set -euo pipefail
+          # A tag names the release; a manual run can pass one instead.
+          if [[ "${GITHUB_REF}" == refs/tags/mobile-v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/mobile-v}"
+          else
+            VERSION="${INPUT_VERSION:-}"
+          fi
+
+          if [ -z "$VERSION" ]; then
+            echo "No version requested — building the current one."
+            echo "version=$(node -p "require('./apps/mobile-pos/app.json').expo.version")" >> "$GITHUB_OUTPUT"
+            echo "sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Version must look like 1.2.3, got '$VERSION'"
+            exit 1
+          fi
+
+          node scripts/bump-mobile-version.mjs "$VERSION"
+
+          if git diff --quiet; then
+            echo "Already at $VERSION — nothing to commit."
+            echo "sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          else
+            git config user.name  "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add apps/*/app.json
+            git commit -m "chore(mobile): set version to ${VERSION}"
+            # A tag build is detached from any branch, so land the bump on main.
+            git push origin HEAD:main
+            echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
   # ── KASTRA POS Cashier App ────────────────────────────────────────────────────
   build-pos:
@@ -31,10 +97,13 @@ jobs:
       github.event.inputs.app == 'all' ||
       github.event.inputs.app == 'mobile-pos' ||
       startsWith(github.ref, 'refs/tags/')
+    needs: version
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.sha }}
 
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
@@ -105,10 +174,13 @@ jobs:
       github.event.inputs.app == 'all' ||
       github.event.inputs.app == 'mobile-customer' ||
       startsWith(github.ref, 'refs/tags/')
+    needs: version
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.sha }}
 
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
@@ -176,10 +248,13 @@ jobs:
       github.event.inputs.app == 'all' ||
       github.event.inputs.app == 'mobile-driver' ||
       startsWith(github.ref, 'refs/tags/')
+    needs: version
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.sha }}
 
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
@@ -247,10 +322,13 @@ jobs:
       github.event.inputs.app == 'all' ||
       github.event.inputs.app == 'mobile-agent' ||
       startsWith(github.ref, 'refs/tags/')
+    needs: version
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.sha }}
 
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
@@ -330,7 +408,7 @@ jobs:
   # ── Publish: create/update rolling mobile-latest GitHub Release ───────────────
   publish:
     name: Publish mobile-latest GitHub Release
-    needs: [build-pos, build-customer, build-driver, build-agent]
+    needs: [version, build-pos, build-customer, build-driver, build-agent]
     # Publishes whenever ANY app built. It used to require app=all or a tag, so a
     # single-app run produced an APK that never reached the release — the download
     # link kept serving the old build and the fix looked like it had not shipped.
@@ -342,6 +420,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.sha }}
 
       - name: Download all APK artifacts
         uses: actions/download-artifact@v4

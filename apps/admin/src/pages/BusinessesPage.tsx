@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { adminApi } from '../lib/api';
 import { useDialog } from '../components/Dialog';
+import GiftPlanModal from '../components/GiftPlanModal';
 
 const C = {
   bg:            '#030712',
@@ -410,6 +411,8 @@ export default function BusinessesPage() {
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ subscriptionStatus: '', subscriptionTier: '', trialDays: '' });
+  const [giftTarget, setGiftTarget] = useState<any | null>(null);
+  const [banner, setBanner] = useState('');
   const [expandedUsers, setExpandedUsers] = useState<string | null>(null);
   const [impersonateResult, setImpersonateResult] = useState<any>(null);
   const [copiedToken, setCopiedToken] = useState(false);
@@ -452,7 +455,7 @@ export default function BusinessesPage() {
       await adminApi.updateSubscription(editingId, payload);
       setEditingId(null);
       load();
-    } catch (e: any) { alert(e.message); }
+    } catch (e: any) { setBanner(`Could not save changes: ${e.message}`); }
   };
 
   /**
@@ -461,34 +464,40 @@ export default function BusinessesPage() {
    * Sets exactly what a real activation sets, plus isComped so the account is not
    * counted in MRR, ARR or the revenue export. Without that flag a gift reads as
    * a sale and quietly inflates the numbers by its list price every month.
+   *
+   * Errors propagate to the modal, which shows them in place — a failure must not
+   * throw away the tier and reason the operator just chose.
    */
-  const giftPlan = async (b: any, tier: string) => {
-    const reason = window.prompt(
-      `Gift ${tier} to "${b.name}" free of charge?\n\nThis grants full access and is excluded from revenue.\nNote (optional):`,
-      'Complimentary account',
-    );
-    if (reason === null) return;
-    try {
-      await adminApi.updateSubscription(b.id, {
-        subscriptionStatus: 'ACTIVE',
-        subscriptionTier: tier,
-        planName: tier,
-        trialEndsAt: null,
-        isComped: true,
-        compedReason: reason || 'Complimentary account',
-      });
-      load();
-      alert(`${b.name} is on ${tier}, free of charge.\n\nThey must sign out and back in — the plan is baked into their login token.`);
-    } catch (e: any) { alert(e.message); }
+  const giftPlan = async (tier: string, reason: string) => {
+    if (!giftTarget) return;
+    await adminApi.updateSubscription(giftTarget.id, {
+      subscriptionStatus: 'ACTIVE',
+      subscriptionTier: tier,
+      planName: tier,
+      trialEndsAt: null,
+      isComped: true,
+      compedReason: reason,
+    });
+    setGiftTarget(null);
+    setEditingId(null);
+    setBanner(`${giftTarget.name} is on ${tier} free of charge. They must sign out and back in for it to take effect.`);
+    load();
   };
 
   /** Turn a gift back into a normal account, so it counts as revenue again. */
   const revokeGift = async (b: any) => {
-    if (!window.confirm(`Stop comping "${b.name}"?\n\nThey keep ${b.subscriptionTier} but will now count towards MRR.`)) return;
+    const ok = await confirm({
+      title: `Stop comping ${b.name}?`,
+      message: `They keep ${b.subscriptionTier ?? 'their plan'}, but the account will start counting towards MRR and ARR from now on.`,
+      variant: 'warning',
+      confirmLabel: 'Stop comping',
+    });
+    if (!ok) return;
     try {
       await adminApi.updateSubscription(b.id, { isComped: false, compedReason: null });
+      setBanner(`${b.name} now counts towards revenue.`);
       load();
-    } catch (e: any) { alert(e.message); }
+    } catch (e: any) { setBanner(`Could not update ${b.name}: ${e.message}`); }
   };
 
   const toggleSelect = (id: string) => {
@@ -526,7 +535,7 @@ export default function BusinessesPage() {
       const result = await adminApi.impersonate(id);
       setImpersonateResult(result);
     }
-    catch (e: any) { alert(e.message); }
+    catch (e: any) { setBanner(`Could not sign in as that business: ${e.message}`); }
   };
 
   const copyToken = () => {
@@ -555,6 +564,30 @@ export default function BusinessesPage() {
 
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+
+      {giftTarget && (
+        <GiftPlanModal
+          business={giftTarget}
+          initialTier={editForm.subscriptionTier || giftTarget.subscriptionTier || 'ENTERPRISE'}
+          onCancel={() => setGiftTarget(null)}
+          onConfirm={giftPlan}
+        />
+      )}
+
+      {/* Outcome of the last action. Dismissable and non-blocking — an alert() stops
+          the tab dead and cannot be read next to the row it refers to. */}
+      {banner && (
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: '0.75rem',
+          background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.25)',
+          borderRadius: '12px', padding: '0.875rem 1.125rem', color: '#c4b5fd', fontSize: '0.875rem',
+        }}>
+          <span style={{ flex: 1 }}>{banner}</span>
+          <button onClick={() => setBanner('')}
+            style={{ background: 'none', border: 'none', color: '#7C3AED', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}
+            aria-label="Dismiss">×</button>
+        </div>
+      )}
 
       {/* Impersonate banner */}
       {impersonateResult && (
@@ -735,7 +768,7 @@ export default function BusinessesPage() {
                               Stop comping
                             </button>
                           ) : (
-                            <button onClick={() => giftPlan(b, editForm.subscriptionTier)}
+                            <button onClick={() => setGiftTarget(b)}
                               title="Grant the selected tier free of charge, excluded from revenue"
                               style={{ padding: '0.5rem 1rem', background: 'rgba(139,92,246,0.14)', color: '#7C3AED', border: '1px solid rgba(139,92,246,0.35)', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 600 }}>
                               Gift {editForm.subscriptionTier} free

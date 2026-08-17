@@ -1,3 +1,5 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import {
   Controller, Get, Post, Patch, Delete,
   Body, Param, Query, UseGuards,
@@ -7,6 +9,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../auth/tenant.guard';
 
 @UseGuards(JwtAuthGuard, TenantGuard)
+@RequiresFeature(Feature.STOCKTAKE)
 @Controller('stocktake')
 export class StocktakeController {
   constructor(private stocktake: StocktakeService) {}

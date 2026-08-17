@@ -1,6 +1,9 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import { Controller, Post, Get, Body, Param, Query } from '@nestjs/common';
 import { GiftCardsService } from './gift-cards.service';
 
+@RequiresFeature(Feature.GIFT_CARDS)
 @Controller('gift-cards')
 export class GiftCardsController {
   constructor(private giftCardsService: GiftCardsService) {}

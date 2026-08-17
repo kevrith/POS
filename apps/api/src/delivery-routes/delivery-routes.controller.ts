@@ -1,3 +1,5 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import {
   Controller,
   Get,
@@ -17,6 +19,7 @@ import type { AuthUser } from '../auth/auth.service';
 
 type AuthedRequest = Request & { user: AuthUser };
 
+@RequiresFeature(Feature.FIELD_SALES)
 @Controller('delivery-routes')
 @UseGuards(JwtAuthGuard)
 export class DeliveryRoutesController {

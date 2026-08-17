@@ -1,7 +1,10 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import { Controller, Get, Query } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { createHash } from 'node:crypto';
 
+@RequiresFeature(Feature.AUDIT_LOGS)
 @Controller('audit')
 export class AuditController {
   constructor(private prisma: PrismaService) {}

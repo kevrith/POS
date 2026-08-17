@@ -13,9 +13,15 @@ export const SKIP_SUBSCRIPTION_CHECK = 'skip_subscription_check';
 export const RequiresFeature = (feature: Feature) => {
   return (target: any, propertyKey?: string, descriptor?: PropertyDescriptor) => {
     if (descriptor) {
+      // Method-level: gate this one route.
       Reflect.defineMetadata(REQUIRES_FEATURE, feature, descriptor.value);
+      return descriptor;
     }
-    return descriptor;
+    // Class-level: gate every route on the controller. Applying this per route
+    // meant 774 endpoints needed 774 decorators, so in practice only two ever got
+    // one and the tiers were enforced in the UI alone.
+    Reflect.defineMetadata(REQUIRES_FEATURE, feature, target);
+    return target;
   };
 };
 
@@ -34,18 +40,20 @@ export class SubscriptionGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     // Check if route is marked to skip subscription check
-    const skipCheck = this.reflector.get<boolean>(
+    const skipCheck = this.reflector.getAllAndOverride<boolean>(
       SKIP_SUBSCRIPTION_CHECK,
-      context.getHandler(),
+      [context.getHandler(), context.getClass()],
     );
 
     if (skipCheck) {
       return true;
     }
 
-    const requiredFeature = this.reflector.get<Feature>(
+    // Route first, then the controller it lives on — a method-level gate on a
+    // gated controller narrows it further rather than being ignored.
+    const requiredFeature = this.reflector.getAllAndOverride<Feature>(
       REQUIRES_FEATURE,
-      context.getHandler(),
+      [context.getHandler(), context.getClass()],
     );
 
     if (!requiredFeature) {

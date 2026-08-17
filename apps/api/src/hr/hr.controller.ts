@@ -1,7 +1,10 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import { Controller, Post, Get, Patch, Delete, Body, Param, Query } from '@nestjs/common';
 import { HrService } from './hr.service';
 import { PayrollService } from './payroll.service';
 
+@RequiresFeature(Feature.HR_BASIC)
 @Controller('hr')
 export class HrController {
   constructor(

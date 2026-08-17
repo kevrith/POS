@@ -1,7 +1,10 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import { Controller, Get, Post, Delete, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiKeysService } from './api-keys.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
+@RequiresFeature(Feature.API_KEYS)
 @Controller('api-keys')
 @UseGuards(JwtAuthGuard)
 export class ApiKeysController {

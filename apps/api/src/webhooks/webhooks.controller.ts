@@ -1,6 +1,9 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import { Controller, Get, Post, Patch, Delete, Param, Body, Query } from '@nestjs/common';
 import { WebhooksService } from './webhooks.service';
 
+@RequiresFeature(Feature.WEBHOOKS)
 @Controller('webhooks')
 export class WebhooksController {
   constructor(private webhooksService: WebhooksService) {}

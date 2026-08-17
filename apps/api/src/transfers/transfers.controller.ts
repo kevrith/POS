@@ -1,6 +1,9 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import { Controller, Post, Get, Patch, Body, Param, Query } from '@nestjs/common';
 import { TransfersService } from './transfers.service';
 
+@RequiresFeature(Feature.TRANSFERS)
 @Controller('transfers')
 export class TransfersController {
   constructor(private transfersService: TransfersService) {}

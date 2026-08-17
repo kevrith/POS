@@ -1,3 +1,5 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import {
   Controller,
   Get,
@@ -13,6 +15,7 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FieldSalesService } from './field-sales.service';
 
+@RequiresFeature(Feature.FIELD_SALES)
 @Controller('field-sales')
 @UseGuards(JwtAuthGuard)
 export class FieldSalesController {

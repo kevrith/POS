@@ -1,3 +1,5 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import {
   Controller,
   Get,
@@ -14,6 +16,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../auth/tenant.guard';
 
 @UseGuards(JwtAuthGuard, TenantGuard)
+@RequiresFeature(Feature.FRANCHISE)
 @Controller('franchise')
 export class FranchiseController {
   constructor(private svc: FranchiseService) {}

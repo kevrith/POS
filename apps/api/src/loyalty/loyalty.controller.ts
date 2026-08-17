@@ -1,6 +1,9 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import { Controller, Post, Get, Patch, Delete, Body, Param, Query } from '@nestjs/common';
 import { LoyaltyService } from './loyalty.service';
 
+@RequiresFeature(Feature.LOYALTY_BASIC)
 @Controller('loyalty')
 export class LoyaltyController {
   constructor(private loyaltyService: LoyaltyService) {}

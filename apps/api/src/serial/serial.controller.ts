@@ -1,8 +1,11 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import { Controller, Get, Post, Body, Query, UseGuards } from '@nestjs/common';
 import { SerialService } from './serial.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../auth/tenant.guard';
 
+@RequiresFeature(Feature.SERIAL_TRACKING)
 @Controller('serial')
 @UseGuards(JwtAuthGuard, TenantGuard)
 export class SerialController {

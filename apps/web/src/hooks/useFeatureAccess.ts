@@ -13,7 +13,10 @@ export function useFeatureAccess(feature: Feature): FeatureAccess {
   const user = useAuthStore((s) => s.user);
   
   return useMemo(() => {
-    const tier = (user?.planName ?? 'FREE') as SubscriptionTier;
+    // subscriptionTier is what the API itself gates on; planName is a display
+    // label that drifts from it. Fall back to planName so tokens issued before
+    // the tier was added keep working until they expire.
+    const tier = (user?.subscriptionTier ?? user?.planName ?? 'FREE') as SubscriptionTier;
     const hasAccess = hasFeatureAccess(tier, feature);
     const limit = getFeatureLimit(tier, feature);
     
@@ -35,5 +38,5 @@ export function useFeatureAccess(feature: Feature): FeatureAccess {
       currentTier: tier,
       requiredTier,
     };
-  }, [user?.planName, feature]);
+  }, [user?.subscriptionTier, user?.planName, feature]);
 }

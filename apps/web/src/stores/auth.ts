@@ -14,7 +14,8 @@ export interface AuthUser {
   businessId: string;
   storeId?: string;
   assignedStoreIds?: string[]; // populated for MANAGER: stores they are scoped to
-  planName?: string;           // FREE | STARTER | GROWTH | PRO | ENTERPRISE
+  planName?: string;           // display label — may lag behind subscriptionTier
+  subscriptionTier?: string;   // FREE | STARTER | GROWTH | PRO | ENTERPRISE — gate on this
 }
 
 interface AuthState {

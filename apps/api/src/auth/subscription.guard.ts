@@ -63,20 +63,42 @@ export class SubscriptionGuard implements CanActivate {
     // Fetch business subscription tier
     const business = await this.prisma.business.findUnique({
       where: { id: user.businessId },
-      select: { subscriptionTier: true, planName: true },
+      select: {
+        subscriptionTier: true,
+        planName: true,
+        subscriptionStatus: true,
+        trialEndsAt: true,
+      },
     });
 
     if (!business) {
       throw new ForbiddenException('Business not found');
     }
 
-    const tier = (business.subscriptionTier ?? 'FREE') as SubscriptionTier;
+    /**
+     * A finished trial has to actually end.
+     *
+     * Nothing flips subscriptionStatus away from TRIAL — there is no scheduled job
+     * — and this guard only ever read the tier, so a trial provisioned on ENTERPRISE
+     * kept every paid feature indefinitely. Expiry is evaluated on each request
+     * instead: past trialEndsAt with no payment, the business is treated as FREE.
+     */
+    const trialExpired =
+      business.subscriptionStatus === 'TRIAL' &&
+      !!business.trialEndsAt &&
+      new Date() > business.trialEndsAt;
+
+    const tier = (
+      trialExpired ? 'FREE' : business.subscriptionTier ?? 'FREE'
+    ) as SubscriptionTier;
 
     // Check if tier has access to the feature
     if (!hasFeatureAccess(tier, requiredFeature)) {
       const requiredTiers = this.getRequiredTiers(requiredFeature);
       throw new ForbiddenException(
-        `This feature requires ${requiredTiers.join(' or ')} plan. You are currently on ${tier}. Please upgrade at /settings/subscription`,
+        trialExpired
+          ? `Your free trial has ended. Subscribe to keep using this feature — /settings/subscription`
+          : `This feature requires ${requiredTiers.join(' or ')} plan. You are currently on ${tier}. Please upgrade at /settings/subscription`,
       );
     }
 

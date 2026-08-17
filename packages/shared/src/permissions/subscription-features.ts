@@ -237,16 +237,29 @@ export const TIER_FEATURES: Record<SubscriptionTier, TierFeatures> = {
   },
 };
 
+/**
+ * Resolve whatever the caller passed to a tier key.
+ *
+ * These lookups used the value verbatim, so anything that was not already an exact
+ * upper-case match — "Enterprise" as written by a paid activation, a stale planName,
+ * a stray space — missed the table and fell through to `?? false`, silently locking
+ * every feature for a customer who had paid for them.
+ */
+function tierKey(tier: SubscriptionTier | string | undefined | null): SubscriptionTier {
+  const key = String(tier ?? '').trim().toUpperCase() as SubscriptionTier;
+  return TIER_FEATURES[key] ? key : (SubscriptionTier.FREE);
+}
+
 export function hasFeatureAccess(tier: SubscriptionTier, feature: Feature): boolean {
-  return TIER_FEATURES[tier]?.[feature]?.enabled ?? false;
+  return TIER_FEATURES[tierKey(tier)]?.[feature]?.enabled ?? false;
 }
 
 export function getFeatureLimit(tier: SubscriptionTier, feature: Feature): number | undefined {
-  return TIER_FEATURES[tier]?.[feature]?.limit;
+  return TIER_FEATURES[tierKey(tier)]?.[feature]?.limit;
 }
 
 export function getFeatureDescription(tier: SubscriptionTier, feature: Feature): string | undefined {
-  return TIER_FEATURES[tier]?.[feature]?.description;
+  return TIER_FEATURES[tierKey(tier)]?.[feature]?.description;
 }
 
 export function getRequiredTierForFeature(feature: Feature): SubscriptionTier | null {

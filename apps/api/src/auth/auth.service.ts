@@ -18,6 +18,8 @@ export interface JwtPayload {
   storeId?: string;
   assignedStoreIds?: string[]; // for MANAGER: stores they are scoped to
   planName?: string;
+  /** The field the API gates on. planName is a display label and drifts from it. */
+  subscriptionTier?: string;
 }
 
 export interface AuthUser {
@@ -29,6 +31,8 @@ export interface AuthUser {
   storeId?: string;
   assignedStoreIds?: string[]; // populated for MANAGER role
   planName?: string;
+  /** The field the API gates on. planName is a display label and drifts from it. */
+  subscriptionTier?: string;
 }
 
 @Injectable()
@@ -171,6 +175,10 @@ export class AuthService {
       businessId: user.businessId,
       role: user.role as UserRole,
       planName: user.business.planName,
+      // Ship the tier too. The UI used to gate on planName, a display label the
+      // admin console could change independently of the tier — so a business moved
+      // to ENTERPRISE kept its old planName and stayed locked out of what it paid for.
+      subscriptionTier: user.business.subscriptionTier,
       ...(assignedStoreIds && { assignedStoreIds }),
     };
 
@@ -195,6 +203,7 @@ export class AuthService {
         role: user.role as UserRole,
         businessId: user.businessId,
         planName: user.business.planName,
+        subscriptionTier: user.business.subscriptionTier,
         ...(assignedStoreIds && { assignedStoreIds }),
       },
     };
@@ -248,9 +257,10 @@ export class AuthService {
 
     const biz = await this.prisma.business.findUnique({
       where: { id: matchedUser.businessId },
-      select: { planName: true },
+      select: { planName: true, subscriptionTier: true },
     });
     const pinPlanName = biz?.planName ?? 'STARTER';
+    const pinTier = biz?.subscriptionTier ?? 'FREE';
 
     const payload: JwtPayload = {
       sub: matchedUser.id,
@@ -258,6 +268,7 @@ export class AuthService {
       role: matchedUser.role as UserRole,
       storeId,
       planName: pinPlanName,
+      subscriptionTier: pinTier,
     };
 
     const accessToken = this.jwt.sign(payload, { expiresIn: '12h' });
@@ -272,6 +283,7 @@ export class AuthService {
         businessId: matchedUser.businessId,
         storeId,
         planName: pinPlanName,
+        subscriptionTier: pinTier,
       },
     };
   }

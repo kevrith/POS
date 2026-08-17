@@ -54,11 +54,27 @@ export class SuperAdminController implements OnModuleInit {
   @Patch('businesses/:id/subscription')
   updateSubscription(
     @Param('id') id: string,
-    @Body() body: { subscriptionStatus?: string; subscriptionTier?: string; planName?: string; trialEndsAt?: string },
+    @Body()
+    body: {
+      subscriptionStatus?: string;
+      subscriptionTier?: string;
+      planName?: string;
+      // null clears the trial date, which is what activating a paid or gifted plan
+      // must do. Previously a null was coerced to undefined and quietly ignored,
+      // leaving a granted account still carrying a trial expiry.
+      trialEndsAt?: string | null;
+      isComped?: boolean;
+      compedReason?: string | null;
+    },
   ) {
     return this.service.updateBusinessSubscription(id, {
       ...body,
-      trialEndsAt: body.trialEndsAt ? new Date(body.trialEndsAt) : undefined,
+      trialEndsAt:
+        body.trialEndsAt === undefined
+          ? undefined
+          : body.trialEndsAt === null
+            ? null
+            : new Date(body.trialEndsAt),
     });
   }
 

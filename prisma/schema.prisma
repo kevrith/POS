@@ -28,6 +28,11 @@ model Business {
   etimsProductionOnboarded      Boolean               @default(false)
   kraItaxIntegrationEnabled     Boolean               @default(false)
   kraItaxCredentials            String?
+  // A gifted or internal account: full access, but nobody paid. Excluded from MRR
+  // and ARR, which otherwise count every ACTIVE business at its list price and
+  // report revenue that does not exist.
+  isComped                      Boolean               @default(false)
+  compedReason                  String?
   subscriptionTier              String                @default("TRIAL")
   subscriptionStatus            String                @default("TRIAL")
   trialEndsAt                   DateTime?

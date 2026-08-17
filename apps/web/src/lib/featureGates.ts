@@ -107,7 +107,11 @@ export const FEATURE_PLANS: Record<string, Plan> = {
 };
 
 export function planRank(plan: Plan | string | undefined): number {
-  return PLAN_RANK[(plan as Plan)] ?? 0;
+  // Case-insensitive on purpose. A paid activation writes planName from PLANS,
+  // which is title case ("Enterprise"), while these keys are upper case — so a raw
+  // lookup returned undefined and ranked a paying Enterprise customer as FREE.
+  if (!plan) return 0;
+  return PLAN_RANK[plan.toUpperCase() as Plan] ?? 0;
 }
 
 /**

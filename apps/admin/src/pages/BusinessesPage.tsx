@@ -58,6 +58,16 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+function CompedBadge() {
+  return (
+    <span title="Complimentary — excluded from MRR and revenue"
+      style={{ marginLeft: 6, padding: '1px 6px', borderRadius: 5, fontSize: '0.625rem', fontWeight: 700,
+               background: 'rgba(139,92,246,0.15)', color: '#7C3AED', border: '1px solid rgba(139,92,246,0.3)' }}>
+      GIFT
+    </span>
+  );
+}
+
 function PlanBadge({ plan }: { plan: string }) {
   const m: Record<string, { bg: string; color: string }> = {
     ENTERPRISE: { bg: 'rgba(139,92,246,0.12)', color: '#8b5cf6' },
@@ -426,7 +436,14 @@ export default function BusinessesPage() {
   const saveEdit = async () => {
     if (!editingId) return;
     try {
-      const payload: any = { subscriptionStatus: editForm.subscriptionStatus, subscriptionTier: editForm.subscriptionTier };
+      const payload: any = {
+        subscriptionStatus: editForm.subscriptionStatus,
+        subscriptionTier: editForm.subscriptionTier,
+        // Send planName alongside the tier. The web app ranks features off planName
+        // from the JWT, so changing only the tier left the two disagreeing and the
+        // customer on their old feature set.
+        planName: editForm.subscriptionTier,
+      };
       if (editForm.trialDays) {
         const d = new Date();
         d.setDate(d.getDate() + parseInt(editForm.trialDays));
@@ -434,6 +451,42 @@ export default function BusinessesPage() {
       }
       await adminApi.updateSubscription(editingId, payload);
       setEditingId(null);
+      load();
+    } catch (e: any) { alert(e.message); }
+  };
+
+  /**
+   * Grant a plan without payment — for a friend, a partner, or our own accounts.
+   *
+   * Sets exactly what a real activation sets, plus isComped so the account is not
+   * counted in MRR, ARR or the revenue export. Without that flag a gift reads as
+   * a sale and quietly inflates the numbers by its list price every month.
+   */
+  const giftPlan = async (b: any, tier: string) => {
+    const reason = window.prompt(
+      `Gift ${tier} to "${b.name}" free of charge?\n\nThis grants full access and is excluded from revenue.\nNote (optional):`,
+      'Complimentary account',
+    );
+    if (reason === null) return;
+    try {
+      await adminApi.updateSubscription(b.id, {
+        subscriptionStatus: 'ACTIVE',
+        subscriptionTier: tier,
+        planName: tier,
+        trialEndsAt: null,
+        isComped: true,
+        compedReason: reason || 'Complimentary account',
+      });
+      load();
+      alert(`${b.name} is on ${tier}, free of charge.\n\nThey must sign out and back in — the plan is baked into their login token.`);
+    } catch (e: any) { alert(e.message); }
+  };
+
+  /** Turn a gift back into a normal account, so it counts as revenue again. */
+  const revokeGift = async (b: any) => {
+    if (!window.confirm(`Stop comping "${b.name}"?\n\nThey keep ${b.subscriptionTier} but will now count towards MRR.`)) return;
+    try {
+      await adminApi.updateSubscription(b.id, { isComped: false, compedReason: null });
       load();
     } catch (e: any) { alert(e.message); }
   };
@@ -675,6 +728,19 @@ export default function BusinessesPage() {
                             style={{ padding: '0.5rem 1.25rem', background: C.green, color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 700, fontSize: '0.875rem' }}>
                             Save Changes
                           </button>
+                          {b.isComped ? (
+                            <button onClick={() => revokeGift(b)}
+                              title="Stop comping — this account starts counting towards MRR"
+                              style={{ padding: '0.5rem 1rem', background: 'rgba(245,158,11,0.14)', color: '#B45309', border: '1px solid rgba(245,158,11,0.35)', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 600 }}>
+                              Stop comping
+                            </button>
+                          ) : (
+                            <button onClick={() => giftPlan(b, editForm.subscriptionTier)}
+                              title="Grant the selected tier free of charge, excluded from revenue"
+                              style={{ padding: '0.5rem 1rem', background: 'rgba(139,92,246,0.14)', color: '#7C3AED', border: '1px solid rgba(139,92,246,0.35)', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 600 }}>
+                              Gift {editForm.subscriptionTier} free
+                            </button>
+                          )}
                           <button onClick={() => setEditingId(null)}
                             style={{ padding: '0.5rem 1rem', background: 'rgba(100,116,139,0.12)', color: C.textSecondary, border: `1px solid ${C.cardBorder}`, borderRadius: '8px', cursor: 'pointer', fontSize: '0.875rem' }}>
                             Cancel
@@ -700,7 +766,10 @@ export default function BusinessesPage() {
                         {b.users?.[0]?.name && <div style={{ fontSize: '0.6875rem', color: C.textMuted }}>{b.users[0].name}</div>}
                       </td>
                       <td style={{ padding: '0.875rem 1.25rem' }}><StatusBadge status={b.subscriptionStatus} /></td>
-                      <td style={{ padding: '0.875rem 1.25rem' }}><PlanBadge plan={b.subscriptionTier ?? b.planName ?? 'STARTER'} /></td>
+                      <td style={{ padding: '0.875rem 1.25rem' }}>
+                        <PlanBadge plan={b.subscriptionTier ?? b.planName ?? 'STARTER'} />
+                        {b.isComped && <CompedBadge />}
+                      </td>
                       <td style={{ padding: '0.875rem 1.25rem', color: C.textMuted, fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
                         {b.trialEndsAt ? new Date(b.trialEndsAt).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: '2-digit' }) : '—'}
                       </td>

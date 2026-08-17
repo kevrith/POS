@@ -104,16 +104,21 @@ export class SuperAdminService {
       this.prisma.referral.count({ where: { status: 'CONVERTED' } }),
     ]);
 
-    // Plan breakdown counts (all tiers including FREE)
-    const [freeCount, starterCount, growthCount, proCount, enterpriseCount] = await Promise.all([
-      this.prisma.business.count({ where: { subscriptionTier: 'FREE' } }),
-      this.prisma.business.count({ where: { subscriptionStatus: 'ACTIVE', subscriptionTier: 'STARTER' } }),
-      this.prisma.business.count({ where: { subscriptionStatus: 'ACTIVE', subscriptionTier: 'GROWTH' } }),
-      this.prisma.business.count({ where: { subscriptionStatus: 'ACTIVE', subscriptionTier: 'PRO' } }),
-      this.prisma.business.count({ where: { subscriptionStatus: 'ACTIVE', subscriptionTier: 'ENTERPRISE' } }),
-    ]);
+    // Plan breakdown counts (all tiers including FREE). Comped accounts are counted
+    // separately: they are real businesses on a real plan, but nobody paid for them,
+    // so folding them into the paid mix invents revenue.
+    const paid = { subscriptionStatus: 'ACTIVE', isComped: false };
+    const [freeCount, starterCount, growthCount, proCount, enterpriseCount, compedCount] =
+      await Promise.all([
+        this.prisma.business.count({ where: { subscriptionTier: 'FREE' } }),
+        this.prisma.business.count({ where: { ...paid, subscriptionTier: 'STARTER' } }),
+        this.prisma.business.count({ where: { ...paid, subscriptionTier: 'GROWTH' } }),
+        this.prisma.business.count({ where: { ...paid, subscriptionTier: 'PRO' } }),
+        this.prisma.business.count({ where: { ...paid, subscriptionTier: 'ENTERPRISE' } }),
+        this.prisma.business.count({ where: { isComped: true } }),
+      ]);
 
-    // Accurate MRR based on actual plan mix (new prices)
+    // MRR from paying businesses only.
     const estimatedMRRCents =
       starterCount * 99900 +
       growthCount  * 249900 +
@@ -132,6 +137,8 @@ export class SuperAdminService {
       referralsConverted,
       estimatedMRRCents,
       estimatedARRCents: estimatedMRRCents * 12,
+      // Surfaced so an active-subscription count that includes gifts stays readable.
+      compedBusinesses: compedCount,
       planBreakdown: { FREE: freeCount, STARTER: starterCount, GROWTH: growthCount, PRO: proCount, ENTERPRISE: enterpriseCount },
     };
   }
@@ -140,7 +147,9 @@ export class SuperAdminService {
     subscriptionStatus?: string;
     subscriptionTier?: string;
     planName?: string;
-    trialEndsAt?: Date;
+    trialEndsAt?: Date | null;
+    isComped?: boolean;
+    compedReason?: string | null;
   }) {
     return this.prisma.business.update({
       where: { id: businessId },
@@ -1084,12 +1093,12 @@ export class SuperAdminService {
       select: {
         id: true, name: true, subscriptionTier: true, subscriptionStatus: true,
         planName: true, createdAt: true, cancelledAt: true, trialEndsAt: true,
-        paystackSubscriptionId: true,
+        paystackSubscriptionId: true, isComped: true,
       },
     });
 
     const lines: string[] = [
-      'Business ID,Business Name,Plan,Status,Monthly (KES),Months Active,Est. LTV (KES),Trial Ends,Cancelled At,Paystack Sub ID,Joined'
+      'Business ID,Business Name,Plan,Status,Comped,Monthly (KES),Months Active,Est. LTV (KES),Trial Ends,Cancelled At,Paystack Sub ID,Joined'
     ];
 
     for (const biz of businesses) {
@@ -1097,14 +1106,18 @@ export class SuperAdminService {
       const monthsActive = Math.max(1, Math.round(
         (endDate.getTime() - biz.createdAt.getTime()) / (30 * 86400000)
       ));
-      const monthlyPrice = (PLAN_PRICE[biz.subscriptionTier] ?? 0) / 100;
-      const ltv = (monthsActive * (PLAN_PRICE[biz.subscriptionTier] ?? 0)) / 100;
+      // A gifted account bills nothing, so its monthly and LTV are zero — otherwise
+      // the export reads as money collected and the totals are wrong.
+      const priceCents = biz.isComped ? 0 : (PLAN_PRICE[biz.subscriptionTier] ?? 0);
+      const monthlyPrice = priceCents / 100;
+      const ltv = (monthsActive * priceCents) / 100;
 
       lines.push([
         biz.id,
         `"${biz.name.replace(/"/g, '""')}"`,
         biz.subscriptionTier,
         biz.subscriptionStatus,
+        biz.isComped ? 'YES' : 'NO',
         monthlyPrice.toFixed(2),
         monthsActive,
         ltv.toFixed(2),

@@ -1,30 +1,79 @@
-# KASTRA POS Desktop (Tauri v2)
+# KASTRA POS — Desktop (Tauri v2)
 
-Enterprise desktop POS application wrapping the KASTRA POS web app with native capabilities.
+Native desktop shell around the KASTRA POS web app, adding the hardware and
+offline capabilities a browser cannot reach: direct printer sockets, cash-drawer
+kick, LAN peer sync, an offline eTIMS/VSCU queue in SQLite, and machine-bound
+licensing.
+
+- Product name: **KASTRA POS** · identifier `co.ke.kastra.pos`
+- Frontend: `apps/web` — dev from the Vite server, release from `apps/web/dist`
+
+---
 
 ## Prerequisites
-- Rust toolchain: https://rustup.rs
-- Tauri CLI: `cargo install tauri-cli`
-- Node.js 18+
+
+- Rust toolchain — https://rustup.rs
+- Node.js 20+
+- Tauri v2 system dependencies for your OS (WebKitGTK on Linux, WebView2 on Windows)
+
+---
 
 ## Development
-```bash
-# Start the web app (in a separate terminal)
-cd ../web && npm run dev
 
-# Start Tauri desktop
-npm run dev
+```bash
+npm run dev          # tauri dev — also starts the web dev server for you
 ```
 
-## Native Features
-- **Network Printer**: TCP socket connection to ESC/POS printers
-- **Cash Drawer**: Serial port kick command
-- **LAN Sync**: Discover and sync with other POS terminals on local network
-- **VSCU**: Offline eTIMS submission queue with local SQLite storage
-- **Auto-Updates**: Built-in Tauri updater support
+`beforeDevCommand` runs `npm run dev:web` from the repo root, so you don't need a
+second terminal.
+
+> **Known mismatch:** `src-tauri/tauri.conf.json` sets `devUrl` to
+> `http://localhost:3001`, but `apps/web` now serves on **3005**. Until the config is
+> corrected, either point `devUrl` at 3005 or run the web app on 3001.
 
 ## Building
+
 ```bash
-npm run build
+cd ../web && npm run build     # REQUIRED FIRST — Tauri bundles apps/web/dist
+cd ../desktop && npm run build
 ```
-Produces installers in `src-tauri/target/release/bundle/`
+
+Installers land in `src-tauri/target/release/bundle/`.
+
+`beforeBuildCommand` builds the web app, but if you build the web app separately
+make sure it finished — a stale `apps/web/dist` ships silently.
+
+Releases are automated by `.github/workflows/desktop-release.yml`.
+
+---
+
+## Native modules (`src-tauri/src/`)
+
+| Module | Capability |
+|---|---|
+| `printer.rs` | Network ESC/POS printers over a raw TCP socket, with connect timeout |
+| `cash_drawer.rs` | Drawer kick — ESC/POS `ESC p` pulse over USB/serial |
+| `discovery.rs` | LAN server auto-discovery. UDP :47474 — client broadcasts `KASTRA_DISCOVER`, servers reply `KASTRA_SERVER:{api_port}:{hostname}`; client collects responses for 2 s |
+| `lan_sync.rs` | TCP peer sync — a server terminal holds a registry of connected client streams and pushes events to all of them |
+| `vscu.rs` | Offline eTIMS/VSCU queue in local SQLite (`rusqlite`) — sales are signed and held until KRA is reachable |
+| `license.rs` | Machine-bound licensing — stable machine id derived and SHA-256 hashed |
+| `setup.rs` | First-run topology: mode `STANDALONE` / `SERVER` / `CLIENT`, device role `FULL_POS` / `CASHIER` / `KIOSK` / `KDS` / `MANAGER` |
+| `backup.rs` | Local database backup/restore to disk |
+
+Auto-updates use the built-in Tauri updater against signed GitHub Releases.
+
+---
+
+## Network topologies
+
+- **STANDALONE** — one terminal, its own local queue.
+- **SERVER** — hosts the API for the site; answers discovery broadcasts and fans out
+  sync events to connected clients.
+- **CLIENT** — discovers the server on the LAN and syncs to it; `device_role`
+  decides which UI it boots into (full POS, cashier-only, kiosk, kitchen display, or
+  manager).
+
+---
+
+When you add a Tauri command, change the discovery/sync protocol, or alter the
+setup topology, update this README in the same change.

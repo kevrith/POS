@@ -1,3 +1,5 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import { Controller, Get, Post, Query, Body, UseGuards, Param, Res } from '@nestjs/common';
 import { Response } from 'express';
 import { ReportsService } from './reports.service';
@@ -6,6 +8,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../auth/tenant.guard';
 
 @UseGuards(JwtAuthGuard, TenantGuard)
+@RequiresFeature(Feature.REPORTS_BASIC)
 @Controller('reports')
 export class ReportsController {
   constructor(private reports: ReportsService, private pdf: PdfService) {}

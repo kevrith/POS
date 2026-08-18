@@ -1,9 +1,12 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ReportSchedulesService } from './report-schedules.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../auth/tenant.guard';
 
 @UseGuards(JwtAuthGuard, TenantGuard)
+@RequiresFeature(Feature.SCHEDULED_REPORTS)
 @Controller('report-schedules')
 export class ReportSchedulesController {
   constructor(private svc: ReportSchedulesService) {}

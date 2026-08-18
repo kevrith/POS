@@ -1,6 +1,9 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import { Controller, Get, Post, Patch, Body, Param, Query } from '@nestjs/common';
 import { HousekeepingService } from './housekeeping.service';
 
+@RequiresFeature(Feature.HOTEL)
 @Controller('hospitality/housekeeping-assignments')
 export class HousekeepingController {
   constructor(private readonly svc: HousekeepingService) {}

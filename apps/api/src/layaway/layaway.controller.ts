@@ -1,9 +1,12 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { LayawayService } from './layaway.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../auth/tenant.guard';
 import { RolesGuard, RequirePermission } from '../auth/roles.guard';
 
+@RequiresFeature(Feature.LAYAWAY)
 @Controller('businesses/:businessId/layaway')
 @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class LayawayController {

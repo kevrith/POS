@@ -1,7 +1,10 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import { Controller, Post, Get, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { IntegrationsService } from './integrations.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
+@RequiresFeature(Feature.INTEGRATIONS_BASIC)
 @Controller('integrations')
 @UseGuards(JwtAuthGuard)
 export class IntegrationsController {

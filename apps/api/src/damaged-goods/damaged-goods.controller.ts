@@ -1,3 +1,5 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import {
   Controller,
   Get,
@@ -28,6 +30,7 @@ interface CreateDamagedGoodsDto {
 }
 
 @UseGuards(TenantGuard)
+@RequiresFeature(Feature.DAMAGED_GOODS)
 @Controller('damaged-goods')
 export class DamagedGoodsController {
   constructor(private readonly svc: DamagedGoodsService) {}

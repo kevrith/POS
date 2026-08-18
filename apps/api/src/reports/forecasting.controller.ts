@@ -1,9 +1,12 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ForecastingService } from './forecasting.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../auth/tenant.guard';
 
 @UseGuards(JwtAuthGuard, TenantGuard)
+@RequiresFeature(Feature.FORECASTING)
 @Controller('forecasting')
 export class ForecastingController {
   constructor(private svc: ForecastingService) {}

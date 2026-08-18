@@ -1,9 +1,12 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FuelPumpService } from './fuel-pump.service';
 import { FuelPumpGateway } from './fuel-pump.gateway';
 
 @UseGuards(JwtAuthGuard)
+@RequiresFeature(Feature.FUEL_PUMP)
 @Controller('fuel-pump')
 export class FuelPumpController {
   constructor(private svc: FuelPumpService, private gateway: FuelPumpGateway) {}

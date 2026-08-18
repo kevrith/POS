@@ -1,6 +1,9 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import { Controller, Get, Post, Patch, Body, Param, Query } from '@nestjs/common';
 import { LedgerService } from './ledger.service';
 
+@RequiresFeature(Feature.LEDGER)
 @Controller('accounting/journal')
 export class LedgerController {
   constructor(private readonly svc: LedgerService) {}

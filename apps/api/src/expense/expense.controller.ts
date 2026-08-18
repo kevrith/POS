@@ -1,3 +1,5 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import {
   Controller,
   Post,
@@ -14,6 +16,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { ExpenseService } from './expense.service';
 
+@RequiresFeature(Feature.EXPENSES)
 @Controller('expenses')
 export class ExpenseController {
   constructor(private expenseService: ExpenseService) {}

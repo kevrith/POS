@@ -1,8 +1,11 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import { Controller, Get, Post, Put, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { RecipeService } from './recipe.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../auth/tenant.guard';
 
+@RequiresFeature(Feature.RECIPES)
 @Controller('recipe')
 @UseGuards(JwtAuthGuard, TenantGuard)
 export class RecipeController {

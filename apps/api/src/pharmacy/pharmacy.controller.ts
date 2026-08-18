@@ -1,8 +1,11 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PharmacyService } from './pharmacy.service';
 
 @UseGuards(JwtAuthGuard)
+@RequiresFeature(Feature.PHARMACY)
 @Controller('pharmacy')
 export class PharmacyController {
   constructor(private svc: PharmacyService) {}

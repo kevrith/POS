@@ -1,9 +1,12 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import { Controller, Post, Get, Put, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { SecurityService } from './security.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../auth/tenant.guard';
 
 @UseGuards(JwtAuthGuard, TenantGuard)
+@RequiresFeature(Feature.SECURITY_SETTINGS)
 @Controller('security')
 export class SecurityController {
   constructor(private securityService: SecurityService) {}

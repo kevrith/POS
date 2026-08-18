@@ -1,7 +1,10 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import { Controller, Post, Get, Patch, Delete, Body, Param, Query, BadRequestException } from '@nestjs/common';
 import { SupplierService } from './supplier.service';
 
 
+@RequiresFeature(Feature.SUPPLIERS)
 @Controller('suppliers')
 export class SupplierController {
   constructor(private supplierService: SupplierService) {}

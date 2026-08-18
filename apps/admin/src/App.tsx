@@ -12,8 +12,9 @@ import UsersPage from './pages/UsersPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import WebhooksPage from './pages/WebhooksPage';
 import PlatformSettingsPage from './pages/PlatformSettingsPage';
+import HelpPage from './pages/HelpPage';
 
-type Page = 'dashboard' | 'businesses' | 'users' | 'license-keys' | 'support' | 'referrals' | 'affiliates' | 'analytics' | 'webhooks' | 'platform-settings';
+type Page = 'dashboard' | 'businesses' | 'users' | 'license-keys' | 'support' | 'referrals' | 'affiliates' | 'analytics' | 'webhooks' | 'platform-settings' | 'help';
 
 const C = {
   bg: '#0a0f1e',
@@ -58,6 +59,7 @@ const MoreIcons = {
   analytics: 'M18 20V10 M12 20V4 M6 20v-6',
   webhooks:  'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71 M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71',
   settings:  'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
+  help:      'M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z',
 };
 
 const NAV: Array<{ id: Page; label: string; icon: string; color: string; group?: string }> = [
@@ -71,6 +73,7 @@ const NAV: Array<{ id: Page; label: string; icon: string; color: string; group?:
   { id: 'webhooks',          label: 'Webhooks',         icon: MoreIcons.webhooks,  color: '#f59e0b' },
   { id: 'support',           label: 'Support Tools',    icon: Icons.support,       color: C.warning },
   { id: 'platform-settings', label: 'Platform Settings',icon: MoreIcons.settings,  color: '#8b5cf6' },
+  { id: 'help',              label: 'Guide',            icon: MoreIcons.help,      color: '#06b6d4' },
 ];
 
 export default function App() {
@@ -438,6 +441,7 @@ export default function App() {
           {page === 'webhooks'           && <WebhooksPage />}
           {page === 'support'            && <SupportPage />}
           {page === 'platform-settings'  && <PlatformSettingsPage />}
+          {page === 'help'               && <HelpPage />}
         </div>
       </main>
     </div>

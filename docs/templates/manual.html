@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>$title$$if(subtitle)$ — $subtitle$$endif$</title>
+<meta name="description" content="$if(subtitle)$$subtitle$ for $title$$else$$title$$endif$"/>
+<link rel="icon" href="favicon.png"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+$styles$
+
+/* ── Pandoc TOC → sidebar nav ─────────────────────────────────────────────── */
+#TOC ul{list-style:none;margin:0;padding:0}
+#TOC li{margin:0}
+#TOC a{display:block;padding:6px 20px;font-size:13px;color:var(--text2);
+  border-left:3px solid transparent;transition:all .15s}
+#TOC a:hover{color:var(--text);background:var(--blue-dim);
+  border-left-color:var(--blue);text-decoration:none}
+#TOC a.active{color:var(--blue2);background:var(--blue-dim);border-left-color:var(--blue)}
+/* Part headings (h1) act as group labels; sections (h2) indent beneath them. */
+#TOC > ul > li > a{font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.1em;color:var(--text3);padding:14px 20px 4px;border-left-color:transparent}
+#TOC > ul > li > a:hover{background:none;color:var(--text2);border-left-color:transparent}
+#TOC ul ul a{padding-left:20px;font-size:12.5px}
+
+/* ── Generated-page touches ───────────────────────────────────────────────── */
+.doc-header{margin:-48px -40px 48px;padding:56px 40px 40px;
+  background:linear-gradient(135deg,var(--bg) 0%,var(--bg2) 100%);
+  border-bottom:1px solid var(--border2)}
+.doc-header .badge{display:inline-flex;align-items:center;gap:8px;background:var(--blue-dim);
+  border:1px solid rgba(59,130,246,.3);color:var(--blue2);font-size:12px;font-weight:600;
+  padding:6px 14px;border-radius:999px;margin-bottom:20px;letter-spacing:.05em;text-transform:uppercase}
+.doc-header h1{font-size:44px;margin:0 0 8px}
+.doc-header .sub{font-size:20px;color:var(--text2)}
+.doc-header .meta{margin-top:20px;font-size:13px;color:var(--text3)}
+.generated-note{margin-top:64px;padding-top:20px;border-top:1px solid var(--border);
+  font-size:12px;color:var(--text3)}
+h1{scroll-margin-top:20px}
+h2{scroll-margin-top:20px;border-top:1px solid var(--border);padding-top:32px}
+h2:first-of-type{border-top:none}
+blockquote{border-left:3px solid var(--blue);background:var(--blue-dim);margin:20px 0;
+  padding:14px 20px;border-radius:0 var(--radius) var(--radius) 0;color:var(--text2)}
+blockquote p:last-child{margin-bottom:0}
+.table-wrap{overflow-x:auto;margin:20px 0}
+@media (max-width:900px){
+  .manual-wrapper{flex-direction:column}
+  .sidebar{width:100%;min-width:0;height:auto;position:static;border-right:none;
+    border-bottom:1px solid var(--border2)}
+  .content{padding:32px 20px}
+  .doc-header{margin:-32px -20px 32px;padding:40px 20px 28px}
+  .doc-header h1{font-size:32px}
+}
+</style>
+</head>
+<body>
+<div class="manual-wrapper">
+
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="brand">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3b82f6"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+        </svg>
+        KASTRA POS
+      </div>
+      <div class="sidebar-version">$if(subtitle)$$subtitle$$else$Documentation$endif$</div>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-section">Contents</div>
+      $toc$
+    </div>
+  </aside>
+
+  <main class="content">
+    <div class="doc-header">
+      <span class="badge">$if(subtitle)$$subtitle$$else$Documentation$endif$</span>
+      <h1>$title$</h1>
+      $if(audience)$<div class="sub">For $audience$</div>$endif$
+      $if(date)$<div class="meta">Last updated $date$</div>$endif$
+    </div>
+
+$body$
+
+    <p class="generated-note">
+      This page is generated from the project documentation source.
+      Do not edit it directly &mdash; edit the markdown and run <code>scripts/build-docs.sh</code>.
+    </p>
+  </main>
+
+</div>
+
+<script>
+// Highlight the section currently in view in the sidebar.
+(function () {
+  var links = Array.prototype.slice.call(document.querySelectorAll('#TOC ul ul a'));
+  if (!links.length) return;
+  var targets = links
+    .map(function (a) {
+      var el = document.querySelector(a.getAttribute('href'));
+      return el ? { link: a, el: el } : null;
+    })
+    .filter(Boolean);
+  if (!targets.length) return;
+
+  function sync() {
+    var y = window.scrollY + 120;
+    var current = targets[0];
+    for (var i = 0; i < targets.length; i++) {
+      if (targets[i].el.offsetTop <= y) current = targets[i];
+    }
+    links.forEach(function (a) { a.classList.remove('active'); });
+    current.link.classList.add('active');
+  }
+
+  window.addEventListener('scroll', sync, { passive: true });
+  sync();
+})();
+
+// Let wide tables scroll on their own instead of stretching the page.
+document.querySelectorAll('table').forEach(function (t) {
+  if (t.parentElement && t.parentElement.classList.contains('table-wrap')) return;
+  var w = document.createElement('div');
+  w.className = 'table-wrap';
+  t.parentNode.insertBefore(w, t);
+  w.appendChild(t);
+});
+</script>
+</body>
+</html>

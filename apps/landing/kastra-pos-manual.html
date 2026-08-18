@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>KASTRA POS — Enterprise User Manual v2.0</title>
+<title>KASTRA POS — User Guide</title>
+<meta name="description" content="User Guide for KASTRA POS"/>
+<link rel="icon" href="favicon.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
@@ -197,1895 +199,1347 @@ hr{border:none;border-top:1px solid var(--border2);margin:48px 0}
   a{color:#2563eb!important}
   .cover-badge{background:#eff6ff!important;color:#2563eb!important;border-color:#93c5fd!important}
 }
+
+/* ── Pandoc TOC → sidebar nav ─────────────────────────────────────────────── */
+#TOC ul{list-style:none;margin:0;padding:0}
+#TOC li{margin:0}
+#TOC a{display:block;padding:6px 20px;font-size:13px;color:var(--text2);
+  border-left:3px solid transparent;transition:all .15s}
+#TOC a:hover{color:var(--text);background:var(--blue-dim);
+  border-left-color:var(--blue);text-decoration:none}
+#TOC a.active{color:var(--blue2);background:var(--blue-dim);border-left-color:var(--blue)}
+/* Part headings (h1) act as group labels; sections (h2) indent beneath them. */
+#TOC > ul > li > a{font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.1em;color:var(--text3);padding:14px 20px 4px;border-left-color:transparent}
+#TOC > ul > li > a:hover{background:none;color:var(--text2);border-left-color:transparent}
+#TOC ul ul a{padding-left:20px;font-size:12.5px}
+
+/* ── Generated-page touches ───────────────────────────────────────────────── */
+.doc-header{margin:-48px -40px 48px;padding:56px 40px 40px;
+  background:linear-gradient(135deg,var(--bg) 0%,var(--bg2) 100%);
+  border-bottom:1px solid var(--border2)}
+.doc-header .badge{display:inline-flex;align-items:center;gap:8px;background:var(--blue-dim);
+  border:1px solid rgba(59,130,246,.3);color:var(--blue2);font-size:12px;font-weight:600;
+  padding:6px 14px;border-radius:999px;margin-bottom:20px;letter-spacing:.05em;text-transform:uppercase}
+.doc-header h1{font-size:44px;margin:0 0 8px}
+.doc-header .sub{font-size:20px;color:var(--text2)}
+.doc-header .meta{margin-top:20px;font-size:13px;color:var(--text3)}
+.generated-note{margin-top:64px;padding-top:20px;border-top:1px solid var(--border);
+  font-size:12px;color:var(--text3)}
+h1{scroll-margin-top:20px}
+h2{scroll-margin-top:20px;border-top:1px solid var(--border);padding-top:32px}
+h2:first-of-type{border-top:none}
+blockquote{border-left:3px solid var(--blue);background:var(--blue-dim);margin:20px 0;
+  padding:14px 20px;border-radius:0 var(--radius) var(--radius) 0;color:var(--text2)}
+blockquote p:last-child{margin-bottom:0}
+.table-wrap{overflow-x:auto;margin:20px 0}
+@media (max-width:900px){
+  .manual-wrapper{flex-direction:column}
+  .sidebar{width:100%;min-width:0;height:auto;position:static;border-right:none;
+    border-bottom:1px solid var(--border2)}
+  .content{padding:32px 20px}
+  .doc-header{margin:-32px -20px 32px;padding:40px 20px 28px}
+  .doc-header h1{font-size:32px}
+}
 </style>
 </head>
 <body>
 <div class="manual-wrapper">
 
-<!-- ── Sidebar Navigation ── -->
-<nav class="sidebar">
-  <div class="sidebar-logo">
-    <div class="brand">
-      <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-        <rect width="28" height="28" rx="7" fill="url(#lg1)"/>
-        <path d="M9 20l4-7 3 4 2-3 3 6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="14" cy="10" r="3" fill="#fff" opacity=".9"/>
-        <defs><linearGradient id="lg1" x1="0" y1="0" x2="28" y2="28" gradientUnits="userSpaceOnUse"><stop stop-color="#2563eb"/><stop offset="1" stop-color="#7c3aed"/></linearGradient></defs>
-      </svg>
-      KASTRA POS
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="brand">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3b82f6"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+        </svg>
+        KASTRA POS
+      </div>
+      <div class="sidebar-version">User Guide</div>
     </div>
-    <div class="sidebar-version">Enterprise Manual v2.0 · March 2026</div>
-  </div>
-  <div class="sidebar-nav">
-    <div class="nav-section">Getting Started</div>
-    <a class="nav-item" href="#ch1">1. Introduction</a>
-    <a class="nav-item" href="#ch2">2. System Architecture</a>
-    <a class="nav-item" href="#ch3">3. System Requirements</a>
-    <a class="nav-item" href="#ch4">4. Installation Guide</a>
-    <a class="nav-item" href="#ch5">5. Initial Setup Wizard</a>
-    <a class="nav-item" href="#ch6">6. User Roles &amp; Permissions</a>
-    <div class="nav-section">Operations</div>
-    <a class="nav-item" href="#ch7">7. Point of Sale</a>
-    <a class="nav-item" href="#ch8">8. Payment Methods</a>
-    <a class="nav-item" href="#ch9">9. Inventory Management</a>
-    <a class="nav-item" href="#ch10">10. Purchase Orders</a>
-    <a class="nav-item" href="#ch11">11. Customer &amp; Loyalty</a>
-    <a class="nav-item" href="#ch12">12. Expense &amp; Budgets</a>
-    <div class="nav-section">Modules</div>
-    <a class="nav-item" href="#ch13">13. Hospitality &amp; Restaurant</a>
-    <a class="nav-item" href="#ch14">14. Hotel Management</a>
-    <a class="nav-item" href="#ch14b">14B. Fuel Station</a>
-    <a class="nav-item" href="#ch14c">14C. Cybercafé</a>
-    <a class="nav-item" href="#ch15">15. HR &amp; Payroll</a>
-    <a class="nav-item" href="#ch16">16. Reports &amp; Analytics</a>
-    <a class="nav-item" href="#ch17">17. KRA eTIMS</a>
-    <div class="nav-section">Enterprise</div>
-    <a class="nav-item" href="#ch18">18. Multi-Store &amp; Franchise</a>
-    <a class="nav-item" href="#ch19">19. Security Settings</a>
-    <a class="nav-item" href="#ch20">20. Third-party Integrations</a>
-    <a class="nav-item" href="#ch21">21. Mobile Applications</a>
-    <a class="nav-item" href="#ch22">22. Settings Reference</a>
-    <div class="nav-section">Reference</div>
-    <a class="nav-item" href="#ch23">23. Troubleshooting</a>
-    <a class="nav-item" href="#ch24">24. Keyboard Shortcuts</a>
-    <a class="nav-item" href="#ch25">25. Glossary &amp; API</a>
-  </div>
-</nav>
-
-<!-- ── Main Content ── -->
-<main class="content">
-
-<!-- Cover -->
-<div class="cover">
-  <div class="cover-badge">
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="#3b82f6"/><path d="M4 7l2 2 4-4" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>
-    Official Documentation
-  </div>
-  <div class="cover-logo">
-    <div class="cover-logo-icon">
-      <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-        <path d="M18 4L8 20h8l-2 12 14-18h-8l2-10z" fill="#fff"/>
-      </svg>
+    <div class="sidebar-nav">
+      <div class="nav-section">Contents</div>
+      <ul>
+      <li><a href="#kastra-pos-user-guide"
+      id="toc-kastra-pos-user-guide">KASTRA POS — User Guide</a>
+      <ul>
+      <li><a href="#contents" id="toc-contents">Contents</a></li>
+      </ul></li>
+      <li><a href="#getting-going" id="toc-getting-going">Getting
+      going</a>
+      <ul>
+      <li><a href="#who-does-what" id="toc-who-does-what">1. Who does
+      what</a></li>
+      <li><a href="#signing-in" id="toc-signing-in">2. Signing
+      in</a></li>
+      <li><a href="#your-first-sale-in-60-seconds"
+      id="toc-your-first-sale-in-60-seconds">3. Your first sale in 60
+      seconds</a></li>
+      </ul></li>
+      <li><a href="#selling" id="toc-selling">Selling</a>
+      <ul>
+      <li><a href="#the-pos-screen" id="toc-the-pos-screen">4. The POS
+      screen</a></li>
+      <li><a href="#adding-items-to-the-cart"
+      id="toc-adding-items-to-the-cart">5. Adding items to the
+      cart</a></li>
+      <li><a href="#taking-payment" id="toc-taking-payment">6. Taking
+      payment</a></li>
+      <li><a href="#receipts" id="toc-receipts">7. Receipts</a></li>
+      <li><a href="#holding-and-recalling-a-sale"
+      id="toc-holding-and-recalling-a-sale">8. Holding and recalling a
+      sale</a></li>
+      <li><a href="#fixing-mistakes-cart-edit-void-refund"
+      id="toc-fixing-mistakes-cart-edit-void-refund">9. Fixing mistakes:
+      cart edit, void, refund</a></li>
+      <li><a href="#customers-credit-and-loyalty"
+      id="toc-customers-credit-and-loyalty">10. Customers, credit and
+      loyalty</a></li>
+      </ul></li>
+      <li><a href="#your-kind-of-business"
+      id="toc-your-kind-of-business">Your kind of business</a>
+      <ul>
+      <li><a href="#restaurant-café-and-bar"
+      id="toc-restaurant-café-and-bar">11. Restaurant, café and
+      bar</a></li>
+      <li><a href="#hotel" id="toc-hotel">12. Hotel</a></li>
+      <li><a href="#pharmacy" id="toc-pharmacy">13. Pharmacy</a></li>
+      <li><a href="#fuel-station-cyber-café-and-other-trades"
+      id="toc-fuel-station-cyber-café-and-other-trades">14. Fuel
+      station, cyber café and other trades</a></li>
+      </ul></li>
+      <li><a href="#stock-and-suppliers"
+      id="toc-stock-and-suppliers">Stock and suppliers</a>
+      <ul>
+      <li><a href="#stock-receiving-and-counting"
+      id="toc-stock-receiving-and-counting">15. Stock, receiving and
+      counting</a></li>
+      <li><a href="#expiry-dates-and-batches"
+      id="toc-expiry-dates-and-batches">16. Expiry dates and
+      batches</a></li>
+      <li><a href="#suppliers-and-purchase-orders"
+      id="toc-suppliers-and-purchase-orders">17. Suppliers and purchase
+      orders</a></li>
+      </ul></li>
+      <li><a href="#money" id="toc-money">Money</a>
+      <ul>
+      <li><a href="#cash-drawer-shifts-and-closing-the-day"
+      id="toc-cash-drawer-shifts-and-closing-the-day">18. Cash drawer,
+      shifts and closing the day</a></li>
+      <li><a href="#expenses-and-the-books"
+      id="toc-expenses-and-the-books">19. Expenses and the
+      books</a></li>
+      <li><a href="#reports-worth-knowing"
+      id="toc-reports-worth-knowing">20. Reports worth knowing</a></li>
+      <li><a href="#kra-vat-and-etims" id="toc-kra-vat-and-etims">21.
+      KRA, VAT and eTIMS</a></li>
+      </ul></li>
+      <li><a href="#beyond-the-counter"
+      id="toc-beyond-the-counter">Beyond the counter</a>
+      <ul>
+      <li><a href="#selling-online-and-to-customers-phones"
+      id="toc-selling-online-and-to-customers-phones">22. Selling online
+      and to customers’ phones</a></li>
+      <li><a href="#delivery" id="toc-delivery">23. Delivery</a></li>
+      <li><a href="#field-sales-and-b2b-invoicing"
+      id="toc-field-sales-and-b2b-invoicing">24. Field sales and B2B
+      invoicing</a></li>
+      <li><a href="#staff-leave-and-payroll"
+      id="toc-staff-leave-and-payroll">25. Staff, leave and
+      payroll</a></li>
+      <li><a href="#the-mobile-apps" id="toc-the-mobile-apps">26. The
+      mobile apps</a></li>
+      </ul></li>
+      <li><a href="#running-the-shop" id="toc-running-the-shop">Running
+      the shop</a>
+      <ul>
+      <li><a href="#settings-you-will-actually-use"
+      id="toc-settings-you-will-actually-use">27. Settings you will
+      actually use</a></li>
+      <li><a href="#your-plan-and-what-it-unlocks"
+      id="toc-your-plan-and-what-it-unlocks">28. Your plan and what it
+      unlocks</a></li>
+      <li><a href="#working-offline" id="toc-working-offline">29.
+      Working offline</a></li>
+      <li><a href="#when-something-goes-wrong"
+      id="toc-when-something-goes-wrong">30. When something goes
+      wrong</a></li>
+      <li><a href="#quick-reference-card"
+      id="toc-quick-reference-card">31. Quick reference card</a></li>
+      <li><a href="#glossary" id="toc-glossary">32. Glossary</a></li>
+      </ul></li>
+      </ul>
     </div>
-    <div>
-      <div class="cover-title">KASTRA POS</div>
+  </aside>
+
+  <main class="content">
+    <div class="doc-header">
+      <span class="badge">User Guide</span>
+      <h1>KASTRA POS</h1>
+      <div class="sub">For owners, managers and shop-floor staff</div>
+      <div class="meta">Last updated 18 August 2026</div>
     </div>
-  </div>
-  <div class="cover-subtitle">Enterprise User Manual &amp; Reference Guide</div>
-  <div class="cover-meta">
-    <div class="cover-meta-item"><strong>Version</strong><span>2.0</span></div>
-    <div class="cover-meta-item"><strong>Updated</strong><span>March 2026</span></div>
-    <div class="cover-meta-item"><strong>Classification</strong><span>Commercial Confidential</span></div>
-    <div class="cover-meta-item"><strong>Pages</strong><span>100+</span></div>
-  </div>
-  <div class="cover-pills">
-    <span class="cover-pill green">✓ KRA eTIMS Compliant</span>
-    <span class="cover-pill blue">⚡ Offline-First</span>
-    <span class="cover-pill blue">🏪 Multi-Store</span>
-    <span class="cover-pill amber">🇰🇪 Built for Kenya</span>
-    <span class="cover-pill green">✓ VAT &amp; TOT Ready</span>
-    <span class="cover-pill blue">📱 Mobile + Desktop + Web</span>
-  </div>
-</div>
 
-<!-- ── Chapter 1: Introduction ── -->
-<section id="ch1">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 1</div>
-  <h1>Introduction</h1>
-  <p>KASTRA POS is Kenya's most comprehensive enterprise Point of Sale platform — purpose-built for KRA eTIMS compliance, offline-first resilience, and multi-store scalability.</p>
-</div>
-
-<h2>1.1 About KASTRA POS</h2>
-<p>KASTRA POS is an enterprise-grade, offline-first Point of Sale system designed specifically for Kenyan businesses of all sizes — from single-location cafés to multi-branch franchise chains. The system covers every aspect of business operations: from ringing up a sale and printing a KRA-compliant receipt, to running payroll, managing hotel rooms, analysing AI-driven demand forecasts, and syncing with QuickBooks.</p>
-
-<div class="card-grid">
-  <div class="card"><div class="card-icon">🏪</div><h4>Multi-channel Sales</h4><p>Retail, Restaurant, Supermarket, Pharmacy, Hotel, Salon, Bar — one platform, all modes.</p></div>
-  <div class="card"><div class="card-icon">🇰🇪</div><h4>KRA eTIMS Compliant</h4><p>Automated tax invoice submission, VAT/TOT, QR receipts, VSCU offline support.</p></div>
-  <div class="card"><div class="card-icon">⚡</div><h4>Offline-First</h4><p>IndexedDB sync engine. Continue selling during internet outages; syncs automatically when reconnected.</p></div>
-  <div class="card"><div class="card-icon">🏢</div><h4>Multi-Store</h4><p>Centralized inventory, cross-store transfers, store-scoped roles, owner dashboard.</p></div>
-  <div class="card"><div class="card-icon">📦</div><h4>Advanced Inventory</h4><p>Batches, serials, expiry (FEFO), recipes/BOM, bundles, stocktake, dead stock analysis.</p></div>
-  <div class="card"><div class="card-icon">💼</div><h4>Full HR &amp; Payroll</h4><p>Kenya PAYE, NHIF, NSSF, Housing Levy. Leave management, shifts, performance dashboards.</p></div>
-  <div class="card"><div class="card-icon">🍽️</div><h4>Hospitality Suite</h4><p>Table management, KOT, KDS, bar tabs, hotel room bookings, guest folio, housekeeping.</p></div>
-  <div class="card"><div class="card-icon">📊</div><h4>Business Intelligence</h4><p>30+ reports, AI demand forecasting, bank reconciliation, franchise dashboards.</p></div>
-</div>
-
-<h2>1.2 Supported Business Types</h2>
-<div class="table-wrap">
+<h1 id="kastra-pos-user-guide">KASTRA POS — User Guide</h1>
+<p><strong>This guide is for the people who use KASTRA POS to run a
+business.</strong> Owners, managers, cashiers, waiters, kitchen staff
+and accountants.</p>
+<p>You do not need to understand servers, databases or code to read it.
+If you are installing KASTRA on a server, you want the <strong>Admin
+&amp; Installation Guide</strong> instead.</p>
+<p>Everything here is written as a task: <em>how do I take a sale</em>,
+<em>how do I refund someone</em>, <em>how do I close the day</em>. Find
+your task, follow the steps.</p>
+<hr />
+<h2 id="contents">Contents</h2>
+<p><strong>Getting going</strong> 1. <a href="#1-who-does-what">Who does
+what</a> 2. <a href="#2-signing-in">Signing in</a> 3. <a
+href="#3-your-first-sale-in-60-seconds">Your first sale in 60
+seconds</a></p>
+<p><strong>Selling</strong> 4. <a href="#4-the-pos-screen">The POS
+screen</a> 5. <a href="#5-adding-items-to-the-cart">Adding items to the
+cart</a> 6. <a href="#6-taking-payment">Taking payment</a> 7. <a
+href="#7-receipts">Receipts</a> 8. <a
+href="#8-holding-and-recalling-a-sale">Holding and recalling a sale</a>
+9. <a href="#9-fixing-mistakes-cart-edit-void-refund">Fixing mistakes:
+cart edit, void, refund</a> 10. <a
+href="#10-customers-credit-and-loyalty">Customers, credit and
+loyalty</a></p>
+<p><strong>Your kind of business</strong> 11. <a
+href="#11-restaurant-café-and-bar">Restaurant, café and bar</a> 12. <a
+href="#12-hotel">Hotel</a> 13. <a href="#13-pharmacy">Pharmacy</a> 14.
+<a href="#14-fuel-station-cyber-café-and-other-trades">Fuel station,
+cyber café and other trades</a></p>
+<p><strong>Stock and suppliers</strong> 15. <a
+href="#15-stock-receiving-and-counting">Stock, receiving and
+counting</a> 16. <a href="#16-expiry-dates-and-batches">Expiry dates and
+batches</a> 17. <a href="#17-suppliers-and-purchase-orders">Suppliers
+and purchase orders</a></p>
+<p><strong>Money</strong> 18. <a
+href="#18-cash-drawer-shifts-and-closing-the-day">Cash drawer, shifts
+and closing the day</a> 19. <a
+href="#19-expenses-and-the-books">Expenses and the books</a> 20. <a
+href="#20-reports-worth-knowing">Reports worth knowing</a> 21. <a
+href="#21-kra-vat-and-etims">KRA, VAT and eTIMS</a></p>
+<p><strong>Beyond the counter</strong> 22. <a
+href="#22-selling-online-and-to-customers-phones">Selling online and to
+customers’ phones</a> 23. <a href="#23-delivery">Delivery</a> 24. <a
+href="#24-field-sales-and-b2b-invoicing">Field sales and B2B
+invoicing</a> 25. <a href="#25-staff-leave-and-payroll">Staff, leave and
+payroll</a> 26. <a href="#26-the-mobile-apps">The mobile apps</a></p>
+<p><strong>Running the shop</strong> 27. <a
+href="#27-settings-you-will-actually-use">Settings you will actually
+use</a> 28. <a href="#28-your-plan-and-what-it-unlocks">Your plan and
+what it unlocks</a> 29. <a href="#29-working-offline">Working
+offline</a> 30. <a href="#30-when-something-goes-wrong">When something
+goes wrong</a> 31. <a href="#31-quick-reference-card">Quick reference
+card</a> 32. <a href="#32-glossary">Glossary</a></p>
+<hr />
+<h1 id="getting-going">Getting going</h1>
+<h2 id="who-does-what">1. Who does what</h2>
+<p>KASTRA gives each person only what their job needs. If a screen
+described in this guide is missing for you, it is almost certainly your
+role — ask the owner.</p>
 <table>
-<thead><tr><th>Business Type</th><th>Key Modules Used</th><th>Special Features</th></tr></thead>
-<tbody>
-<tr><td><strong>Retail Shop</strong></td><td>POS, Inventory, Suppliers, Reports</td><td>Barcode labels, stock transfers, layaway</td></tr>
-<tr><td><strong>Restaurant / Café</strong></td><td>POS, Tables, KOT, KDS, Recipes</td><td>Kitchen display, table reservations, bill splitting</td></tr>
-<tr><td><strong>Supermarket</strong></td><td>POS, Inventory, Batches, Suppliers</td><td>Weight scale, FEFO, bulk imports, promotions</td></tr>
-<tr><td><strong>Pharmacy / Clinic</strong></td><td>POS, Batches, Serials, Prescriptions</td><td>Expiry tracking, batch recall, prescriptions, refer out to external pharmacy</td></tr>
-<tr><td><strong>Hotel / Lodge</strong></td><td>POS, Hotel Rooms, Folio, Restaurant</td><td>Room bookings, housekeeping, guest folio, room charge</td></tr>
-<tr><td><strong>Bar / Nightclub</strong></td><td>POS, Bar Tabs, Tables, KOT</td><td>Bar tab management, tab settlement, KOT routing to bar</td></tr>
-<tr><td><strong>Salon / Spa</strong></td><td>POS, Appointments, Employees, HR</td><td>Service items, commission tracking, appointment booking</td></tr>
-<tr><td><strong>Fuel Station</strong></td><td>POS, Fuel Pump, Inventory, Shifts</td><td>Per-pump &amp; per-nozzle tracking, nozzle calibration, dip readings, attendant shift reports, fleet credit accounts</td></tr>
-<tr><td><strong>Cybercafé / Business Centre</strong></td><td>POS, Cybercafé Sessions, Reports</td><td>Computer session timer, per-minute/hourly billing, printing &amp; scanning charges, daily usage reports, M-Pesa per session</td></tr>
-<tr><td><strong>Hardware / General Trade</strong></td><td>POS, Inventory, Suppliers, POs, Serials</td><td>Purchase orders &amp; GRN, supplier ageing, serial registry, proforma invoices, credit book</td></tr>
-<tr><td><strong>Franchise Chain</strong></td><td>All modules + Franchise Dashboard</td><td>Royalty tracking, franchise reports, multi-business hierarchy, per-franchisee performance dashboards</td></tr>
-</tbody>
-</table>
-</div>
-
-<h2>1.3 What's New in v2.0</h2>
-<ul>
-  <li><strong>Full HR &amp; Payroll</strong> — Kenya PAYE/NHIF/NSSF/Housing Levy calculator, payslips, leave management, shift scheduling, performance dashboards.</li>
-  <li><strong>Hotel Management</strong> — Room bookings, guest folio charges, housekeeping queue, hotel dashboard with occupancy metrics.</li>
-  <li><strong>AI Demand Forecasting</strong> — ML-based demand forecasting, top movers, seasonal analysis.</li>
-  <li><strong>Bank Reconciliation</strong> — CSV upload (KCB/Equity/NCBA/Co-op formats), auto-matching, reconciliation reports.</li>
-  <li><strong>Franchise Management</strong> — Multi-business hierarchy, royalty rates, franchise performance dashboard.</li>
-  <li><strong>Production eTIMS</strong> — Real HTTP calls to KRA eTIMS API. Set <code>ETIMS_ENV=production</code> to go live.</li>
-  <li><strong>Mobile Apps</strong> — Three dedicated Expo React Native apps: POS Cashier, Customer Self-Service, Driver/Delivery.</li>
-  <li><strong>Secrets Rotation</strong> — <code>POST /super-admin/rotate-encryption-key</code> re-encrypts all stored credentials.</li>
-</ul>
-</section>
-
-<hr/>
-
-<!-- ── Chapter 2: Architecture ── -->
-<section id="ch2">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 2</div>
-  <h1>System Architecture</h1>
-  <p>KASTRA POS uses a three-tier architecture with offline-first capabilities, real-time synchronisation, and modular external integrations.</p>
-</div>
-
-<div class="diagram">
-<svg width="780" height="380" viewBox="0 0 780 380" font-family="Inter,sans-serif" font-size="13">
-  <!-- Background -->
-  <rect width="780" height="380" fill="#0f172a" rx="12"/>
-
-  <!-- Title -->
-  <text x="390" y="32" text-anchor="middle" fill="#94a3b8" font-size="12" font-weight="600" letter-spacing="0.1em">KASTRA POS SYSTEM ARCHITECTURE</text>
-
-  <!-- CLIENT LAYER -->
-  <rect x="20" y="50" width="480" height="90" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
-  <text x="260" y="70" text-anchor="middle" fill="#60a5fa" font-size="11" font-weight="700" letter-spacing="0.08em">CLIENT LAYER</text>
-  <!-- Web -->
-  <rect x="36" y="80" width="130" height="48" rx="6" fill="#0f172a" stroke="#3b82f6" stroke-width="1"/>
-  <text x="101" y="101" text-anchor="middle" fill="#f1f5f9" font-size="12" font-weight="600">Web App</text>
-  <text x="101" y="117" text-anchor="middle" fill="#64748b" font-size="11">React 18 + Vite PWA</text>
-  <!-- Desktop -->
-  <rect x="185" y="80" width="130" height="48" rx="6" fill="#0f172a" stroke="#3b82f6" stroke-width="1"/>
-  <text x="250" y="101" text-anchor="middle" fill="#f1f5f9" font-size="12" font-weight="600">Desktop App</text>
-  <text x="250" y="117" text-anchor="middle" fill="#64748b" font-size="11">Tauri (Windows/macOS)</text>
-  <!-- Mobile -->
-  <rect x="334" y="80" width="150" height="48" rx="6" fill="#0f172a" stroke="#3b82f6" stroke-width="1"/>
-  <text x="409" y="101" text-anchor="middle" fill="#f1f5f9" font-size="12" font-weight="600">Mobile Apps (×3)</text>
-  <text x="409" y="117" text-anchor="middle" fill="#64748b" font-size="11">React Native / Expo</text>
-
-  <!-- Arrow down -->
-  <line x1="260" y1="140" x2="260" y2="168" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="4,3"/>
-  <polygon points="256,165 260,174 264,165" fill="#3b82f6"/>
-
-  <!-- API LAYER -->
-  <rect x="20" y="175" width="480" height="60" rx="8" fill="#1e293b" stroke="#6366f1" stroke-width="1.5"/>
-  <text x="260" y="195" text-anchor="middle" fill="#a5b4fc" font-size="11" font-weight="700" letter-spacing="0.08em">API LAYER</text>
-  <text x="260" y="218" text-anchor="middle" fill="#f1f5f9" font-size="13" font-weight="600">NestJS REST API · WebSockets · JWT Auth · BullMQ Jobs</text>
-
-  <!-- Arrow down -->
-  <line x1="260" y1="235" x2="260" y2="263" stroke="#6366f1" stroke-width="1.5" stroke-dasharray="4,3"/>
-  <polygon points="256,260 260,269 264,260" fill="#6366f1"/>
-
-  <!-- DATA LAYER -->
-  <rect x="20" y="270" width="480" height="90" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
-  <text x="260" y="290" text-anchor="middle" fill="#60a5fa" font-size="11" font-weight="700" letter-spacing="0.08em">DATA LAYER</text>
-  <!-- PostgreSQL -->
-  <rect x="36" y="299" width="130" height="48" rx="6" fill="#0f172a" stroke="#10b981" stroke-width="1"/>
-  <text x="101" y="320" text-anchor="middle" fill="#f1f5f9" font-size="12" font-weight="600">PostgreSQL 14</text>
-  <text x="101" y="336" text-anchor="middle" fill="#64748b" font-size="11">Primary Database</text>
-  <!-- Redis -->
-  <rect x="185" y="299" width="130" height="48" rx="6" fill="#0f172a" stroke="#f59e0b" stroke-width="1"/>
-  <text x="250" y="320" text-anchor="middle" fill="#f1f5f9" font-size="12" font-weight="600">Redis + BullMQ</text>
-  <text x="250" y="336" text-anchor="middle" fill="#64748b" font-size="11">Queue &amp; Cache</text>
-  <!-- SQLite -->
-  <rect x="334" y="299" width="150" height="48" rx="6" fill="#0f172a" stroke="#8b5cf6" stroke-width="1"/>
-  <text x="409" y="320" text-anchor="middle" fill="#f1f5f9" font-size="12" font-weight="600">SQLite (VSCU)</text>
-  <text x="409" y="336" text-anchor="middle" fill="#64748b" font-size="11">Offline Submissions</text>
-
-  <!-- EXTERNAL SERVICES -->
-  <rect x="525" y="50" width="235" height="310" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
-  <text x="642" y="72" text-anchor="middle" fill="#94a3b8" font-size="11" font-weight="700" letter-spacing="0.08em">EXTERNAL SERVICES</text>
-  <!-- Arrow from API to External -->
-  <line x1="500" y1="205" x2="525" y2="205" stroke="#475569" stroke-width="1.5" stroke-dasharray="4,3"/>
-  <polygon points="520,201 529,205 520,209" fill="#475569"/>
-  <!-- Services list -->
-  <rect x="538" y="85" width="209" height="32" rx="5" fill="#0f172a" stroke="#ef4444" stroke-width="1"/>
-  <text x="642" y="106" text-anchor="middle" fill="#fca5a5" font-size="12" font-weight="500">KRA eTIMS API</text>
-  <rect x="538" y="125" width="209" height="32" rx="5" fill="#0f172a" stroke="#10b981" stroke-width="1"/>
-  <text x="642" y="146" text-anchor="middle" fill="#6ee7b7" font-size="12" font-weight="500">M-Pesa Daraja API</text>
-  <rect x="538" y="165" width="209" height="32" rx="5" fill="#0f172a" stroke="#f59e0b" stroke-width="1"/>
-  <text x="642" y="186" text-anchor="middle" fill="#fcd34d" font-size="12" font-weight="500">Africa's Talking SMS/WA</text>
-  <rect x="538" y="205" width="209" height="32" rx="5" fill="#0f172a" stroke="#3b82f6" stroke-width="1"/>
-  <text x="642" y="226" text-anchor="middle" fill="#93c5fd" font-size="12" font-weight="500">Resend (Email)</text>
-  <rect x="538" y="245" width="209" height="32" rx="5" fill="#0f172a" stroke="#8b5cf6" stroke-width="1"/>
-  <text x="642" y="266" text-anchor="middle" fill="#c4b5fd" font-size="12" font-weight="500">QuickBooks / Xero</text>
-  <rect x="538" y="285" width="209" height="32" rx="5" fill="#0f172a" stroke="#06b6d4" stroke-width="1"/>
-  <text x="642" y="306" text-anchor="middle" fill="#67e8f9" font-size="12" font-weight="500">Shopify / WooCommerce</text>
-  <rect x="538" y="325" width="209" height="24" rx="5" fill="#0f172a" stroke="#334155" stroke-width="1"/>
-  <text x="642" y="341" text-anchor="middle" fill="#64748b" font-size="11">Paystack · Google OAuth</text>
-</svg>
-</div>
-
-<h2>2.1 Technology Stack</h2>
-<div class="table-wrap">
-<table>
-<thead><tr><th>Layer</th><th>Technology</th><th>Purpose</th></tr></thead>
-<tbody>
-<tr><td>Frontend</td><td>React 18, TypeScript, Vite, Tailwind CSS</td><td>Web POS, Admin Panel, Landing Page</td></tr>
-<tr><td>Backend API</td><td>NestJS 10, TypeScript, Prisma ORM</td><td>REST API on port 3010, prefix <code>/api/v1/</code></td></tr>
-<tr><td>Mobile</td><td>Expo React Native (SDK 50)</td><td>Cashier App, Customer App, Driver App</td></tr>
-<tr><td>Desktop</td><td>Tauri (Rust + WebView)</td><td>Offline VSCU, local SQLite queue</td></tr>
-<tr><td>Database</td><td>PostgreSQL 14+</td><td>Primary data store (all production data)</td></tr>
-<tr><td>Cache / Queue</td><td>Redis 6+, BullMQ</td><td>Job queues: email, webhook-retry, etims-retry</td></tr>
-<tr><td>Auth</td><td>JWT (15 min access), bcrypt, TOTP</td><td>Email/password, PIN login, Google OAuth, 2FA</td></tr>
-<tr><td>Real-time</td><td>Socket.io (WebSockets)</td><td>KDS order updates, pole display, notifications</td></tr>
-<tr><td>Offline Sync</td><td>Dexie.js (IndexedDB)</td><td>Browser-side offline queue and sync engine</td></tr>
-</tbody>
-</table>
-</div>
-</section>
-
-<hr/>
-
-<!-- ── Chapter 3: System Requirements ── -->
-<section id="ch3">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 3</div>
-  <h1>System Requirements</h1>
-</div>
-
-<h2>3.1 Server Requirements</h2>
-<div class="table-wrap">
-<table>
-<thead><tr><th>Specification</th><th>Minimum</th><th>Recommended</th><th>High-Volume (50+ terminals)</th></tr></thead>
-<tbody>
-<tr><td><strong>CPU</strong></td><td>2 cores, 2.0 GHz</td><td>4 cores, 3.0 GHz</td><td>8+ cores</td></tr>
-<tr><td><strong>RAM</strong></td><td>4 GB</td><td>8 GB</td><td>16–32 GB</td></tr>
-<tr><td><strong>Storage</strong></td><td>50 GB SSD</td><td>100 GB NVMe SSD</td><td>500 GB+ with RAID</td></tr>
-<tr><td><strong>OS</strong></td><td>Ubuntu 20.04 LTS</td><td>Ubuntu 22.04 LTS</td><td>Ubuntu 22.04 LTS</td></tr>
-<tr><td><strong>Network</strong></td><td>10 Mbps</td><td>50 Mbps + backup 4G</td><td>100 Mbps + redundant</td></tr>
-<tr><td><strong>Uptime SLA</strong></td><td>95%</td><td>99.5%</td><td>99.9% (HA setup)</td></tr>
-</tbody>
-</table>
-</div>
-
-<h2>3.2 Client Requirements</h2>
-<div class="table-wrap">
-<table>
-<thead><tr><th>Client Type</th><th>Requirement</th><th>Notes</th></tr></thead>
-<tbody>
-<tr><td><strong>Web Browser (POS)</strong></td><td>Chrome 90+, Firefox 88+, Edge 90+<br/>RAM: 4 GB | Screen: 1366×768 min</td><td>1920×1080 recommended for hospitality mode</td></tr>
-<tr><td><strong>Desktop App (Tauri)</strong></td><td>Windows 10/11, macOS 11+, Ubuntu 20.04+<br/>RAM: 4 GB | Storage: 2 GB free</td><td>Required for VSCU offline eTIMS</td></tr>
-<tr><td><strong>Mobile (Android)</strong></td><td>Android 8.0+ (API 26+) | RAM: 2 GB</td><td>Camera required for barcode scanning</td></tr>
-<tr><td><strong>Mobile (iOS)</strong></td><td>iOS 13.0+ | RAM: 2 GB</td><td>Camera required for barcode scanning</td></tr>
-</tbody>
-</table>
-</div>
-
-<h2>3.3 Peripheral Support</h2>
-<div class="table-wrap">
-<table>
-<thead><tr><th>Device</th><th>Connection</th><th>Configuration</th></tr></thead>
-<tbody>
-<tr><td><strong>Barcode Scanner</strong></td><td>USB, Bluetooth</td><td>Keyboard wedge mode, Enter/Return suffix, no prefix</td></tr>
-<tr><td><strong>Receipt Printer</strong></td><td>USB, Network (LAN), Bluetooth</td><td>Settings → Printers → Add Printer → assign routing handle</td></tr>
-<tr><td><strong>Cash Drawer</strong></td><td>Via receipt printer (RJ11)</td><td>Auto-triggers on cash sale; manual trigger available</td></tr>
-<tr><td><strong>Pole Display</strong></td><td>USB-Serial, RS232, Network</td><td>Settings → General → Pole Display. Shows item/total, idle message &amp; logo configurable.</td></tr>
-<tr><td><strong>Weight Scale</strong></td><td>USB-Serial (RS232)</td><td>Settings → Scale Integration. WEIGHTED items prompt scale reading at POS.</td></tr>
-<tr><td><strong>Kitchen Printer</strong></td><td>Network (LAN)</td><td>Assign routing handle: KOT_FOOD, KOT_DRINKS, KOT_DESSERTS</td></tr>
-<tr><td><strong>Label Printer</strong></td><td>USB, Network</td><td>Assign routing handle: LABELS. Used for barcode label batch printing.</td></tr>
-</tbody>
-</table>
-</div>
-</section>
-
-<hr/>
-
-<!-- ── Chapter 4: Installation ── -->
-<section id="ch4">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 4</div>
-  <h1>Installation Guide</h1>
-  <p>Full production installation on Ubuntu 22.04 LTS. Estimated time: 45–60 minutes.</p>
-</div>
-
-<h2>4.1 Pre-Installation Checklist</h2>
-<ul>
-  <li>☐ Server with Ubuntu 22.04 LTS (root/sudo access)</li>
-  <li>☐ Domain name pointed to server IP (e.g., <code>pos.yourbusiness.co.ke</code>, <code>api.yourbusiness.co.ke</code>)</li>
-  <li>☐ SSL certificate ready (Let's Encrypt recommended)</li>
-  <li>☐ KRA eTIMS credentials (Branch ID, TIN, CMC Key) — optional at install time</li>
-  <li>☐ M-Pesa Daraja API credentials — optional at install time</li>
-  <li>☐ Resend API key for email notifications — optional</li>
-</ul>
-
-<h2>4.2 Server Setup</h2>
-<pre><code><span class="comment"># 1. Update system</span>
-sudo apt update &amp;&amp; sudo apt upgrade -y
-sudo apt install -y curl wget git build-essential
-
-<span class="comment"># 2. Install Node.js 20</span>
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install -y nodejs
-node --version  <span class="comment"># Should show v20.x.x</span>
-npm install -g pnpm pm2
-
-<span class="comment"># 3. Install PostgreSQL 14</span>
-sudo apt install -y postgresql postgresql-contrib
-sudo systemctl start postgresql &amp;&amp; sudo systemctl enable postgresql
-sudo -u postgres psql &lt;&lt;EOF
-CREATE DATABASE kastra_pos;
-CREATE USER kastra WITH ENCRYPTED PASSWORD 'your_secure_password';
-GRANT ALL PRIVILEGES ON DATABASE kastra_pos TO kastra;
-\q
-EOF
-
-<span class="comment"># 4. Install Redis (optional — enables job queues)</span>
-sudo apt install -y redis-server
-sudo systemctl start redis-server &amp;&amp; sudo systemctl enable redis-server
-redis-cli ping  <span class="comment"># Should return PONG</span>
-
-<span class="comment"># 5. Install Nginx</span>
-sudo apt install -y nginx</code></pre>
-
-<h2>4.3 Application Installation</h2>
-<pre><code><span class="comment"># Create app directory</span>
-sudo mkdir -p /opt/kastra-pos
-sudo chown $USER:$USER /opt/kastra-pos
-cd /opt/kastra-pos
-
-<span class="comment"># Clone repository</span>
-git clone https://github.com/your-org/kastra-pos.git .
-
-<span class="comment"># Install all dependencies (monorepo)</span>
-npm install
-
-<span class="comment"># Configure environment</span>
-cp apps/api/.env.example apps/api/.env
-nano apps/api/.env</code></pre>
-
-<h3>4.3.1 Environment Variables</h3>
-<div class="table-wrap">
-<table>
-<thead><tr><th>Variable</th><th>Required</th><th>Description</th></tr></thead>
-<tbody>
-<tr><td><code>DATABASE_URL</code></td><td><span class="badge badge-red">Required</span></td><td>PostgreSQL connection string. Format: <code>postgresql://user:pass@localhost:5432/kastra_pos</code></td></tr>
-<tr><td><code>JWT_SECRET</code></td><td><span class="badge badge-red">Required</span></td><td>64-char hex string. Generate: <code>openssl rand -hex 32</code></td></tr>
-<tr><td><code>ENCRYPTION_KEY</code></td><td><span class="badge badge-red">Required</span></td><td>64-char hex for AES-256 credential encryption. Generate: <code>openssl rand -hex 32</code></td></tr>
-<tr><td><code>ETIMS_ENV</code></td><td><span class="badge badge-blue">Optional</span></td><td><code>test</code> (default sandbox) or <code>production</code> (live KRA). Set to <code>production</code> to go live.</td></tr>
-<tr><td><code>REDIS_HOST</code></td><td><span class="badge badge-blue">Optional</span></td><td>Redis host (default: localhost). Omit to disable job queues.</td></tr>
-<tr><td><code>RESEND_API_KEY</code></td><td><span class="badge badge-blue">Optional</span></td><td>For email receipts and scheduled reports</td></tr>
-<tr><td><code>GOOGLE_CLIENT_ID</code></td><td><span class="badge badge-blue">Optional</span></td><td>Google OAuth — for staff Google login</td></tr>
-<tr><td><code>SENTRY_DSN</code></td><td><span class="badge badge-blue">Optional</span></td><td>Sentry error monitoring DSN</td></tr>
-<tr><td><code>SUPER_ADMIN_EMAIL</code></td><td><span class="badge badge-amber">Recommended</span></td><td>Super-admin email for initial login</td></tr>
-<tr><td><code>SUPER_ADMIN_PASSWORD</code></td><td><span class="badge badge-amber">Recommended</span></td><td>Initial super-admin password. Change immediately after install.</td></tr>
-</tbody>
-</table>
-</div>
-
-<pre><code><span class="comment"># Run database migrations</span>
-cd /opt/kastra-pos
-npx prisma migrate deploy --schema prisma/schema.prisma
-
-<span class="comment"># (Optional) Seed demo data</span>
-cd apps/api &amp;&amp; npx ts-node src/seed.ts
-
-<span class="comment"># Build all apps</span>
-cd /opt/kastra-pos
-npm run build   <span class="comment"># builds api, web, admin</span>
-
-<span class="comment"># Start API with PM2</span>
-pm2 start apps/api/dist/main.js --name kastra-api
-pm2 save
-pm2 startup  <span class="comment"># Follow the output command to enable auto-start on reboot</span></code></pre>
-
-<h2>4.4 Nginx Configuration</h2>
-<pre><code>sudo nano /etc/nginx/sites-available/kastra-pos</code></pre>
-<pre><code><span class="comment"># API Server</span>
-server {
-    listen 80;
-    server_name api.yourbusiness.co.ke;
-    location / {
-        proxy_pass http://localhost:3010;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-<span class="comment"># Web POS App</span>
-server {
-    listen 80;
-    server_name pos.yourbusiness.co.ke;
-    root /opt/kastra-pos/apps/web/dist;
-    index index.html;
-    location / { try_files $uri $uri/ /index.html; }
-    location /api { proxy_pass http://localhost:3010; }
-}
-<span class="comment"># Admin Panel</span>
-server {
-    listen 80;
-    server_name admin.yourbusiness.co.ke;
-    root /opt/kastra-pos/apps/admin/dist;
-    index index.html;
-    location / { try_files $uri $uri/ /index.html; }
-}</code></pre>
-<pre><code><span class="comment"># Enable and test</span>
-sudo ln -s /etc/nginx/sites-available/kastra-pos /etc/nginx/sites-enabled/
-sudo nginx -t &amp;&amp; sudo systemctl restart nginx
-
-<span class="comment"># Install SSL (Let's Encrypt)</span>
-sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d api.yourbusiness.co.ke -d pos.yourbusiness.co.ke -d admin.yourbusiness.co.ke
-
-<span class="comment"># Firewall</span>
-sudo ufw enable
-sudo ufw allow 22/tcp &amp;&amp; sudo ufw allow 80/tcp &amp;&amp; sudo ufw allow 443/tcp
-
-<span class="comment"># Verify</span>
-curl https://api.yourbusiness.co.ke/api/v1/health
-<span class="comment"># Should return: {"status":"ok"}</span></code></pre>
-
-<div class="callout callout-important">
-  <div class="callout-icon">🔒</div>
-  <div class="callout-body"><h5>Security</h5><p>Change all default passwords immediately after installation. The default seed data users (<code>owner@premiercafe.co.ke</code>, etc.) must be deleted or have passwords changed before going live.</p></div>
-</div>
-</section>
-
-<hr/>
-
-<!-- ── Chapter 5: Setup Wizard ── -->
-<section id="ch5">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 5</div>
-  <h1>Initial Setup Wizard</h1>
-  <p>When you first access KASTRA POS, a multi-step wizard guides you through essential configuration.</p>
-</div>
-
-<div class="steps">
-  <div class="step"><div class="step-num">1</div><div class="step-body"><h5>Welcome Screen</h5><p>Overview of the setup process. Click <strong>Get Started</strong> to begin.</p></div></div>
-  <div class="step"><div class="step-num">2</div><div class="step-body"><h5>Business Profile</h5><p><strong>Business Name</strong> (as registered with KRA) · <strong>Business Type</strong> (Retail / Restaurant / Supermarket / Pharmacy / Hotel / Salon / Clinic) — determines which modules appear in navigation · <strong>Tax Type</strong>: VAT 16% (turnover &gt; KES 5M/year) or TOT 3% (turnover &lt; KES 5M/year) · Phone, email, address, currency.</p></div></div>
-  <div class="step"><div class="step-num">3</div><div class="step-body"><h5>Store Setup</h5><p><strong>Store Name</strong> (e.g., "Main Branch – Nairobi CBD") · <strong>Store Code</strong> (max 10 chars, e.g., "NRB01") — used in receipt numbers: <code>NRB01-2026-0000001</code>. Click <strong>Create Store</strong>.</p></div></div>
-  <div class="step"><div class="step-num">4</div><div class="step-body"><h5>KRA eTIMS (Optional)</h5><p><strong>Branch ID (BHF ID)</strong>: Usually "00" for single location · <strong>TIN</strong>: Your KRA PIN in P000000000A format · <strong>CMC Key</strong>: From KRA iTax portal. Click <strong>Save &amp; Test Connection</strong>. Skip if credentials not yet available.</p></div></div>
-  <div class="step"><div class="step-num">5</div><div class="step-body"><h5>Ready to Sell</h5><p>System is configured. Recommended next steps: Add Products → Add Staff → Configure Printers → Start Selling. Click <strong>Go to POS</strong>.</p></div></div>
-</div>
-
-<div class="callout callout-tip">
-  <div class="callout-icon">💡</div>
-  <div class="callout-body"><h5>Tip</h5><p>All wizard settings can be changed later in <strong>Settings</strong>. You don't need eTIMS credentials to start selling — submit sales manually in bulk when you're ready.</p></div>
-</div>
-</section>
-
-<hr/>
-
-<!-- ── Chapter 6: Roles & Permissions ── -->
-<section id="ch6">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 6</div>
-  <h1>User Roles &amp; Permissions</h1>
-</div>
-
-<h2>6.1 Role Hierarchy</h2>
-<div class="diagram">
-<svg width="500" height="260" viewBox="0 0 500 260" font-family="Inter,sans-serif">
-  <rect width="500" height="260" fill="#0f172a" rx="10"/>
-  <!-- OWNER -->
-  <rect x="160" y="20" width="180" height="42" rx="8" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1.5"/>
-  <text x="250" y="36" text-anchor="middle" fill="#60a5fa" font-size="12" font-weight="700">👑 OWNER</text>
-  <text x="250" y="53" text-anchor="middle" fill="#93c5fd" font-size="11">Full System Access</text>
-  <!-- MANAGER -->
-  <rect x="130" y="90" width="240" height="42" rx="8" fill="#1e293b" stroke="#6366f1" stroke-width="1.5"/>
-  <text x="250" y="106" text-anchor="middle" fill="#a5b4fc" font-size="12" font-weight="700">🔧 MANAGER</text>
-  <text x="250" y="123" text-anchor="middle" fill="#818cf8" font-size="11">All ops except Settings</text>
-  <!-- ACCOUNTANT CASHIER WAITER -->
-  <rect x="20" y="165" width="130" height="42" rx="8" fill="#1e293b" stroke="#10b981" stroke-width="1"/>
-  <text x="85" y="181" text-anchor="middle" fill="#34d399" font-size="11" font-weight="600">ACCOUNTANT</text>
-  <text x="85" y="197" text-anchor="middle" fill="#6ee7b7" font-size="10">Financial Reports</text>
-  <rect x="185" y="165" width="130" height="42" rx="8" fill="#1e293b" stroke="#f59e0b" stroke-width="1"/>
-  <text x="250" y="181" text-anchor="middle" fill="#fbbf24" font-size="11" font-weight="600">CASHIER</text>
-  <text x="250" y="197" text-anchor="middle" fill="#fcd34d" font-size="10">POS &amp; Cash Drawer</text>
-  <rect x="350" y="165" width="130" height="42" rx="8" fill="#1e293b" stroke="#8b5cf6" stroke-width="1"/>
-  <text x="415" y="181" text-anchor="middle" fill="#c4b5fd" font-size="11" font-weight="600">WAITER</text>
-  <text x="415" y="197" text-anchor="middle" fill="#a78bfa" font-size="10">Hospitality &amp; Tables</text>
-  <!-- KITCHEN -->
-  <rect x="185" y="235" width="130" height="18" rx="5" fill="#1e293b" stroke="#ef4444" stroke-width="1"/>
-  <text x="250" y="248" text-anchor="middle" fill="#fca5a5" font-size="10" font-weight="600">🍳 KITCHEN — KDS view only</text>
-  <!-- Arrows -->
-  <line x1="250" y1="62" x2="250" y2="90" stroke="#3b82f6" stroke-width="1" stroke-dasharray="3,2"/>
-  <line x1="200" y1="132" x2="120" y2="165" stroke="#475569" stroke-width="1" stroke-dasharray="3,2"/>
-  <line x1="250" y1="132" x2="250" y2="165" stroke="#475569" stroke-width="1" stroke-dasharray="3,2"/>
-  <line x1="300" y1="132" x2="380" y2="165" stroke="#475569" stroke-width="1" stroke-dasharray="3,2"/>
-  <line x1="250" y1="207" x2="250" y2="235" stroke="#475569" stroke-width="1" stroke-dasharray="3,2"/>
-</svg>
-</div>
-
-<h2>6.2 Permission Matrix</h2>
-<div class="table-wrap">
-<table class="perm-table">
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
 <thead>
-<tr><th>Feature</th><th>Owner</th><th>Manager</th><th>Accountant</th><th>Cashier</th><th>Waiter</th><th>Kitchen</th></tr>
+<tr class="header">
+<th>Role</th>
+<th>What they can do</th>
+</tr>
 </thead>
 <tbody>
-<tr><td>POS Sales</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check no">—</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check no">—</td></tr>
-<tr><td>Void Sales</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td></tr>
-<tr><td>Returns &amp; Refunds</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td></tr>
-<tr><td>Price Override</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td></tr>
-<tr><td>Inventory (View)</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check no">—</td><td class="check no">—</td></tr>
-<tr><td>Inventory (Edit)</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td></tr>
-<tr><td>Purchase Orders</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td></tr>
-<tr><td>Financial Reports</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td></tr>
-<tr><td>Sales Reports</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check no">—</td><td class="check no">—</td></tr>
-<tr><td>Customer Management</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check no">—</td><td class="check no">—</td></tr>
-<tr><td>Staff Management</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td></tr>
-<tr><td>Settings / Configuration</td><td class="check yes">✓</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td></tr>
-<tr><td>Hospitality Orders</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check no">—</td><td class="check no">—</td><td class="check yes">✓</td><td class="check no">—</td></tr>
-<tr><td>Kitchen Display (View)</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check no">—</td><td class="check no">—</td><td class="check yes">✓</td><td class="check yes">✓</td></tr>
-<tr><td>KDS Status Updates</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td><td class="check yes">✓</td></tr>
-<tr><td>Cash Drawer</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check no">—</td><td class="check yes">✓</td><td class="check no">—</td><td class="check no">—</td></tr>
-<tr><td>Expense Management</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td></tr>
-<tr><td>Expense Approval</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td></tr>
-<tr><td>Payroll Management</td><td class="check yes">✓</td><td class="check no">—</td><td class="check yes">✓</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td></tr>
-<tr><td>HR / Leave Management</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td></tr>
-<tr><td>Bank Reconciliation</td><td class="check yes">✓</td><td class="check no">—</td><td class="check yes">✓</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td></tr>
-<tr><td>API Keys</td><td class="check yes">✓</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td></tr>
-<tr><td>Multi-store Transfers</td><td class="check yes">✓</td><td class="check yes">✓</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td></tr>
-<tr><td>Franchise Dashboard</td><td class="check yes">✓</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td><td class="check no">—</td></tr>
+<tr class="odd">
+<td><strong>Owner</strong></td>
+<td>Everything, including settings, staff and billing</td>
+</tr>
+<tr class="even">
+<td><strong>Manager</strong></td>
+<td>Sell, manage stock, approve things, see reports, authorise
+voids</td>
+</tr>
+<tr class="odd">
+<td><strong>Cashier</strong></td>
+<td>Sell, look up and create customers, manage <strong>their
+own</strong> cash drawer, see <strong>their own</strong> sales</td>
+</tr>
+<tr class="even">
+<td><strong>Waiter</strong></td>
+<td>Take table orders, print bills. <strong>Cannot take payment or see
+reports</strong></td>
+</tr>
+<tr class="odd">
+<td><strong>Kitchen</strong></td>
+<td>See the kitchen screen and mark items in-progress or ready. Sees no
+money at all</td>
+</tr>
+<tr class="even">
+<td><strong>Accountant</strong></td>
+<td>Reports, expenses, ledger, supplier accounts. <strong>Cannot sell or
+edit stock</strong></td>
+</tr>
 </tbody>
 </table>
-</div>
-
-<h2>6.3 Adding Staff Members</h2>
-<div class="steps">
-  <div class="step"><div class="step-num">1</div><div class="step-body"><h5>Navigate</h5><p>Settings → Users &amp; Roles → click <strong>+ Add User</strong></p></div></div>
-  <div class="step"><div class="step-num">2</div><div class="step-body"><h5>Personal Information</h5><p><strong>Full Name</strong> · <strong>Email</strong> (for login &amp; notifications) · <strong>Phone</strong> · <strong>National ID</strong></p></div></div>
-  <div class="step"><div class="step-num">3</div><div class="step-body"><h5>Access Control</h5><p><strong>Role</strong>: Select from hierarchy above · <strong>PIN</strong>: 4–6 digit PIN for quick POS login · <strong>Stores</strong>: Assign specific locations (Manager/Cashier are store-scoped)</p></div></div>
-  <div class="step"><div class="step-num">4</div><div class="step-body"><h5>Employment (Optional)</h5><p>Start Date · Commission Rate (% of sales) · Sales Target (monthly KES) · Commission Basis: SALES_VALUE / TRANSACTION_COUNT / GROSS_MARGIN</p></div></div>
-  <div class="step"><div class="step-num">5</div><div class="step-body"><h5>Create &amp; Notify</h5><p>Click <strong>Create User</strong>. User receives email with temporary password. Prompt to change on first login.</p></div></div>
-</div>
-</section>
-
-</main>
-</div>
-
-
-<!-- ── Chapter 7: POS Operations ── -->
-<section id="ch7">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 7</div>
-  <h1>Point of Sale Operations</h1>
-  <p>The POS screen is the heart of KASTRA. It handles retail checkout, restaurant orders, barcode scanning, promotions, loyalty points, and eTIMS submission — all in one interface.</p>
-</div>
-
-<h2>7.1 POS Screen Layout</h2>
-<div class="diagram">
-<svg width="740" height="420" viewBox="0 0 740 420" font-family="Inter,sans-serif" font-size="12">
-  <rect width="740" height="420" fill="#0f172a" rx="10"/>
-  <!-- Top bar -->
-  <rect x="10" y="10" width="720" height="40" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1"/>
-  <rect x="20" y="20" width="320" height="20" rx="4" fill="#0f172a" stroke="#3b82f6" stroke-width="1"/>
-  <text x="186" y="34" text-anchor="middle" fill="#475569" font-size="11">🔍  Search or scan barcode... (F2)</text>
-  <rect x="350" y="18" width="80" height="24" rx="4" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1"/>
-  <text x="390" y="34" text-anchor="middle" fill="#60a5fa" font-size="11" font-weight="600">Retail</text>
-  <rect x="438" y="18" width="90" height="24" rx="4" fill="#0f172a" stroke="#334155" stroke-width="1"/>
-  <text x="483" y="34" text-anchor="middle" fill="#64748b" font-size="11">Wholesale</text>
-  <rect x="536" y="18" width="60" height="24" rx="4" fill="#0f172a" stroke="#334155" stroke-width="1"/>
-  <text x="566" y="34" text-anchor="middle" fill="#64748b" font-size="11">VIP</text>
-  <rect x="610" y="18" width="110" height="24" rx="4" fill="rgba(16,185,129,.15)" stroke="#10b981" stroke-width="1"/>
-  <text x="665" y="34" text-anchor="middle" fill="#34d399" font-size="11">👤 Select Customer</text>
-
-  <!-- LEFT PANEL - Items -->
-  <rect x="10" y="58" width="450" height="352" rx="6" fill="#0a0f1e" stroke="#1e293b" stroke-width="1"/>
-  <!-- Category tabs -->
-  <rect x="16" y="64" width="64" height="24" rx="4" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1"/>
-  <text x="48" y="80" text-anchor="middle" fill="#60a5fa" font-size="10" font-weight="600">All Items</text>
-  <rect x="86" y="64" width="50" height="24" rx="4" fill="#0f172a" stroke="#334155" stroke-width="1"/>
-  <text x="111" y="80" text-anchor="middle" fill="#64748b" font-size="10">Food</text>
-  <rect x="142" y="64" width="54" height="24" rx="4" fill="#0f172a" stroke="#334155" stroke-width="1"/>
-  <text x="169" y="80" text-anchor="middle" fill="#64748b" font-size="10">Drinks</text>
-  <rect x="202" y="64" width="54" height="24" rx="4" fill="#0f172a" stroke="#334155" stroke-width="1"/>
-  <text x="229" y="80" text-anchor="middle" fill="#64748b" font-size="10">Coffee</text>
-  <rect x="262" y="64" width="64" height="24" rx="4" fill="#0f172a" stroke="#334155" stroke-width="1"/>
-  <text x="294" y="80" text-anchor="middle" fill="#64748b" font-size="10">Desserts</text>
-  <!-- Item cards grid (3×3) -->
-  <rect x="16" y="96" width="136" height="90" rx="6" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
-  <text x="84" y="125" text-anchor="middle" fill="#94a3b8" font-size="18">☕</text>
-  <text x="84" y="143" text-anchor="middle" fill="#f1f5f9" font-size="11" font-weight="600">Cappuccino</text>
-  <text x="84" y="158" text-anchor="middle" fill="#60a5fa" font-size="12" font-weight="700">KES 250</text>
-  <rect x="159" y="96" width="136" height="90" rx="6" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
-  <text x="227" y="125" text-anchor="middle" fill="#94a3b8" font-size="18">🥪</text>
-  <text x="227" y="143" text-anchor="middle" fill="#f1f5f9" font-size="11" font-weight="600">Club Sandwich</text>
-  <text x="227" y="158" text-anchor="middle" fill="#60a5fa" font-size="12" font-weight="700">KES 850</text>
-  <rect x="302" y="96" width="136" height="90" rx="6" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
-  <text x="370" y="125" text-anchor="middle" fill="#94a3b8" font-size="18">🥤</text>
-  <text x="370" y="143" text-anchor="middle" fill="#f1f5f9" font-size="11" font-weight="600">Fresh Juice</text>
-  <text x="370" y="158" text-anchor="middle" fill="#60a5fa" font-size="12" font-weight="700">KES 180</text>
-  <rect x="16" y="194" width="136" height="90" rx="6" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
-  <text x="84" y="223" text-anchor="middle" fill="#94a3b8" font-size="18">🍰</text>
-  <text x="84" y="241" text-anchor="middle" fill="#f1f5f9" font-size="11" font-weight="600">Cheesecake</text>
-  <text x="84" y="256" text-anchor="middle" fill="#60a5fa" font-size="12" font-weight="700">KES 450</text>
-  <rect x="159" y="194" width="136" height="90" rx="6" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
-  <text x="227" y="223" text-anchor="middle" fill="#94a3b8" font-size="18">🍳</text>
-  <text x="227" y="241" text-anchor="middle" fill="#f1f5f9" font-size="11" font-weight="600">Eggs Benedict</text>
-  <text x="227" y="256" text-anchor="middle" fill="#60a5fa" font-size="12" font-weight="700">KES 750</text>
-  <rect x="302" y="194" width="136" height="90" rx="6" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
-  <text x="370" y="223" text-anchor="middle" fill="#94a3b8" font-size="18">🥗</text>
-  <text x="370" y="241" text-anchor="middle" fill="#f1f5f9" font-size="11" font-weight="600">Caesar Salad</text>
-  <text x="370" y="256" text-anchor="middle" fill="#60a5fa" font-size="12" font-weight="700">KES 620</text>
-  <!-- Labels -->
-  <text x="230" y="310" text-anchor="middle" fill="#334155" font-size="11">← Item Grid (click to add to cart)</text>
-
-  <!-- RIGHT PANEL - Cart -->
-  <rect x="468" y="58" width="262" height="352" rx="6" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
-  <rect x="468" y="58" width="262" height="36" rx="6" fill="#1e293b"/>
-  <text x="599" y="80" text-anchor="middle" fill="#f1f5f9" font-size="13" font-weight="700">🛒 Shopping Cart</text>
-  <!-- Cart items -->
-  <rect x="476" y="102" width="246" height="44" rx="4" fill="#1e293b" stroke="#334155" stroke-width="1"/>
-  <text x="492" y="120" fill="#f1f5f9" font-size="12" font-weight="500">Cappuccino × 2</text>
-  <text x="492" y="136" fill="#60a5fa" font-size="12">KES 500</text>
-  <text x="700" y="128" fill="#ef4444" font-size="14" font-weight="700" text-anchor="middle">×</text>
-  <rect x="476" y="152" width="246" height="44" rx="4" fill="#1e293b" stroke="#334155" stroke-width="1"/>
-  <text x="492" y="170" fill="#f1f5f9" font-size="12" font-weight="500">Club Sandwich × 1</text>
-  <text x="492" y="186" fill="#60a5fa" font-size="12">KES 850</text>
-  <!-- Totals -->
-  <line x1="476" y1="210" x2="714" y2="210" stroke="#334155" stroke-width="1"/>
-  <text x="492" y="230" fill="#94a3b8" font-size="11">Subtotal (ex-VAT)</text>
-  <text x="706" y="230" fill="#94a3b8" font-size="11" text-anchor="end">KES 1,172</text>
-  <text x="492" y="250" fill="#94a3b8" font-size="11">VAT (16%)</text>
-  <text x="706" y="250" fill="#94a3b8" font-size="11" text-anchor="end">KES 178</text>
-  <text x="492" y="270" fill="#94a3b8" font-size="11">Service Charge (10%)</text>
-  <text x="706" y="270" fill="#94a3b8" font-size="11" text-anchor="end">KES 135</text>
-  <line x1="476" y1="280" x2="714" y2="280" stroke="#334155" stroke-width="1"/>
-  <text x="492" y="300" fill="#f1f5f9" font-size="14" font-weight="700">TOTAL</text>
-  <text x="706" y="300" fill="#60a5fa" font-size="16" font-weight="800" text-anchor="end">KES 1,485</text>
-  <!-- Pay button -->
-  <rect x="476" y="316" width="246" height="46" rx="8" fill="#2563eb"/>
-  <text x="599" y="344" text-anchor="middle" fill="#fff" font-size="14" font-weight="700">💳 Pay  F5</text>
-  <!-- Labels for diagram -->
-  <text x="599" y="398" text-anchor="middle" fill="#334155" font-size="11">← Cart Panel (totals update live)</text>
-</svg>
-</div>
-
-<h2>7.2 Adding Items to Cart</h2>
-<h3>Method 1 — Click Product Tile</h3>
-<p>Browse the item grid, click any product card. Item is instantly added to cart with quantity 1. Click again to increment.</p>
-
-<h3>Method 2 — Barcode Scanner</h3>
-<p>Focus the search bar (click it or press <kbd>F2</kbd>). Scan barcode with USB/Bluetooth scanner. Item is found and added automatically. If barcode matches multiple items, a dropdown appears.</p>
-
-<h3>Method 3 — Camera Barcode (mobile/tablet)</h3>
-<p>Click the camera icon next to the search bar. Grant camera permission. Point camera at barcode — ZXing decodes it and adds the item.</p>
-
-<h3>Method 4 — Quick Keyboard Entry (Power Users)</h3>
-<p>Type a quantity-multiplier expression in the search bar and press <kbd>Enter</kbd>. Example: <code>3×500</code> or <code>3*500</code> — adds 3 units of the item priced at KES 500. For barcode: <code>5×6001020003004</code> adds 5 units of that barcode.</p>
-
-<h2>7.3 Price Levels</h2>
-<p>At the top of the search bar, three pill buttons switch the pricing mode applied to all items in cart:</p>
+<p>Two deliberate choices worth knowing:</p>
 <ul>
-  <li><strong>Retail</strong> — Standard <code>retailPriceCents</code> (default)</li>
-  <li><strong>Wholesale</strong> — <code>wholesalePriceCents</code> (requires item to have wholesale price set)</li>
-  <li><strong>VIP</strong> — <code>vipPriceCents</code> (requires item to have VIP price set)</li>
+<li>A <strong>cashier cannot browse other cashiers’ takings.</strong>
+The sales list shows only their own. Owners, managers and accountants
+see everything.</li>
+<li>An <strong>accountant can see the money but cannot touch stock or
+staff.</strong> Approving spending is a management act, not an
+accounting one.</li>
 </ul>
-<div class="callout callout-info"><div class="callout-icon">ℹ️</div><div class="callout-body"><h5>Note</h5><p>Price level applies to all items. For per-item price override, use the edit (pencil) icon on the cart item row — requires Manager PIN if cashier role.</p></div></div>
-
-<h2>7.4 Special Sale Types</h2>
-<h3>Layaway (Instalment Plan)</h3>
-<ol>
-  <li>Add items to cart, click <strong>Layaway</strong> button</li>
-  <li>Select/create customer (required)</li>
-  <li>Enter: initial deposit · payment schedule · due date</li>
-  <li>Click <strong>Create Layaway</strong> — stock is reserved</li>
-  <li>Manage via Reports → Layaway Book. Add payments via "Add Payment" button. Converts to sale on full payment.</li>
-</ol>
-
-<h3>Proforma Invoice</h3>
-<ol>
-  <li>Add items to cart, click <strong>Proforma</strong> button</li>
-  <li>Enter customer name, valid-until date, notes</li>
-  <li>Click <strong>Generate Proforma</strong> — no stock deduction</li>
-  <li>Convert: Reports → Proforma Pipeline → find proforma → click <strong>Convert to Sale</strong> → process payment</li>
-</ol>
-
-<h3>Credit Sale</h3>
-<ol>
-  <li>Add items, select customer (required — must have credit limit set)</li>
-  <li>In payment modal, select <strong>Credit</strong></li>
-  <li>System verifies credit limit. Sale completes; amount added to customer's outstanding balance.</li>
-  <li>Record payment: Customers page → select customer → Add Payment</li>
-</ol>
-
-<h2>7.5 Voiding Sales</h2>
-<div class="callout callout-important"><div class="callout-icon">⚠️</div><div class="callout-body"><h5>Requires Manager or Owner</h5><p>Cashiers cannot void sales. A PIN challenge appears for Manager-level authorization.</p></div></div>
-<div class="steps">
-  <div class="step"><div class="step-num">1</div><div class="step-body"><h5>Navigate to Sales History</h5><p>Find the sale to void. Sales must have PAID status.</p></div></div>
-  <div class="step"><div class="step-num">2</div><div class="step-body"><h5>Click Void</h5><p>Select void type: <strong>Full Void</strong> (cancel entire sale) or <strong>Line Item Void</strong> (cancel specific items). Enter reason.</p></div></div>
-  <div class="step"><div class="step-num">3</div><div class="step-body"><h5>Confirm</h5><p>Enter Manager PIN. Effects: stock returned · payment refunded (cash or credit note) · void record created for audit · eTIMS void notification sent to KRA.</p></div></div>
-</div>
-
-<h2>7.6 FEFO &amp; Expiry Warnings</h2>
-<p>When a batch-tracked item is added to cart, the system checks expiry dates:</p>
+<p>Owners can also build <strong>custom roles</strong> in Settings if
+these six do not fit.</p>
+<h2 id="signing-in">2. Signing in</h2>
+<p>There are two ways in, and they behave differently on purpose.</p>
+<p><strong>Email and password</strong> — for office work. Your session
+lasts <strong>15 minutes</strong> of inactivity before it needs
+refreshing. This is the secure option for anything involving money,
+staff or settings.</p>
+<p><strong>PIN</strong> — for the shop floor. Four to six digits, and
+the session lasts <strong>12 hours</strong>, so a cashier is not
+retyping a password all shift. Tap your name, enter your PIN.</p>
+<p>Owners may also enable:</p>
 <ul>
-  <li><span class="badge badge-red">EXPIRED</span> — Sale blocked. Item cannot be sold.</li>
-  <li><span class="badge badge-amber">CRITICAL</span> — Expires within 7 days. Warning modal shown; cashier can proceed or remove item.</li>
-  <li><span class="badge badge-blue">WARNING</span> — Expires within 30 days. FEFO suggestion banner shows recommended batch.</li>
+<li><strong>Google sign-in</strong></li>
+<li><strong>Two-factor (TOTP)</strong> — an authenticator app code on
+top of your password. Recommended for owners, and often required</li>
+<li><strong>Fingerprint / face unlock</strong> where the device supports
+it</li>
 </ul>
-<p><strong>FEFO</strong> (First Expired, First Out) — The system always deducts from the batch with the nearest expiry date first.</p>
-
-<h2>7.7 Keyboard Shortcuts</h2>
-<div class="table-wrap">
+<blockquote>
+<p><strong>“No sales found” when you know there are sales?</strong> Your
+session quietly expired. Sign in again. If it keeps happening on a
+shared shop-floor device, ask the owner to switch that device to PIN
+login.</p>
+</blockquote>
+<h2 id="your-first-sale-in-60-seconds">3. Your first sale in 60
+seconds</h2>
+<ol type="1">
+<li>Open <strong>POS</strong>.</li>
+<li>Type the first few letters of the item, or scan its barcode.</li>
+<li>Click the item. It lands in the cart on the right.</li>
+<li>Click <strong>Charge</strong> (or press <strong>F1</strong> for a
+straight cash sale).</li>
+<li>Pick how the customer is paying.</li>
+<li>Enter what they handed over. KASTRA shows the change.</li>
+<li><strong>Complete</strong>. The receipt prints or sends.</li>
+</ol>
+<p>That is the whole loop. Everything below is detail on top of it.</p>
+<hr />
+<h1 id="selling">Selling</h1>
+<h2 id="the-pos-screen">4. The POS screen</h2>
+<p>Three areas:</p>
+<ul>
+<li><strong>Left / centre — the item grid.</strong> Your products,
+grouped by category. Tap to add.</li>
+<li><strong>Top — the search bar.</strong> Typing here searches names,
+SKUs and barcodes.</li>
+<li><strong>Right — the cart.</strong> Lines, quantities, discounts, the
+running total, and the <strong>Charge</strong> button.</li>
+</ul>
+<p><strong>Keyboard shortcuts</strong> (they work when you are not
+typing in a box):</p>
 <table>
-<thead><tr><th>Key</th><th>Action</th><th>Key</th><th>Action</th></tr></thead>
+<thead>
+<tr class="header">
+<th>Key</th>
+<th>Does</th>
+</tr>
+</thead>
 <tbody>
-<tr><td><kbd>F1</kbd></td><td>New sale / clear cart</td><td><kbd>F5</kbd></td><td>Cash payment</td></tr>
-<tr><td><kbd>F2</kbd></td><td>Focus search bar</td><td><kbd>F6</kbd></td><td>M-Pesa payment</td></tr>
-<tr><td><kbd>F3</kbd></td><td>Select customer</td><td><kbd>F7</kbd></td><td>Card payment</td></tr>
-<tr><td><kbd>F4</kbd></td><td>Apply discount</td><td><kbd>F8</kbd></td><td>Credit payment</td></tr>
-<tr><td><kbd>Ctrl+Enter</kbd></td><td>Complete sale</td><td><kbd>F9</kbd></td><td>Open cash drawer</td></tr>
-<tr><td><kbd>Ctrl+Backspace</kbd></td><td>Clear cart</td><td><kbd>Esc</kbd></td><td>Close modal</td></tr>
+<tr class="odd">
+<td><code>/</code></td>
+<td>Jump to search</td>
+</tr>
+<tr class="even">
+<td><code>F1</code></td>
+<td>Charge as cash</td>
+</tr>
+<tr class="odd">
+<td><code>F5</code></td>
+<td>Hold the current sale</td>
+</tr>
+<tr class="even">
+<td><code>F6</code></td>
+<td>Recall a held sale</td>
+</tr>
 </tbody>
 </table>
-</div>
-</section>
-
-<hr/>
-
-<!-- ── Chapter 8: Payments ── -->
-<section id="ch8">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 8</div>
-  <h1>Payment Methods</h1>
-</div>
-
-<h2>8.1 Cash</h2>
-<p>Enter the amount tendered. System automatically calculates change. Click <strong>Complete Sale</strong>. Cash drawer triggers automatically.</p>
-
-<h2>8.2 M-Pesa STK Push</h2>
-<div class="steps">
-  <div class="step"><div class="step-num">1</div><div class="step-body"><h5>Enter Phone Number</h5><p>Type customer's Safaricom number (07XX or 2547XX format). System sends STK push prompt to customer's phone.</p></div></div>
-  <div class="step"><div class="step-num">2</div><div class="step-body"><h5>Customer Approves</h5><p>Customer enters M-Pesa PIN on their phone. System polls Daraja API every 3 seconds for up to 2 minutes.</p></div></div>
-  <div class="step"><div class="step-num">3</div><div class="step-body"><h5>Auto-Confirm</h5><p>On success, payment auto-confirms and sale completes. M-Pesa transaction code is recorded. On timeout, cashier can enter code manually via "Add Payment" flow.</p></div></div>
-</div>
-
-<h2>8.3 M-Pesa Dynamic QR</h2>
-<p>Click <strong>M-Pesa QR</strong>. System generates a Daraja QR code displayed on screen. Customer scans with M-Pesa app and pays. System auto-confirms via webhook. Ideal for counter/restaurant setups where customers self-pay.</p>
-
-<h2>8.4 Card / Paystack</h2>
-<p>Click <strong>Card</strong>. System initiates Paystack payment. Customer taps/swipes card on terminal. Enter approval code when prompted. Click <strong>Complete Sale</strong>.</p>
-<div class="callout callout-info"><div class="callout-icon">ℹ️</div><div class="callout-body"><h5>Setup</h5><p>Requires Paystack credentials in Settings → Payments → Card. Contact Paystack Kenya (+254) to obtain credentials.</p></div></div>
-
-<h2>8.5 Bank Transfer</h2>
-<p>Select <strong>Bank Transfer</strong>. Enter reference number (from customer's bank receipt or confirmation SMS). Sale records the reference for later bank reconciliation matching.</p>
-
-<h2>8.6 Credit / Account</h2>
-<p>Customer must be selected with a credit limit set. Remaining credit is shown. Sale is marked CREDIT; amount added to customer outstanding balance. View and record payments via Customers → Credit Management.</p>
-
-<h2>8.7 Split Payment</h2>
-<p>Click <strong>Split Payment</strong>. Add multiple payment rows — any combination of methods. Example: KES 1,000 Cash + KES 2,000 M-Pesa. The total must equal the cart total. Click <strong>Complete Sale</strong> when all splits balance.</p>
-
-<h2>8.8 Gift Card</h2>
-<p>In the payment modal, click <strong>Gift Card</strong> tab. Scan barcode or enter gift card code. System validates balance and applies it. Remaining balance usable in future sales.</p>
-<div class="callout callout-tip"><div class="callout-icon">💡</div><div class="callout-body"><h5>Tip</h5><p>Create and manage gift cards via Sales → Gift Cards page. Set denomination, expiry date, and optional customer assignment.</p></div></div>
-
-<h2>8.9 Loyalty Points Redemption</h2>
-<p>When a customer is selected and has loyalty points, a balance chip appears in the cart header. Toggle <strong>Redeem Points</strong> to convert points to a KES discount. The redemption rate is set in Settings → Loyalty Program.</p>
-
-<h2>8.10 Room Charge (Hotel Mode)</h2>
-<p>Available when Hotel module is active. Select the guest's room number. Amount is posted to the guest's folio. Settled at checkout. Requires hotel integration to be configured.</p>
-</section>
-
-<hr/>
-
-<!-- ── Chapter 9: Inventory ── -->
-<section id="ch9">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 9</div>
-  <h1>Inventory Management</h1>
-</div>
-
-<h2>9.1 Adding Items</h2>
-<p>Navigate to <strong>Inventory → Items &amp; Stock</strong>, click <strong>+ Add Item</strong>.</p>
-<div class="table-wrap">
+<p>The screen adapts to your business type. A restaurant asks which
+table first; a fuel station asks which pump; a supermarket runs a
+denser, scan-heavy layout. Same cart underneath.</p>
+<h2 id="adding-items-to-the-cart">5. Adding items to the cart</h2>
+<p><strong>Search</strong> — type any part of the name, the SKU, or the
+barcode.</p>
+<p><strong>Scan</strong> — use a USB/Bluetooth scanner, or the camera. A
+scanner just types into the search box, so it works anywhere the box is
+focused.</p>
+<p><strong>Quick price entry</strong> — type <code>3x500</code> and
+press Enter to add <strong>three of the item that costs KES
+500</strong>. <code>3×500</code> and <code>3*500</code> work too. This
+is built for market stalls and kiosks where staff know goods by price
+rather than name. Note it matches on <strong>price, not quantity of
+shillings</strong> — if two items both cost 500, it takes the first.</p>
+<p><strong>Weighed goods</strong> — scan the label a weighing scale
+prints (a GS1 barcode). KASTRA reads the weight, subtracts the
+<strong>tare</strong> (the container’s own weight, set per item), and
+prices the net. A toast confirms: <em>“Scanned: Beef — Net: 1.240 kg
+(tare: 0.010 kg deducted)”</em>.</p>
+<p><strong>Price levels</strong> — retail and wholesale. Switch the
+level on the cart before charging and every line reprices.</p>
+<p><strong>Overriding a price</strong> — allowed if your role permits
+it, and it is recorded against your name.</p>
+<p>Two things may interrupt you, by design:</p>
+<ul>
+<li><strong>Age gate</strong> — for age-restricted goods, KASTRA asks
+you to confirm the customer’s age before the line is added.</li>
+<li><strong>Expiry warning</strong> — if stock about to be sold is
+expired or close to it, KASTRA stops and shows you which batch. See <a
+href="#16-expiry-dates-and-batches">section 16</a>.</li>
+</ul>
+<h2 id="taking-payment">6. Taking payment</h2>
+<p>Click <strong>Charge</strong>. The payment window offers:</p>
 <table>
-<thead><tr><th>Field</th><th>Description</th><th>Required?</th></tr></thead>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Method</th>
+<th>Notes</th>
+</tr>
+</thead>
 <tbody>
-<tr><td>Item Name</td><td>Display name (e.g., "Coca-Cola 500ml")</td><td><span class="badge badge-red">Yes</span></td></tr>
-<tr><td>Category</td><td>Group items for filtering and reports</td><td><span class="badge badge-red">Yes</span></td></tr>
-<tr><td>Type</td><td>PRODUCT (physical) / SERVICE (non-stock) / WEIGHTED (sold by weight) / BUNDLE / RECIPE</td><td><span class="badge badge-red">Yes</span></td></tr>
-<tr><td>Retail Price</td><td>Selling price inclusive of VAT (KES)</td><td><span class="badge badge-red">Yes</span></td></tr>
-<tr><td>Wholesale Price</td><td>Bulk/trade price (optional)</td><td><span class="badge badge-blue">Optional</span></td></tr>
-<tr><td>VIP Price</td><td>Special customer price (optional)</td><td><span class="badge badge-blue">Optional</span></td></tr>
-<tr><td>Cost Price</td><td>Your purchase cost — used for P&amp;L and margins</td><td><span class="badge badge-amber">Recommended</span></td></tr>
-<tr><td>Barcode</td><td>EAN-13 or custom barcode</td><td><span class="badge badge-blue">Optional</span></td></tr>
-<tr><td>SKU</td><td>Internal stock keeping unit code</td><td><span class="badge badge-blue">Optional</span></td></tr>
-<tr><td>VAT Applicable</td><td>Check if item is subject to 16% VAT</td><td><span class="badge badge-amber">Recommended</span></td></tr>
-<tr><td>TOT Applicable</td><td>Check if item is subject to 3% Turnover Tax</td><td><span class="badge badge-blue">Optional</span></td></tr>
-<tr><td>Track Stock</td><td>Enable inventory deduction on sale</td><td><span class="badge badge-amber">Recommended</span></td></tr>
-<tr><td>Initial Quantity</td><td>Opening stock count</td><td>If tracking stock</td></tr>
-<tr><td>Reorder Level</td><td>Alert threshold for low-stock notifications</td><td><span class="badge badge-blue">Optional</span></td></tr>
-<tr><td>Reorder Qty</td><td>Suggested quantity for auto-reorder PO</td><td><span class="badge badge-blue">Optional</span></td></tr>
-<tr><td>Image URL</td><td>Product thumbnail shown on POS grid</td><td><span class="badge badge-blue">Optional</span></td></tr>
-<tr><td>Allergens</td><td>Select from: Gluten, Dairy, Nuts, Soy, Eggs, Shellfish, etc.</td><td><span class="badge badge-blue">Optional</span></td></tr>
-<tr><td>Age Restricted</td><td>Flag item (e.g., alcohol). Enter minimum age in years.</td><td><span class="badge badge-blue">Optional</span></td></tr>
+<tr class="odd">
+<td><strong>Cash</strong></td>
+<td>Type what the customer handed over; change is calculated</td>
+</tr>
+<tr class="even">
+<td><strong>M-Pesa — STK Push</strong></td>
+<td>Sends the prompt to the customer’s phone. They enter their PIN</td>
+</tr>
+<tr class="odd">
+<td><strong>M-Pesa — QR Code</strong></td>
+<td>Shows a QR on screen for the customer to scan</td>
+</tr>
+<tr class="even">
+<td><strong>M-Pesa — Paybill / Till</strong></td>
+<td>For manual paybill payments; enter the reference</td>
+</tr>
+<tr class="odd">
+<td><strong>Card — Paystack</strong></td>
+<td>Card payment through Paystack</td>
+</tr>
+<tr class="even">
+<td><strong>Card — Terminal</strong></td>
+<td>A connected card terminal (Ingenico, PAX, Verifone)</td>
+</tr>
+<tr class="odd">
+<td><strong>NFC</strong></td>
+<td>Tap-to-pay where supported</td>
+</tr>
+<tr class="even">
+<td><strong>Bank Transfer</strong></td>
+<td>Records bank, account name, branch and reference</td>
+</tr>
+<tr class="odd">
+<td><strong>Credit Sale</strong></td>
+<td>Puts it on the customer’s account. Needs a customer, and respects
+their credit limit</td>
+</tr>
+<tr class="even">
+<td><strong>Gift Card</strong></td>
+<td>Scan or type the card code; shows the remaining balance</td>
+</tr>
+<tr class="odd">
+<td><strong>Room Charge</strong></td>
+<td>Hotel mode — bills it to a guest’s room folio</td>
+</tr>
+<tr class="even">
+<td><strong>Split Pay</strong></td>
+<td>Any combination of the above</td>
+</tr>
 </tbody>
 </table>
-</div>
-
-<h2>9.2 Bulk CSV Import</h2>
-<p>Go to Inventory → Items → click <strong>Import CSV</strong>. Download the template. Fill in Excel/Google Sheets. Upload completed CSV.</p>
-<pre><code>name,category,type,retailPrice,costPrice,barcode,trackStock,vatApplicable
-Coca-Cola 500ml,Beverages,PRODUCT,55,35,6001020003004,true,true
-Tusker Beer 500ml,Beverages,PRODUCT,350,250,6001020003003,true,true
-Club Sandwich,Food,PRODUCT,850,200,,true,true</code></pre>
-<div class="callout callout-tip"><div class="callout-icon">💡</div><div class="callout-body"><h5>Tip</h5><p>Prices in the CSV are in KES (not cents). The import endpoint converts to cents automatically.</p></div></div>
-
-<h2>9.3 Batch &amp; Expiry Tracking</h2>
-<p>For pharmacy, food, or any perishable items:</p>
-<div class="steps">
-  <div class="step"><div class="step-num">1</div><div class="step-body"><h5>Enable on Item</h5><p>Edit item → check <strong>Track Batches</strong> and <strong>Track Expiry</strong> → set Default Expiry Days → Save.</p></div></div>
-  <div class="step"><div class="step-num">2</div><div class="step-body"><h5>Receive Batch</h5><p>When creating a GRN for this item, enter: Lot/Batch number, Manufacturing Date, Expiry Date, Quantity received. Each batch is tracked separately.</p></div></div>
-  <div class="step"><div class="step-num">3</div><div class="step-body"><h5>FEFO at POS</h5><p>When selling, the system automatically deducts from the batch with the nearest expiry date first (First Expired, First Out).</p></div></div>
-  <div class="step"><div class="step-num">4</div><div class="step-body"><h5>Batch Recall</h5><p>Inventory → Batch Management → find batch → click <strong>Recall</strong>. Marks all units as recalled. Sends notification to all affected stores. Recall note required.</p></div></div>
-</div>
-
-<h2>9.4 Serial Number Tracking</h2>
-<p>For electronics, high-value items, and warranty tracking:</p>
+<p><strong>Split payments</strong> are the common real-world case: KES
+1,000 in cash and the rest on M-Pesa. Choose <strong>Split Pay</strong>,
+add each part, and KASTRA tracks <em>Remaining to pay</em> until it
+reaches zero.</p>
+<p><strong>On credit sales</strong>, if the amount would push the
+customer past their limit, KASTRA blocks it and says <em>“Credit limit
+exceeded”</em>. A manager can raise the limit on the customer’s
+record.</p>
+<p><strong>On M-Pesa STK</strong>, the screen shows <em>“Waiting for
+payment”</em> while the customer approves on their phone. Do not hand
+over goods until it confirms. If they never respond it times out and you
+can retry or switch method.</p>
+<h2 id="receipts">7. Receipts</h2>
+<p>After a sale you can:</p>
 <ul>
-  <li>Edit item → check <strong>Track Serial Numbers</strong></li>
-  <li>Add serials: Inventory → Serial Tracking → <strong>+ Add Serial</strong> (or bulk import CSV)</li>
-  <li>At POS, when item is added to cart, system prompts: <em>"Select Serial Number"</em></li>
-  <li>Serial marked as SOLD; linked to customer and sale</li>
-  <li>View: Reports → Serial Registry (filter by status: Available / Sold / Reserved)</li>
+<li><strong>Print</strong> to a thermal receipt printer</li>
+<li><strong>Send by SMS or WhatsApp</strong> — automatic when the sale
+has a customer with a phone number</li>
+<li><strong>Email</strong> it</li>
+<li>Show a <strong>digital receipt</strong> on screen for the customer
+to photograph</li>
+<li>Print an <strong>A4 invoice</strong> instead of a receipt, for
+business customers</li>
 </ul>
-
-<h2>9.5 Recipe / BOM Management</h2>
-<p>For restaurants and manufacturers — define finished products in terms of ingredients:</p>
-<ol>
-  <li>Inventory → Recipes/BOM → <strong>+ New Recipe</strong></li>
-  <li>Enter: Recipe Name, Selling Price, Yield (portions per batch)</li>
-  <li>Add ingredients: select item, enter quantity (grams/units per portion)</li>
-  <li>System calculates: Total Cost, Cost per Portion, Profit Margin</li>
-  <li>When recipe item is sold at POS, ingredients are automatically deducted</li>
-</ol>
-<p><strong>Recipe Variance Report</strong>: Reports → Recipe Variance — compares planned vs actual ingredient usage. Identifies waste, over-portioning, or theft.</p>
-
-<h2>9.6 Stocktake / Physical Count</h2>
-<ol>
-  <li>Inventory → Stocktake → <strong>New Stocktake Session</strong></li>
-  <li>Select store and date. System generates counting sheets.</li>
-  <li>Count physical stock. Enter actual counts per item.</li>
-  <li>System calculates variance (System vs Actual). Review discrepancies.</li>
-  <li>Click <strong>Finalise Stocktake</strong> — stock adjustments are created automatically for variances.</li>
-</ol>
-<div class="callout callout-warning"><div class="callout-icon">⚠️</div><div class="callout-body"><h5>Best Practice</h5><p>Conduct stocktakes at end of day (after Z-Report) to avoid counting discrepancies from in-flight sales.</p></div></div>
-
-<h2>9.7 Barcode Label Printing</h2>
-<p>Inventory → Items → select items → click <strong>Print Labels</strong>. Choose label format (58mm or 80mm roll). Labels include: item name, barcode, price. Requires a label printer with routing handle <code>LABELS</code> configured in Settings → Printers.</p>
-
-<h2>9.8 Prescription Management (Pharmacy)</h2>
-<p>The Prescriptions module is available when your Business Type is set to <strong>Pharmacy</strong> or <strong>Clinic</strong>. Navigate to <strong>Inventory → Prescriptions</strong> to access the prescription queue.</p>
-
-<h3>9.8.1 Prescription Statuses</h3>
-<div class="table-wrap">
+<p>You can customise the header, footer, logo and wording in
+<strong>Settings → Receipt</strong>.</p>
+<h2 id="holding-and-recalling-a-sale">8. Holding and recalling a
+sale</h2>
+<p>A customer forgot their wallet and is going to the car. Do not cancel
+the sale.</p>
+<ul>
+<li><strong>F5</strong> or <strong>Hold</strong> parks the cart under a
+name or number.</li>
+<li><strong>F6</strong> or <strong>Recall</strong> brings it back.</li>
+</ul>
+<p>The till is free for the next customer in between. Held sales are not
+sales yet — nothing has been recorded and no stock has moved.</p>
+<h2 id="fixing-mistakes-cart-edit-void-refund">9. Fixing mistakes: cart
+edit, void, refund</h2>
+<p>This is the section worth reading twice, because the three are
+genuinely different and KASTRA treats them differently on purpose.</p>
+<h3 id="before-payment-just-edit-the-cart">Before payment — just edit
+the cart</h3>
+<p>Remove the line, change the quantity, start over. Nothing has
+happened yet: no receipt, no stock movement, no record. <strong>No
+manager, no reason, no audit trail.</strong></p>
+<h3 id="after-payment-void">After payment — void</h3>
+<p>The receipt exists, so undoing it is a formal act.</p>
+<ul>
+<li>Requires a <strong>manager PIN</strong> and a <strong>written
+reason</strong></li>
+<li>Either <strong>the whole sale</strong> or <strong>specific
+lines</strong></li>
+<li>Writes a permanent entry to the audit log that nobody can edit or
+delete</li>
+<li><strong>Puts the stock back</strong></li>
+<li>Sends a <strong>void or amendment to KRA</strong> through eTIMS</li>
+</ul>
+<p>Use a void when the sale should never have happened — wrong item rung
+up, duplicate charge, customer changed their mind at the counter.</p>
+<h3 id="later-refund-return">Later — refund / return</h3>
+<p>The customer comes back tomorrow with the goods. Use
+<strong>Return</strong> from the sale in the sales list. Stock comes
+back in, the money goes out, and the return is linked to the original
+sale.</p>
+<blockquote>
+<p><strong>Rule of thumb:</strong> cart edit = nothing happened. Void =
+it happened and we are cancelling it. Return = it happened, it stood,
+and now goods are coming back.</p>
+</blockquote>
+<h2 id="customers-credit-and-loyalty">10. Customers, credit and
+loyalty</h2>
+<p>Add a customer from the POS or from <strong>Customers</strong>.
+Useful fields: phone (drives SMS and WhatsApp receipts), KRA PIN (needed
+on B2B invoices), and <strong>credit limit</strong>.</p>
+<p><strong>Credit / account sales</strong> — sell now, collect later.
+The customer’s outstanding balance shows on their record and in the
+<strong>Credit Book</strong> report. Record payments against the account
+as they come in.</p>
+<p><strong>Loyalty</strong> — customers earn points on qualifying sales
+and redeem them as payment. Set the earn and redeem rates in
+Settings.</p>
+<p><strong>Gift cards</strong> — sell them, check balances, redeem them
+at the till.</p>
+<hr />
+<h1 id="your-kind-of-business">Your kind of business</h1>
+<p>KASTRA runs one till that changes shape depending on your business
+type. Set it in <strong>Settings → Business type</strong>.</p>
+<h2 id="restaurant-café-and-bar">11. Restaurant, café and bar</h2>
+<p><strong>Tables.</strong> The floor plan shows your tables grouped by
+area. Tap a table to start or continue its order. Tables can be
+<strong>merged</strong>, <strong>transferred</strong> to another table,
+and <strong>split</strong> for separate bills.</p>
+<p><strong>The order is not a sale.</strong> Food goes to the kitchen
+long before anyone pays. KASTRA keeps <em>orders</em> (what the kitchen
+is making) separate from <em>sales</em> (money that changed hands). The
+order becomes a sale when the bill is settled.</p>
+<p><strong>Kitchen tickets (KOT).</strong> When you send an order, each
+line goes to the right printer automatically — food to the kitchen,
+drinks to the bar. You set that routing once, per category.</p>
+<p><strong>Kitchen display (KDS).</strong> Instead of paper, the kitchen
+can run a screen showing live orders. Kitchen staff tap to mark items
+<em>in progress</em> and <em>ready</em>. Waiters see the status without
+walking to the pass.</p>
+<p><strong>Modifiers.</strong> “No onions”, “extra shot”, “well done” —
+and they can carry a price.</p>
+<p><strong>Bar tabs.</strong> Open a tab against a customer or a name,
+keep adding to it, settle at the end of the night.</p>
+<p><strong>Service charge.</strong> Applied automatically at your
+configured rate.</p>
+<p><strong>Reservations and the waitlist.</strong> Take bookings ahead
+of time, and manage walk-ins waiting for a table.</p>
+<h2 id="hotel">12. Hotel</h2>
+<ul>
+<li><strong>Rooms</strong> — availability, rates, status</li>
+<li><strong>Bookings</strong> — check guests in and out</li>
+<li><strong>Guest folio</strong> — everything the guest charges during
+their stay, on one bill</li>
+<li><strong>Room charge</strong> — the restaurant and bar can bill
+straight to a room</li>
+<li><strong>Housekeeping</strong> — a live queue of rooms needing
+service</li>
+<li><strong>Channel manager</strong> — keeps availability in step with
+booking sites</li>
+</ul>
+<h2 id="pharmacy">13. Pharmacy</h2>
+<ul>
+<li><strong>Prescriptions</strong> captured at the till against the
+patient</li>
+<li><strong>Batch and expiry tracking</strong> enforced — see <a
+href="#16-expiry-dates-and-batches">section 16</a></li>
+<li>Controlled items flagged and recorded</li>
+</ul>
+<h2 id="fuel-station-cyber-café-and-other-trades">14. Fuel station,
+cyber café and other trades</h2>
+<ul>
+<li><strong>Fuel station</strong> — authorise a pump, sell the fuel it
+dispensed, close the pump</li>
+<li><strong>Cyber café</strong> — start and stop timed sessions per
+station, bill the time. Stations are counter-managed on the web app</li>
+<li><strong>Salon / clinic</strong> — an appointment diary with bookings
+against staff</li>
+<li><strong>Supermarket</strong> — a denser, faster scan-first layout
+built for queues</li>
+</ul>
+<hr />
+<h1 id="stock-and-suppliers">Stock and suppliers</h1>
+<h2 id="stock-receiving-and-counting">15. Stock, receiving and
+counting</h2>
+<p><strong>Stock is never simply typed in.</strong> Every change is a
+recorded movement with a reason: a sale, a return, a delivery received,
+a transfer, a count adjustment, a write-off. That is why you can always
+answer <em>“where did those twelve go?”</em>.</p>
+<p><strong>Adding items</strong> — one at a time in
+<strong>Inventory</strong>, or in bulk by <strong>CSV import</strong>.
+Items can have <strong>variants</strong> (size, colour, weight) and be
+sold as <strong>bundles</strong> or made from a
+<strong>recipe</strong>.</p>
+<p><strong>Receiving stock</strong> — raise a purchase order, then
+receive against it (a GRN). What you actually received is recorded, so
+short deliveries show up in the <strong>GRN Discrepancy</strong> report
+rather than quietly vanishing.</p>
+<p><strong>Stocktake</strong> — open a stocktake session, count, and
+enter counts. KASTRA shows counted against expected, you review the
+variance, then commit. The adjustment is recorded with your name on
+it.</p>
+<p><strong>Transfers</strong> — move stock between stores. The sending
+store loses it and the receiving store gains it, with the movement
+recorded both ends.</p>
+<p><strong>Damaged goods</strong> — write off breakages and spoilage
+with a reason, so shrinkage is measured rather than guessed.</p>
+<p><strong>Barcode labels</strong> — generate and print labels for items
+and shelf edges.</p>
+<h2 id="expiry-dates-and-batches">16. Expiry dates and batches</h2>
+<p>If you sell food, medicine or anything else that goes off, turn on
+batch tracking for those items.</p>
+<ul>
+<li>Stock is received in <strong>batches</strong>, each with its own
+expiry date</li>
+<li>KASTRA sells <strong>oldest-first (FEFO)</strong> automatically —
+first expired, first out</li>
+<li>You get <strong>expiry alerts</strong> ahead of time so stock can be
+moved or discounted</li>
+<li>If someone tries to sell expired stock, the till <strong>stops
+them</strong> and names the batch</li>
+<li>A <strong>recall</strong> can pull a whole batch, and tell you which
+customers bought from it</li>
+</ul>
+<p><strong>Serial numbers</strong> are the same idea for
+individually-tracked goods — electronics, appliances — where you need to
+know exactly which unit went to which customer.</p>
+<h2 id="suppliers-and-purchase-orders">17. Suppliers and purchase
+orders</h2>
+<ul>
+<li><strong>Suppliers</strong> — contacts, terms, and what you owe
+them</li>
+<li><strong>Purchase orders</strong> — raise, send, and track them</li>
+<li><strong>Goods received (GRN)</strong> — record what actually
+arrived</li>
+<li><strong>RFQ</strong> — ask several suppliers to quote, compare, and
+pick. Suppliers respond through a link you send them; they do not need a
+login</li>
+<li><strong>Supplier ageing</strong> — what you owe, by how overdue it
+is</li>
+</ul>
+<hr />
+<h1 id="money">Money</h1>
+<h2 id="cash-drawer-shifts-and-closing-the-day">18. Cash drawer, shifts
+and closing the day</h2>
+<p><strong>Opening.</strong> Declare your opening float when you
+start.</p>
+<p><strong>During the shift.</strong> Record cash paid in and out (a
+supplier paid in cash, a staff advance) so the drawer stays
+explainable.</p>
+<p><strong>X-report.</strong> A mid-shift snapshot. Read it any time; it
+changes nothing.</p>
+<p><strong>Z-report.</strong> The end-of-day close. It totals the day,
+closes it off, and is the number your books are built on.</p>
+<p><strong>Counting down.</strong> Enter what is physically in the
+drawer. KASTRA shows the difference against what it expected — over,
+under, or exact. Differences are recorded, which is the point.</p>
+<h2 id="expenses-and-the-books">19. Expenses and the books</h2>
+<ul>
+<li><strong>Expenses</strong> — record what the business spends, by
+category, with approval where you require it</li>
+<li><strong>Cheques</strong> — track cheques in and out and when they
+clear</li>
+<li><strong>Ledger</strong> — the underlying accounts</li>
+<li><strong>Reconciliation</strong> — match your records against the
+bank and M-Pesa statements</li>
+<li><strong>Budgets</strong> — set them and track against them</li>
+</ul>
+<h2 id="reports-worth-knowing">20. Reports worth knowing</h2>
+<p>There are 44 report tabs across six groups. These are the ones most
+businesses live on:</p>
 <table>
-<thead><tr><th>Status</th><th>Badge Colour</th><th>Meaning</th></tr></thead>
+<thead>
+<tr class="header">
+<th>Report</th>
+<th>Answers</th>
+</tr>
+</thead>
 <tbody>
-<tr><td><strong>PENDING</strong></td><td>Yellow</td><td>Prescription received, awaiting dispensing or action.</td></tr>
-<tr><td><strong>DISPENSED</strong></td><td>Green</td><td>All items dispensed; stock deducted; prescription complete.</td></tr>
-<tr><td><strong>PARTIALLY_DISPENSED</strong></td><td>Blue</td><td>Some items dispensed; remaining items still outstanding.</td></tr>
-<tr><td><strong>REFERRED_EXTERNAL</strong></td><td>Purple</td><td>Patient has been referred to an external pharmacy. No stock has been deducted. Referral notes are stored on the prescription record.</td></tr>
-<tr><td><strong>CANCELLED</strong></td><td>Red</td><td>Prescription voided; no stock deducted.</td></tr>
+<tr class="odd">
+<td><strong>X / Z Report</strong></td>
+<td>What happened today, and closing it off</td>
+</tr>
+<tr class="even">
+<td><strong>Sales</strong></td>
+<td>What sold, when, by whom</td>
+</tr>
+<tr class="odd">
+<td><strong>Gross Margin</strong></td>
+<td>What you actually made, not just turnover</td>
+</tr>
+<tr class="even">
+<td><strong>P &amp; L</strong></td>
+<td>Profit and loss for the period</td>
+</tr>
+<tr class="odd">
+<td><strong>Dead Stock</strong></td>
+<td>What has not moved and is tying up cash</td>
+</tr>
+<tr class="even">
+<td><strong>Shrinkage</strong></td>
+<td>What went missing</td>
+</tr>
+<tr class="odd">
+<td><strong>Credit Book</strong></td>
+<td>Who owes you</td>
+</tr>
+<tr class="even">
+<td><strong>Supplier Ageing</strong></td>
+<td>Who you owe</td>
+</tr>
+<tr class="odd">
+<td><strong>Sales by Staff</strong></td>
+<td>Who is selling</td>
+</tr>
+<tr class="even">
+<td><strong>Item Summary</strong></td>
+<td>Per-item performance</td>
+</tr>
+<tr class="odd">
+<td><strong>Basket Analysis</strong></td>
+<td>What gets bought together</td>
+</tr>
+<tr class="even">
+<td><strong>Customer LTV</strong></td>
+<td>What a customer is worth over time</td>
+</tr>
+<tr class="odd">
+<td><strong>VAT Return</strong></td>
+<td>Your VAT position</td>
+</tr>
+<tr class="even">
+<td><strong>Audit Log</strong></td>
+<td>Who did what, tamper-evident</td>
+</tr>
 </tbody>
 </table>
-</div>
-
-<h3>9.8.2 Prescription Queue Filters</h3>
-<p>The prescription queue provides filter tabs at the top of the screen so staff can quickly locate prescriptions by status:</p>
+<p>Every tab exports to <strong>CSV</strong>. VAT reports, receipts,
+purchase orders and B2B invoices also export to <strong>PDF</strong>.
+Reports can be <strong>scheduled</strong> to email themselves to
+you.</p>
+<p><strong>Forecasting</strong> predicts demand from your sales history
+so you order better.</p>
+<h2 id="kra-vat-and-etims">21. KRA, VAT and eTIMS</h2>
+<p>KASTRA is built for Kenyan tax compliance.</p>
 <ul>
-  <li><strong>All</strong> — shows every prescription regardless of status.</li>
-  <li><strong>PENDING</strong> — prescriptions awaiting action (the default working view).</li>
-  <li><strong>DISPENSED</strong> — completed prescriptions for record-keeping.</li>
-  <li><strong>PARTIALLY_DISPENSED</strong> — prescriptions where dispensing is still in progress.</li>
-  <li><strong>REFERRED_EXTERNAL</strong> — prescriptions referred to an outside pharmacy.</li>
-  <li><strong>CANCELLED</strong> — voided prescriptions.</li>
+<li><strong>VAT is inclusive.</strong> The price on the shelf is what
+the customer pays; KASTRA extracts the VAT within it. It does not add
+VAT on top at the till.</li>
+<li><strong>TOT</strong> (turnover tax) is supported for businesses not
+on VAT.</li>
+<li><strong>eTIMS</strong> — sales are submitted to KRA automatically
+after checkout. Voids and amendments go too.</li>
+<li><strong>Offline</strong> — if KRA is unreachable, submissions queue
+and go when the connection returns. You keep trading.</li>
+<li><strong>KRA export</strong> — produce the files KRA asks for.</li>
+<li><strong>Audit log</strong> — tamper-evident, and exportable.</li>
 </ul>
-
-<h3>9.8.3 Dispensing a Prescription</h3>
-<div class="steps">
-  <div class="step"><div class="step-num">1</div><div class="step-body"><h5>Open Prescription</h5><p>In the prescription queue, click on a <strong>PENDING</strong> prescription to open the detail view.</p></div></div>
-  <div class="step"><div class="step-num">2</div><div class="step-body"><h5>Review Items</h5><p>Confirm each drug on the prescription, verify available batch stock and expiry dates. The system applies FEFO — the batch nearest to expiry is selected first.</p></div></div>
-  <div class="step"><div class="step-num">3</div><div class="step-body"><h5>Dispense</h5><p>Click <strong>Dispense</strong>. Stock is deducted from inventory and the prescription status changes to <strong>DISPENSED</strong> (or <strong>PARTIALLY_DISPENSED</strong> if any items could not be fulfilled).</p></div></div>
-  <div class="step"><div class="step-num">4</div><div class="step-body"><h5>Attach to Sale</h5><p>If payment is required at the counter, the dispensed items can be added directly to a POS cart for checkout, creating a linked sale.</p></div></div>
-</div>
-
-<h3>9.8.4 Referring a Prescription Externally (Refer Out)</h3>
-<p>Use the <strong>Refer Out</strong> action when one or more required drugs are not in stock and the patient needs to obtain them from a different pharmacy. No stock is deducted when a prescription is referred out.</p>
-<div class="steps">
-  <div class="step"><div class="step-num">1</div><div class="step-body"><h5>Open the Prescription</h5><p>In the prescription queue, click on a <strong>PENDING</strong> prescription to open its detail view.</p></div></div>
-  <div class="step"><div class="step-num">2</div><div class="step-body"><h5>Click "Refer Out"</h5><p>Click the <strong>Refer Out</strong> button. A modal dialog will appear prompting for referral details.</p></div></div>
-  <div class="step"><div class="step-num">3</div><div class="step-body"><h5>Enter Referral Notes</h5><p>In the notes field, record the reason for the referral and the name of the external pharmacy or facility the patient is being directed to (e.g. <em>"Haltons Pharmacy, Westlands — Amoxicillin 500mg out of stock"</em>). This field is mandatory.</p></div></div>
-  <div class="step"><div class="step-num">4</div><div class="step-body"><h5>Confirm</h5><p>Click <strong>Confirm Referral</strong>. The prescription status immediately changes to <strong>REFERRED_EXTERNAL</strong> and no inventory adjustment is made.</p></div></div>
-</div>
-<div class="callout callout-tip"><div class="callout-icon">💡</div><div class="callout-body"><h5>Tip</h5><p>Referred prescriptions are visible in the <strong>REFERRED_EXTERNAL</strong> filter tab. The referral notes you entered are displayed in a purple "Referred Out" card inside the prescription detail view, providing a permanent audit trail.</p></div></div>
-<div class="callout callout-warning"><div class="callout-icon">⚠️</div><div class="callout-body"><h5>Important</h5><p>A prescription can only be referred out when its status is <strong>PENDING</strong>. Partially dispensed or already dispensed prescriptions cannot be referred out. If partial dispensing occurred before the referral decision, cancel the prescription and raise a new one.</p></div></div>
-
-<h3>9.8.5 Viewing Referral Notes</h3>
-<p>To review the referral record for any referred prescription:</p>
-<ol>
-  <li>Go to <strong>Inventory → Prescriptions</strong> and click the <strong>REFERRED_EXTERNAL</strong> filter tab.</li>
-  <li>Click the prescription to open its detail view.</li>
-  <li>A purple <strong>"Referred Out"</strong> card is displayed at the top of the detail panel, showing the referral notes, the staff member who actioned the referral, and the timestamp.</li>
-</ol>
-</section>
-
-<hr/>
-
-<!-- ── Chapter 10: Purchase Orders ── -->
-<section id="ch10">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 10</div>
-  <h1>Purchase Orders &amp; Suppliers</h1>
-</div>
-
-<h2>10.1 Supplier Management</h2>
-<p>Suppliers → <strong>+ Add Supplier</strong>. Fields: Supplier Name, Contact Person, Phone, Email, Address, Payment Terms (e.g., "Net 30"), Credit Limit.</p>
-
-<h2>10.2 Purchase Order Workflow</h2>
-<div class="diagram">
-<svg width="680" height="80" viewBox="0 0 680 80" font-family="Inter,sans-serif" font-size="11">
-  <rect width="680" height="80" fill="#0f172a" rx="8"/>
-  <rect x="10" y="20" width="100" height="40" rx="6" fill="#1e293b" stroke="#3b82f6" stroke-width="1.5"/>
-  <text x="60" y="44" text-anchor="middle" fill="#60a5fa" font-weight="600">DRAFT</text>
-  <polygon points="110,40 124,32 124,48" fill="#3b82f6"/>
-  <rect x="124" y="20" width="100" height="40" rx="6" fill="#1e293b" stroke="#f59e0b" stroke-width="1.5"/>
-  <text x="174" y="44" text-anchor="middle" fill="#fbbf24" font-weight="600">SENT</text>
-  <polygon points="224,40 238,32 238,48" fill="#f59e0b"/>
-  <rect x="238" y="20" width="130" height="40" rx="6" fill="#1e293b" stroke="#8b5cf6" stroke-width="1.5"/>
-  <text x="303" y="44" text-anchor="middle" fill="#c4b5fd" font-weight="600">PART. RECEIVED</text>
-  <polygon points="368,40 382,32 382,48" fill="#8b5cf6"/>
-  <rect x="382" y="20" width="110" height="40" rx="6" fill="#1e293b" stroke="#10b981" stroke-width="1.5"/>
-  <text x="437" y="44" text-anchor="middle" fill="#34d399" font-weight="600">RECEIVED</text>
-  <polygon points="492,40 506,32 506,48" fill="#10b981"/>
-  <rect x="506" y="20" width="100" height="40" rx="6" fill="#1e293b" stroke="#64748b" stroke-width="1.5"/>
-  <text x="556" y="44" text-anchor="middle" fill="#94a3b8" font-weight="600">CLOSED</text>
-  <text x="60" y="70" text-anchor="middle" fill="#475569" font-size="9">Create PO</text>
-  <text x="174" y="70" text-anchor="middle" fill="#475569" font-size="9">Manager Approves</text>
-  <text x="303" y="70" text-anchor="middle" fill="#475569" font-size="9">Partial GRN</text>
-  <text x="437" y="70" text-anchor="middle" fill="#475569" font-size="9">Full GRN</text>
-  <text x="556" y="70" text-anchor="middle" fill="#475569" font-size="9">Force-Close/Done</text>
-</svg>
-</div>
-
-<h3>Create a Purchase Order</h3>
-<ol>
-  <li>Suppliers → <strong>+ New PO</strong></li>
-  <li>Select supplier, set expected delivery date</li>
-  <li>Add items: search item, enter quantity ordered, agreed price</li>
-  <li>Click <strong>Save as Draft</strong></li>
-  <li>Manager reviews and clicks <strong>Approve</strong> → status changes to SENT → optional: print PO as text to email/fax supplier</li>
-</ol>
-
-<h3>Receiving Goods (GRN)</h3>
-<ol>
-  <li>Find approved PO → click <strong>Receive Goods</strong></li>
-  <li>For each item: enter quantity received, quality check, add batch/lot number &amp; expiry date if applicable</li>
-  <li>Enter delivery note number → click <strong>Save GRN</strong></li>
-  <li>Stock is added to inventory. PO status updated automatically.</li>
-  <li>If received &lt; ordered: system flags GRN discrepancy. View in Reports → GRN Discrepancy.</li>
-</ol>
-
-<h2>10.3 Supplier Reports</h2>
-<ul>
-  <li><strong>Supplier Ledger</strong>: All POs by supplier, outstanding balances, payment history</li>
-  <li><strong>Supplier Performance</strong>: On-time delivery rate, fill rate (% of orders complete), average lead time</li>
-  <li><strong>Supplier Ageing</strong>: Outstanding amounts by age bucket — Current / 1–30 days / 31–60 / 61–90 / 90+ days</li>
-</ul>
-</section>
-
-<hr/>
-
-<!-- ── Chapter 11: Customers & Loyalty ── -->
-<section id="ch11">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 11</div>
-  <h1>Customer &amp; Loyalty Management</h1>
-</div>
-
-<h2>11.1 Customer Profiles</h2>
-<p>Customers page → <strong>+ New Customer</strong>. Fields: Name, Phone, Email, Address, Credit Limit. Customer profiles track: purchase history, loyalty points, outstanding balance, credit notes.</p>
-
-<h2>11.2 Loyalty Program</h2>
-<p>Configure in <strong>Settings → Loyalty Program</strong>:</p>
-<ul>
-  <li><strong>Points Per KES</strong>: e.g., 1 point per KES 100 spent</li>
-  <li><strong>Redemption Rate</strong>: e.g., 100 points = KES 10 discount</li>
-  <li><strong>Minimum Redemption</strong>: e.g., 500 points minimum to redeem</li>
-  <li><strong>Loyalty Tiers</strong>: Bronze / Silver / Gold with multiplier per tier</li>
-  <li><strong>Points Expiry</strong>: Optional expiry period in months</li>
-</ul>
-<p>At POS: select customer → loyalty balance chip appears → toggle <strong>Redeem Points</strong> to apply discount. Points earned are credited after sale completes.</p>
-
-<h2>11.3 Credit Management</h2>
-<p>Customers with credit sales accumulate an outstanding balance. View via Reports → Credit Book. Record payments: Customer profile → <strong>Add Payment</strong> → enter amount and payment method.</p>
-
-<h2>11.4 KDPA Compliance (Data Privacy)</h2>
-<p>Settings → KDPA Compliance. If a customer requests data deletion (Kenya Data Protection Act 2019):</p>
-<ol>
-  <li>Create a Data Deletion Request for the customer</li>
-  <li>Owner reviews and approves the request</li>
-  <li>System anonymises customer PII (name → "Deleted User", phone/email → hashed). Transaction records are retained for audit but unlinked from personal data.</li>
-</ol>
-</section>
-
-<hr/>
-
-<!-- ── Chapter 12: Expenses & Budgets ── -->
-<section id="ch12">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 12</div>
-  <h1>Expense Management &amp; Budgets</h1>
-</div>
-
-<h2>12.1 Recording Expenses</h2>
-<p>Finance → Expenses → <strong>+ Add Expense</strong>. Fields: Category, Amount, Date, Vendor, Notes, Receipt Photo (upload image). Expense is created with status <strong>PENDING</strong>.</p>
-
-<h2>12.2 Approval Workflow</h2>
-<ul>
-  <li>Cashier/Staff submit expense → status: <strong>PENDING</strong></li>
-  <li>Manager/Owner reviews → click <strong>Approve</strong> or <strong>Reject</strong> with reason</li>
-  <li>Approved expenses appear in P&amp;L reports and expense totals</li>
-  <li>Rejected expenses are flagged with rejection reason visible to submitter</li>
-</ul>
-
-<h2>12.3 Budget Management</h2>
-<p>Finance → Budgets → <strong>+ Set Budget</strong>. Set monthly budgets per category (Rent, Utilities, Supplies, Marketing, etc.).</p>
-<ul>
-  <li>System sends notification when spending reaches <strong>80%</strong> of budget</li>
-  <li>System sends notification when budget is <strong>100% consumed</strong></li>
-  <li>Reports → Budget vs Actual: see variance for each category</li>
-</ul>
-
-<h2>12.4 Recurring Expenses</h2>
-<p>Finance → Recurring Expenses → <strong>+ Add Recurring</strong>. Set: Category, Amount, Frequency (Daily/Weekly/Monthly), Start Date. System automatically creates expense entries on schedule.</p>
-<div class="callout callout-tip"><div class="callout-icon">💡</div><div class="callout-body"><h5>Use Case</h5><p>Set up recurring entries for: rent (monthly), staff salaries (monthly), utility bills (monthly). These appear in the P&amp;L automatically without manual entry each period.</p></div></div>
-</section>
-
-<hr/>
-
-<!-- ── Chapter 13: Hospitality ── -->
-<section id="ch13">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 13</div>
-  <h1>Hospitality &amp; Restaurant Module</h1>
-</div>
-
-<h2>13.1 Floor Plan &amp; Tables</h2>
-<p>Tables are grouped by floor/section (Indoor, Outdoor, VIP, Bar). Each table shows status:</p>
-<ul>
-  <li><span class="badge badge-green">AVAILABLE</span> — Ready for seating (green)</li>
-  <li><span class="badge badge-blue">OCCUPIED</span> — Customers seated, order in progress (blue)</li>
-  <li><span class="badge badge-amber">BILL REQUESTED</span> — Customer ready to pay (yellow)</li>
-  <li><span class="badge badge-red">RESERVED</span> — Advance booking (red)</li>
-</ul>
-
-<h2>13.2 Taking a Restaurant Order</h2>
-<div class="steps">
-  <div class="step"><div class="step-num">1</div><div class="step-body"><h5>Select Table</h5><p>Click an available (green) table. Enter cover count (number of guests). Table status changes to OCCUPIED.</p></div></div>
-  <div class="step"><div class="step-num">2</div><div class="step-body"><h5>Add Items</h5><p>Browse menu grid by category. Click items to add. Each item can have modifiers (Extra Spicy, No Onions, Well Done) and special instructions. Modifiers can have price adjustments.</p></div></div>
-  <div class="step"><div class="step-num">3</div><div class="step-body"><h5>Send to Kitchen</h5><p>Click <strong>Send to Kitchen</strong>. System prints KOT(s) to the appropriate kitchen printer — food items → kitchen printer (KOT_FOOD handle), drinks → bar printer (KOT_DRINKS handle).</p></div></div>
-  <div class="step"><div class="step-num">4</div><div class="step-body"><h5>Kitchen Display (KDS)</h5><p>Order appears on KDS screen. Kitchen staff click <strong>Start</strong> when cooking begins and <strong>Ready</strong> when complete. Waiter is notified.</p></div></div>
-  <div class="step"><div class="step-num">5</div><div class="step-body"><h5>Mark Served</h5><p>Waiter confirms delivery — click <strong>Served</strong> on each item. Customer can now request the bill.</p></div></div>
-  <div class="step"><div class="step-num">6</div><div class="step-body"><h5>Bill &amp; Payment</h5><p>Customer requests bill → waiter clicks <strong>Request Bill</strong> (table turns yellow, bill prints automatically). Click <strong>Pay Bill</strong> → select payment method → complete. Table resets to AVAILABLE.</p></div></div>
-</div>
-
-<h2>13.3 Kitchen Display System (KDS)</h2>
-<p>Access at <code>/kds</code> — full-screen fixed overlay, auto-refreshes every 10 seconds. Designed for kitchen monitors.</p>
-<ul>
-  <li><span class="badge badge-blue">White</span> — Just received</li>
-  <li><span class="badge badge-amber">Yellow</span> — In progress (chef clicked Start)</li>
-  <li><span class="badge badge-green">Green</span> — Ready to serve</li>
-  <li><span class="badge badge-red">Red</span> — Overdue (&gt;15 minutes)</li>
-</ul>
-
-<h2>13.4 Split Bills</h2>
-<p>On an occupied table, click <strong>Split Bill</strong>:</p>
-<ul>
-  <li><strong>By Item</strong>: Assign specific items to different bills (each guest pays for their own)</li>
-  <li><strong>Equal Split</strong>: Divide total equally among N guests</li>
-  <li><strong>Custom</strong>: Enter custom amounts for each split</li>
-</ul>
-<p>Each split is processed as a separate payment. All are linked to the original order for reporting.</p>
-
-<h2>13.5 Table Features</h2>
-<ul>
-  <li><strong>Merge Tables</strong>: Combine two occupied tables into one order</li>
-  <li><strong>Transfer Order</strong>: Move an order from one table to another</li>
-  <li><strong>Table Reservations</strong>: Book a table with customer name, phone, date/time, guests, special requests</li>
-  <li><strong>Fast Food / Counter Mode</strong>: Pay-first mode — payment is taken before order is sent to kitchen</li>
-  <li><strong>Bar Tabs</strong>: Open a running tab for a customer (bar mode). Add drinks over time. Settle tab at end of visit.</li>
-  <li><strong>Clear Table</strong>: Manager/Owner can void an order and reset table if guests leave without paying</li>
-</ul>
-
-<h2>13.6 Service Charge</h2>
-<p>Configure in Settings → General → Service Charge Rate (e.g., 10%). Applied automatically to all hospitality bills. Shown as a line item on bill and receipt.</p>
-</section>
-
-<hr/>
-
-<!-- ── Chapter 14: Hotel Management ── -->
-<section id="ch14">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 14</div>
-  <h1>Hotel Room Management</h1>
-  <p>The hotel module manages room bookings, guest folios, housekeeping, and hotel-specific reporting.</p>
-</div>
-
-<h2>14.1 Hotel Dashboard</h2>
-<p>Hospitality → Hotel Dashboard shows: Occupancy % · Arrivals Today · Departures Today · Monthly Revenue · Dirty Rooms Count.</p>
-
-<h2>14.2 Room Setup</h2>
-<p>Hospitality → Hotel Rooms → <strong>+ Add Room</strong>. Fields: Room Number, Room Type (Standard/Deluxe/Suite), Floor, Rate per Night (KES), Capacity.</p>
-
-<h2>14.3 Check-In Process</h2>
-<div class="steps">
-  <div class="step"><div class="step-num">1</div><div class="step-body"><h5>Find Available Room</h5><p>Hotel Rooms grid shows rooms grouped by floor. Green = Available. Click room → select <strong>Check In</strong>.</p></div></div>
-  <div class="step"><div class="step-num">2</div><div class="step-body"><h5>Guest Details</h5><p>Enter: Guest Name, Phone, ID Number, Expected Check-out Date, Deposit Amount (optional).</p></div></div>
-  <div class="step"><div class="step-num">3</div><div class="step-body"><h5>Booking Created</h5><p>Room status changes to OCCUPIED. Guest folio is created. Rate-per-night charges accumulate automatically.</p></div></div>
-</div>
-
-<h2>14.4 Guest Folio</h2>
-<p>The guest folio tracks all charges during the stay:</p>
-<ul>
-  <li><strong>Room Rate</strong>: Auto-added nightly (calculated on checkout)</li>
-  <li><strong>Restaurant Charges</strong>: Via Room Charge payment method at POS/Hospitality</li>
-  <li><strong>Manual Charges</strong>: Add any charge type (minibar, laundry, phone calls, etc.) with amount and description</li>
-  <li><strong>Deposit Offset</strong>: Initial deposit deducted at checkout</li>
-</ul>
-<p>View folio: Hospitality → Room Bookings → select booking → Folio panel.</p>
-
-<h2>14.5 Checkout</h2>
-<ol>
-  <li>Select booking → click <strong>Check Out</strong></li>
-  <li>System calculates: Room nights × rate + all folio charges - deposit</li>
-  <li>Checkout Invoice modal shows itemised folio</li>
-  <li>Process payment (any method). Print invoice.</li>
-  <li>Room status automatically changes to DIRTY (awaiting housekeeping)</li>
-</ol>
-
-<h2>14.6 Housekeeping</h2>
-<p>Hospitality → Housekeeping Queue — lists all rooms by status: CLEAN / DIRTY / INSPECTED / OUT_OF_ORDER.</p>
-<p>Housekeeper updates room status after cleaning. Room moves to CLEAN → INSPECTED → AVAILABLE for new booking. Manager can mark rooms OUT_OF_ORDER for maintenance.</p>
-</section>
-
-<hr/>
-
-<!-- ── Chapter 14B: Fuel Station ── -->
-<section id="ch14b">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 14B</div>
-  <h1>Fuel Station Module</h1>
-  <p>Manage petrol station operations — pump tracking, nozzle calibration, attendant shifts, and fleet credit accounts — all integrated with the POS and eTIMS.</p>
-</div>
-
-<h2>14B.1 Overview</h2>
-<p>Enable the Fuel Station module by setting your <strong>Business Type</strong> to <em>Fuel Station</em> in Settings → General. The <strong>Fuel Pump</strong> page appears in the navigation, and a real-time pump status panel is added to the POS sidebar.</p>
-
-<h2>14B.2 Pump &amp; Nozzle Setup</h2>
-<ol>
-  <li>Go to <strong>Fuel Pump → Manage Pumps</strong>.</li>
-  <li>Click <strong>+ Add Pump</strong> — enter pump name (e.g. "Pump 1"), and add nozzles (Petrol, Diesel, Super).</li>
-  <li>Set the unit price per litre for each product. Prices sync to the POS automatically.</li>
-  <li>Record opening dip readings at the start of each day for fuel stock reconciliation.</li>
-</ol>
-
-<h2>14B.3 Recording a Fuel Sale</h2>
-<p>Attendants can record sales directly on the Fuel Pump page or via the main POS:</p>
-<ol>
-  <li>Select the pump and nozzle.</li>
-  <li>Enter the amount dispensed (litres) or the monetary value.</li>
-  <li>Choose payment method (Cash / M-Pesa / Credit Account).</li>
-  <li>KRA eTIMS invoice is submitted automatically after confirmation.</li>
-</ol>
-
-<h2>14B.4 Nozzle Calibration</h2>
-<p>Navigate to <strong>Fuel Pump → Calibration</strong>. Enter the calibration litres for each nozzle. The system adjusts volume calculations going forward and logs the calibration event in the audit trail.</p>
-
-<h2>14B.5 Fuel Stock Reconciliation</h2>
-<p>At shift end, record closing dip readings. The system calculates:</p>
-<ul>
-  <li><strong>Expected closing</strong> = Opening stock − Litres sold</li>
-  <li><strong>Variance</strong> = Expected − Actual dip reading</li>
-  <li>Variances above the configured threshold trigger an alert notification to the manager.</li>
-</ul>
-
-<h2>14B.6 Attendant Shift Reports</h2>
-<p>Go to <strong>Fuel Pump → Shift Reports</strong>. Filter by attendant, date range, or pump. The report shows litres dispensed, revenue collected, payment breakdown (Cash / M-Pesa / Credit), and any cash discrepancies.</p>
-
-<h2>14B.7 Fleet &amp; Credit Accounts</h2>
-<p>Set up fleet credit accounts for regular commercial customers:</p>
-<ol>
-  <li><strong>Customers → + Add Customer</strong> — enable <em>Credit Account</em> and set a credit limit.</li>
-  <li>At the pump, select the customer and post the sale to their credit account.</li>
-  <li>Issue a monthly credit statement from <strong>Reports → Credit Book</strong> and collect payment.</li>
-</ol>
-</section>
-
-<hr/>
-
-<!-- ── Chapter 14C: Cybercafé ── -->
-<section id="ch14c">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 14C</div>
-  <h1>Cybercafé Module</h1>
-  <p>Manage internet sessions, printing charges, and business centre services with per-minute or flat-rate billing and M-Pesa integration.</p>
-</div>
-
-<h2>14C.1 Overview</h2>
-<p>Enable the Cybercafé module by setting your <strong>Business Type</strong> to <em>Cybercafé</em> in Settings → General. The <strong>Cybercafé</strong> page appears in the navigation with a live session grid showing all computers.</p>
-
-<h2>14C.2 Computer Setup</h2>
-<ol>
-  <li>Go to <strong>Cybercafé → Manage Computers</strong>.</li>
-  <li>Click <strong>+ Add Computer</strong> — enter a name or station number (e.g. "PC-01").</li>
-  <li>Set the default billing rate: per-minute price or flat hourly rate.</li>
-  <li>Computers appear on the session grid with status: Available / In Use / Reserved.</li>
-</ol>
-
-<h2>14C.3 Starting a Session</h2>
-<ol>
-  <li>Click a free computer on the session grid.</li>
-  <li>Optionally enter the customer's name or phone number.</li>
-  <li>Select billing type: <strong>Per Minute</strong>, <strong>Hourly</strong>, or <strong>Fixed Package</strong> (e.g. 1-hour bundle).</li>
-  <li>Click <strong>Start Session</strong> — the timer begins and the computer status changes to <em>In Use</em>.</li>
-</ol>
-
-<h2>14C.4 Ending a Session &amp; Billing</h2>
-<ol>
-  <li>Click the active computer on the grid and select <strong>End Session</strong>.</li>
-  <li>The system calculates the charge based on elapsed time and rate.</li>
-  <li>A POS checkout screen opens pre-filled with the session charge.</li>
-  <li>Accept payment (Cash, M-Pesa, or credit) and issue a KRA-compliant receipt.</li>
-</ol>
-
-<h2>14C.5 Additional Services</h2>
-<p>Add other chargeable services as standard inventory items (e.g. "A4 Print — KES 10", "Scanning — KES 20"). These appear in the POS item grid and can be combined with a session checkout or sold separately.</p>
-
-<h2>14C.6 Daily Usage Report</h2>
-<p>Go to <strong>Reports → Cybercafé Summary</strong>. The report shows total sessions, total hours used, revenue per station, and payment method breakdown for any date range. Export as CSV for reconciliation.</p>
-</section>
-
-<hr/>
-
-<!-- ── Chapter 15: HR & Payroll ── -->
-<section id="ch15">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 15</div>
-  <h1>HR &amp; Payroll</h1>
-  <p>Full Kenya statutory payroll calculations including PAYE, NHIF, NSSF Tier 1 &amp; 2, and Housing Levy.</p>
-</div>
-
-<h2>15.1 Employee Management</h2>
-<p>HR → Employees → <strong>+ Add Employee</strong>. Link to a user account or create standalone. Fields: Name, ID Number, KRA PIN, NSSF Number, NHIF Number, Bank Account, Start Date, Department, Basic Salary.</p>
-
-<h2>15.2 Kenya Payroll Calculations</h2>
-<div class="table-wrap">
+<p>Your KRA credentials are entered once in <strong>Settings →
+eTIMS</strong> and stored encrypted. Start in <strong>test</strong>
+mode; switch to <strong>production</strong> once KRA approves you.</p>
+<hr />
+<h1 id="beyond-the-counter">Beyond the counter</h1>
+<h2 id="selling-online-and-to-customers-phones">22. Selling online and
+to customers’ phones</h2>
+<p>Each of these is a link you can print, share or turn into a QR code.
+<strong>None of them require the customer to install
+anything.</strong></p>
 <table>
-<thead><tr><th>Deduction</th><th>Rate / Calculation</th><th>2026 Rates</th></tr></thead>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>What</th>
+<th>Link</th>
+<th>For</th>
+</tr>
+</thead>
 <tbody>
-<tr><td><strong>PAYE</strong></td><td>Progressive tax on taxable income</td><td>10% (0–24k) · 25% (24k–32.3k) · 30% (32.3k–500k) · 32.5% (500k–800k) · 35% (800k+). Less KES 2,400/month personal relief.</td></tr>
-<tr><td><strong>NHIF</strong></td><td>Tiered by gross salary</td><td>KES 150 (≤5,999) → 300 (6k–7,999) → 400 (8k–11,999) → ... → 1,700 (100k+). 17 tiers.</td></tr>
-<tr><td><strong>NSSF Tier 1</strong></td><td>6% of Lower Earnings Limit (LEL = KES 7,000)</td><td>Employee: KES 420 / Employer: KES 420</td></tr>
-<tr><td><strong>NSSF Tier 2</strong></td><td>6% of (Gross - LEL), capped at UEL (KES 36,000)</td><td>Max employee contribution: KES 1,740/month</td></tr>
-<tr><td><strong>Directors' NSSF</strong></td><td>Flat rate option</td><td>KES 200/month (if isDirector flag set)</td></tr>
-<tr><td><strong>Housing Levy</strong></td><td>1.5% of gross salary</td><td>Employee 1.5% + Employer 1.5% = 3% total</td></tr>
+<tr class="odd">
+<td><strong>Web storefront</strong></td>
+<td><code>/shop/&lt;your business&gt;</code></td>
+<td>Browsing and ordering online</td>
+</tr>
+<tr class="even">
+<td><strong>QR menu</strong></td>
+<td><code>/menu/&lt;your business&gt;</code></td>
+<td>Table menus in a restaurant</td>
+</tr>
+<tr class="odd">
+<td><strong>Online ordering</strong></td>
+<td><code>/order/&lt;your business&gt;</code></td>
+<td>Takeaway and delivery orders</td>
+</tr>
+<tr class="even">
+<td><strong>Payment link</strong></td>
+<td><code>/pay/&lt;code&gt;</code></td>
+<td>Send someone a link to pay you</td>
+</tr>
+<tr class="odd">
+<td><strong>Order tracking</strong></td>
+<td><code>/track/&lt;order number&gt;</code></td>
+<td>Customer follows their delivery</td>
+</tr>
+<tr class="even">
+<td><strong>Customer portal</strong></td>
+<td><code>/portal</code></td>
+<td>Customers sign in with a phone code to see orders, points and
+account</td>
+</tr>
 </tbody>
 </table>
-</div>
-
-<h3>Running Payroll</h3>
-<div class="steps">
-  <div class="step"><div class="step-num">1</div><div class="step-body"><h5>Create Payroll Run</h5><p>HR → Payroll → <strong>+ New Payroll Run</strong>. Select month/year and store.</p></div></div>
-  <div class="step"><div class="step-num">2</div><div class="step-body"><h5>Review Payslips</h5><p>System calculates payslip for each employee. Review: Basic, Housing Allowance, Transport, Commission, Overtime → Gross. Then: PAYE, NHIF, NSSF, Housing Levy → Net Pay.</p></div></div>
-  <div class="step"><div class="step-num">3</div><div class="step-body"><h5>Approve</h5><p>Owner/Accountant clicks <strong>Approve Run</strong>. Status changes from DRAFT → APPROVED. Payslips locked for editing.</p></div></div>
-  <div class="step"><div class="step-num">4</div><div class="step-body"><h5>Mark as Paid</h5><p>After bank transfers are processed, click <strong>Mark as Paid</strong>. Status changes to PAID. Payslips available for employee download.</p></div></div>
-</div>
-
-<div class="callout callout-info"><div class="callout-icon">ℹ️</div><div class="callout-body"><h5>Proration</h5><p>Mid-month joiners are automatically prorated: Net = (Gross × daysWorked / daysInMonth). Set daysWorked in employee record for the joining month.</p></div></div>
-
-<h2>15.3 Leave Management</h2>
+<p>Orders placed through these arrive in <strong>Online Orders</strong>
+for you to accept and fulfil.</p>
+<h2 id="delivery">23. Delivery</h2>
 <ul>
-  <li>HR → Leave → <strong>+ Apply for Leave</strong> (staff self-service or manager on behalf)</li>
-  <li>Leave types: Annual, Sick, Maternity/Paternity, Compassionate, Unpaid</li>
-  <li>Manager/Owner approves or rejects with reason</li>
-  <li>System tracks leave balance per employee per year (LeaveBalance model)</li>
-  <li>Leave deducted automatically on approval</li>
+<li>Take delivery orders from the shop, the storefront or the phone
+apps</li>
+<li>Assign a <strong>driver</strong></li>
+<li>The customer gets a <strong>tracking link</strong> showing the
+driver’s live position</li>
+<li>Drivers confirm delivery on their phone, with proof</li>
+<li><strong>Delivery routes</strong> plan a driver’s whole run rather
+than one drop at a time</li>
 </ul>
-
-<h2>15.4 Shift Management</h2>
+<h2 id="field-sales-and-b2b-invoicing">24. Field sales and B2B
+invoicing</h2>
+<p>For businesses that sell out of a van or through agents on the
+road.</p>
+<p><strong>The agent, on their phone:</strong> - Sees a <strong>call
+plan</strong> — which shops to visit, prioritised by who owes the most -
+Registers new shops, with GPS - Takes orders against a shop’s credit
+limit - Collects payments and records them - Works with no signal —
+everything queues and syncs later</p>
+<p><strong>The office, on the web:</strong> - Orders arrive on the
+<strong>Field Orders</strong> board - <strong>Generate Invoice</strong>
+for the full order, or <strong>Partial Invoice</strong> for only what
+was actually delivered - <strong>Invoice All Delivered</strong> does the
+whole day’s delivered orders at once - <strong>Record Payment</strong> —
+cash, M-Pesa, bank or cheque - The customer is notified by WhatsApp or
+SMS automatically - <strong>B2B Invoice PDF</strong> with your
+letterhead, itemised lines, payment terms and bank details -
+<strong>Invoice Ageing</strong> buckets what is outstanding: 0–30,
+31–60, 61–90, 90+ days</p>
+<p>You can also save a POS cart as a <strong>proforma invoice</strong>
+rather than a sale — useful when a business customer needs a quote
+before they will pay.</p>
+<h2 id="staff-leave-and-payroll">25. Staff, leave and payroll</h2>
 <ul>
-  <li>HR → Shifts → <strong>+ New Shift</strong>. Assign employee, day of week, start/end time, store.</li>
-  <li>System detects shift overlaps and warns on save</li>
-  <li>Clock In/Out: Staff clock in at start of shift. System records actual vs scheduled hours.</li>
-  <li>Reports → Attendance: view clock-in/out times, late arrivals, total hours</li>
-  <li>Reports → Shift Sales: see sales performance per shift</li>
+<li><strong>Staff records</strong>, roles and pay rates</li>
+<li><strong>Commission</strong> — by sales value, transaction count, or
+gross margin</li>
+<li><strong>Leave</strong> with running balances</li>
+<li><strong>Shift scheduling</strong>, plus sales per shift</li>
+<li><strong>Attendance</strong></li>
+<li><strong>Disciplinary records</strong> and <strong>salary
+advances</strong></li>
+<li><strong>Payroll</strong> — Kenyan PAYE, <strong>SHIF</strong>, NSSF
+and the Affordable Housing Levy</li>
+<li><strong>Payslips</strong> generated per employee</li>
 </ul>
-
-<h2>15.5 Performance Dashboard</h2>
-<p>HR → Performance. Shows per employee for selected month: Sales Count · Total Sales Value · Commission Earned · Leave Days Used · Attendance Rate · Commission Milestone Progress (25%/50%/75%/100% milestones trigger bonus notifications).</p>
-</section>
-
-
-<!-- ── Chapter 16: Reports ── -->
-<section id="ch16">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 16</div>
-  <h1>Reports &amp; Analytics</h1>
-  <p>KASTRA provides 30+ report types covering sales, finance, inventory, HR, compliance, and operational intelligence.</p>
-</div>
-
-<h2>16.1 Report Categories</h2>
-<div class="card-grid">
-  <div class="card"><div class="card-icon">📈</div><h4>Sales Reports</h4><p>Summary · By Date · By Employee · By Category · Payment Method Breakdown · Item Summary</p></div>
-  <div class="card"><div class="card-icon">💰</div><h4>Financial Reports</h4><p>P&amp;L Statement · VAT/TOT Register · Expense Report · Cash Flow · Owner Dashboard · Bank Reconciliation</p></div>
-  <div class="card"><div class="card-icon">📦</div><h4>Inventory Reports</h4><p>Stock Valuation · Stock Movement · Expiry · Historical Stock · Recipe Variance · Bundle Profitability · Dead Stock · GRN Discrepancy</p></div>
-  <div class="card"><div class="card-icon">🏭</div><h4>Supplier Reports</h4><p>Supplier Ledger · Supplier Performance · Supplier Ageing Statement · GRN Discrepancy</p></div>
-  <div class="card"><div class="card-icon">👥</div><h4>Customer Reports</h4><p>Credit Book · Customer Analysis · Loyalty Points · Layaway Book · Proforma Pipeline</p></div>
-  <div class="card"><div class="card-icon">🇰🇪</div><h4>Compliance Reports</h4><p>KRA Export (JSON/CSV) · Audit Log Export · Serial Registry · VAT Return Data</p></div>
-  <div class="card"><div class="card-icon">👤</div><h4>Employee Reports</h4><p>Attendance · Commission · Shift Sales · Performance · Payroll Summary</p></div>
-  <div class="card"><div class="card-icon">📊</div><h4>Operational Reports</h4><p>X-Report (shift snapshot) · Z-Report (end of day) · Cash Discrepancy · Receipt Reprint</p></div>
-</div>
-
-<h2>16.2 Key Reports Explained</h2>
-
-<h3>X-Report (Shift Snapshot)</h3>
-<p>Reports → X/Z Report → <strong>X-Report</strong>. Shows current shift totals <em>without closing</em> the shift. Use for mid-shift manager checks. Shows: transactions count, total sales, VAT collected, payment method breakdown.</p>
-
-<h3>Z-Report (End of Day)</h3>
-<p>Reports → X/Z Report → <strong>Run Z-Report</strong>. Count physical cash → enter closing balance → click Run. Closes the business day, resets daily counters, creates permanent audit record. <strong>Run once per day at close of business only.</strong></p>
-
-<h3>Profit &amp; Loss Statement</h3>
-<p>Reports → P&amp;L. Shows: Revenue from Sales · Cost of Goods Sold · Gross Profit · Operating Expenses (from approved expenses) · Net Profit · Net Margin %. Filter by date range and store.</p>
-
-<h3>Historical Stock Report</h3>
-<p>Reports → Stock History. Select an as-of date. System reconstructs stock levels at that point in time using all inventory movements. Useful for month-end stock reports, audits, and theft investigation.</p>
-
-<h3>KRA Export</h3>
-<p>Reports → KRA Export. Generates JSON format (KRA-compatible) with all sales for selected date range, eTIMS control numbers, and submission status. Use for monthly KRA filing and audits.</p>
-
-<h3>Audit Log Export</h3>
-<p>Reports → Audit Log Export. Tamper-evident log of all system actions: sales, voids, adjustments, logins, settings changes. Each entry includes user, timestamp, action type, and before/after values. Cannot be edited or deleted.</p>
-
-<h2>16.3 AI Demand Forecasting</h2>
-<p>Analytics → Forecasting. Powered by statistical analysis of your sales history.</p>
+<blockquote>
+<p>Payroll follows the <strong>SHIF</strong> rules that replaced NHIF.
+Older payslips keep the figures they were generated with.</p>
+</blockquote>
+<h2 id="the-mobile-apps">26. The mobile apps</h2>
+<p>Four separate Android apps, each for one job.</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>App</th>
+<th>Who</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>KASTRA POS</strong></td>
+<td>Cashiers, managers</td>
+<td>A full till in your hand, plus a Manage section for stock, counts,
+transfers, approvals and day-close</td>
+</tr>
+<tr class="even">
+<td><strong>KASTRA Order</strong></td>
+<td>Your customers</td>
+<td>Browse the menu, order, pay by M-Pesa, book a table, check
+points</td>
+</tr>
+<tr class="odd">
+<td><strong>KASTRA Driver</strong></td>
+<td>Drivers</td>
+<td>Assigned drops, navigation hand-off, delivery confirmation,
+earnings</td>
+</tr>
+<tr class="even">
+<td><strong>KASTRA Agent</strong></td>
+<td>Field sales agents</td>
+<td>Call plan, orders, collections, new shop registration</td>
+</tr>
+</tbody>
+</table>
+<p>All four work offline and sync when signal returns.</p>
+<p><strong>Pointing an app at your server:</strong> on the login screen,
+set the server address. Your installer will give you this. It defaults
+to the cloud service.</p>
+<p><strong>Receipt printing on mobile</strong> is off by default,
+because most mobile selling has no printer and sends the receipt by SMS
+or WhatsApp instead. Turn it on in the app’s Settings and a Print button
+appears after each sale. It prints through the phone’s own print system,
+so it works with a printer already paired to the phone, or saves a
+PDF.</p>
+<hr />
+<h1 id="running-the-shop">Running the shop</h1>
+<h2 id="settings-you-will-actually-use">27. Settings you will actually
+use</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Setting</th>
+<th>Why you would touch it</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Business type</strong></td>
+<td>Changes the whole till — restaurant, retail, fuel, pharmacy…</td>
+</tr>
+<tr class="even">
+<td><strong>Receipt</strong></td>
+<td>Logo, header, footer wording</td>
+</tr>
+<tr class="odd">
+<td><strong>Tax</strong></td>
+<td>VAT or TOT, and your rate</td>
+</tr>
+<tr class="even">
+<td><strong>eTIMS</strong></td>
+<td>KRA credentials, test or production</td>
+</tr>
+<tr class="odd">
+<td><strong>Payments</strong></td>
+<td>M-Pesa, Paystack, bank details</td>
+</tr>
+<tr class="even">
+<td><strong>Users</strong></td>
+<td>Add staff, set roles and PINs</td>
+</tr>
+<tr class="odd">
+<td><strong>Stores</strong></td>
+<td>Multiple branches</td>
+</tr>
+<tr class="even">
+<td><strong>Printers</strong></td>
+<td>Which printer gets food, which gets drinks</td>
+</tr>
+<tr class="odd">
+<td><strong>Loyalty</strong></td>
+<td>Earn and redeem rates</td>
+</tr>
+<tr class="even">
+<td><strong>Security</strong></td>
+<td>Two-factor, password rules, lockouts</td>
+</tr>
+</tbody>
+</table>
+<h2 id="your-plan-and-what-it-unlocks">28. Your plan and what it
+unlocks</h2>
+<table>
+<thead>
+<tr class="header">
+<th>Plan</th>
+<th style="text-align: right;">KES/month</th>
+<th style="text-align: right;">Stores</th>
+<th style="text-align: right;">Users</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Free</strong></td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">1</td>
+</tr>
+<tr class="even">
+<td><strong>Starter</strong></td>
+<td style="text-align: right;">999</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">8</td>
+</tr>
+<tr class="odd">
+<td><strong>Growth</strong></td>
+<td style="text-align: right;">2,499</td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">15</td>
+</tr>
+<tr class="even">
+<td><strong>Pro</strong></td>
+<td style="text-align: right;">4,999</td>
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">30</td>
+</tr>
+<tr class="odd">
+<td><strong>Enterprise</strong></td>
+<td style="text-align: right;">14,999</td>
+<td style="text-align: right;">Unlimited</td>
+<td style="text-align: right;">Unlimited</td>
+</tr>
+</tbody>
+</table>
+<p>Roughly what each adds:</p>
 <ul>
-  <li><strong>Demand Forecast</strong>: <code>GET /forecasting/demand?businessId=&amp;days=30</code> — predicted sales for next N days per item</li>
-  <li><strong>Top Movers</strong>: <code>GET /forecasting/top-movers?period=7d/14d/30d</code> — fastest-selling items by velocity</li>
-  <li><strong>Seasonal Patterns</strong>: <code>GET /forecasting/seasonal</code> — identifies day-of-week and month patterns in sales data</li>
+<li><strong>Free</strong> — the till, stock, customers, sales list, cash
+drawer</li>
+<li><strong>Starter</strong> — reports, batch tracking, receipt
+customisation</li>
+<li><strong>Growth</strong> — restaurant and bar, kitchen screen,
+pharmacy, delivery, suppliers, promotions, gift cards, stocktake</li>
+<li><strong>Pro</strong> — multi-store transfers, owner dashboard, HR
+and payroll, ledger, reconciliation, API keys, scheduled reports</li>
+<li><strong>Enterprise</strong> — field sales, delivery routes, hotel,
+channel manager, forecasting, franchise</li>
 </ul>
-<div class="callout callout-info"><div class="callout-icon">ℹ️</div><div class="callout-body"><h5>Data Requirement</h5><p>Forecasting accuracy improves with more sales history. Minimum 30 days of data recommended for meaningful predictions.</p></div></div>
-
-<h2>16.4 Bank Reconciliation</h2>
-<ol>
-  <li>Finance → Reconciliation → <strong>Upload Bank Statement</strong></li>
-  <li>Download CSV from your bank portal (KCB, Equity, NCBA, Co-op formats supported)</li>
-  <li>Upload CSV. System parses transactions automatically.</li>
-  <li>System auto-matches bank entries to KASTRA sales by amount (±2 days tolerance) and by reference string</li>
-  <li>Review unmatched entries. Manually match remaining items.</li>
-  <li>View Summary: matched count, unmatched debits, unmatched credits, variance</li>
+<p><strong>During your trial you get everything</strong>, so you can see
+what you actually need. When the trial ends, your plan’s features
+apply.</p>
+<p>If a menu item is missing, it is on a higher plan. Clicking it
+explains which.</p>
+<h3 id="referring-other-businesses">Referring other businesses</h3>
+<p>If you recommend KASTRA to another business and they sign up, you
+earn a reward through the <strong>referral programme</strong>. Your
+referral link is in Settings.</p>
+<p>There is also a separate <strong>affiliate programme</strong> for
+people who promote KASTRA commercially and earn ongoing commission — you
+do not need to be a KASTRA customer to join it. Affiliates get their own
+sign-in at <code>/affiliate</code>, which is separate from your POS
+login and gives no access to any business’s data.</p>
+<h2 id="working-offline">29. Working offline</h2>
+<p>KASTRA is built to keep selling when the internet does not.</p>
+<p><strong>What still works offline:</strong> taking sales, printing
+receipts, looking up cached items and customers.</p>
+<p><strong>What happens to those sales:</strong> they are saved on the
+device and sent up when the connection returns. Each one carries a
+unique ID, so a sale that was actually received before the connection
+dropped is <strong>never charged twice</strong> on retry.</p>
+<p><strong>What you will see:</strong> a sync indicator showing how many
+are waiting.</p>
+<p><strong>What does not work offline:</strong> anything that needs a
+live third party — M-Pesa STK, card payments, and live KRA submission.
+eTIMS submissions queue and go later.</p>
+<blockquote>
+<p><strong>On the mobile cashier app</strong>, the offline queue is
+flushed from the <strong>Sync</strong> button in Settings. If you have
+been selling offline, open Settings and tap Sync once you are back on
+signal.</p>
+</blockquote>
+<h2 id="when-something-goes-wrong">30. When something goes wrong</h2>
+<p><strong>“No sales found” but there are sales</strong> Your session
+expired. Sign in again.</p>
+<p><strong>A menu item disappeared</strong> Either your role does not
+include it, or it is on a higher plan.</p>
+<p><strong>M-Pesa says “waiting for payment” forever</strong> The
+customer never approved it on their phone. Cancel and retry, or take
+another payment method. Never hand over goods on an unconfirmed STK.</p>
+<p><strong>“Credit limit exceeded”</strong> The sale would put the
+customer past their limit. A manager can raise it on the customer’s
+record, or take part payment now.</p>
+<p><strong>The receipt printer does nothing</strong> Check power and
+cable first, then that the right printer is selected in Settings. For
+kitchen tickets, check the category is routed to that printer.</p>
+<p><strong>Stock looks wrong</strong> Open the item’s movement history.
+Every change is listed with a reason and a name.</p>
+<p><strong>Expired-stock warning I need to get past</strong> That is
+deliberate. Check the batch. If it genuinely is fine, a manager can
+resolve it — but the warning is there because selling expired goods is a
+real liability.</p>
+<p><strong>Sales are not reaching KRA</strong> Check the eTIMS status in
+Settings. If the queue is backing up, your credentials or connection
+need attention — tell whoever runs your server.</p>
+<p><strong>The app is slow or behaving oddly</strong> Refresh the page.
+If it persists on one device only, that device is the problem, not the
+system.</p>
+<h2 id="quick-reference-card">31. Quick reference card</h2>
+<p><strong>Keyboard</strong></p>
+<table>
+<thead>
+<tr class="header">
+<th>Key</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>/</code></td>
+<td>Search</td>
+</tr>
+<tr class="even">
+<td><code>F1</code></td>
+<td>Cash sale</td>
+</tr>
+<tr class="odd">
+<td><code>F5</code></td>
+<td>Hold sale</td>
+</tr>
+<tr class="even">
+<td><code>F6</code></td>
+<td>Recall held sale</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Quick entry</strong></p>
+<table>
+<thead>
+<tr class="header">
+<th>Type</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>3x500</code></td>
+<td>Three of the item priced KES 500</td>
+</tr>
+<tr class="even">
+<td>Scan a scale label</td>
+<td>Weighed item, tare deducted</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The three ways to undo</strong></p>
+<table>
+<thead>
+<tr class="header">
+<th>Situation</th>
+<th>Do this</th>
+<th>Needs</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Not paid yet</td>
+<td>Edit the cart</td>
+<td>Nothing</td>
+</tr>
+<tr class="even">
+<td>Paid, cancel it</td>
+<td><strong>Void</strong></td>
+<td>Manager PIN + reason</td>
+</tr>
+<tr class="odd">
+<td>Paid, goods coming back</td>
+<td><strong>Return</strong></td>
+<td>Per your settings</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Daily rhythm</strong></p>
+<ol type="1">
+<li>Sign in, declare your float</li>
+<li>Sell</li>
+<li>X-report to check mid-shift</li>
+<li>Count the drawer</li>
+<li><strong>Z-report</strong> to close the day</li>
 </ol>
-</section>
-
-<hr/>
-
-<!-- ── Chapter 17: eTIMS ── -->
-<section id="ch17">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 17</div>
-  <h1>KRA eTIMS Integration</h1>
-  <p>Kenya Revenue Authority requires all VAT-registered businesses to submit tax invoices electronically via eTIMS. KASTRA handles this automatically.</p>
-</div>
-
-<h2>17.1 eTIMS Flow</h2>
-<div class="diagram">
-<svg width="680" height="100" viewBox="0 0 680 100" font-family="Inter,sans-serif" font-size="11">
-  <rect width="680" height="100" fill="#0f172a" rx="8"/>
-  <rect x="10" y="30" width="100" height="40" rx="6" fill="#1e293b" stroke="#3b82f6" stroke-width="1.5"/>
-  <text x="60" y="53" text-anchor="middle" fill="#60a5fa" font-weight="600">POS Sale</text>
-  <text x="60" y="67" text-anchor="middle" fill="#475569" font-size="9">Checkout</text>
-  <polygon points="110,50 124,42 124,58" fill="#3b82f6"/>
-  <rect x="124" y="30" width="110" height="40" rx="6" fill="#1e293b" stroke="#8b5cf6" stroke-width="1.5"/>
-  <text x="179" y="53" text-anchor="middle" fill="#c4b5fd" font-weight="600">Queue</text>
-  <text x="179" y="67" text-anchor="middle" fill="#475569" font-size="9">BullMQ / VSCU</text>
-  <polygon points="234,50 248,42 248,58" fill="#8b5cf6"/>
-  <rect x="248" y="30" width="120" height="40" rx="6" fill="#1e293b" stroke="#ef4444" stroke-width="1.5"/>
-  <text x="308" y="53" text-anchor="middle" fill="#fca5a5" font-weight="600">KRA eTIMS API</text>
-  <text x="308" y="67" text-anchor="middle" fill="#475569" font-size="9">saveTaxInvoice</text>
-  <polygon points="368,50 382,42 382,58" fill="#ef4444"/>
-  <rect x="382" y="30" width="130" height="40" rx="6" fill="#1e293b" stroke="#10b981" stroke-width="1.5"/>
-  <text x="447" y="53" text-anchor="middle" fill="#34d399" font-weight="600">Control Number</text>
-  <text x="447" y="67" text-anchor="middle" fill="#475569" font-size="9">ETM-XXXXXXXXX</text>
-  <polygon points="512,50 526,42 526,58" fill="#10b981"/>
-  <rect x="526" y="30" width="140" height="40" rx="6" fill="#1e293b" stroke="#f59e0b" stroke-width="1.5"/>
-  <text x="596" y="53" text-anchor="middle" fill="#fbbf24" font-weight="600">QR Receipt</text>
-  <text x="596" y="67" text-anchor="middle" fill="#475569" font-size="9">Printed for customer</text>
-</svg>
-</div>
-
-<h2>17.2 Configuration</h2>
-<div class="steps">
-  <div class="step"><div class="step-num">1</div><div class="step-body"><h5>Obtain Credentials</h5><p>Register on KRA iTax portal (itax.kra.go.ke). Apply for eTIMS access. Receive: Branch ID (BHF ID), TIN (KRA PIN — format P000000000A), CMC Key.</p></div></div>
-  <div class="step"><div class="step-num">2</div><div class="step-body"><h5>Configure in KASTRA</h5><p>Settings → KRA eTIMS → enter credentials → select <strong>Production</strong> environment → click <strong>Save &amp; Test Connection</strong>. Status shows "Connected".</p></div></div>
-  <div class="step"><div class="step-num">3</div><div class="step-body"><h5>Enable on Server</h5><p>In server <code>.env</code> file: set <code>ETIMS_ENV=production</code> and restart the API. This switches from sandbox to live KRA eTIMS API.</p></div></div>
-</div>
-
-<div class="callout callout-important"><div class="callout-icon">🔴</div><div class="callout-body"><h5>Go-Live Checklist</h5><p>Before setting ETIMS_ENV=production: 1) Test all credentials in sandbox. 2) Ensure server has stable internet. 3) Configure VSCU (Tauri desktop app) for offline fallback. 4) Keep CMC Key secure — treat like a password.</p></div></div>
-
-<h2>17.3 Automatic Submission</h2>
-<p>When enabled, every completed sale automatically: sends data to KRA eTIMS API → receives ETM control number → generates QR code → prints on receipt. The QR code can be scanned by customers to verify the invoice with KRA.</p>
-
-<h2>17.4 Manual &amp; Batch Submission</h2>
-<p>For sales made during internet outage: Settings → KRA eTIMS → click <strong>Submit Pending</strong>. System submits all unsubmitted sales in a batch (max 50 per run). Status shows: submitted count, failed count.</p>
-
-<h2>17.5 VSCU (Offline Mode)</h2>
-<p>The Tauri Desktop App includes a Virtual Sales Control Unit (VSCU) that stores sales in a local SQLite queue at <code>~/.local/share/kastra-pos/vscu.db</code> (Linux) or equivalent. Sales are submitted to KRA when internet is restored. This ensures 100% eTIMS compliance even in areas with intermittent connectivity.</p>
-
-<h2>17.6 Voiding &amp; Amending Invoices</h2>
-<ul>
-  <li><strong>Void</strong>: <code>POST /api/v1/etims/void/:saleId</code> — sends cancellation notice to KRA</li>
-  <li><strong>Amendment</strong>: <code>POST /api/v1/etims/amend/:saleId</code> — sends corrected invoice with orgInvcNo (original invoice number) reference</li>
-</ul>
-<p>Both operations are available in the Sales History void modal.</p>
-
-<h2>17.7 Common eTIMS Errors</h2>
-<div class="table-wrap">
+<h2 id="glossary">32. Glossary</h2>
 <table>
-<thead><tr><th>Error</th><th>Cause</th><th>Solution</th></tr></thead>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Term</th>
+<th>Meaning</th>
+</tr>
+</thead>
 <tbody>
-<tr><td>"Invalid TIN"</td><td>Wrong PIN format</td><td>Verify format is P000000000A (10 digits + letter). Check iTax portal.</td></tr>
-<tr><td>"Branch not registered"</td><td>BHF ID not activated</td><td>Register branch on eTIMS portal. Wait 24 hours for KRA activation.</td></tr>
-<tr><td>"Connection timeout"</td><td>KRA API offline or slow</td><td>Check internet. Try manual submission later. Sales are queued automatically.</td></tr>
-<tr><td>"Invalid CMC Key"</td><td>Key expired or changed</td><td>Regenerate CMC key on iTax. Update in Settings → KRA eTIMS.</td></tr>
+<tr class="odd">
+<td><strong>Batch / lot</strong></td>
+<td>A delivery of stock with its own expiry date</td>
+</tr>
+<tr class="even">
+<td><strong>eTIMS</strong></td>
+<td>KRA’s electronic tax invoice system</td>
+</tr>
+<tr class="odd">
+<td><strong>FEFO</strong></td>
+<td>First Expired, First Out — oldest stock sells first</td>
+</tr>
+<tr class="even">
+<td><strong>Folio</strong></td>
+<td>A hotel guest’s running bill</td>
+</tr>
+<tr class="odd">
+<td><strong>GRN</strong></td>
+<td>Goods Received Note — what actually arrived</td>
+</tr>
+<tr class="even">
+<td><strong>KOT</strong></td>
+<td>Kitchen Order Ticket</td>
+</tr>
+<tr class="odd">
+<td><strong>KDS</strong></td>
+<td>Kitchen Display Screen</td>
+</tr>
+<tr class="even">
+<td><strong>Layaway</strong></td>
+<td>Customer pays in instalments; goods held until paid</td>
+</tr>
+<tr class="odd">
+<td><strong>PAYE</strong></td>
+<td>Kenyan income tax deducted from salaries</td>
+</tr>
+<tr class="even">
+<td><strong>Proforma</strong></td>
+<td>A quote — looks like an invoice, is not a sale</td>
+</tr>
+<tr class="odd">
+<td><strong>RFQ</strong></td>
+<td>Request for Quotation — ask suppliers to bid</td>
+</tr>
+<tr class="even">
+<td><strong>SHIF</strong></td>
+<td>Social Health Insurance Fund, replaced NHIF</td>
+</tr>
+<tr class="odd">
+<td><strong>STK push</strong></td>
+<td>The M-Pesa prompt that appears on a customer’s phone</td>
+</tr>
+<tr class="even">
+<td><strong>Shrinkage</strong></td>
+<td>Stock lost to theft, damage or error</td>
+</tr>
+<tr class="odd">
+<td><strong>Tare</strong></td>
+<td>The container’s own weight, deducted from weighed goods</td>
+</tr>
+<tr class="even">
+<td><strong>TOT</strong></td>
+<td>Turnover Tax, for businesses not registered for VAT</td>
+</tr>
+<tr class="odd">
+<td><strong>VSCU</strong></td>
+<td>The offline eTIMS queue that holds sales until KRA is reachable</td>
+</tr>
+<tr class="even">
+<td><strong>X / Z report</strong></td>
+<td>Mid-shift snapshot / end-of-day close</td>
+</tr>
 </tbody>
 </table>
-</div>
-</section>
+<hr />
+<p><em>Need the installation and server side instead? See the
+<strong>Admin &amp; Installation Guide</strong>.</em></p>
 
-<hr/>
+    <p class="generated-note">
+      This page is generated from the project documentation source.
+      Do not edit it directly &mdash; edit the markdown and run <code>scripts/build-docs.sh</code>.
+    </p>
+  </main>
 
-<!-- ── Chapter 18: Multi-Store & Franchise ── -->
-<section id="ch18">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 18</div>
-  <h1>Multi-Store &amp; Franchise Management</h1>
-</div>
-
-<h2>18.1 Multi-Store Setup</h2>
-<p>Settings → Stores → <strong>+ Add Store</strong>. Each store has: Name, Store Code, Address, Phone. Users are assigned to specific stores — Managers and Cashiers only see data for their assigned stores.</p>
-
-<h2>18.2 Owner Dashboard</h2>
-<p>Navigate to <strong>/owner-dashboard</strong> (OWNER role only). Shows consolidated view across all stores: Total Sales · Total Revenue · Stock Levels · Employee Count. Compare store performance side-by-side.</p>
-
-<h2>18.3 Inter-Store Stock Transfers</h2>
-<ol>
-  <li>Inventory → Stock Transfers → <strong>+ New Transfer</strong></li>
-  <li>Select From Store and To Store, add items and quantities</li>
-  <li>Click <strong>Create Transfer</strong> → status: PENDING</li>
-  <li>Source store: reviews transfer, clicks <strong>Dispatch</strong> → prints transfer note → status: IN_TRANSIT, stock deducted</li>
-  <li>Destination store: verifies items received, clicks <strong>Receive</strong> → status: COMPLETED, stock added</li>
-</ol>
-
-<h2>18.4 Franchise Management</h2>
-<p>Navigate to <strong>/franchise</strong> (OWNER role only, Enterprise plan).</p>
-<ul>
-  <li><strong>Link Franchise</strong>: Connect a franchisee's KASTRA business to your network via Business ID</li>
-  <li><strong>Franchise Settings</strong>: Set franchiseFee (flat monthly KES) and royaltyRate (% of revenue)</li>
-  <li><strong>Franchise Network</strong>: View all linked franchise businesses with status</li>
-  <li><strong>Franchise Dashboard</strong>: Aggregate performance across all franchisees — revenue, royalties due, compliance status</li>
-</ul>
-
-<h2>18.5 Plan Limits</h2>
-<div class="table-wrap">
-<table>
-<thead><tr><th>Plan</th><th>Stores</th><th>Users</th><th>Price</th></tr></thead>
-<tbody>
-<tr><td><span class="badge badge-blue">STARTER</span></td><td>1 store</td><td>10 users</td><td>KES 2,500/month</td></tr>
-<tr><td><span class="badge badge-green">PRO</span></td><td>5 stores</td><td>20 users</td><td>KES 7,500/month</td></tr>
-<tr><td><span class="badge badge-purple">ENTERPRISE</span></td><td>Unlimited</td><td>Unlimited</td><td>KES 20,000/month</td></tr>
-</tbody>
-</table>
-</div>
-</section>
-
-<hr/>
-
-<!-- ── Chapter 19: Security ── -->
-<section id="ch19">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 19</div>
-  <h1>Security &amp; Access Control</h1>
-</div>
-
-<h2>19.1 Authentication Methods</h2>
-<ul>
-  <li><strong>Email + Password</strong>: Standard login. bcrypt-hashed. Minimum 8 characters enforced.</li>
-  <li><strong>PIN Login</strong>: 4–6 digit PIN for quick POS access. 15-minute PIN session (shorter than full JWT session).</li>
-  <li><strong>Google OAuth</strong>: Staff can sign in with Google accounts linked to their user profile.</li>
-  <li><strong>TOTP 2FA</strong>: Settings → Security → Enable Two-Factor Authentication. Scan QR code with Google Authenticator. Required on every login once enabled.</li>
-</ul>
-
-<h2>19.2 Login Lockout</h2>
-<p>After <strong>5 consecutive failed login attempts</strong>, the account is locked for <strong>15 minutes</strong>. The owner receives a security notification. Lockout can be cleared manually by an Owner from Settings → Users.</p>
-
-<h2>19.3 Auto-Lock / Inactivity Timer</h2>
-<p>Settings → General → Inactivity Timeout. After N minutes of inactivity, POS locks with PIN prompt. Enter staff PIN to unlock without full re-login. Configurable per business (default: 10 minutes).</p>
-
-<h2>19.4 API Keys</h2>
-<p>Settings → API Keys → <strong>+ Generate API Key</strong>. The raw key is shown <em>once</em> — copy immediately. SHA-256 hash is stored in database. Keys can be revoked without regeneration.</p>
-<ul>
-  <li><strong>IP Whitelist</strong>: Optionally restrict API key to specific IP addresses</li>
-  <li><strong>Scope</strong>: Keys have read-only or read-write scope</li>
-  <li>Used for third-party integrations (webhook consumers, accounting systems, etc.)</li>
-</ul>
-
-<h2>19.5 Encryption</h2>
-<p>All sensitive credentials (M-Pesa keys, eTIMS CMC Key, Africa's Talking credentials, accounting tokens) are stored encrypted using <strong>AES-256-CBC</strong> with a random IV per encryption. The ENCRYPTION_KEY environment variable is the master key.</p>
-
-<div class="callout callout-important"><div class="callout-icon">🔒</div><div class="callout-body"><h5>Key Rotation</h5><p>If the encryption key is compromised, rotate it via: <code>POST /api/v1/super-admin/rotate-encryption-key</code> with body <code>{"oldKey":"...","newKey":"..."}</code>. This re-encrypts all stored credentials in a transaction. Run immediately if key compromise is suspected.</p></div></div>
-
-<h2>19.6 Audit Trail</h2>
-<p>Every action in the system is logged: who did what, when, from which IP. Audit logs are tamper-evident and cannot be edited. Export via Reports → Audit Log Export (CSV or JSON).</p>
-
-<h2>19.7 Security Headers</h2>
-<p>The API uses Helmet.js to set: HSTS, X-Frame-Options, X-Content-Type-Options, Content-Security-Policy, and X-XSS-Protection headers on all responses.</p>
-</section>
-
-<hr/>
-
-<!-- ── Chapter 20: Integrations ── -->
-<section id="ch20">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 20</div>
-  <h1>Third-Party Integrations</h1>
-</div>
-
-<h2>20.1 Accounting Integrations</h2>
-<div class="table-wrap">
-<table>
-<thead><tr><th>System</th><th>What Syncs</th><th>Endpoint</th></tr></thead>
-<tbody>
-<tr><td><strong>QuickBooks Online</strong></td><td>Sales as QBO Invoices, token auto-refresh</td><td><code>POST /integrations/qb/sync-sale</code></td></tr>
-<tr><td><strong>Xero</strong></td><td>Sales as ACCREC invoices, token auto-refresh</td><td><code>POST /integrations/xero/sync-sale</code></td></tr>
-<tr><td><strong>Sage</strong></td><td>Sales invoices via Sage API</td><td><code>POST /integrations/accounting/sage</code></td></tr>
-</tbody>
-</table>
-</div>
-
-<h2>20.2 eCommerce Integrations</h2>
-<div class="table-wrap">
-<table>
-<thead><tr><th>Platform</th><th>Sync Direction</th><th>What Syncs</th></tr></thead>
-<tbody>
-<tr><td><strong>Shopify</strong></td><td>Bi-directional</td><td>Inventory sync by barcode, order push to KASTRA as sales</td></tr>
-<tr><td><strong>WooCommerce</strong></td><td>Bi-directional</td><td>Order sync via WC REST API</td></tr>
-</tbody>
-</table>
-</div>
-
-<h2>20.3 Communication</h2>
-<ul>
-  <li><strong>M-Pesa (Safaricom Daraja API)</strong>: STK Push, Dynamic QR, C2B callbacks. Configure in Settings → M-Pesa.</li>
-  <li><strong>Africa's Talking</strong>: SMS receipts (auto-sent after checkout if customer phone set) and WhatsApp receipts (via WhatsApp button in sale). Configure in Settings → Messaging (AT).</li>
-  <li><strong>Resend Email</strong>: Email receipts, scheduled report delivery, trial expiry notifications. Configure via RESEND_API_KEY env variable.</li>
-</ul>
-
-<h2>20.4 Webhooks</h2>
-<p>Settings → Webhooks → <strong>+ Add Webhook URL</strong>. Register a URL and select events. KASTRA sends HMAC-SHA256 signed HTTP POST to your URL on events:</p>
-<ul>
-  <li><code>sale.completed</code> — payload includes sale object with all items and payment</li>
-  <li><code>inventory.low_stock</code> — payload includes item name, current quantity, reorder level</li>
-</ul>
-<p>Verify webhook authenticity: check <code>X-KASTRA-Signature</code> header against HMAC-SHA256 of payload body using your webhook secret.</p>
-</section>
-
-<hr/>
-
-<!-- ── Chapter 21: Mobile Apps ── -->
-<section id="ch21">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 21</div>
-  <h1>Mobile Applications</h1>
-  <p>Three dedicated Expo React Native apps extend KASTRA to mobile devices.</p>
-</div>
-
-<h2>21.1 KASTRA POS Mobile (Cashier App)</h2>
-<p><strong>Target users</strong>: Cashiers and mobile sales staff</p>
-<ul>
-  <li>Full POS screen — item grid, cart, checkout</li>
-  <li>Payment: Cash / M-Pesa / Card / Bank Transfer / Split + offline queue</li>
-  <li>Barcode scanner via device camera (expo-camera)</li>
-  <li>Sales history with receipt reprint</li>
-  <li>Customer management (search, create, credit)</li>
-  <li>Reports: X-Report for Today/Week/Month</li>
-  <li>Settings: server URL configuration, sync</li>
-  <li><strong>Offline queue</strong>: Failed sales stored in AsyncStorage, retried when connectivity restores</li>
-</ul>
-
-<h2>21.2 KASTRA Customer App (Self-Service)</h2>
-<p><strong>Target users</strong>: Customers at restaurants and retail stores</p>
-<ul>
-  <li>Browse menu by category with search</li>
-  <li>Cart with quantity management</li>
-  <li>Checkout: enter phone/name and optional table number</li>
-  <li>Order tracking with 10-second auto-refresh</li>
-  <li>Loyalty points lookup</li>
-  <li>Session persistence across app restarts</li>
-</ul>
-
-<h2>21.3 KASTRA Driver App (Delivery)</h2>
-<p><strong>Target users</strong>: Delivery drivers and riders</p>
-<ul>
-  <li>Active deliveries list with status</li>
-  <li>Map screen with Google Maps/Waze deep link + Call Customer button</li>
-  <li>Delivery detail with status progression: Assign → In Transit → Delivered</li>
-  <li>Proof of delivery capture + issue reporting</li>
-  <li>History screen with stats: Today / Week / All</li>
-  <li>Earnings tab showing completed deliveries and amounts</li>
-</ul>
-
-<h2>21.4 App Configuration</h2>
-<p>On first launch, all mobile apps prompt for <strong>Server URL</strong> (e.g., <code>https://api.yourbusiness.co.ke</code>). Login with email + password or PIN. The server URL is stored in AsyncStorage and persists across restarts.</p>
-</section>
-
-<hr/>
-
-<!-- ── Chapter 22: Settings Reference ── -->
-<section id="ch22">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 22</div>
-  <h1>Settings Reference</h1>
-</div>
-
-<div class="table-wrap">
-<table>
-<thead><tr><th>Settings Tab</th><th>Key Options</th></tr></thead>
-<tbody>
-<tr><td><strong>General</strong></td><td>Business name, tax type, currency, service charge rate, table prefix, idle message (pole display), idle logo URL, receipt header/footer text, inactivity timeout</td></tr>
-<tr><td><strong>Users &amp; Roles</strong></td><td>Add/edit/delete staff, set roles, PIN, store assignment, commission settings</td></tr>
-<tr><td><strong>Stores</strong></td><td>Add/edit stores, store code, address</td></tr>
-<tr><td><strong>Printers</strong></td><td>Add printer (USB/Network/Bluetooth), test print, assign routing handle (KOT_FOOD / KOT_DRINKS / KOT_DESSERTS / BILL / RECEIPT / REPORTS / LABELS)</td></tr>
-<tr><td><strong>KRA eTIMS</strong></td><td>Branch ID, TIN, CMC Key, environment (test/production), test connection, submit pending</td></tr>
-<tr><td><strong>M-Pesa</strong></td><td>Consumer Key, Secret, Shortcode, Passkey, environment (sandbox/production)</td></tr>
-<tr><td><strong>Messaging (AT)</strong></td><td>Africa's Talking API key and username for SMS/WhatsApp receipts</td></tr>
-<tr><td><strong>Loyalty</strong></td><td>Points per KES, redemption rate, minimum redemption, loyalty tiers, expiry period</td></tr>
-<tr><td><strong>API Keys</strong></td><td>Generate/revoke API keys, IP whitelist per key</td></tr>
-<tr><td><strong>Backup</strong></td><td>Manual backup trigger, backup schedule, download backup file</td></tr>
-<tr><td><strong>Automation</strong></td><td>Recurring expense schedules, report schedules (email delivery)</td></tr>
-<tr><td><strong>Subscription</strong></td><td>Current plan, upgrade options, billing history</td></tr>
-<tr><td><strong>Integrations</strong></td><td>QuickBooks, Xero, Shopify, WooCommerce, Hotel PMS connection</td></tr>
-<tr><td><strong>Security</strong></td><td>Enable TOTP 2FA, view login history, clear lockouts</td></tr>
-<tr><td><strong>KDPA</strong></td><td>Data deletion requests — review and approve customer PII deletion</td></tr>
-<tr><td><strong>Webhooks</strong></td><td>Register webhook URLs, select events, view delivery log</td></tr>
-<tr><td><strong>Scale</strong></td><td>Serial port, baud rate, data format for weight scale integration</td></tr>
-</tbody>
-</table>
-</div>
-</section>
-
-<hr/>
-
-<!-- ── Chapter 23: Troubleshooting ── -->
-<section id="ch23">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 23</div>
-  <h1>Troubleshooting</h1>
-</div>
-
-<h2>23.1 Common Issues</h2>
-<div class="table-wrap">
-<table>
-<thead><tr><th>Symptom</th><th>Likely Cause</th><th>Solution</th></tr></thead>
-<tbody>
-<tr><td>Cannot login — "Invalid credentials"</td><td>Wrong password, caps lock on, or locked account</td><td>Check caps lock. Try password reset. If locked (5 failures), wait 15 min or ask Owner to clear lockout.</td></tr>
-<tr><td>Barcode scan doesn't add item</td><td>Scanner not in keyboard wedge mode; barcode not in system</td><td>Test scanner in Notepad — it should type characters. Enable keyboard wedge mode + Enter suffix. Check item has barcode set in inventory.</td></tr>
-<tr><td>Receipt not printing</td><td>Printer offline or wrong port</td><td>Check power/paper. Verify USB/Network connection. Settings → Printers → Test Print. Reinstall printer driver if needed.</td></tr>
-<tr><td>M-Pesa STK push not received</td><td>Wrong phone number format; Daraja sandbox</td><td>Verify Safaricom number. Check MPESA_ENV=production in .env. Confirm M-Pesa credentials are live, not sandbox.</td></tr>
-<tr><td>eTIMS submission failed</td><td>TIN format wrong, branch not registered, API timeout</td><td>Verify TIN format (P000000000A). Check BHF ID. Try manual batch submission. Review error message in Settings → KRA eTIMS.</td></tr>
-<tr><td>Stock not updating after sale</td><td>Item "Track Stock" not enabled; sync issue</td><td>Edit item → confirm Track Stock is checked. Check Inventory → Movements log for the item. Refresh page (F5).</td></tr>
-<tr><td>Page loads slowly</td><td>Large database, poor connection, browser cache</td><td>Clear browser cache. Close unused tabs. Check internet speed. Consider server upgrade if consistent.</td></tr>
-<tr><td>POS reloads to login on every API error</td><td>401 loop — expired session</td><td>Clear sessionStorage (DevTools → Application → Session Storage → clear). Re-login. The pos-auth key is automatically cleared on 401.</td></tr>
-</tbody>
-</table>
-</div>
-
-<h2>23.2 Getting Support</h2>
-<ul>
-  <li><strong>Email</strong>: support@kastrapos.co.ke — 24-hour response time. Include: business name, issue description, screenshots, error messages.</li>
-  <li><strong>Phone</strong>: +254 700 000 000 — Mon–Fri 8AM–6PM EAT. For urgent issues only.</li>
-  <li><strong>Live Chat</strong>: Available in-app (bottom right corner) — Mon–Fri 9AM–5PM EAT.</li>
-  <li><strong>Remote Support</strong>: Request via support ticket. Technician connects remotely for screen-sharing troubleshooting.</li>
-</ul>
-
-<div class="callout callout-tip"><div class="callout-icon">💡</div><div class="callout-body"><h5>When Reporting a Bug</h5><p>Include: What happened · Expected behavior · Steps to reproduce · Screenshots · Browser/OS · User role · Exact error text. This gets your issue resolved faster.</p></div></div>
-</section>
-
-<hr/>
-
-<!-- ── Chapter 24: Keyboard Shortcuts ── -->
-<section id="ch24">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 24</div>
-  <h1>Keyboard Shortcuts</h1>
-</div>
-
-<h2>24.1 Global</h2>
-<div class="table-wrap">
-<table>
-<thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
-<tbody>
-<tr><td><kbd>F2</kbd></td><td>Focus POS search bar</td></tr>
-<tr><td><kbd>F9</kbd></td><td>Open cash drawer</td></tr>
-<tr><td><kbd>F10</kbd></td><td>Repeat last item added</td></tr>
-<tr><td><kbd>Ctrl+K</kbd></td><td>Open command palette</td></tr>
-<tr><td><kbd>Ctrl+/</kbd></td><td>Show keyboard shortcuts help</td></tr>
-<tr><td><kbd>Esc</kbd></td><td>Close modal / cancel action</td></tr>
-<tr><td><kbd>Alt+1</kbd></td><td>Navigate to POS</td></tr>
-<tr><td><kbd>Alt+2</kbd></td><td>Navigate to Inventory</td></tr>
-<tr><td><kbd>Alt+3</kbd></td><td>Navigate to Reports</td></tr>
-<tr><td><kbd>Alt+4</kbd></td><td>Navigate to Customers</td></tr>
-<tr><td><kbd>Alt+5</kbd></td><td>Navigate to Settings</td></tr>
-</tbody>
-</table>
-</div>
-
-<h2>24.2 POS Screen</h2>
-<div class="table-wrap">
-<table>
-<thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
-<tbody>
-<tr><td><kbd>F1</kbd></td><td>New sale / clear cart</td></tr>
-<tr><td><kbd>F3</kbd></td><td>Select customer</td></tr>
-<tr><td><kbd>F4</kbd></td><td>Apply discount to cart</td></tr>
-<tr><td><kbd>F5</kbd></td><td>Open cash payment</td></tr>
-<tr><td><kbd>F6</kbd></td><td>Open M-Pesa payment</td></tr>
-<tr><td><kbd>F7</kbd></td><td>Open card payment</td></tr>
-<tr><td><kbd>F8</kbd></td><td>Open credit payment</td></tr>
-<tr><td><kbd>Ctrl+Enter</kbd></td><td>Complete sale (confirm payment)</td></tr>
-<tr><td><kbd>Ctrl+Backspace</kbd></td><td>Clear all items from cart</td></tr>
-</tbody>
-</table>
-</div>
-</section>
-
-<hr/>
-
-<!-- ── Chapter 25: Glossary & API ── -->
-<section id="ch25">
-<div class="chapter-header">
-  <div class="chapter-number">Chapter 25</div>
-  <h1>Glossary &amp; API Reference</h1>
-</div>
-
-<h2>25.1 Glossary</h2>
-<div class="table-wrap">
-<table>
-<thead><tr><th>Term</th><th>Definition</th></tr></thead>
-<tbody>
-<tr><td><strong>BHF ID</strong></td><td>Branch ID for KRA eTIMS system. Usually "00" for a single-location business.</td></tr>
-<tr><td><strong>CMC Key</strong></td><td>Communication Key for KRA eTIMS authentication. Obtained from iTax portal.</td></tr>
-<tr><td><strong>COGS</strong></td><td>Cost of Goods Sold. Sum of cost prices of items sold.</td></tr>
-<tr><td><strong>eTIMS</strong></td><td>Electronic Tax Invoice Management System — KRA's digital tax invoice platform.</td></tr>
-<tr><td><strong>FEFO</strong></td><td>First Expired, First Out. Stock deduction policy for batch-tracked items.</td></tr>
-<tr><td><strong>GRN</strong></td><td>Goods Received Note. Document created when inventory is received from a supplier.</td></tr>
-<tr><td><strong>Housing Levy</strong></td><td>Affordable Housing Levy — 1.5% employee + 1.5% employer deduction introduced 2023.</td></tr>
-<tr><td><strong>KDS</strong></td><td>Kitchen Display System. Screen in kitchen showing live order queue.</td></tr>
-<tr><td><strong>KOT</strong></td><td>Kitchen Order Ticket. Printed ticket sent to kitchen or bar with order details.</td></tr>
-<tr><td><strong>Layaway</strong></td><td>Payment plan where customer pays in instalments. Stock reserved until fully paid.</td></tr>
-<tr><td><strong>NHIF</strong></td><td>National Hospital Insurance Fund. Mandatory health insurance deduction.</td></tr>
-<tr><td><strong>NSSF</strong></td><td>National Social Security Fund. Mandatory pension deduction (Tier 1 + Tier 2 since 2023).</td></tr>
-<tr><td><strong>PAYE</strong></td><td>Pay As You Earn. Progressive income tax deducted from employee salaries.</td></tr>
-<tr><td><strong>PO</strong></td><td>Purchase Order. Formal order document sent to a supplier.</td></tr>
-<tr><td><strong>Proforma</strong></td><td>Quotation or pro-forma invoice. No stock deduction until converted to sale.</td></tr>
-<tr><td><strong>Recipe/BOM</strong></td><td>Bill of Materials. Defines ingredient quantities needed to produce one unit of a finished item.</td></tr>
-<tr><td><strong>SKU</strong></td><td>Stock Keeping Unit. Unique internal product identifier.</td></tr>
-<tr><td><strong>TIN</strong></td><td>Tax Identification Number. KRA PIN in P000000000A format.</td></tr>
-<tr><td><strong>TOT</strong></td><td>Turnover Tax. 3% tax for businesses with annual turnover below KES 5M.</td></tr>
-<tr><td><strong>VAT</strong></td><td>Value Added Tax. 16% in Kenya. Prices in KASTRA are VAT-inclusive.</td></tr>
-<tr><td><strong>VSCU</strong></td><td>Virtual Sales Control Unit. Offline eTIMS queue in the Tauri desktop app.</td></tr>
-<tr><td><strong>X-Report</strong></td><td>Mid-shift sales snapshot. Does not close the shift.</td></tr>
-<tr><td><strong>Z-Report</strong></td><td>End-of-day report. Closes the business day and resets daily counters.</td></tr>
-</tbody>
-</table>
-</div>
-
-<h2>25.2 Key API Endpoints</h2>
-<p><strong>Base URL</strong>: <code>https://api.yourbusiness.co.ke/api/v1</code><br/>
-<strong>Authentication</strong>: <code>Authorization: Bearer &lt;JWT&gt;</code></p>
-<div class="table-wrap">
-<table>
-<thead><tr><th>Method</th><th>Endpoint</th><th>Description</th></tr></thead>
-<tbody>
-<tr><td>POST</td><td>/auth/login</td><td>Email + password login → returns JWT</td></tr>
-<tr><td>POST</td><td>/auth/pin-login</td><td>PIN login → returns short-lived JWT</td></tr>
-<tr><td>GET</td><td>/auth/me</td><td>Current user info</td></tr>
-<tr><td>GET</td><td>/items?businessId=</td><td>List items with stock</td></tr>
-<tr><td>POST</td><td>/items</td><td>Create item</td></tr>
-<tr><td>POST</td><td>/sales</td><td>Create sale (checkout)</td></tr>
-<tr><td>GET</td><td>/sales?businessId=</td><td>List sales</td></tr>
-<tr><td>POST</td><td>/sales/:id/void</td><td>Void sale (Manager+)</td></tr>
-<tr><td>GET</td><td>/reports/sales?businessId=&amp;startDate=&amp;endDate=</td><td>Sales summary report</td></tr>
-<tr><td>GET</td><td>/reports/profit-loss?businessId=</td><td>P&amp;L statement</td></tr>
-<tr><td>POST</td><td>/etims/submit/:saleId</td><td>Submit sale to KRA eTIMS</td></tr>
-<tr><td>GET</td><td>/health</td><td>API health check (no auth)</td></tr>
-</tbody>
-</table>
-</div>
-<p>Full API documentation: <code>https://api.yourbusiness.co.ke/api/v1/docs</code> (Swagger UI)</p>
-
-<h2>25.3 Default Test Credentials (After Seeding)</h2>
-<div class="callout callout-important"><div class="callout-icon">⚠️</div><div class="callout-body"><h5>Change Before Production</h5><p>Delete or change all seed data users before going live. These credentials are public knowledge.</p></div></div>
-<div class="table-wrap">
-<table>
-<thead><tr><th>Role</th><th>Email</th><th>Password</th><th>PIN</th></tr></thead>
-<tbody>
-<tr><td>Owner</td><td>owner@premiercafe.co.ke</td><td>password123</td><td>1234</td></tr>
-<tr><td>Manager</td><td>manager@premiercafe.co.ke</td><td>manager123</td><td>5678</td></tr>
-<tr><td>Cashier</td><td>cashier@premiercafe.co.ke</td><td>cashier123</td><td>0000</td></tr>
-<tr><td>Waiter</td><td>waiter@premiercafe.co.ke</td><td>waiter123</td><td>9999</td></tr>
-</tbody>
-</table>
-</div>
-<p><strong>Business ID</strong>: <code>biz-001</code> | <strong>Store ID</strong>: <code>store-001</code> | <strong>Store Code</strong>: <code>NRB01</code></p>
-
-<hr style="margin:60px 0 40px"/>
-<div style="text-align:center;color:var(--text3);font-size:13px;padding-bottom:60px">
-  <p><strong style="color:var(--text2)">KASTRA POS</strong> — Enterprise User Manual v2.0</p>
-  <p>© 2026 KASTRA Technologies. All rights reserved.</p>
-  <p>support@kastrapos.co.ke · +254 700 000 000</p>
-  <p style="margin-top:16px">To convert to PDF: File → Print → Save as PDF (use A4, margins 10mm)</p>
-</div>
-</section>
-
-</main>
 </div>
 
 <script>
-const sections = document.querySelectorAll('section[id]');
-const navItems = document.querySelectorAll('.nav-item');
-function updateNav(){
-  let current = '';
-  sections.forEach(s=>{
-    if(window.scrollY >= s.offsetTop - 100) current = s.id;
-  });
-  navItems.forEach(a=>{
-    a.classList.toggle('active', a.getAttribute('href')==='#'+current);
-  });
-}
-window.addEventListener('scroll', updateNav, {passive:true});
-updateNav();
+// Highlight the section currently in view in the sidebar.
+(function () {
+  var links = Array.prototype.slice.call(document.querySelectorAll('#TOC ul ul a'));
+  if (!links.length) return;
+  var targets = links
+    .map(function (a) {
+      var el = document.querySelector(a.getAttribute('href'));
+      return el ? { link: a, el: el } : null;
+    })
+    .filter(Boolean);
+  if (!targets.length) return;
+
+  function sync() {
+    var y = window.scrollY + 120;
+    var current = targets[0];
+    for (var i = 0; i < targets.length; i++) {
+      if (targets[i].el.offsetTop <= y) current = targets[i];
+    }
+    links.forEach(function (a) { a.classList.remove('active'); });
+    current.link.classList.add('active');
+  }
+
+  window.addEventListener('scroll', sync, { passive: true });
+  sync();
+})();
+
+// Let wide tables scroll on their own instead of stretching the page.
+document.querySelectorAll('table').forEach(function (t) {
+  if (t.parentElement && t.parentElement.classList.contains('table-wrap')) return;
+  var w = document.createElement('div');
+  w.className = 'table-wrap';
+  t.parentNode.insertBefore(w, t);
+  w.appendChild(t);
+});
 </script>
 </body>
 </html>

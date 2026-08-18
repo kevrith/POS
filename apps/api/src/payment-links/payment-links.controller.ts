@@ -1,3 +1,4 @@
+import { Feature } from '@pos/shared';
 import {
   Controller,
   Get,
@@ -10,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { Public } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../auth/tenant.guard';
-import { SkipSubscriptionCheck } from '../auth/subscription.guard';
+import { SkipSubscriptionCheck, RequiresFeature } from '../auth/subscription.guard';
 import { PaymentLinksService } from './payment-links.service';
 import type { Request } from 'express';
 import type { AuthUser } from '../auth/auth.service';
@@ -22,6 +23,7 @@ export class PaymentLinksController {
   // ── Merchant-facing ─────────────────────────────────────────────────────────
 
   @UseGuards(TenantGuard)
+  @RequiresFeature(Feature.PAYMENT_LINKS)
   @Post()
   create(
     @Body()
@@ -45,12 +47,14 @@ export class PaymentLinksController {
   }
 
   @UseGuards(TenantGuard)
+  @RequiresFeature(Feature.PAYMENT_LINKS)
   @Get()
   list(@Req() req: Request & { user: AuthUser }) {
     return this.svc.list(req.user.businessId);
   }
 
   @UseGuards(TenantGuard)
+  @RequiresFeature(Feature.PAYMENT_LINKS)
   @Patch(':id/disable')
   disable(@Param('id') id: string, @Req() req: Request & { user: AuthUser }) {
     return this.svc.disable(id, req.user.businessId);

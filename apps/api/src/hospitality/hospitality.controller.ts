@@ -7,6 +7,7 @@ import { SubscriptionGuard, RequiresFeature } from '../auth/subscription.guard';
 import { Feature } from '@pos/shared';
 
 @UseGuards(JwtAuthGuard, SubscriptionGuard)
+@RequiresFeature(Feature.HOSPITALITY)
 @Controller('hospitality')
 export class HospitalityController {
   constructor(private hospitalityService: HospitalityService) {}

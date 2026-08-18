@@ -84,6 +84,7 @@ export enum Feature {
   HOTEL = 'HOTEL',
   CHANNEL_MANAGER = 'CHANNEL_MANAGER',
   FORECASTING = 'FORECASTING',
+  DELIVERY = 'DELIVERY',
 }
 
 interface FeatureLimit {
@@ -147,6 +148,7 @@ export const TIER_FEATURES: Record<SubscriptionTier, TierFeatures> = {
     [Feature.HOTEL]: { enabled: false },
     [Feature.CHANNEL_MANAGER]: { enabled: false },
     [Feature.FORECASTING]: { enabled: false },
+    [Feature.DELIVERY]: { enabled: false },
   },
   
   [SubscriptionTier.STARTER]: {
@@ -201,6 +203,7 @@ export const TIER_FEATURES: Record<SubscriptionTier, TierFeatures> = {
     [Feature.HOTEL]: { enabled: false },
     [Feature.CHANNEL_MANAGER]: { enabled: false },
     [Feature.FORECASTING]: { enabled: false },
+    [Feature.DELIVERY]: { enabled: false },
   },
   
   [SubscriptionTier.GROWTH]: {
@@ -255,6 +258,7 @@ export const TIER_FEATURES: Record<SubscriptionTier, TierFeatures> = {
     [Feature.HOTEL]: { enabled: false },
     [Feature.CHANNEL_MANAGER]: { enabled: false },
     [Feature.FORECASTING]: { enabled: false },
+    [Feature.DELIVERY]: { enabled: true },
   },
   
   [SubscriptionTier.PRO]: {
@@ -309,6 +313,7 @@ export const TIER_FEATURES: Record<SubscriptionTier, TierFeatures> = {
     [Feature.HOTEL]: { enabled: false },
     [Feature.CHANNEL_MANAGER]: { enabled: false },
     [Feature.FORECASTING]: { enabled: false },
+    [Feature.DELIVERY]: { enabled: true },
   },
   
   [SubscriptionTier.ENTERPRISE]: {
@@ -363,6 +368,7 @@ export const TIER_FEATURES: Record<SubscriptionTier, TierFeatures> = {
     [Feature.HOTEL]: { enabled: true },
     [Feature.CHANNEL_MANAGER]: { enabled: true },
     [Feature.FORECASTING]: { enabled: true },
+    [Feature.DELIVERY]: { enabled: true },
   },
 };
 

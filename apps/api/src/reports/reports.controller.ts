@@ -81,6 +81,7 @@ export class ReportsController {
     return this.reports.stockValuation(businessId, storeId);
   }
 
+  @RequiresFeature(Feature.REPORTS_ADVANCED)
   @Get('profit-loss')
   async profitAndLoss(
     @Query('businessId') businessId: string,
@@ -124,6 +125,7 @@ export class ReportsController {
     );
   }
 
+  @RequiresFeature(Feature.REPORTS_ADVANCED)
   @Get('commissions')
   async commissionReport(
     @Query('businessId') businessId: string,
@@ -141,6 +143,7 @@ export class ReportsController {
     );
   }
 
+  @RequiresFeature(Feature.REPORTS_ADVANCED)
   @Get('attendance')
   async attendanceReport(
     @Query('businessId') businessId: string,
@@ -158,6 +161,7 @@ export class ReportsController {
     );
   }
 
+  @RequiresFeature(Feature.RECIPES)
   @Get('recipe-variance')
   async recipeVarianceReport(
     @Query('businessId') businessId: string,
@@ -167,6 +171,7 @@ export class ReportsController {
     return this.reports.recipeVarianceReport(businessId, new Date(startDate), new Date(endDate));
   }
 
+  @RequiresFeature(Feature.BUNDLES)
   @Get('bundle-profitability')
   async bundleProfitabilityReport(
     @Query('businessId') businessId: string,
@@ -176,6 +181,7 @@ export class ReportsController {
     return this.reports.bundleProfitabilityReport(businessId, new Date(startDate), new Date(endDate));
   }
 
+  @RequiresFeature(Feature.REPORTS_ADVANCED)
   @Get('supplier-ledger')
   async supplierLedgerReport(
     @Query('businessId') businessId: string,
@@ -191,6 +197,7 @@ export class ReportsController {
     );
   }
 
+  @RequiresFeature(Feature.REPORTS_ADVANCED)
   @Get('supplier-performance')
   async supplierPerformanceReport(
     @Query('businessId') businessId: string,
@@ -200,6 +207,7 @@ export class ReportsController {
     return this.reports.supplierPerformanceReport(businessId, new Date(startDate), new Date(endDate));
   }
 
+  @RequiresFeature(Feature.REPORTS_CUSTOM)
   @Get('cross-store-dashboard')
   async crossStoreDashboard(
     @Query('businessId') businessId: string,
@@ -213,6 +221,7 @@ export class ReportsController {
     );
   }
 
+  @RequiresFeature(Feature.REPORTS_ADVANCED)
   @Get('credit-book')
   async creditBook(
     @Query('businessId') businessId: string,
@@ -228,6 +237,7 @@ export class ReportsController {
     );
   }
 
+  @RequiresFeature(Feature.REPORTS_ADVANCED)
   @Get('historical-stock')
   async historicalStockReport(
     @Query('businessId') businessId: string,
@@ -244,6 +254,7 @@ export class ReportsController {
     );
   }
 
+  @RequiresFeature(Feature.LAYAWAY)
   @Get('layaway-book')
   async layawayBook(
     @Query('businessId') businessId: string,
@@ -269,6 +280,7 @@ export class ReportsController {
     return this.reports.proformaPipeline(businessId, storeId);
   }
 
+  @RequiresFeature(Feature.SERIAL_TRACKING)
   @Get('serial-registry')
   async serialRegistry(
     @Query('businessId') businessId: string,
@@ -279,6 +291,7 @@ export class ReportsController {
     return this.reports.serialRegistry(businessId, storeId, status, itemId);
   }
 
+  @RequiresFeature(Feature.REPORTS_CUSTOM)
   @Get('kra-export')
   async kraFormattedExport(
     @Query('businessId') businessId: string,
@@ -288,6 +301,7 @@ export class ReportsController {
     return this.reports.kraFormattedExport(businessId, new Date(startDate), new Date(endDate));
   }
 
+  @RequiresFeature(Feature.AUDIT_LOGS)
   @Get('audit-log-export')
   async auditLogExport(
     @Query('businessId') businessId: string,
@@ -301,6 +315,7 @@ export class ReportsController {
     );
   }
 
+  @RequiresFeature(Feature.REPORTS_ADVANCED)
   @Get('grn-discrepancy')
   async grnDiscrepancyReport(
     @Query('businessId') businessId: string,
@@ -316,16 +331,19 @@ export class ReportsController {
     );
   }
 
+  @RequiresFeature(Feature.REPORTS_CUSTOM)
   @Get('full-data-export')
   async fullDataExport(@Query('businessId') businessId: string) {
     return this.reports.fullDataExport(businessId);
   }
 
+  @RequiresFeature(Feature.RECIPES)
   @Get('recipe-costing')
   async recipeCostingReport(@Query('businessId') businessId: string) {
     return this.reports.recipeCostingReport(businessId);
   }
 
+  @RequiresFeature(Feature.REPORTS_ADVANCED)
   @Get('supplier-ageing')
   async supplierAgeingReport(
     @Query('businessId') businessId: string,
@@ -352,6 +370,7 @@ export class ReportsController {
     );
   }
 
+  @RequiresFeature(Feature.REPORTS_ADVANCED)
   @Get('expiry')
   getExpiryReport(
     @Query('businessId') businessId: string,
@@ -361,6 +380,7 @@ export class ReportsController {
     return this.reports.getExpiryReport(businessId, storeId || undefined, parseInt(days) || 30);
   }
 
+  @RequiresFeature(Feature.REPORTS_ADVANCED)
   @Get('employee-sales')
   async employeeSalesReport(
     @Query('businessId') businessId: string,
@@ -422,6 +442,7 @@ export class ReportsController {
     res.send(html);
   }
 
+  @RequiresFeature(Feature.PAYROLL)
   @Get('pdf/payslip/:employeeId')
   async payslipPdf(
     @Param('employeeId') employeeId: string,
@@ -434,6 +455,7 @@ export class ReportsController {
     res.send(html);
   }
 
+  @RequiresFeature(Feature.PAYROLL)
   @Get('pdf/p9/:employeeId')
   async p9Pdf(
     @Param('employeeId') employeeId: string,
@@ -445,6 +467,7 @@ export class ReportsController {
     res.send(html);
   }
 
+  @RequiresFeature(Feature.PAYROLL)
   @Get('pdf/p10')
   async p10Pdf(
     @Query('businessId') businessId: string,
@@ -457,6 +480,7 @@ export class ReportsController {
     res.send(html);
   }
 
+  @RequiresFeature(Feature.FIELD_SALES)
   @Get('pdf/field-order-invoice/:orderId')
   async fieldOrderInvoicePdf(@Param('orderId') orderId: string, @Res() res: Response) {
     const html = await this.pdf.generateFieldOrderInvoice(orderId);
@@ -464,6 +488,7 @@ export class ReportsController {
     res.send(html);
   }
 
+  @RequiresFeature(Feature.FIELD_SALES)
   @Get('pdf/field-order-delivery-note/:orderId')
   async fieldOrderDeliveryNotePdf(@Param('orderId') orderId: string, @Res() res: Response) {
     const html = await this.pdf.generateFieldOrderDeliveryNote(orderId);
@@ -485,6 +510,7 @@ export class ReportsController {
     res.send(html);
   }
 
+  @RequiresFeature(Feature.EXPENSES)
   @Get('pdf/expense-report')
   async expenseReportPdf(
     @Query('employeeId') employeeId: string,
@@ -504,6 +530,7 @@ export class ReportsController {
     return this.reports.getVATReturn(businessId, month);
   }
 
+  @RequiresFeature(Feature.PAYROLL)
   @Get('nssf-return')
   async nssfReturn(
     @Query('businessId') businessId: string,
@@ -517,6 +544,7 @@ export class ReportsController {
     res.send(csv);
   }
 
+  @RequiresFeature(Feature.PAYROLL)
   @Get('shif-return')
   async shifReturn(
     @Query('businessId') businessId: string,
@@ -530,6 +558,7 @@ export class ReportsController {
     res.send(csv);
   }
   /** Legacy path — NHIF became SHIF on 1 Oct 2024. Kept so old links keep working. */
+  @RequiresFeature(Feature.PAYROLL)
   @Get('nhif-return')
   async nhifReturnLegacy(
     @Query('businessId') businessId: string,
@@ -543,6 +572,7 @@ export class ReportsController {
     res.send(csv);
   }
 
+  @RequiresFeature(Feature.TRANSFERS)
   @Get('stock-transfers')
   async stockTransfers(
     @Query('businessId') businessId: string,
@@ -560,6 +590,7 @@ export class ReportsController {
     );
   }
 
+  @RequiresFeature(Feature.REPORTS_ADVANCED)
   @Get('dead-stock')
   async deadStockReport(
     @Query('businessId') businessId: string,
@@ -569,6 +600,7 @@ export class ReportsController {
     return this.reports.deadStockReport(businessId, storeId, days ? Number(days) : 90);
   }
 
+  @RequiresFeature(Feature.REPORTS_ADVANCED)
   @Get('gross-margin')
   async grossMarginReport(
     @Query('businessId') businessId: string,
@@ -584,6 +616,7 @@ export class ReportsController {
     );
   }
 
+  @RequiresFeature(Feature.REPORTS_ADVANCED)
   @Get('shrinkage')
   async shrinkageReport(
     @Query('businessId') businessId: string,
@@ -598,6 +631,7 @@ export class ReportsController {
     );
   }
 
+  @RequiresFeature(Feature.REPORTS_CUSTOM)
   @Get('department-pnl')
   async departmentPnl(
     @Query('businessId') businessId: string,
@@ -612,6 +646,7 @@ export class ReportsController {
     );
   }
 
+  @RequiresFeature(Feature.REPORTS_ADVANCED)
   @Get('customer-analytics')
   async customerAnalytics(
     @Query('businessId') businessId: string,
@@ -627,6 +662,7 @@ export class ReportsController {
     );
   }
 
+  @RequiresFeature(Feature.FORECASTING)
   @Get('forecast')
   async forecastReport(
     @Query('businessId') businessId: string,
@@ -640,6 +676,7 @@ export class ReportsController {
     );
   }
 
+  @RequiresFeature(Feature.REPORTS_CUSTOM)
   @Get('menu-engineering')
   async menuEngineering(
     @Query('businessId') businessId: string,
@@ -649,6 +686,7 @@ export class ReportsController {
     return this.reports.menuEngineering(businessId, storeId, parseInt(days));
   }
 
+  @RequiresFeature(Feature.REPORTS_CUSTOM)
   @Get('basket-analysis')
   async basketAnalysis(
     @Query('businessId') businessId: string,
@@ -657,11 +695,13 @@ export class ReportsController {
     return this.reports.basketAnalysis(businessId, parseInt(days));
   }
 
+  @RequiresFeature(Feature.REPORTS_CUSTOM)
   @Get('clv')
   async clv(@Query('businessId') businessId: string) {
     return this.reports.customerLifetimeValue(businessId);
   }
 
+  @RequiresFeature(Feature.REPORTS_ADVANCED)
   @Get('nps-summary')
   async npsSummary(
     @Query('businessId') businessId: string,

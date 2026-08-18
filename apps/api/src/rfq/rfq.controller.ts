@@ -1,3 +1,4 @@
+import { Feature } from '@pos/shared';
 import {
   Controller,
   Get,
@@ -13,7 +14,7 @@ import {
 import { RFQService } from './rfq.service';
 import { TenantGuard } from '../auth/tenant.guard';
 import { Public } from '../auth/jwt-auth.guard';
-import { SkipSubscriptionCheck } from '../auth/subscription.guard';
+import { SkipSubscriptionCheck, RequiresFeature } from '../auth/subscription.guard';
 import type { Request } from 'express';
 import type { AuthUser } from '../auth/auth.service';
 
@@ -27,6 +28,7 @@ interface CreateRFQDto {
   supplierIds?: string[];
 }
 
+@RequiresFeature(Feature.RFQ)
 @UseGuards(TenantGuard)
 @Controller('suppliers/rfq')
 export class RFQController {

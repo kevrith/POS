@@ -1,3 +1,5 @@
+import { Feature } from '@pos/shared';
+import { RequiresFeature } from '../auth/subscription.guard';
 import { Controller, Post, Get, Put, Body, Param, Query, Req, UseGuards, Patch, Delete } from '@nestjs/common';
 import { DeliveryService } from './delivery.service';
 import { JwtAuthGuard, Public } from '../auth/jwt-auth.guard';
@@ -10,6 +12,7 @@ import type { AuthUser } from '../auth/auth.service';
 export class DeliveryController {
   constructor(private deliveryService: DeliveryService) {}
 
+  @RequiresFeature(Feature.DELIVERY)
   @Get('orders')
   async getDeliveryOrders(
     @Query('businessId') businessId: string,
@@ -22,6 +25,7 @@ export class DeliveryController {
   }
 
   // Alias: GET /delivery?businessId=...&storeId=...&status=...&channel=...
+  @RequiresFeature(Feature.DELIVERY)
   @Get()
   async listDeliveries(
     @Query('businessId') businessId: string,
@@ -34,24 +38,28 @@ export class DeliveryController {
     return result.data;
   }
 
+  @RequiresFeature(Feature.DELIVERY)
   @Post('orders')
   async createDeliveryOrder(@Body() dto: any) {
     return this.deliveryService.createDeliveryOrder(dto);
   }
 
   // Alias: POST /delivery (frontend shorthand)
+  @RequiresFeature(Feature.DELIVERY)
   @Post()
   async createDeliveryAlias(@Body() dto: any) {
     return this.deliveryService.createDeliveryOrder(dto);
   }
 
   // PATCH /delivery/:id — update status / notes
+  @RequiresFeature(Feature.DELIVERY)
   @Patch(':id')
   async updateDelivery(@Param('id') id: string, @Body() dto: any) {
     return this.deliveryService.updateDeliveryOrder(id, dto);
   }
 
   // PATCH /delivery/:id/assign — assign driver
+  @RequiresFeature(Feature.DELIVERY)
   @Patch(':id/assign')
   async assignDriverPatch(
     @Param('id') id: string,
@@ -61,6 +69,7 @@ export class DeliveryController {
   }
 
   // DELETE /delivery/:id — cancel delivery order
+  @RequiresFeature(Feature.DELIVERY)
   @Delete(':id')
   async cancelDelivery(@Param('id') id: string) {
     return this.deliveryService.cancelDeliveryOrder(id);
@@ -72,6 +81,7 @@ export class DeliveryController {
     return this.deliveryService.getDeliveryTracking(orderNumber);
   }
 
+  @RequiresFeature(Feature.DELIVERY)
   @Put('orders/:id/assign-driver')
   async assignDriver(
     @Param('id') deliveryOrderId: string,
@@ -80,6 +90,7 @@ export class DeliveryController {
     return this.deliveryService.assignDriver(deliveryOrderId, dto.driverId, dto.businessId);
   }
 
+  @RequiresFeature(Feature.DELIVERY)
   @Put('orders/:id/delivered')
   async markDelivered(
     @Param('id') deliveryOrderId: string,
@@ -88,6 +99,7 @@ export class DeliveryController {
     return this.deliveryService.markDelivered(deliveryOrderId, dto.businessId, dto.proofPhotoUrl);
   }
 
+  @RequiresFeature(Feature.DELIVERY)
   @Put('orders/:id/reschedule')
   async rescheduleDelivery(
     @Param('id') deliveryOrderId: string,
@@ -96,6 +108,7 @@ export class DeliveryController {
     return this.deliveryService.rescheduleDelivery(deliveryOrderId, dto.newScheduledAt, dto.reason);
   }
 
+  @RequiresFeature(Feature.DELIVERY)
   @Post('driver-location')
   async updateDriverLocation(@Body() dto: any) {
     return this.deliveryService.updateDriverLocation(dto);
@@ -103,6 +116,7 @@ export class DeliveryController {
 
   /** A driver's own pay. Drivers hit this with their own id; managers may pass any
    *  driver in their business — the service checks the driver belongs to it. */
+  @RequiresFeature(Feature.DELIVERY)
   @Get('driver-earnings/:driverId')
   async getDriverEarnings(
     @Param('driverId') driverId: string,
@@ -115,6 +129,7 @@ export class DeliveryController {
    *  Business comes from the token, not the query: TenantGuard rejects a MISMATCHED
    *  businessId but lets a missing one through, and a missing one here would widen
    *  the query to every tenant's drivers. */
+  @RequiresFeature(Feature.DELIVERY)
   @Get('driver-locations')
   async getActiveDriverLocations(
     @Req() req: Request & { user: AuthUser },
@@ -126,6 +141,7 @@ export class DeliveryController {
     );
   }
 
+  @RequiresFeature(Feature.DELIVERY)
   @Get('driver-locations/:driverId')
   async getDriverLocations(
     @Param('driverId') driverId: string,
@@ -135,21 +151,25 @@ export class DeliveryController {
     return this.deliveryService.getDriverLocations(driverId, req.user.businessId, since);
   }
 
+  @RequiresFeature(Feature.DELIVERY)
   @Post('zones')
   async createDeliveryZone(@Body() dto: any) {
     return this.deliveryService.createDeliveryZone(dto);
   }
 
+  @RequiresFeature(Feature.DELIVERY)
   @Get('zones')
   async getDeliveryZones(@Query('businessId') businessId: string) {
     return this.deliveryService.getDeliveryZones(businessId);
   }
 
+  @RequiresFeature(Feature.DELIVERY)
   @Post('courier/push')
   async pushToCourier(@Body() dto: any) {
     return this.deliveryService.pushToCourier(dto);
   }
 
+  @RequiresFeature(Feature.DELIVERY)
   @Get('sla-report')
   async getDeliverySLAReport(
     @Query('businessId') businessId: string,
@@ -159,6 +179,7 @@ export class DeliveryController {
     return this.deliveryService.getDeliverySLAReport(businessId, startDate, endDate);
   }
 
+  @RequiresFeature(Feature.DELIVERY)
   @Put('orders/:id/failed')
   async markFailed(
     @Param('id') id: string,
@@ -167,21 +188,25 @@ export class DeliveryController {
     return this.deliveryService.markFailed(id, dto.reason);
   }
 
+  @RequiresFeature(Feature.DELIVERY)
   @Post('orders/:id/tracking-link')
   async sendTrackingLink(@Param('id') id: string) {
     return this.deliveryService.sendCustomerTrackingLink(id);
   }
 
+  @RequiresFeature(Feature.DELIVERY)
   @Post('calc-fee')
   async calcFee(@Body() dto: { businessId: string; lat: number; lng: number }) {
     return this.deliveryService.calcDeliveryFee(dto.businessId, dto.lat, dto.lng);
   }
 
+  @RequiresFeature(Feature.DELIVERY)
   @Get('couriers')
   async getCouriers(@Query('businessId') businessId: string) {
     return this.deliveryService.getCourierIntegrations(businessId);
   }
 
+  @RequiresFeature(Feature.DELIVERY)
   @Post('couriers')
   async saveCourier(@Body() dto: any) {
     return this.deliveryService.saveCourierIntegration(dto);
@@ -189,6 +214,7 @@ export class DeliveryController {
 
   // GET /delivery/:id — single delivery (driver app detail screen).
   // Declared last so it never shadows the literal GET routes above.
+  @RequiresFeature(Feature.DELIVERY)
   @Get(':id')
   async getDelivery(
     @Param('id') id: string,

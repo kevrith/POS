@@ -5,11 +5,12 @@ import { SubscriptionController } from './subscription.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { EmailModule } from '../email/email.module';
 import { AffiliateModule } from '../affiliate/affiliate.module';
+import { TrialExpiryService } from './trial-expiry.service';
 
 @Module({
   imports: [PrismaModule, EmailModule, AffiliateModule],
-  providers: [SubscriptionLimitsService, SubscriptionService],
+  providers: [SubscriptionLimitsService, SubscriptionService, TrialExpiryService],
   controllers: [SubscriptionController],
-  exports: [SubscriptionLimitsService, SubscriptionService],
+  exports: [SubscriptionLimitsService, SubscriptionService, TrialExpiryService],
 })
 export class SubscriptionModule {}

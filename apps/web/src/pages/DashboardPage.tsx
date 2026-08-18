@@ -723,7 +723,7 @@ export default function DashboardPage() {
         onClose={() => setUpgradeModal({ isOpen: false, featureName: '', requiredTier: null })}
         featureName={upgradeModal.featureName}
         requiredTier={upgradeModal.requiredTier}
-        currentTier={(user?.planName ?? 'FREE') as SubscriptionTier}
+        currentTier={(user?.subscriptionTier ?? user?.planName ?? 'FREE') as SubscriptionTier}
       />
     </div>
   );

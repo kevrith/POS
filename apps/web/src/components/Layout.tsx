@@ -466,7 +466,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const userPlan = user?.planName ?? 'STARTER';
   const subStatus = subscription?.subscriptionStatus;
-  const subTier = businessSettings?.subscriptionTier ?? 'FREE';
+  // Fall back to the tier on the auth user rather than to FREE: businessSettings
+  // resolves asynchronously, so defaulting to FREE briefly hid paid nav items on
+  // every page load for customers who had paid for them.
+  const subTier = businessSettings?.subscriptionTier ?? user?.subscriptionTier ?? 'FREE';
   const canSeePlan = (to: string) => hasFeature(userPlan, to.replace(/^\//, ''), subStatus, subTier);
 
   const visibleGroups = NAV_GROUPS

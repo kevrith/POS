@@ -1721,11 +1721,11 @@ export default function SettingsPage() {
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Receipt Customization</h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Add your own message above and below the receipt items</p>
               </div>
-              {!hasFeature(user?.planName, 'receipt-customization') && (
+              {!hasFeature(user?.subscriptionTier ?? user?.planName, 'receipt-customization') && (
                 <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">Starter+</span>
               )}
             </div>
-            {!hasFeature(user?.planName, 'receipt-customization') ? (
+            {!hasFeature(user?.subscriptionTier ?? user?.planName, 'receipt-customization') ? (
               <div className="rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-dashed border-gray-300 dark:border-gray-600 p-6 text-center space-y-2">
                 <p className="text-sm text-gray-500 dark:text-gray-400">Upgrade to <strong className="text-gray-700 dark:text-gray-300">Starter</strong> to add custom header and footer text to your receipts.</p>
                 <a href="/settings?tab=subscription" className="inline-block mt-1 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline">View plans →</a>
@@ -4304,7 +4304,7 @@ export default function SettingsPage() {
       })()}
 
       {/* ── Automation Tab ────────────────────────────────────────────────── */}
-      {activeTab === 'automation' && !hasFeature(user?.planName, 'scheduled-reports') && (
+      {activeTab === 'automation' && !hasFeature(user?.subscriptionTier ?? user?.planName, 'scheduled-reports') && (
         <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
           <div className="text-5xl">⏰</div>
           <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Scheduled Reports</h2>
@@ -4312,7 +4312,7 @@ export default function SettingsPage() {
           <a href="/settings?tab=subscription" className="mt-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors">Upgrade to Pro →</a>
         </div>
       )}
-      {activeTab === 'automation' && hasFeature(user?.planName, 'scheduled-reports') && (
+      {activeTab === 'automation' && hasFeature(user?.subscriptionTier ?? user?.planName, 'scheduled-reports') && (
         <div className="space-y-6">
           <div className="bg-white rounded-xl shadow p-6">
             <div className="flex items-center justify-between mb-4">

@@ -141,6 +141,7 @@ async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Prom
 
 export default function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const refreshUser = useAuthStore((s) => s.refreshUser);
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
   const { ready, isTauri } = useTauriReady();
   const [tauriSetupVerified, setTauriSetupVerified] = useState(false);
@@ -169,6 +170,15 @@ export default function App() {
       setTauriSetupVerified(true);
     });
   }, [ready, isTauri]);
+
+  // Pull the current plan from the API on load.
+  //
+  // The persisted user is written at login and never updated, so an upgrade (or a
+  // plan gifted from the admin console) left paid features greyed out for a
+  // signed-in customer until they manually signed out and back in.
+  useEffect(() => {
+    if (isAuthenticated) void refreshUser();
+  }, [isAuthenticated, refreshUser]);
 
   // Wait until Tauri env is detected AND (if Tauri) setup config is verified
   if (!ready || (isTauri && !tauriSetupVerified)) {

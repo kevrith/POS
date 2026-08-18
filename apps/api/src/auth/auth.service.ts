@@ -544,7 +544,10 @@ export class AuthService {
   }
 
   async validateUser(payload: JwtPayload): Promise<AuthUser | null> {
-    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      include: { business: { select: { planName: true, subscriptionTier: true } } },
+    });
     if (!user) return null;
     return {
       id: user.id,
@@ -552,7 +555,20 @@ export class AuthService {
       email: user.email,
       role: user.role as UserRole,
       businessId: user.businessId,
-      planName: payload.planName,
+      // Read the plan from the business on every request, not from the token.
+      //
+      // This object is what /auth/me returns and what the web app stores, and it
+      // used to carry planName ALONE. planName is a display label that drifts —
+      // an account gifted ENTERPRISE from the admin console keeps planName "Free"
+      // — so the browser fell back to it, resolved FREE, and greyed out every
+      // paid feature for a customer the API was happily authorising. Gating on
+      // subscriptionTier here keeps the client's view and the SubscriptionGuard's
+      // decision in agreement.
+      //
+      // Reading it live also means a plan change or a gift takes effect on the
+      // next request instead of waiting for every user's token to expire.
+      planName: user.business?.planName ?? payload.planName,
+      subscriptionTier: user.business?.subscriptionTier ?? payload.subscriptionTier,
     };
   }
 

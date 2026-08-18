@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { setToken, clearToken, getApiUrl } from '../lib/api';
+import { setToken, clearToken, getApiUrl, getToken } from '../lib/api';
 
 const API_V1 = getApiUrl();
 
@@ -27,6 +27,8 @@ interface AuthState {
   loginWithOAuth: (accessToken: string, user: AuthUser) => Promise<void>;
   // PIN login (Cashier / Waiter / Kitchen)
   loginWithPin: (pin: string, businessId: string, storeId?: string, userId?: string) => Promise<void>;
+  /** Re-read the plan fields from the API. Safe to call on every app load. */
+  refreshUser: () => Promise<void>;
   logout: () => void;
 }
 
@@ -109,6 +111,44 @@ export const useAuthStore = create<AuthState>()(
         const data = await res.json() as { accessToken: string; user: AuthUser };
         setToken(data.accessToken);
         set({ user: data.user, isAuthenticated: true });
+      },
+
+      /**
+       * Re-read the plan fields from GET /auth/me.
+       *
+       * The user object is written once at login and then persisted, so a plan
+       * change — an upgrade, or a gift from the admin console — did not reach a
+       * signed-in browser at all: the customer kept seeing paid features greyed
+       * out until they happened to sign out and back in. Nothing else in the app
+       * called /auth/me, so nothing ever corrected the stale copy.
+       *
+       * Only the plan fields are merged. storeId is deliberately left alone: the
+       * login flow resolves it separately and /auth/me does not return it.
+       */
+      refreshUser: async () => {
+        const token = getToken();
+        if (!token) return;
+        try {
+          const res = await fetch(`${API_V1}/auth/me`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) return; // 401 is handled by the api layer; don't fight it here
+          const fresh = await res.json() as Partial<AuthUser>;
+          set((s) => {
+            if (!s.user) return {};
+            return {
+              user: {
+                ...s.user,
+                ...(fresh.planName !== undefined && { planName: fresh.planName }),
+                ...(fresh.subscriptionTier !== undefined && { subscriptionTier: fresh.subscriptionTier }),
+                ...(fresh.role !== undefined && { role: fresh.role }),
+              },
+            };
+          });
+        } catch {
+          // Offline, or the API is unreachable. Keep the cached user — this is an
+          // offline-first POS and a failed refresh must never block trading.
+        }
       },
 
       logout: () => {

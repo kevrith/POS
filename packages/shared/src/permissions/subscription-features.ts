@@ -380,7 +380,7 @@ export const TIER_FEATURES: Record<SubscriptionTier, TierFeatures> = {
  * a stray space — missed the table and fell through to `?? false`, silently locking
  * every feature for a customer who had paid for them.
  */
-function tierKey(tier: SubscriptionTier | string | undefined | null): SubscriptionTier {
+export function tierKey(tier: SubscriptionTier | string | undefined | null): SubscriptionTier {
   const key = String(tier ?? '').trim().toUpperCase() as SubscriptionTier;
   return TIER_FEATURES[key] ? key : (SubscriptionTier.FREE);
 }
@@ -406,3 +406,42 @@ export function getRequiredTierForFeature(feature: Feature): SubscriptionTier | 
   }
   return null;
 }
+
+// ─── Display label ───────────────────────────────────────────────────────────
+
+/**
+ * Human label for a tier.
+ *
+ * `Business.planName` is only ever this — a label. It is NOT an access control
+ * input, and nothing should branch on it. It exists because a paid activation
+ * wants to show "Enterprise" rather than "ENTERPRISE" on a receipt or an invoice.
+ *
+ * Keeping the map here, next to the tier enum, is what stops it drifting: it used
+ * to be spelled out in the API's PLANS table, again in the web app's PLAN_LABELS,
+ * and again inline in the admin console, which is how an account ended up on tier
+ * ENTERPRISE with the label "Free".
+ */
+export const PLAN_DISPLAY_NAME: Record<SubscriptionTier, string> = {
+  [SubscriptionTier.FREE]:       'Free',
+  [SubscriptionTier.STARTER]:    'Starter',
+  [SubscriptionTier.GROWTH]:     'Growth',
+  [SubscriptionTier.PRO]:        'Pro',
+  [SubscriptionTier.ENTERPRISE]: 'Enterprise',
+};
+
+/**
+ * The label for a tier, tolerant of whatever casing the caller has to hand.
+ * Unknown values fall back to Free, matching `tierKey`.
+ */
+export function planDisplayName(tier: SubscriptionTier | string | undefined | null): string {
+  return PLAN_DISPLAY_NAME[tierKey(tier)];
+}
+
+/**
+ * Public name for {@link tierKey}. Normalises whatever the caller has — a raw DB
+ * string, a value off a JWT, a display label — into a real SubscriptionTier.
+ *
+ * Use this rather than comparing tier strings directly. Every case-sensitivity
+ * bug in plan gating so far has come from a verbatim `=== 'FREE'` somewhere.
+ */
+export const normalizeTier = tierKey;

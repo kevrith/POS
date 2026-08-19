@@ -6,6 +6,29 @@ import { DbBackupService } from '../backup/db-backup.service';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { createHash, randomBytes } from 'crypto';
+import { normalizeTier, planDisplayName } from '@pos/shared';
+
+/**
+ * Keep `planName` truthful whenever a tier is written.
+ *
+ * planName is a display label, but it was being written independently of the
+ * tier — the admin console happened to send both, and every other caller did
+ * not. That is how a business ended up on tier ENTERPRISE labelled "Free", which
+ * then locked the customer out of the UI they had paid for and, worse, applied
+ * the free-tier transaction cap to them.
+ *
+ * Deriving it here means no caller can reintroduce the mismatch, and an explicit
+ * planName from the caller is deliberately ignored rather than trusted: there is
+ * no legitimate reason for the label to disagree with the tier.
+ */
+function withDerivedPlanName<T extends { subscriptionTier?: string; planName?: string }>(data: T): T {
+  if (!data.subscriptionTier) return data;
+  return {
+    ...data,
+    subscriptionTier: normalizeTier(data.subscriptionTier),
+    planName: planDisplayName(data.subscriptionTier),
+  };
+}
 
 // Plan pricing (KES cents / month) — 5-tier
 const PLAN_PRICE: Record<string, number> = {
@@ -153,7 +176,7 @@ export class SuperAdminService {
   }) {
     return this.prisma.business.update({
       where: { id: businessId },
-      data,
+      data: withDerivedPlanName(data),
     });
   }
 
@@ -1022,7 +1045,13 @@ export class SuperAdminService {
   }) {
     const updateData: any = {};
     if (data.subscriptionStatus) updateData.subscriptionStatus = data.subscriptionStatus;
-    if (data.subscriptionTier)   updateData.subscriptionTier   = data.subscriptionTier;
+    // Normalise the tier and derive the label together — a bulk change used to
+    // write the tier alone, leaving every business it touched with a label from
+    // whatever plan they were on before.
+    if (data.subscriptionTier) {
+      updateData.subscriptionTier = normalizeTier(data.subscriptionTier);
+      updateData.planName         = planDisplayName(data.subscriptionTier);
+    }
     if (data.trialDays)          updateData.trialEndsAt        = new Date(Date.now() + data.trialDays * 86400000);
     if (data.subscriptionStatus === 'CANCELLED') updateData.cancelledAt = new Date();
 

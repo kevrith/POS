@@ -3,13 +3,16 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { createHmac, randomBytes } from 'node:crypto';
+import { normalizeTier, planDisplayName } from '@pos/shared';
 
+// Labels come from @pos/shared so the API, the web app and the admin console all
+// spell a tier the same way. Only price and the Paystack plan code live here.
 export const PLANS = {
-  FREE:       { name: 'Free',       amountKES: 0,     paystackPlanCode: '' },
-  STARTER:    { name: 'Starter',    amountKES: 999,   paystackPlanCode: process.env.PAYSTACK_STARTER_PLAN    ?? '' },
-  GROWTH:     { name: 'Growth',     amountKES: 2499,  paystackPlanCode: process.env.PAYSTACK_GROWTH_PLAN     ?? '' },
-  PRO:        { name: 'Pro',        amountKES: 4999,  paystackPlanCode: process.env.PAYSTACK_PRO_PLAN        ?? '' },
-  ENTERPRISE: { name: 'Enterprise', amountKES: 14999, paystackPlanCode: process.env.PAYSTACK_ENTERPRISE_PLAN ?? '' },
+  FREE:       { name: planDisplayName('FREE'),       amountKES: 0,     paystackPlanCode: '' },
+  STARTER:    { name: planDisplayName('STARTER'),    amountKES: 999,   paystackPlanCode: process.env.PAYSTACK_STARTER_PLAN    ?? '' },
+  GROWTH:     { name: planDisplayName('GROWTH'),     amountKES: 2499,  paystackPlanCode: process.env.PAYSTACK_GROWTH_PLAN     ?? '' },
+  PRO:        { name: planDisplayName('PRO'),        amountKES: 4999,  paystackPlanCode: process.env.PAYSTACK_PRO_PLAN        ?? '' },
+  ENTERPRISE: { name: planDisplayName('ENTERPRISE'), amountKES: 14999, paystackPlanCode: process.env.PAYSTACK_ENTERPRISE_PLAN ?? '' },
 };
 
 @Injectable()
@@ -126,8 +129,8 @@ export class SubscriptionService {
       where: { id: businessId },
       data: {
         subscriptionStatus: 'ACTIVE',
-        subscriptionTier: tier,
-        planName: PLANS[tier]?.name ?? tier,
+        subscriptionTier: normalizeTier(tier),
+        planName: planDisplayName(tier),
         trialEndsAt: null,
         ...(subscriptionCode ? { paystackSubscriptionId: subscriptionCode } : {}),
       },

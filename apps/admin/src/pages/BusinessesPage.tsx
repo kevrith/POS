@@ -439,13 +439,11 @@ export default function BusinessesPage() {
   const saveEdit = async () => {
     if (!editingId) return;
     try {
+      // planName is derived from the tier by the API. Sending it from here was
+      // how the two drifted: every caller that forgot left the label behind.
       const payload: any = {
         subscriptionStatus: editForm.subscriptionStatus,
         subscriptionTier: editForm.subscriptionTier,
-        // Send planName alongside the tier. The web app ranks features off planName
-        // from the JWT, so changing only the tier left the two disagreeing and the
-        // customer on their old feature set.
-        planName: editForm.subscriptionTier,
       };
       if (editForm.trialDays) {
         const d = new Date();
@@ -473,14 +471,13 @@ export default function BusinessesPage() {
     await adminApi.updateSubscription(giftTarget.id, {
       subscriptionStatus: 'ACTIVE',
       subscriptionTier: tier,
-      planName: tier,
       trialEndsAt: null,
       isComped: true,
       compedReason: reason,
     });
     setGiftTarget(null);
     setEditingId(null);
-    setBanner(`${giftTarget.name} is on ${tier} free of charge. They must sign out and back in for it to take effect.`);
+    setBanner(`${giftTarget.name} is on ${tier} free of charge. It takes effect the next time they load the app.`);
     load();
   };
 

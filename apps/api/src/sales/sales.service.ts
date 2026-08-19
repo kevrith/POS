@@ -11,7 +11,7 @@ import { EventsGateway } from '../events/events.gateway';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { SubscriptionLimitsService } from '../subscription/subscription-limits.service';
 import { LedgerService } from '../ledger/ledger.service';
-import { SaleType, SaleStatus, InventoryMovementType, calculateVAT, calculateTOT, calculateServiceCharge } from '@pos/shared';
+import { SaleType, SaleStatus, InventoryMovementType, calculateVAT, calculateTOT, calculateServiceCharge, normalizeTier, SubscriptionTier } from '@pos/shared';
 import { v4 as uuidv4 } from 'uuid';
 
 interface FindAllOptions {
@@ -101,7 +101,12 @@ export class SalesService {
     // FREE tier: count transactions this calendar month
     let monthlyTxCount: number | null = null;
     const FREE_TX_LIMIT = 200;
-    if (store.business.subscriptionTier === 'FREE' || store.business.planName === 'Free') {
+    // Gate on the tier ALONE. This used to also fire when planName was 'Free',
+    // and planName is a display label that drifts from the tier — an account
+    // gifted ENTERPRISE keeps the label it had. The OR meant a paying Enterprise
+    // business got the free-tier transaction counter and the upgrade prompt that
+    // comes with it, at 200 sales a month.
+    if (normalizeTier(store.business.subscriptionTier) === SubscriptionTier.FREE) {
       const now = new Date();
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
       const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 1);

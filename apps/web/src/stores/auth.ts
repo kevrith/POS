@@ -16,6 +16,8 @@ export interface AuthUser {
   assignedStoreIds?: string[]; // populated for MANAGER: stores they are scoped to
   planName?: string;           // display label — may lag behind subscriptionTier
   subscriptionTier?: string;   // FREE | STARTER | GROWTH | PRO | ENTERPRISE — gate on this
+  subscriptionStatus?: string; // TRIAL | ACTIVE | EXPIRED | CANCELLED
+  trialEndsAt?: string | null; // needed with the two above to resolve the effective tier
 }
 
 interface AuthState {
@@ -141,6 +143,8 @@ export const useAuthStore = create<AuthState>()(
                 ...s.user,
                 ...(fresh.planName !== undefined && { planName: fresh.planName }),
                 ...(fresh.subscriptionTier !== undefined && { subscriptionTier: fresh.subscriptionTier }),
+                ...(fresh.subscriptionStatus !== undefined && { subscriptionStatus: fresh.subscriptionStatus }),
+                ...(fresh.trialEndsAt !== undefined && { trialEndsAt: fresh.trialEndsAt }),
                 ...(fresh.role !== undefined && { role: fresh.role }),
               },
             };

@@ -33,10 +33,15 @@ model Business {
   // report revenue that does not exist.
   isComped                      Boolean               @default(false)
   compedReason                  String?
-  subscriptionTier              String                @default("TRIAL")
+  // "TRIAL" is a STATUS, not a tier — it was the default here and resolved to
+  // FREE everywhere, so every new signup was silently treated as free. Access
+  // during a trial comes from subscriptionStatus + trialEndsAt via
+  // effectiveTier(), so the tier can default to what they have actually paid for.
+  subscriptionTier              String                @default("FREE")
   subscriptionStatus            String                @default("TRIAL")
   trialEndsAt                   DateTime?
-  planName                      String                @default("STARTER")
+  // Display label only. Derived from subscriptionTier on write — never gate on it.
+  planName                      String                @default("Free")
   paystackCustomerId            String?
   paystackSubscriptionId        String?
   paystackPublicKey             String?

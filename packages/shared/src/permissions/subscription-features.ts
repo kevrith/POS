@@ -445,3 +445,53 @@ export function planDisplayName(tier: SubscriptionTier | string | undefined | nu
  * bug in plan gating so far has come from a verbatim `=== 'FREE'` somewhere.
  */
 export const normalizeTier = tierKey;
+
+// ─── Effective tier ──────────────────────────────────────────────────────────
+
+/**
+ * What an active trial is allowed to use.
+ *
+ * A trial exists so the customer can evaluate the product, so it grants the top
+ * tier for its duration and drops to FREE the moment it lapses.
+ */
+export const TRIAL_TIER = SubscriptionTier.ENTERPRISE;
+
+export interface PlanState {
+  subscriptionTier?: string | null;
+  subscriptionStatus?: string | null;
+  trialEndsAt?: Date | string | null;
+}
+
+/**
+ * True only for a trial that is genuinely still running.
+ *
+ * A TRIAL status with no end date is deliberately NOT active. Treating it as one
+ * would hand out permanent free access to the whole product to any row created
+ * without a trialEndsAt — this fails closed instead.
+ */
+export function isActiveTrial(state: PlanState, now: Date = new Date()): boolean {
+  if (state.subscriptionStatus !== 'TRIAL') return false;
+  if (!state.trialEndsAt) return false;
+  const ends = state.trialEndsAt instanceof Date ? state.trialEndsAt : new Date(state.trialEndsAt);
+  if (Number.isNaN(ends.getTime())) return false;
+  return now <= ends;
+}
+
+/**
+ * The tier a business should actually be treated as, right now.
+ *
+ * This is THE answer to "what can they use", and both the API's SubscriptionGuard
+ * and the web app's useFeatureAccess call it. They used to decide separately and
+ * disagreed: the web granted a trial everything while the API granted only what
+ * the stored tier allowed, and the stored tier defaulted to the string "TRIAL",
+ * which is not a tier at all and normalised to FREE. A trial customer therefore
+ * saw a sidebar full of features and tiles telling them to upgrade.
+ */
+export function effectiveTier(state: PlanState, now: Date = new Date()): SubscriptionTier {
+  if (isActiveTrial(state, now)) return TRIAL_TIER;
+  // An expired or cancelled subscription keeps no paid access.
+  if (state.subscriptionStatus === 'TRIAL' || state.subscriptionStatus === 'EXPIRED') {
+    return SubscriptionTier.FREE;
+  }
+  return tierKey(state.subscriptionTier);
+}

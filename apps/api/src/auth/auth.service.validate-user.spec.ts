@@ -81,7 +81,14 @@ describe('AuthService.validateUser — plan fields', () => {
     // the bug — the fields would just come back undefined.
     expect(prisma.user.findUnique).toHaveBeenCalledWith(
       expect.objectContaining({
-        include: { business: { select: { planName: true, subscriptionTier: true } } },
+        include: {
+          business: {
+            select: {
+              planName: true, subscriptionTier: true,
+              subscriptionStatus: true, trialEndsAt: true,
+            },
+          },
+        },
       }),
     );
   });

@@ -1,7 +1,7 @@
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException, SetMetadata } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../prisma/prisma.service';
-import { Feature, hasFeatureAccess, getFeatureLimit, SubscriptionTier } from '@pos/shared';
+import { Feature, hasFeatureAccess, getFeatureLimit, SubscriptionTier, effectiveTier, isActiveTrial } from '@pos/shared';
 
 export const REQUIRES_FEATURE = 'requires_feature';
 export const SKIP_SUBSCRIPTION_CHECK = 'skip_subscription_check';
@@ -84,21 +84,26 @@ export class SubscriptionGuard implements CanActivate {
     }
 
     /**
-     * A finished trial has to actually end.
+     * One shared decision, used by the web app's useFeatureAccess too.
      *
-     * Nothing flips subscriptionStatus away from TRIAL — there is no scheduled job
-     * — and this guard only ever read the tier, so a trial provisioned on ENTERPRISE
-     * kept every paid feature indefinitely. Expiry is evaluated on each request
-     * instead: past trialEndsAt with no payment, the business is treated as FREE.
+     * This was worked out here and again on the client, and the two disagreed:
+     * the client granted a trial everything, while this granted only what the
+     * stored tier allowed — and that tier defaulted to the string "TRIAL", which
+     * is a status, not a tier, and resolved to FREE. Trial customers therefore
+     * got a full sidebar beside tiles telling them to upgrade.
+     *
+     * It also closes a revenue leak. This used to treat a lapsed trial as expired
+     * only while its status still read TRIAL, so TrialExpiryService flipping the
+     * status to EXPIRED defeated the very check meant to catch it, and the
+     * business kept its provisioned tier for good without ever paying.
+     * effectiveTier grants the top tier while trialEndsAt is in the future and
+     * FREE for any trial or expired subscription after it.
      */
+    const tier = effectiveTier(business);
     const trialExpired =
-      business.subscriptionStatus === 'TRIAL' &&
-      !!business.trialEndsAt &&
-      new Date() > business.trialEndsAt;
-
-    const tier = (
-      trialExpired ? 'FREE' : business.subscriptionTier ?? 'FREE'
-    ) as SubscriptionTier;
+      !isActiveTrial(business) &&
+      (business.subscriptionStatus === 'TRIAL' || business.subscriptionStatus === 'EXPIRED') &&
+      !!business.trialEndsAt;
 
     // Check if tier has access to the feature
     if (!hasFeatureAccess(tier, requiredFeature)) {

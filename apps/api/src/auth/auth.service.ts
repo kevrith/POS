@@ -20,6 +20,10 @@ export interface JwtPayload {
   planName?: string;
   /** The field the API gates on. planName is a display label and drifts from it. */
   subscriptionTier?: string;
+  /** Status + trial end travel with the tier: access during a trial depends on
+   *  all three, and the client must reach the same verdict as SubscriptionGuard. */
+  subscriptionStatus?: string;
+  trialEndsAt?: Date | string | null;
 }
 
 export interface AuthUser {
@@ -33,6 +37,10 @@ export interface AuthUser {
   planName?: string;
   /** The field the API gates on. planName is a display label and drifts from it. */
   subscriptionTier?: string;
+  /** Status + trial end travel with the tier: access during a trial depends on
+   *  all three, and the client must reach the same verdict as SubscriptionGuard. */
+  subscriptionStatus?: string;
+  trialEndsAt?: Date | string | null;
 }
 
 @Injectable()
@@ -179,6 +187,8 @@ export class AuthService {
       // admin console could change independently of the tier — so a business moved
       // to ENTERPRISE kept its old planName and stayed locked out of what it paid for.
       subscriptionTier: user.business.subscriptionTier,
+      subscriptionStatus: user.business.subscriptionStatus,
+      trialEndsAt: user.business.trialEndsAt,
       ...(assignedStoreIds && { assignedStoreIds }),
     };
 
@@ -204,6 +214,8 @@ export class AuthService {
         businessId: user.businessId,
         planName: user.business.planName,
         subscriptionTier: user.business.subscriptionTier,
+        subscriptionStatus: user.business.subscriptionStatus,
+        trialEndsAt: user.business.trialEndsAt,
         ...(assignedStoreIds && { assignedStoreIds }),
       },
     };
@@ -257,7 +269,10 @@ export class AuthService {
 
     const biz = await this.prisma.business.findUnique({
       where: { id: matchedUser.businessId },
-      select: { planName: true, subscriptionTier: true },
+      select: {
+        planName: true, subscriptionTier: true,
+        subscriptionStatus: true, trialEndsAt: true,
+      },
     });
     const pinPlanName = biz?.planName ?? 'STARTER';
     const pinTier = biz?.subscriptionTier ?? 'FREE';
@@ -269,6 +284,8 @@ export class AuthService {
       storeId,
       planName: pinPlanName,
       subscriptionTier: pinTier,
+      subscriptionStatus: biz?.subscriptionStatus,
+      trialEndsAt: biz?.trialEndsAt ?? null,
     };
 
     const accessToken = this.jwt.sign(payload, { expiresIn: '12h' });
@@ -284,6 +301,8 @@ export class AuthService {
         storeId,
         planName: pinPlanName,
         subscriptionTier: pinTier,
+        subscriptionStatus: biz?.subscriptionStatus,
+        trialEndsAt: biz?.trialEndsAt ?? null,
       },
     };
   }
@@ -546,7 +565,14 @@ export class AuthService {
   async validateUser(payload: JwtPayload): Promise<AuthUser | null> {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      include: { business: { select: { planName: true, subscriptionTier: true } } },
+      include: {
+        business: {
+          select: {
+            planName: true, subscriptionTier: true,
+            subscriptionStatus: true, trialEndsAt: true,
+          },
+        },
+      },
     });
     if (!user) return null;
     return {
@@ -569,6 +595,8 @@ export class AuthService {
       // next request instead of waiting for every user's token to expire.
       planName: user.business?.planName ?? payload.planName,
       subscriptionTier: user.business?.subscriptionTier ?? payload.subscriptionTier,
+      subscriptionStatus: user.business?.subscriptionStatus ?? payload.subscriptionStatus,
+      trialEndsAt: user.business?.trialEndsAt ?? payload.trialEndsAt ?? null,
     };
   }
 

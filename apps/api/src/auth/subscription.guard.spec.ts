@@ -104,9 +104,43 @@ describe('SubscriptionGuard', () => {
       await expect(guard.canActivate(ctx())).resolves.toBe(true);
     });
 
-    it('treats a trial with no end date as still running', async () => {
+    it('denies a trial with no end date instead of granting it forever', async () => {
+      // Reversed deliberately. This used to pass, which meant a TRIAL row with no
+      // trialEndsAt kept the whole product permanently — a trial that could never
+      // expire because there was no date to compare against. effectiveTier now
+      // fails closed: no end date, no trial. Registration always sets one, and no
+      // production row was in this state when the behaviour changed.
       const guard = makeGuard(
         { subscriptionTier: 'ENTERPRISE', subscriptionStatus: 'TRIAL', trialEndsAt: null },
+        { [REQUIRES_FEATURE]: GATED },
+      );
+      await expect(guard.canActivate(ctx())).rejects.toThrow(ForbiddenException);
+    });
+
+    it('denies a lapsed trial even once its status has been flipped to EXPIRED', async () => {
+      // TrialExpiryService moves a finished trial from TRIAL to EXPIRED, which used
+      // to defeat the expiry check here — it only looked for status TRIAL — so the
+      // business silently kept its provisioned tier without ever paying.
+      const guard = makeGuard(
+        {
+          subscriptionTier: 'ENTERPRISE',
+          subscriptionStatus: 'EXPIRED',
+          trialEndsAt: new Date(Date.now() - 30 * DAY),
+        },
+        { [REQUIRES_FEATURE]: GATED },
+      );
+      await expect(guard.canActivate(ctx())).rejects.toThrow(ForbiddenException);
+    });
+
+    it('grants the top tier while a trial is genuinely running', async () => {
+      // A trial exists to evaluate the product, so the stored tier is irrelevant
+      // until it ends.
+      const guard = makeGuard(
+        {
+          subscriptionTier: 'FREE',
+          subscriptionStatus: 'TRIAL',
+          trialEndsAt: new Date(Date.now() + 7 * DAY),
+        },
         { [REQUIRES_FEATURE]: GATED },
       );
       await expect(guard.canActivate(ctx())).resolves.toBe(true);

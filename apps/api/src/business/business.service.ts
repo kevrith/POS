@@ -106,12 +106,50 @@ export class BusinessService {
     };
   }
 
+  /**
+   * Fields a client is allowed to change through the settings endpoint.
+   *
+   * Mirrors UpdateBusinessDto. Deliberately excludes anything the customer must
+   * not set for themselves — id, subscriptionTier, planName, isComped, the
+   * encrypted credential columns — so a stray or hostile key cannot reach the
+   * update.
+   */
+  private static readonly SETTINGS_FIELDS = [
+    'name', 'taxType', 'totRate', 'serviceChargeRate', 'serviceChargeDefault',
+    'negativePolicyDefault', 'posMode', 'expiredItemPolicy',
+    'expenseApprovalThresholdCents', 'expiryAlertDays',
+    'exchangeRates', 'displayCurrencies', 'paystackPublicKey',
+    'bankName', 'bankAccountNumber', 'bankAccountName', 'bankBranch',
+    'idleMessage', 'idleLogoUrl', 'tablePrefix',
+    'receiptHeader', 'receiptFooter',
+    'receiptFormatSale', 'receiptFormatInvoice', 'receiptFormatDelivery', 'receiptFormatEmail',
+    'enableCashDrawer', 'enableBarcodeScanner', 'enablePoleDisplay',
+  ] as const;
+
   async updateSettings(businessId: string, dto: UpdateBusinessDto) {
     const business = await this.prisma.business.findUnique({
       where: { id: businessId },
     });
     if (!business) throw new NotFoundException('Business not found');
-    return this.prisma.business.update({ where: { id: businessId }, data: dto });
+
+    // Pick only known columns rather than spreading the request body.
+    //
+    // The body used to go to Prisma verbatim, and the controller's type declares
+    // an index signature, so any extra key travelled with it. The setup wizard
+    // reads settings, keeps the response in form state and posts it back, which
+    // included `businessId` — not a column on Business — and Prisma rejected the
+    // whole update with an "Unknown argument" wall of text in the user's face.
+    // There is no ValidationPipe on this API, so nothing upstream strips it.
+    const data: Record<string, unknown> = {};
+    for (const key of BusinessService.SETTINGS_FIELDS) {
+      if (dto[key as keyof UpdateBusinessDto] !== undefined) {
+        data[key] = dto[key as keyof UpdateBusinessDto];
+      }
+    }
+
+    if (Object.keys(data).length === 0) return business;
+
+    return this.prisma.business.update({ where: { id: businessId }, data });
   }
 
   async getStores(businessId: string) {

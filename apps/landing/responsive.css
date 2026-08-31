@@ -1,0 +1,153 @@
+/* ===========================================================================
+   KASTRA landing — shared responsive layer
+   ---------------------------------------------------------------------------
+   Loaded by every page AFTER its own <style> block, so these rules win without
+   needing !important on everything.
+
+   index.html was already tuned down to 400px. The other pages were not: they
+   carried one or two breakpoints, hid the nav below 768px with no hamburger to
+   replace it, and never collapsed the footer to a single column. On a phone the
+   secondary pages therefore had no navigation at all.
+
+   Everything here is additive. No page's desktop layout changes.
+   =========================================================================== */
+
+/* ── Never scroll sideways ─────────────────────────────────────────────────
+   One over-wide child (a long URL, a wide table, a fixed-width card) drags the
+   whole document sideways and every section then looks misaligned. Contain it
+   at the root instead of hunting each offender. */
+html { overflow-x: hidden; }
+body { overflow-x: hidden; max-width: 100vw; }
+
+/* Media and embeds must never exceed their column. */
+img, svg, video, canvas, iframe { max-width: 100%; height: auto; }
+
+/* Long unbroken strings — emails, URLs, KRA PINs — are a classic overflow
+   source on narrow screens. */
+p, li, td, th, h1, h2, h3, h4, dd, dt, blockquote, figcaption, label, span, div,
+a[href^="mailto:"], a[href^="http"], code {
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+}
+
+/* Wide tables scroll inside themselves rather than stretching the page. */
+table { max-width: 100%; }
+
+/* ── Shared mobile navigation ──────────────────────────────────────────────
+   Ported from index.html so all pages behave identically. Pages that already
+   define these rules simply get the same values again. */
+.nav-hamburger {
+  display: none; flex-direction: column; justify-content: center; gap: 5px;
+  width: 36px; height: 36px; background: rgba(255,255,255,.06);
+  border: 1px solid var(--border2); border-radius: 8px; cursor: pointer;
+  padding: 8px; flex-shrink: 0;
+}
+.nav-hamburger span { display: block; height: 2px; background: var(--text2); border-radius: 2px; transition: all .25s; }
+.nav-hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.nav-hamburger.open span:nth-child(2) { opacity: 0; }
+.nav-hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+.mobile-menu {
+  display: none; position: fixed; top: 68px; left: 0; right: 0; z-index: 999;
+  background: rgba(3,7,18,.97); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border); padding: 20px 24px 28px;
+  flex-direction: column; gap: 4px;
+  max-height: calc(100vh - 68px); overflow-y: auto;   /* long menus on short screens */
+}
+.mobile-menu.open { display: flex; }
+.mobile-menu a {
+  font-size: 1rem; font-weight: 500; color: var(--text2); padding: 12px 0;
+  border-bottom: 1px solid var(--border); transition: color .15s; text-decoration: none;
+}
+.mobile-menu a:last-of-type { border-bottom: none; }
+.mobile-menu a:hover { color: var(--text); }
+.mobile-menu-actions { display: flex; gap: 10px; margin-top: 16px; }
+.mobile-menu-actions .btn { flex: 1; justify-content: center; }
+
+/* The hamburger has to appear well before 768px.
+   The bar carries a logo, seven links, a status pill and two CTAs. At 820px
+   that no longer fits: the logo wrapped onto two lines, the pill was clipped by
+   the viewport edge and both CTAs were pushed off-screen entirely — while the
+   hamburger was still hidden, because it only appeared at 768px. Switching to
+   the mobile menu at 1024px is where the desktop bar actually runs out of room. */
+@media (max-width: 1024px) {
+  .nav-hamburger { display: flex; }
+  .nav-links,
+  .nav-pill { display: none; }
+  .nav-logo-text { white-space: nowrap; }
+  .nav-inner { gap: 12px; }
+}
+
+@media (max-width: 768px) {
+  /* Below this the primary CTA alone is all the bar can carry. Log in stays one
+     tap away inside the menu. */
+  .nav-inner .btn-ghost { display: none; }
+  .nav-inner { gap: 10px; }
+}
+
+/* ── Tablet / small laptop ─────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .footer-top { grid-template-columns: 1fr 1fr; gap: 32px; }
+  .guide-layout { grid-template-columns: 1fr; gap: 32px; }
+}
+
+/* ── Phones ────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Any remaining multi-column grid collapses. Named explicitly rather than
+     with a universal selector so page-specific layouts keep their intent. */
+  .grid-2, .grid-3, .grid-4,
+  .about-stats, .channels-grid, .rights-grid, .industry-grid, .form-section {
+    grid-template-columns: 1fr;
+  }
+  .hide-mobile { display: none !important; }
+
+  section { padding: 64px 0; }
+  .section-header { margin-bottom: 36px; }
+
+  /* Stacked buttons read better than two cramped ones side by side. */
+  .hero-cta { flex-direction: column; align-items: stretch; }
+  .hero-cta .btn { width: 100%; justify-content: center; }
+}
+
+/* ── Small phones (iPhone SE, Galaxy A-series ~360-414px) ─────────────── */
+@media (max-width: 480px) {
+  .container, .container-sm { padding-left: 16px; padding-right: 16px; }
+  section { padding: 48px 0; }
+
+  /* Headings sized for a desktop hero overflow a 375px screen. */
+  h1 { font-size: clamp(1.75rem, 8vw, 2.25rem); line-height: 1.2; }
+  h2 { font-size: clamp(1.375rem, 6vw, 1.75rem); line-height: 1.25; }
+  h3 { font-size: 1.125rem; }
+
+  .footer-top { grid-template-columns: 1fr; gap: 28px; }
+  .footer-bottom { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .footer-badges { flex-wrap: wrap; }
+
+  .btn { width: 100%; justify-content: center; }
+  .btn-sm, .nav-inner .btn { width: auto; }   /* keep the nav CTA inline */
+
+  .mobile-menu { padding: 16px 16px 24px; }
+}
+
+/* ── Very small / older devices (~320px) ──────────────────────────────── */
+@media (max-width: 360px) {
+  .container, .container-sm { padding-left: 12px; padding-right: 12px; }
+  .nav-logo-text { font-size: .95rem; }
+  h1 { font-size: 1.5rem; }
+}
+
+/* ── Landscape phones ─────────────────────────────────────────────────────
+   A fixed menu that is taller than the viewport traps its own last item. */
+@media (max-height: 480px) and (orientation: landscape) {
+  .mobile-menu { max-height: calc(100vh - 60px); overflow-y: auto; }
+}
+
+/* ── Respect reduced motion ───────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

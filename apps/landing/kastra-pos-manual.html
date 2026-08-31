@@ -235,12 +235,45 @@ blockquote p:last-child{margin-bottom:0}
 .table-wrap{overflow-x:auto;margin:20px 0}
 @media (max-width:900px){
   .manual-wrapper{flex-direction:column}
-  .sidebar{width:100%;min-width:0;height:auto;position:static;border-right:none;
-    border-bottom:1px solid var(--border2)}
+  /* The sidebar stacks above the content here, and this manual has 40+ entries.
+     Left to its natural height the reader scrolls through the whole table of
+     contents before reaching a single word, so cap it and let it scroll itself. */
+  .sidebar{
+    width:100%;min-width:0;position:static;border-right:none;
+    border-bottom:1px solid var(--border2);
+    max-height:38vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    padding:16px 0;
+  }
+  .sidebar-logo{padding:0 16px 12px}
+  #TOC > ul > li > a{padding-top:10px}
   .content{padding:32px 20px}
   .doc-header{margin:-32px -20px 32px;padding:40px 20px 28px}
   .doc-header h1{font-size:32px}
 }
+
+/* ── Phones ──────────────────────────────────────────────────────────────── */
+@media (max-width:560px){
+  html{font-size:15px}
+  .sidebar{max-height:32vh}
+  .content{padding:24px 16px}
+  .doc-header{margin:-24px -16px 28px;padding:32px 16px 24px}
+  .doc-header h1{font-size:26px;line-height:1.2}
+  .doc-header .sub{font-size:16px}
+  h2{font-size:21px;margin:32px 0 12px;padding-top:24px}
+  h3{font-size:17px}
+  /* Tables are the usual culprit for sideways scroll on a phone. .table-wrap
+     already scrolls; make sure the cells stay legible rather than shrinking. */
+  table{font-size:13px}
+  th,td{padding:8px 10px}
+  pre{padding:14px 16px}
+  pre code{font-size:12px}
+  blockquote{padding:12px 14px}
+}
+
+/* Nothing may drag the page sideways. */
+html,body{overflow-x:hidden;max-width:100vw}
+img,svg,video,iframe{max-width:100%;height:auto}
+p,li,td,th,h1,h2,h3,h4,code{overflow-wrap:break-word;word-wrap:break-word}
 </style>
 </head>
 <body>
@@ -377,7 +410,7 @@ blockquote p:last-child{margin-bottom:0}
       <span class="badge">User Guide</span>
       <h1>KASTRA POS</h1>
       <div class="sub">For owners, managers and shop-floor staff</div>
-      <div class="meta">Last updated 18 August 2026</div>
+      <div class="meta">Last updated 31 August 2026</div>
     </div>
 
 <h1 id="kastra-pos-user-guide">KASTRA POS — User Guide</h1>

@@ -393,7 +393,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex bg-slate-50 dark:bg-gray-950">
 
       {/* ── Left branding panel (lg+) ─────────────────────────────────── */}
-      <div className="hidden lg:flex lg:w-[440px] xl:w-[500px] flex-col relative overflow-hidden flex-shrink-0 bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-700">
+      <div className="hidden lg:flex lg:w-[440px] xl:w-[500px] flex-col relative overflow-hidden flex-shrink-0 bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900">
         {/* Decorative circles */}
         <div className="absolute -top-28 -right-28 w-80 h-80 rounded-full bg-white/[0.06]" />
         <div className="absolute top-1/2 -left-20 w-56 h-56 rounded-full bg-white/[0.04]" />
@@ -474,7 +474,7 @@ export default function LoginPage() {
 
           {/* Mobile logo (hidden when left panel is visible) */}
           <div className="lg:hidden text-center mb-8">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-blue-500/25">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-blue-500/25">
               <img src="/logo.png" alt="" className="w-8 h-8 object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
             </div>
             <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white tracking-tight">KASTRA POS</h1>
@@ -1063,7 +1063,7 @@ export default function LoginPage() {
 
           <p className="text-center text-xs text-gray-400 mt-6">
             Want to earn by referring businesses?{' '}
-            <a href="/affiliate" className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline">Join our affiliate program →</a>
+            <a href="/affiliate" className="text-blue-600 dark:text-blue-400 font-medium hover:underline">Join our affiliate program →</a>
           </p>
 
         </div>

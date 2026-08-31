@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Patch, Delete, Body, Param, Query, UseGuards, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Body, Param, Query, UseGuards, UploadedFile, UseInterceptors, Logger } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { MpesaService } from './mpesa.service';
 import { ReconciliationService } from './reconciliation.service';
@@ -9,6 +9,8 @@ import { Throttle } from '@nestjs/throttler';
 
 @Controller('payments')
 export class PaymentsController {
+  private readonly logger = new Logger(PaymentsController.name);
+
   constructor(
     private mpesa: MpesaService,
     private reconciliation: ReconciliationService,
@@ -105,15 +107,32 @@ export class PaymentsController {
     };
   }
 
-  /** Get Paystack public key for Inline popup (POS card payments) */
+  /** Get Paystack public key + the email to bill, for the Inline popup. */
   @Get('paystack/config')
   @UseGuards(JwtAuthGuard)
-  async paystackConfig(@Query('businessId') businessId: string) {
-    const biz = await this.prisma.business.findUnique({
-      where: { id: businessId },
-      select: { paystackPublicKey: true },
-    });
-    return { publicKey: biz?.paystackPublicKey ?? null };
+  async paystackConfig(
+    @Query('businessId') businessId: string,
+    @Query('customerId') customerId?: string,
+  ) {
+    const [biz, customer] = await Promise.all([
+      this.prisma.business.findUnique({
+        where: { id: businessId },
+        select: { paystackPublicKey: true, shortCode: true },
+      }),
+      customerId
+        ? this.prisma.customer.findUnique({ where: { id: customerId }, select: { email: true } })
+        : null,
+    ]);
+
+    // Paystack uses this address for the receipt and for any dispute
+    // correspondence. Every transaction used to be sent as customer@pos.local —
+    // one fake address on an invalid TLD, so receipts bounced and every card
+    // sale in the dashboard was attributed to the same non-existent customer.
+    const payerEmail =
+      customer?.email?.trim() ||
+      `pos-${(biz?.shortCode ?? businessId).toLowerCase()}@kastrapos.co.ke`;
+
+    return { publicKey: biz?.paystackPublicKey ?? null, payerEmail };
   }
 
   /** Verify a Paystack Inline transaction reference */
@@ -125,31 +144,79 @@ export class PaymentsController {
       select: { paystackPublicKey: true },
     });
 
-    // If no Paystack secret configured, accept with mock success
+    // Verification fails CLOSED.
+    //
+    // This used to answer `verified: true` in two situations where nothing had
+    // actually been checked: when no secret key was configured at all, and in the
+    // catch block, so any timeout or malformed response from Paystack marked the
+    // sale paid. The success callback it trusts comes from a popup running in the
+    // browser, which anyone can invoke from devtools — this endpoint is the only
+    // real control over whether money arrived, and it was waving everything
+    // through. Production currently runs with PAYSTACK_SECRET_KEY unset, so the
+    // first branch was live: every card sale was approved without a single call
+    // to Paystack.
+    //
+    // There is no mock-success path any more. Paystack issue free test keys; use
+    // those to exercise the flow rather than a branch that says "paid" on trust.
     const secretKey = process.env.PAYSTACK_SECRET_KEY;
-    if (!secretKey && !biz?.paystackPublicKey) {
-      return { verified: true, reference: body.reference, status: 'success' };
+    if (!secretKey) {
+      this.logger.error(
+        `Paystack verify attempted with no PAYSTACK_SECRET_KEY (ref ${body.reference}). ` +
+        'Card payment cannot be confirmed — refusing.',
+      );
+      return {
+        verified: false,
+        reference: body.reference,
+        status: 'unconfigured',
+        reason: 'Card verification is not configured. Set PAYSTACK_SECRET_KEY.',
+      };
     }
 
-    // Call Paystack verify API
     try {
       const res = await fetch(
         `https://api.paystack.co/transaction/verify/${encodeURIComponent(body.reference)}`,
         {
           headers: {
-            Authorization: `Bearer ${secretKey ?? ''}`,
+            Authorization: `Bearer ${secretKey}`,
             'Content-Type': 'application/json',
           },
+          signal: AbortSignal.timeout(15000),
         },
       );
-      const data = await res.json() as { status: boolean; data: { status: string } };
+
+      if (!res.ok) {
+        this.logger.warn(`Paystack verify HTTP ${res.status} for ref ${body.reference}`);
+        return {
+          verified: false, reference: body.reference, status: 'unverified',
+          reason: `Paystack returned ${res.status}.`,
+        };
+      }
+
+      const data = await res.json() as { status?: boolean; data?: { status?: string; amount?: number } };
+      const paid = data.status === true && data.data?.status === 'success';
+
+      if (!paid) {
+        this.logger.warn(
+          `Paystack verify not successful for ref ${body.reference}: ${data.data?.status ?? 'unknown'}`,
+        );
+      }
+
       return {
-        verified: data.status && data.data?.status === 'success',
+        verified: paid,
         reference: body.reference,
         status: data.data?.status ?? 'unknown',
+        amountCents: data.data?.amount ?? undefined,
       };
-    } catch {
-      return { verified: true, reference: body.reference, status: 'unverified' };
+    } catch (err) {
+      // Unreachable, timed out, or unparseable. We do not know that the money
+      // arrived, so we must not say that it did.
+      this.logger.error(
+        `Paystack verify failed for ref ${body.reference}: ${err instanceof Error ? err.message : err}`,
+      );
+      return {
+        verified: false, reference: body.reference, status: 'unverified',
+        reason: 'Could not reach Paystack to confirm this payment.',
+      };
     }
   }
 

@@ -481,9 +481,10 @@ export default function PaymentModal({
     setCardStatus('loading');
     setCardError('');
     try {
-      // Get Paystack public key for this business
-      const config = await api.get<{ publicKey: string | null }>(
-        `/payments/paystack/config?businessId=${businessId}`,
+      // Public key + the address Paystack should bill and send the receipt to.
+      const config = await api.get<{ publicKey: string | null; payerEmail: string }>(
+        `/payments/paystack/config?businessId=${businessId}` +
+        (customerId ? `&customerId=${encodeURIComponent(customerId)}` : ''),
       );
 
       if (!config.publicKey) {
@@ -507,21 +508,48 @@ export default function PaymentModal({
 
       window.PaystackPop.setup({
         key: config.publicKey ?? 'pk_test_placeholder',
-        email: 'customer@pos.local',
+        // Resolved server-side: the customer's own address when we have one,
+        // otherwise a per-business fallback. This was hardcoded to
+        // customer@pos.local, so receipts bounced and every card sale in the
+        // Paystack dashboard belonged to the same fictional person.
+        email: config.payerEmail,
         amount: totalCents,
         currency: 'KES',
         ref: reference,
         onSuccess: async (transaction: { reference: string }) => {
-          setCardStatus('success');
-          // Verify on backend
+          // This callback comes from Paystack's popup, which runs in the browser
+          // and can be invoked from devtools. It is a hint that payment MIGHT
+          // have happened, not proof. The server's verification decides.
+          //
+          // Previously the sale was marked successful before verifying, the
+          // verify error was swallowed, and the response was never read — so the
+          // sale completed no matter what the server said, and goods left the
+          // counter unpaid.
           try {
-            await api.post('/payments/paystack/verify', {
-              reference: transaction.reference,
-              businessId,
-            });
-          } catch {
-            // Verification failed but payment was successful per popup
+            const result = await api.post<{ verified: boolean; status: string; reason?: string }>(
+              '/payments/paystack/verify',
+              { reference: transaction.reference, businessId },
+            );
+
+            if (!result.verified) {
+              setCardStatus('error');
+              setCardError(
+                result.reason ??
+                `Payment could not be confirmed (${result.status}). Do not release goods — ` +
+                'check the Paystack dashboard before retrying.',
+              );
+              return;
+            }
+          } catch (err) {
+            setCardStatus('error');
+            setCardError(
+              'Could not confirm this payment with Paystack. Do not release goods until you have ' +
+              'checked the dashboard.',
+            );
+            return;
           }
+
+          setCardStatus('success');
           setTimeout(() => {
             onComplete([{ method: 'CARD', amountCents: totalCents, reference: transaction.reference }]);
           }, 800);

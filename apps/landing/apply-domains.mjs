@@ -27,6 +27,12 @@ const DIR = dirname(fileURLToPath(import.meta.url));
 const MAP = [
   { from: 'https://pos-web-sigma.vercel.app', env: 'KASTRA_WEB_ORIGIN' },
   { from: 'https://pos-bhe5.onrender.com',    env: 'KASTRA_API_ORIGIN' },
+  // Dev origins, listed so a stray one is rewritten instead of shipping.
+  // Six pages reached production with their Log in and Start Free buttons
+  // pointing at http://localhost:3001, which goes nowhere for a visitor.
+  { from: 'http://localhost:3001',            env: 'KASTRA_WEB_ORIGIN' },
+  { from: 'http://localhost:3005',            env: 'KASTRA_WEB_ORIGIN' },
+  { from: 'http://localhost:3010',            env: 'KASTRA_API_ORIGIN' },
 ];
 
 const subs = MAP

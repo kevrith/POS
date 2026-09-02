@@ -9,6 +9,8 @@ interface Affiliate {
   id: string; name: string; email: string; phone?: string | null; code: string;
   status: string; commissionPercent: number; payoutMethod?: string | null; payoutDetails?: string | null;
   balanceCents: number; totalEarnedCents: number;
+  /** Built server-side from FRONTEND_URL. Optional so an older API still renders. */
+  referralLink?: string;
 }
 interface Stats { signups: number; subscribed: number; paidOutCents: number; balanceCents: number; totalEarnedCents: number }
 interface Me extends Affiliate { stats: Stats }
@@ -145,7 +147,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 
   if (!me) return <div className="min-h-screen bg-gray-50 flex justify-center pt-20"><Loader2 className="w-8 h-8 animate-spin text-indigo-600" /></div>;
 
-  const link = `${window.location.origin}/?mode=register&aff=${me.code}`;
+  const link = me.referralLink ?? `${window.location.origin}/?mode=register&aff=${me.code}`;
   const copy = () => { void navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1800); };
   async function savePayout() {
     await affiliateFetch('/affiliate/me', { method: 'PATCH', body: JSON.stringify({ payoutMethod, payoutDetails }) }).catch(() => {});

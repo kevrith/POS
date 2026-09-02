@@ -63,6 +63,20 @@ export class AffiliateService {
     return { token: this.sign(affiliate), affiliate: this.publicShape(affiliate) };
   }
 
+  private static webBase(): string {
+    return (process.env.FRONTEND_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+  }
+
+  /**
+   * The referral link an affiliate shares publicly. Built server-side from
+   * FRONTEND_URL so it is always the canonical origin: the portal is reachable
+   * on fallback hosts too, and a link built from window.location.origin there
+   * would be copied into WhatsApp and social posts pinned to the wrong host.
+   */
+  static referralUrl(code: string): string {
+    return `${AffiliateService.webBase()}/?mode=register&aff=${code}`;
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private publicShape(a: any) {
     return {
@@ -70,6 +84,7 @@ export class AffiliateService {
       status: a.status, commissionPercent: a.commissionPercent,
       payoutMethod: a.payoutMethod, payoutDetails: a.payoutDetails,
       balanceCents: a.balanceCents, totalEarnedCents: a.totalEarnedCents,
+      referralLink: AffiliateService.referralUrl(a.code),
     };
   }
 
@@ -214,7 +229,7 @@ export class AffiliateService {
 
     // Email the affiliate the first time they're approved.
     if (status === 'ACTIVE' && before?.status !== 'ACTIVE') {
-      const link = `${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/?mode=register&aff=${updated.code}`;
+      const link = AffiliateService.referralUrl(updated.code);
       this.email
         .sendAffiliateApproved({ to: updated.email, name: updated.name, code: updated.code, link, commissionPercent: updated.commissionPercent })
         .catch(() => {});

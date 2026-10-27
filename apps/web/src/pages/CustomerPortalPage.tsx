@@ -5,6 +5,7 @@ import {
   ShoppingBag, CreditCard, FileText, LogOut, RefreshCw, ChevronDown,
   ChevronUp, Copy, Check, X, MapPin, Phone,
 } from 'lucide-react';
+import { useOtpTimers } from '../hooks/useOtpTimers';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -60,6 +61,9 @@ interface PortalStatement {
 
 // ── Portal fetch helper ───────────────────────────────────────────────────────
 
+/** Set by the page so an expired session can drop straight back to the login screen. */
+let onSessionLost: (() => void) | null = null;
+
 const portalFetch = async (path: string, opts?: RequestInit) => {
   const session = JSON.parse(localStorage.getItem('portal-session') ?? 'null') as PortalSession | null;
   const res = await fetch(`/api/v1${path}`, {
@@ -70,6 +74,13 @@ const portalFetch = async (path: string, opts?: RequestInit) => {
       ...(opts?.headers ?? {}),
     },
   });
+  // The stored session was only ever checked once at boot, so a session revoked
+  // or expired mid-visit left every panel showing a raw 401 body.
+  if (res.status === 401 && session?.token) {
+    localStorage.removeItem('portal-session');
+    onSessionLost?.();
+    throw new Error('Your session has expired. Please sign in again.');
+  }
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || `HTTP ${res.status}`);
@@ -115,17 +126,20 @@ function OtpLoginScreen({ onLogin }: { onLogin: (session: PortalSession) => void
   const [businessId, setBusinessId] = useState(bizFromUrl);
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
+  const timers = useOtpTimers();
 
   async function requestOtp() {
     if (!phone || !businessId) { toast.error('Enter your phone and business ID'); return; }
     setLoading(true);
     try {
-      await portalFetch('/portal/auth/request-otp', {
+      const r = await portalFetch('/portal/auth/request-otp', {
         method: 'POST',
         body: JSON.stringify({ phone, businessId }),
       });
       toast.success('A 6-digit code has been sent to your phone');
+      setOtp('');
       setPhase('otp');
+      timers.start(r.expiresInSeconds, r.resendInSeconds);
     } catch (err) {
       toast.error((err as Error).message);
     } finally {
@@ -134,6 +148,7 @@ function OtpLoginScreen({ onLogin }: { onLogin: (session: PortalSession) => void
   }
 
   async function verifyOtp() {
+    if (timers.expired) { toast.error('That code has expired. Ask for a new one.'); return; }
     if (!otp || otp.length < 4) { toast.error('Enter the OTP code'); return; }
     setLoading(true);
     try {
@@ -150,6 +165,7 @@ function OtpLoginScreen({ onLogin }: { onLogin: (session: PortalSession) => void
         expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
       };
       localStorage.setItem('portal-session', JSON.stringify(session));
+      timers.clear();
       onLogin(session);
     } catch (err) {
       toast.error((err as Error).message);
@@ -212,7 +228,12 @@ function OtpLoginScreen({ onLogin }: { onLogin: (session: PortalSession) => void
               <button onClick={() => setPhase('phone')} className="flex items-center gap-2 text-slate-400 hover:text-slate-200 text-sm mb-4 transition-colors">
                 <X className="w-4 h-4" /> Back
               </button>
-              <h2 className="text-white font-bold text-lg mb-1">Enter OTP</h2>
+              <div className="flex items-baseline justify-between mb-1">
+                <h2 className="text-white font-bold text-lg">Enter OTP</h2>
+                <span className={`text-xs font-semibold tabular-nums ${timers.expired ? 'text-red-400' : timers.secondsLeft <= 60 ? 'text-amber-400' : 'text-slate-400'}`}>
+                  {timers.expired ? 'Expired' : `Expires in ${timers.countdown}`}
+                </span>
+              </div>
               <p className="text-slate-400 text-sm mb-4">Code sent to {phone}</p>
               <div className="space-y-4">
                 <input
@@ -220,21 +241,23 @@ function OtpLoginScreen({ onLogin }: { onLogin: (session: PortalSession) => void
                   value={otp}
                   onChange={(e) => setOtp(e.target.value)}
                   placeholder="6-digit code"
-                  className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-indigo-500 text-lg tracking-widest text-center"
+                  disabled={timers.expired}
+                  className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-indigo-500 text-lg tracking-widest text-center disabled:opacity-50"
                   onKeyDown={(e) => e.key === 'Enter' && verifyOtp()}
                 />
                 <button
                   onClick={verifyOtp}
-                  disabled={loading || !otp}
+                  disabled={loading || !otp || timers.expired}
                   className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold rounded-xl transition-colors text-sm"
                 >
                   {loading ? 'Verifying…' : 'Verify & Sign In'}
                 </button>
                 <button
-                  onClick={() => { setOtp(''); requestOtp(); }}
-                  className="w-full py-2 text-slate-400 hover:text-slate-200 text-sm transition-colors"
+                  onClick={requestOtp}
+                  disabled={loading || timers.resendIn > 0}
+                  className="w-full py-2 text-slate-400 hover:text-slate-200 disabled:text-slate-600 disabled:hover:text-slate-600 text-sm transition-colors"
                 >
-                  Resend code
+                  {timers.resendIn > 0 ? `Resend code in ${timers.resendIn}s` : 'Resend code'}
                 </button>
               </div>
             </>
@@ -767,43 +790,12 @@ export default function CustomerPortalPage() {
   }, []);
 
   useEffect(() => {
+    onSessionLost = () => setSession(null);
+    return () => { onSessionLost = null; };
+  }, []);
+
+  useEffect(() => {
     async function init() {
-      const params = new URLSearchParams(window.location.search);
-      const urlToken = params.get('token');
-
-      if (urlToken) {
-        const tentative: PortalSession = {
-          token: urlToken,
-          customerId: '',
-          shopCode: '',
-          customerName: 'Shop',
-          phone: '',
-          expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
-        };
-        localStorage.setItem('portal-session', JSON.stringify(tentative));
-        try {
-          const data = await portalFetch('/portal/auth/verify-magic', {
-            method: 'POST',
-            body: JSON.stringify({ token: urlToken }),
-          });
-          const fullSession: PortalSession = {
-            token: urlToken,
-            customerId: data.customerId ?? '',
-            shopCode: data.shopCode ?? '',
-            customerName: data.customerName ?? 'Shop',
-            phone: data.phone ?? '',
-            expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
-          };
-          localStorage.setItem('portal-session', JSON.stringify(fullSession));
-          setSession(fullSession);
-          window.history.replaceState({}, '', '/portal');
-        } catch {
-          localStorage.removeItem('portal-session');
-        }
-        setLoading(false);
-        return;
-      }
-
       const stored = JSON.parse(localStorage.getItem('portal-session') ?? 'null') as PortalSession | null;
       if (stored && stored.expiresAt > Date.now()) {
         const valid = await verifySession(stored);

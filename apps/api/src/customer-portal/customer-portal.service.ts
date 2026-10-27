@@ -1,11 +1,15 @@
 import {
   Injectable,
+  Logger,
   BadRequestException,
   NotFoundException,
   UnauthorizedException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { normalizeKePhone, kePhoneVariants } from '../common/phone';
 import { createHash, randomBytes } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -13,9 +17,14 @@ import { v4 as uuidv4 } from 'uuid';
 const OTP_MAX_ATTEMPTS = 5;
 /** Minimum gap between two codes to the same phone — one SMS credit each. */
 const OTP_RESEND_COOLDOWN_MS = 60_000;
+/** How long a code stays good for. Published to clients so their countdown
+ *  cannot drift away from what the server actually enforces. */
+const OTP_TTL_MS = 10 * 60 * 1000;
 
 @Injectable()
 export class CustomerPortalService {
+  private readonly logger = new Logger(CustomerPortalService.name);
+
   constructor(
     private prisma: PrismaService,
     private notifications: NotificationsService,
@@ -24,22 +33,33 @@ export class CustomerPortalService {
   // ─── Auth ─────────────────────────────────────────────────────────────────
 
   async requestOtp(phone: string, businessId: string, name?: string) {
-    if (!phone?.trim()) throw new BadRequestException('Phone number is required');
     if (!businessId) throw new BadRequestException('Business is required');
+    const canonical = normalizeKePhone(phone);
+    if (!canonical) {
+      throw new BadRequestException(
+        'Enter a valid Kenyan mobile number, e.g. 0712345678.',
+      );
+    }
 
     // Self-service registration: find the customer or create one on first contact.
     // A bare phone-only Customer is harmless; phoneVerifiedAt gates "real" identity.
+    // Rows written before normalization existed hold whatever the cashier or the
+    // CSV typed, so match every shape and rewrite the row once — each row heals
+    // the first time its owner logs in, and duplicates stop being created.
     let customer = await this.prisma.customer.findFirst({
-      where: { phone, businessId },
-      select: { id: true, name: true },
+      where: { businessId, phone: { in: kePhoneVariants(canonical) } },
+      select: { id: true, name: true, phone: true, phoneVerifiedAt: true },
     });
-    let isNew = false;
     if (!customer) {
       customer = await this.prisma.customer.create({
-        data: { businessId, phone, name: name?.trim() || 'Customer' },
-        select: { id: true, name: true },
+        data: { businessId, phone: canonical, name: name?.trim() || 'Customer' },
+        select: { id: true, name: true, phone: true, phoneVerifiedAt: true },
       });
-      isNew = true;
+    } else if (customer.phone !== canonical) {
+      await this.prisma.customer.update({
+        where: { id: customer.id },
+        data: { phone: canonical },
+      });
     }
 
     // A resend costs an SMS credit and resets the guess counter, so it must not be
@@ -61,19 +81,20 @@ export class CustomerPortalService {
     // Generate 6-digit OTP
     const otp = String(Math.floor(100000 + Math.random() * 900000));
     const otpHash = createHash('sha256').update(otp).digest('hex');
-    const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+    const otpExpiresAt = new Date(Date.now() + OTP_TTL_MS);
 
     // Upsert the OTP-placeholder session for this customer. A fresh code resets the
     // attempt counter — the limit is per code, not a permanent lockout of the phone.
     await this.prisma.customerPortalSession.upsert({
       where: { sessionToken: `otp-placeholder-${customer.id}` },
       update: {
+        phone: canonical,
         otpHash, otpExpiresAt, expiresAt: otpExpiresAt,
         otpAttempts: 0, otpSentAt: new Date(),
       },
       create: {
         customerId: customer.id,
-        phone,
+        phone: canonical,
         sessionToken: `otp-placeholder-${customer.id}`,
         otpHash,
         otpExpiresAt,
@@ -83,40 +104,79 @@ export class CustomerPortalService {
       },
     });
 
-    // Send the code via SMS (Africa's Talking). Fire-and-forget so an SMS failure
-    // never blocks login; dev still echoes the OTP for testing.
+    // The SMS *is* the login — a send that fails is a failed request, not a
+    // background detail. Fire-and-forget left the customer watching a code screen
+    // for a code nobody sent, with nothing on either side saying so.
     const business = await this.prisma.business.findUnique({
       where: { id: businessId },
       select: { name: true },
     });
     const brand = business?.name ?? 'KASTRA';
-    this.notifications
-      .sendSMS(businessId, phone, `${otp} is your ${brand} verification code. It expires in 10 minutes.`)
-      .catch(() => {});
-
     const isDev = process.env.NODE_ENV !== 'production';
+    const sms = await this.notifications.sendSMS(
+      businessId,
+      canonical,
+      `${otp} is your ${brand} verification code. It expires in 10 minutes.`,
+    );
+
+    if (!sms.success) {
+      this.logger.error(
+        `Portal OTP SMS failed for business ${businessId}: ${sms.error ?? 'unknown error'}`,
+      );
+      // Dev has no Africa's Talking credentials and reads the echoed code instead,
+      // so keep that code alive. In production there is no code to fall back on.
+      if (!isDev) {
+        // Burn the code and clear the cooldown — making the customer wait 60s to
+        // retry a code we never sent punishes them for our outage.
+        await this.prisma.customerPortalSession.update({
+          where: { sessionToken: `otp-placeholder-${customer.id}` },
+          data: { otpSentAt: null, otpExpiresAt: new Date() },
+        });
+        throw new ServiceUnavailableException(
+          sms.error === 'Messaging not configured'
+            ? 'This business has not set up SMS yet, so we cannot send a login code. Please contact them directly.'
+            : 'We could not send your code just now. Please try again in a moment.',
+        );
+      }
+    }
+
     return {
       sent: true,
       customerId: customer.id,
-      isNew,
+      // "We still need a name from you" — the clients use this to decide whether
+      // to ask for one. Keyed on verification rather than on whether the row was
+      // created this second, so abandoning the first attempt no longer leaves the
+      // customer called "Customer" forever.
+      isNew: !customer.phoneVerifiedAt && (!customer.name || customer.name === 'Customer'),
+      // Drives the client countdown and the resend button. Sent by the server so
+      // the timer the customer watches is the one actually being enforced.
+      expiresInSeconds: OTP_TTL_MS / 1000,
+      resendInSeconds: OTP_RESEND_COOLDOWN_MS / 1000,
       ...(isDev ? { otp } : {}),
     };
   }
 
   async verifyOtp(phone: string, otp: string, businessId: string, name?: string) {
+    const canonical = normalizeKePhone(phone);
+    if (!canonical) {
+      throw new BadRequestException(
+        'Enter a valid Kenyan mobile number, e.g. 0712345678.',
+      );
+    }
+
     const customer = await this.prisma.customer.findFirst({
-      where: { phone, businessId },
+      where: { businessId, phone: { in: kePhoneVariants(canonical) } },
       select: { id: true, name: true, shopCode: true, phoneVerifiedAt: true },
     });
     if (!customer) {
       throw new NotFoundException('Customer not found');
     }
 
-    // Find pending OTP session
+    // Matched on customerId alone: the placeholder is unique per customer, and a
+    // session written before normalization carries the old phone shape.
     const session = await this.prisma.customerPortalSession.findFirst({
       where: {
         customerId: customer.id,
-        phone,
         otpExpiresAt: { gt: new Date() },
         otpHash: { not: null },
       },
@@ -126,7 +186,7 @@ export class CustomerPortalService {
       // A burned code is expired, so it lands here too. Tell a customer who simply
       // mistyped five times what to do, instead of "expired or not found".
       const burned = await this.prisma.customerPortalSession.findFirst({
-        where: { customerId: customer.id, phone, otpAttempts: { gte: OTP_MAX_ATTEMPTS } },
+        where: { customerId: customer.id, otpAttempts: { gte: OTP_MAX_ATTEMPTS } },
         select: { id: true },
       });
       throw new UnauthorizedException(
@@ -168,12 +228,13 @@ export class CustomerPortalService {
     // First verified login for this phone → treat as a brand-new registration.
     const isNew = !customer.phoneVerifiedAt;
 
-    // Capture/refresh profile: stamp verification, and set the name if the
-    // customer supplied one and we only had the placeholder default.
+    // Capture/refresh profile: stamp verification, canonicalize the stored number,
+    // and set the name if the customer supplied one and we only had the placeholder.
     const shouldSetName = !!name?.trim() && (isNew || !customer.name || customer.name === 'Customer');
     const updated = await this.prisma.customer.update({
       where: { id: customer.id },
       data: {
+        phone: canonical,
         ...(customer.phoneVerifiedAt ? {} : { phoneVerifiedAt: new Date() }),
         ...(shouldSetName ? { name: name!.trim() } : {}),
       },
@@ -190,7 +251,7 @@ export class CustomerPortalService {
     await this.prisma.customerPortalSession.create({
       data: {
         customerId: customer.id,
-        phone,
+        phone: canonical,
         sessionToken: tokenHash,
         otpHash: null,
         otpExpiresAt: null,
@@ -206,6 +267,20 @@ export class CustomerPortalService {
       customerName: updated.name,
       isNew,
     };
+  }
+
+  /**
+   * Sweep dead portal sessions nightly. A placeholder row is only deleted when its
+   * code is actually used, so every abandoned login — and every expired 30-day
+   * session — otherwise stayed on the table forever.
+   */
+  @Cron('40 2 * * *')
+  async pruneExpiredSessions(): Promise<{ removed: number }> {
+    const { count } = await this.prisma.customerPortalSession.deleteMany({
+      where: { expiresAt: { lt: new Date() } },
+    });
+    if (count > 0) this.logger.log(`Pruned ${count} expired portal session(s)`);
+    return { removed: count };
   }
 
   // ─── Profile ──────────────────────────────────────────────────────────────

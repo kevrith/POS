@@ -66,7 +66,9 @@ Login paths:
 - **PIN** → 12-hour token (shop-floor sessions)
 - **Google OAuth** (`google.strategy.ts`)
 - **TOTP** second factor, **WebAuthn** (`webauthn.controller.ts`)
-- **Phone OTP** for customers (customer portal, rate-limited)
+- **Phone OTP** for customers (customer portal, rate-limited). Numbers are
+  canonicalized to `254XXXXXXXXX` by `common/phone.ts` before any lookup, and
+  a failed SMS fails the request rather than silently reporting `sent: true`
 - **Affiliate JWT** (`src/affiliate/affiliate-jwt.guard.ts`) — separate audience
 - **Super admin** — `POST /api/v1/super-admin/login`, own guard
 
@@ -205,6 +207,15 @@ push (`.github/workflows/ci.yml`).
   `StocktakeCount.itemName`, `FieldOrderItem.itemName`.
 - Without `REDIS_HOST`, BullMQ falls back to synchronous execution — fine for dev,
   not for production throughput.
+- **`Customer.phone` is stored canonically only where the portal has touched it.**
+  Every other write path (POS, field sales, CSV import) still stores the number as
+  typed; portal login matches all four shapes via `kePhoneVariants()` and rewrites
+  the row on first login. Match on variants, never on an exact string.
+- **Rate limits are per client IP, which needs `trust proxy`.** `main.ts` sets it
+  from `TRUST_PROXY` (default `1` in production). Without it every request behind a
+  load balancer reports the balancer's address and a per-IP limit becomes global.
+  `AppThrottlerGuard.getTracker` reads `req.ip`, not the library's spoofable
+  `req.ips[0]`.
 
 ---
 

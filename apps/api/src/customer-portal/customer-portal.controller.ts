@@ -28,15 +28,20 @@ export class CustomerPortalController {
 
   /* The per-phone cooldown and attempt cap live in the service; these throttles are the
      other axis — one caller walking through many phone numbers, which no per-phone
-     counter can see. Each request-otp also creates a Customer row and spends an SMS. */
+     counter can see. Each request-otp also creates a Customer row and spends an SMS.
 
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+     The limits are per client IP, and Kenyan carriers put a lot of subscribers behind
+     one CGNAT address, so they are set to absorb a handful of genuine customers on the
+     same mobile network rather than to be the primary defence. That is the service's
+     job: one code per phone per minute, five guesses per code. */
+
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('auth/request-otp')
   requestOtp(@Body() body: { phone: string; businessId: string; name?: string }) {
     return this.service.requestOtp(body.phone, body.businessId, body.name);
   }
 
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   @Post('auth/verify-otp')
   verifyOtp(@Body() body: { phone: string; otp: string; businessId: string; name?: string }) {
     return this.service.verifyOtp(body.phone, body.otp, body.businessId, body.name);

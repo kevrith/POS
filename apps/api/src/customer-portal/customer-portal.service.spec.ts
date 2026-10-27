@@ -15,6 +15,7 @@ function makePrisma() {
       update: jest.fn(),
       create: jest.fn(),
       delete: jest.fn(),
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
     business: { findUnique: jest.fn().mockResolvedValue({ name: 'Wazi Biz' }) },
   };
@@ -26,13 +27,13 @@ function makeService(overrides: Record<string, any> = {}) {
   return { svc: new CustomerPortalService(prisma, notifications as any), prisma, notifications };
 }
 
-const CUSTOMER = { id: 'cust-1', name: 'Kev', shopCode: null, phoneVerifiedAt: null };
+const CUSTOMER = { id: 'cust-1', name: 'Kev', phone: '254712345678', shopCode: null, phoneVerifiedAt: null };
 
 describe('CustomerPortalService — OTP limits', () => {
   describe('requestOtp', () => {
     it('sends a code and records when it went out', async () => {
       const { svc, prisma, notifications } = makeService();
-      prisma.customer.findFirst.mockResolvedValue({ id: 'cust-1', name: 'Kev' });
+      prisma.customer.findFirst.mockResolvedValue(CUSTOMER);
 
       await svc.requestOtp('254712345678', 'biz-1');
 
@@ -44,7 +45,7 @@ describe('CustomerPortalService — OTP limits', () => {
 
     it('refuses a resend inside the cooldown', async () => {
       const { svc, prisma, notifications } = makeService();
-      prisma.customer.findFirst.mockResolvedValue({ id: 'cust-1', name: 'Kev' });
+      prisma.customer.findFirst.mockResolvedValue(CUSTOMER);
       prisma.customerPortalSession.findUnique.mockResolvedValue({
         otpSentAt: new Date(Date.now() - 10_000), // 10s ago
       });
@@ -56,7 +57,7 @@ describe('CustomerPortalService — OTP limits', () => {
 
     it('allows a resend once the cooldown has passed', async () => {
       const { svc, prisma, notifications } = makeService();
-      prisma.customer.findFirst.mockResolvedValue({ id: 'cust-1', name: 'Kev' });
+      prisma.customer.findFirst.mockResolvedValue(CUSTOMER);
       prisma.customerPortalSession.findUnique.mockResolvedValue({
         otpSentAt: new Date(Date.now() - 61_000),
       });
@@ -70,7 +71,7 @@ describe('CustomerPortalService — OTP limits', () => {
       process.env.NODE_ENV = 'production';
       try {
         const { svc, prisma } = makeService();
-        prisma.customer.findFirst.mockResolvedValue({ id: 'cust-1', name: 'Kev' });
+        prisma.customer.findFirst.mockResolvedValue(CUSTOMER);
         const res = await svc.requestOtp('254712345678', 'biz-1');
         expect(res).not.toHaveProperty('otp');
       } finally {
@@ -152,6 +153,127 @@ describe('CustomerPortalService — OTP limits', () => {
       const stored = prisma.customerPortalSession.create.mock.calls[0][0].data.sessionToken;
       expect(stored).toBe(hash(res.sessionToken));
       expect(stored).not.toBe(res.sessionToken);
+    });
+  });
+
+  describe('phone normalization', () => {
+    it('finds one customer however the number was typed', async () => {
+      for (const typed of ['0712345678', '+254 712 345 678', '712345678', '254712345678']) {
+        const { svc, prisma } = makeService();
+        prisma.customer.findFirst.mockResolvedValue(CUSTOMER);
+
+        await svc.requestOtp(typed, 'biz-1');
+
+        // One lookup, matching every shape the row could already be stored under.
+        expect(prisma.customer.findFirst).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: {
+              businessId: 'biz-1',
+              phone: { in: ['254712345678', '+254712345678', '0712345678', '712345678'] },
+            },
+          }),
+        );
+        expect(prisma.customer.create).not.toHaveBeenCalled();
+      }
+    });
+
+    it('rewrites a legacy row to the canonical number', async () => {
+      const { svc, prisma } = makeService();
+      prisma.customer.findFirst.mockResolvedValue({ ...CUSTOMER, phone: '0712345678' });
+
+      await svc.requestOtp('0712345678', 'biz-1');
+
+      expect(prisma.customer.update).toHaveBeenCalledWith({
+        where: { id: 'cust-1' },
+        data: { phone: '254712345678' },
+      });
+    });
+
+    it('stores a new customer canonically rather than as typed', async () => {
+      const { svc, prisma } = makeService();
+      prisma.customer.findFirst.mockResolvedValue(null);
+      prisma.customer.create.mockResolvedValue({ ...CUSTOMER, name: 'Customer' });
+
+      await svc.requestOtp('0712345678', 'biz-1');
+
+      expect(prisma.customer.create.mock.calls[0][0].data.phone).toBe('254712345678');
+    });
+
+    it('rejects a number that is not a Kenyan mobile', async () => {
+      const { svc, prisma, notifications } = makeService();
+      await expect(svc.requestOtp('0712', 'biz-1')).rejects.toThrow(/valid Kenyan mobile/);
+      expect(prisma.customer.create).not.toHaveBeenCalled();
+      expect(notifications.sendSMS).not.toHaveBeenCalled();
+    });
+
+    it('verifies against a customer stored under an older shape', async () => {
+      const { svc, prisma } = makeService();
+      prisma.customer.findFirst.mockResolvedValue(CUSTOMER);
+      prisma.customerPortalSession.findFirst.mockResolvedValue({
+        id: 'sess-1', customerId: 'cust-1', otpHash: hash('123456'),
+        otpExpiresAt: new Date(Date.now() + 60_000), otpAttempts: 0,
+      });
+      prisma.customer.update.mockResolvedValue({ name: 'Kev', shopCode: null });
+
+      await svc.verifyOtp('0712345678', '123456', 'biz-1');
+
+      expect(prisma.customer.update.mock.calls[0][0].data.phone).toBe('254712345678');
+    });
+  });
+
+  describe('SMS delivery', () => {
+    it('fails the request when the code could not be sent', async () => {
+      const previous = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
+      try {
+        const { svc, prisma, notifications } = makeService();
+        prisma.customer.findFirst.mockResolvedValue(CUSTOMER);
+        notifications.sendSMS.mockResolvedValue({ success: false, error: 'Messaging not configured' });
+
+        await expect(svc.requestOtp('254712345678', 'biz-1')).rejects.toThrow(/has not set up SMS/);
+
+        // The code is burned and the cooldown cleared — the customer never got a
+        // code, so they should not be made to wait 60s to try again.
+        const data = prisma.customerPortalSession.update.mock.calls[0][0].data;
+        expect(data.otpSentAt).toBeNull();
+        expect(data.otpExpiresAt.getTime()).toBeLessThanOrEqual(Date.now());
+      } finally {
+        process.env.NODE_ENV = previous;
+      }
+    });
+
+    it('keeps the echoed code alive in development when SMS is unconfigured', async () => {
+      const { svc, prisma, notifications } = makeService();
+      prisma.customer.findFirst.mockResolvedValue(CUSTOMER);
+      notifications.sendSMS.mockResolvedValue({ success: false, error: 'Messaging not configured' });
+
+      const res = await svc.requestOtp('254712345678', 'biz-1');
+
+      expect(res.otp).toMatch(/^\d{6}$/);
+      expect(prisma.customerPortalSession.update).not.toHaveBeenCalled();
+    });
+
+    it('publishes the timings the client counts down against', async () => {
+      const { svc, prisma } = makeService();
+      prisma.customer.findFirst.mockResolvedValue(CUSTOMER);
+
+      const res = await svc.requestOtp('254712345678', 'biz-1');
+
+      expect(res.expiresInSeconds).toBe(600);
+      expect(res.resendInSeconds).toBe(60);
+    });
+  });
+
+  describe('pruneExpiredSessions', () => {
+    it('removes only sessions whose expiry has passed', async () => {
+      const { svc, prisma } = makeService();
+      prisma.customerPortalSession.deleteMany.mockResolvedValue({ count: 3 });
+
+      const res = await svc.pruneExpiredSessions();
+
+      expect(res.removed).toBe(3);
+      const where = prisma.customerPortalSession.deleteMany.mock.calls[0][0].where;
+      expect(where.expiresAt.lt).toBeInstanceOf(Date);
     });
   });
 });

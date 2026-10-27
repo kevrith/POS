@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator,
   KeyboardAvoidingView, Platform, ScrollView,
@@ -24,7 +24,10 @@ function normalizePhone(local: string): string {
   return `254${d}`;
 }
 
-interface OtpResp { sent: boolean; customerId: string; isNew: boolean; otp?: string }
+interface OtpResp {
+  sent: boolean; customerId: string; isNew: boolean; otp?: string;
+  expiresInSeconds: number; resendInSeconds: number;
+}
 interface VerifyResp { sessionToken: string; customerId: string; customerName: string; isNew: boolean }
 
 /**
@@ -45,6 +48,23 @@ export default function LoginGate({ onDone }: { onDone: () => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [devOtp, setDevOtp] = useState<string | null>(null);
+  // The two clocks the customer needs: how long this code lives, and when they
+  // may ask for another. Both come from the server so they match what it enforces.
+  const [expiresIn, setExpiresIn] = useState(0);
+  const [resendIn, setResendIn] = useState(0);
+  const started = useRef(false);
+
+  useEffect(() => {
+    if (step !== 'OTP') return;
+    const t = setInterval(() => {
+      setExpiresIn((v) => (v > 0 ? v - 1 : 0));
+      setResendIn((v) => (v > 0 ? v - 1 : 0));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [step]);
+
+  const expired = started.current && expiresIn === 0;
+  const countdown = `${Math.floor(expiresIn / 60)}:${String(expiresIn % 60).padStart(2, '0')}`;
 
   const phone = normalizePhone(phoneInput);
 
@@ -55,6 +75,10 @@ export default function LoginGate({ onDone }: { onDone: () => void }) {
       const resp = await apiPost<OtpResp>('/portal/auth/request-otp', { phone, businessId });
       setIsNew(resp.isNew);
       setDevOtp(resp.otp ?? null);
+      setOtp('');
+      setExpiresIn(resp.expiresInSeconds ?? 600);
+      setResendIn(resp.resendInSeconds ?? 60);
+      started.current = true;
       setStep('OTP');
     } catch (e: any) {
       setError(e?.message ?? 'Could not send code. Try again.');
@@ -64,6 +88,7 @@ export default function LoginGate({ onDone }: { onDone: () => void }) {
   }
 
   async function verify() {
+    if (expired) { setError('That code has expired. Ask for a new one.'); return; }
     if (otp.trim().length < 4) { setError('Enter the code we sent you.'); return; }
     if (isNew && !name.trim()) { setError('Please tell us your name.'); return; }
     setLoading(true); setError('');
@@ -119,16 +144,22 @@ export default function LoginGate({ onDone }: { onDone: () => void }) {
             </View>
           ) : (
             <View style={s.card}>
-              <Text style={s.cardTitle}>Verification code</Text>
+              <View style={s.titleRow}>
+                <Text style={s.cardTitle}>Verification code</Text>
+                <Text style={[s.timer, expired ? s.timerDead : expiresIn <= 60 ? s.timerWarn : null]}>
+                  {expired ? 'Expired' : `Expires in ${countdown}`}
+                </Text>
+              </View>
               <Text style={s.cardSub}>Sent to +{phone}.{devOtp ? `  (dev: ${devOtp})` : ''}</Text>
               {error ? <Text style={s.error}>{error}</Text> : null}
               <TextInput
-                style={[s.input, s.codeInput]}
+                style={[s.input, s.codeInput, expired && s.inputDead]}
                 value={otp}
                 onChangeText={(v) => { setOtp(v.replace(/[^0-9]/g, '')); setError(''); }}
                 placeholder="••••••"
                 keyboardType="number-pad"
                 maxLength={6}
+                editable={!expired}
                 placeholderTextColor={SUBTLE}
                 autoFocus
               />
@@ -144,10 +175,24 @@ export default function LoginGate({ onDone }: { onDone: () => void }) {
                   />
                 </>
               ) : null}
-              <TouchableOpacity style={[s.btn, loading && { opacity: 0.7 }]} onPress={verify} disabled={loading}>
+              <TouchableOpacity
+                style={[s.btn, (loading || expired) && { opacity: 0.7 }]}
+                onPress={verify}
+                disabled={loading || expired}
+              >
                 {loading ? <ActivityIndicator color="#FFF" /> : <><Ionicons name="checkmark-circle" size={18} color="#FFF" /><Text style={s.btnText}>{isNew ? 'Create account' : 'Sign in'}</Text></>}
               </TouchableOpacity>
-              <TouchableOpacity style={s.changeLink} onPress={() => { setStep('PHONE'); setOtp(''); setError(''); }}>
+              <TouchableOpacity
+                style={s.changeLink}
+                onPress={requestOtp}
+                disabled={loading || resendIn > 0}
+              >
+                <Ionicons name="refresh" size={13} color={resendIn > 0 ? SUBTLE : PRIMARY} />
+                <Text style={[s.changeLinkText, resendIn === 0 && s.resendReady]}>
+                  {resendIn > 0 ? `Resend code in ${resendIn}s` : 'Resend code'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.changeLink} onPress={() => { setStep('PHONE'); setOtp(''); setError(''); started.current = false; }}>
                 <Ionicons name="arrow-back" size={13} color={SUBTLE} />
                 <Text style={s.changeLinkText}>Change number</Text>
               </TouchableOpacity>
@@ -192,4 +237,10 @@ const s = StyleSheet.create({
   btnText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
   changeLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
   changeLinkText: { fontSize: 12, color: SUBTLE },
+  resendReady: { color: PRIMARY, fontWeight: '700' },
+  titleRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  timer: { fontSize: 12, fontWeight: '700', color: SUBTLE },
+  timerWarn: { color: '#D97706' },
+  timerDead: { color: ERROR },
+  inputDead: { opacity: 0.5 },
 });

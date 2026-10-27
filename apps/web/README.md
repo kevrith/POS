@@ -111,6 +111,12 @@ Authenticated app routes are plan-gated — see
 `/portal` is matched on `window.location.pathname` before the router mounts, so the
 phone-OTP customer portal never renders the staff shell.
 
+Both customer-facing OTP screens — `/portal` (`CustomerPortalPage`) and
+`/shop/:businessId` (`ShopPage`) — share [`hooks/useOtpTimers.ts`](src/hooks/useOtpTimers.ts)
+for the code-expiry countdown and the resend cooldown, driven by the
+`expiresInSeconds` / `resendInSeconds` the server returns. Their `portalFetch`
+helpers both drop the session and return to the login screen on a 401.
+
 ---
 
 ## Plan gating

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
+import { useOtpTimers } from '../hooks/useOtpTimers';
 import {
   ShoppingCart, Plus, Minus, Search, Loader2, CheckCircle2, X,
   Smartphone, MapPin, Package, Clock, LogOut, ReceiptText, RefreshCw,
@@ -18,6 +19,7 @@ interface UnifiedOrder {
   totalCents: number; invoiceNumber?: string | null; createdAt: string; items: OrderItem[];
 }
 interface Session { token: string; customerId: string; customerName: string; phone: string; businessId: string }
+interface OtpResp { isNew: boolean; otp?: string; expiresInSeconds: number; resendInSeconds: number }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const SESSION_KEY = 'customer-portal-session';
@@ -36,6 +38,9 @@ function saveSession(s: Session | null) {
   if (s) localStorage.setItem(SESSION_KEY, JSON.stringify(s));
   else localStorage.removeItem(SESSION_KEY);
 }
+/** Set by the page so an expired session can drop straight back to the login screen. */
+let onSessionLost: (() => void) | null = null;
+
 async function portalFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   const s = loadSession();
   const res = await fetch(`/api/v1${path}`, {
@@ -46,6 +51,14 @@ async function portalFetch<T>(path: string, opts?: RequestInit): Promise<T> {
       ...(opts?.headers ?? {}),
     },
   });
+  // A portal session lasts 30 days and can be revoked server-side. Without this
+  // the shop just kept rendering raw 401 bodies at a customer with no way back
+  // to the login screen.
+  if (res.status === 401 && s?.token) {
+    saveSession(null);
+    onSessionLost?.();
+    throw new Error('Your session has expired. Please sign in again.');
+  }
   if (!res.ok) { throw new Error((await res.text()) || `HTTP ${res.status}`); }
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -69,6 +82,11 @@ export default function ShopPage() {
   });
   const [bizName, setBizName] = useState('');
 
+  useEffect(() => {
+    onSessionLost = () => setSession(null);
+    return () => { onSessionLost = null; };
+  }, []);
+
   if (!session) {
     return <LoginView businessId={businessId} bizName={bizName} onName={setBizName} onLogin={(s) => { saveSession(s); setSession(s); }} />;
   }
@@ -88,6 +106,7 @@ function LoginView({ businessId, bizName, onName, onLogin }: {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const phone = normalizePhone(phoneInput);
+  const timers = useOtpTimers();
 
   useEffect(() => {
     fetch(`/api/v1/portal/menu?businessId=${businessId}`)
@@ -98,13 +117,15 @@ function LoginView({ businessId, bizName, onName, onLogin }: {
     if (phoneInput.replace(/[^0-9]/g, '').length < 9) { setError('Enter a valid phone number.'); return; }
     setLoading(true); setError('');
     try {
-      const r = await portalFetch<{ isNew: boolean; otp?: string }>('/portal/auth/request-otp', {
+      const r = await portalFetch<OtpResp>('/portal/auth/request-otp', {
         method: 'POST', body: JSON.stringify({ phone, businessId }),
       });
-      setIsNew(r.isNew); setDevOtp(r.otp ?? null); setStep('otp');
+      setIsNew(r.isNew); setDevOtp(r.otp ?? null); setOtp(''); setStep('otp');
+      timers.start(r.expiresInSeconds, r.resendInSeconds);
     } catch (e) { setError((e as Error).message); } finally { setLoading(false); }
   }
   async function verify() {
+    if (timers.expired) { setError('That code has expired. Ask for a new one.'); return; }
     if (otp.trim().length < 4) { setError('Enter the code we sent you.'); return; }
     if (isNew && !name.trim()) { setError('Please tell us your name.'); return; }
     setLoading(true); setError('');
@@ -112,6 +133,7 @@ function LoginView({ businessId, bizName, onName, onLogin }: {
       const r = await portalFetch<{ token: string; customerId: string; customerName: string }>('/portal/auth/verify-otp', {
         method: 'POST', body: JSON.stringify({ phone, otp: otp.trim(), businessId, ...(isNew ? { name: name.trim() } : {}) }),
       });
+      timers.clear();
       onLogin({ token: r.token, customerId: r.customerId, customerName: r.customerName, phone, businessId });
     } catch (e) { setError((e as Error).message); } finally { setLoading(false); }
   }
@@ -145,20 +167,29 @@ function LoginView({ businessId, bizName, onName, onLogin }: {
             </>
           ) : (
             <>
-              <label className="text-sm font-medium text-gray-700">Verification code</label>
+              <div className="flex items-baseline justify-between">
+                <label className="text-sm font-medium text-gray-700">Verification code</label>
+                <span className={`text-xs font-semibold tabular-nums ${timers.expired ? 'text-red-600' : timers.secondsLeft <= 60 ? 'text-amber-600' : 'text-gray-400'}`}>
+                  {timers.expired ? 'Expired' : `Expires in ${timers.countdown}`}
+                </span>
+              </div>
               <p className="text-xs text-gray-400">Sent to +{phone}{devOtp ? ` · dev: ${devOtp}` : ''}</p>
               <input autoFocus value={otp} onChange={(e) => { setOtp(e.target.value.replace(/[^0-9]/g, '')); setError(''); }}
-                maxLength={6} inputMode="numeric" placeholder="••••••"
-                className="w-full border rounded-lg px-3 py-2 text-center text-2xl tracking-[0.4em] font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
+                maxLength={6} inputMode="numeric" placeholder="••••••" disabled={timers.expired}
+                className="w-full border rounded-lg px-3 py-2 text-center text-2xl tracking-[0.4em] font-bold focus:ring-2 focus:ring-indigo-500 outline-none disabled:bg-gray-50 disabled:text-gray-400" />
               {isNew && (
                 <input value={name} onChange={(e) => { setName(e.target.value); setError(''); }} placeholder="Your name"
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
               )}
-              <button onClick={verify} disabled={loading}
+              <button onClick={verify} disabled={loading || timers.expired}
                 className="w-full bg-indigo-600 text-white rounded-lg py-2.5 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-60">
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} {isNew ? 'Create account' : 'Sign in'}
               </button>
-              <button onClick={() => { setStep('phone'); setOtp(''); setError(''); }} className="w-full text-xs text-gray-500 py-1">Change number</button>
+              <button onClick={requestOtp} disabled={loading || timers.resendIn > 0}
+                className="w-full text-xs font-semibold text-indigo-600 py-1 disabled:text-gray-400 disabled:font-normal">
+                {timers.resendIn > 0 ? `Resend code in ${timers.resendIn}s` : 'Resend code'}
+              </button>
+              <button onClick={() => { setStep('phone'); setOtp(''); setError(''); timers.clear(); }} className="w-full text-xs text-gray-500 py-1">Change number</button>
             </>
           )}
         </div>

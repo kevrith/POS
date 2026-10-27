@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 import { createDecipheriv } from 'crypto';
+import { toE164 } from '../common/phone';
 
 @Injectable()
 export class NotificationsService {
@@ -215,8 +216,22 @@ export class NotificationsService {
       console.warn('[AT] Africa\'s Talking not configured for business', businessId);
       return { success: false, error: 'Messaging not configured' };
     }
+    // Callers hold phone numbers in whatever shape they were typed in; Africa's
+    // Talking documents international format. Normalize here so every caller
+    // benefits rather than each one remembering to.
+    const to = toE164(phone);
+    if (!to) {
+      console.warn('[AT] Unroutable phone number, not sending:', phone);
+      return { success: false, error: 'Invalid phone number' };
+    }
     try {
-      const result = await instance.at.SMS.send({ to: [phone], message });
+      const result = await instance.at.SMS.send({
+        to: [to],
+        message,
+        // Without the account's registered sender ID, AT falls back to a shared
+        // shortcode — or rejects the send outright on accounts that require one.
+        ...(instance.creds.senderId ? { from: instance.creds.senderId } : {}),
+      });
       const recipient = result?.SMSMessageData?.Recipients?.[0];
       return { success: recipient?.status === 'Success', messageId: recipient?.messageId };
     } catch (err: any) {
@@ -233,8 +248,10 @@ export class NotificationsService {
     }
     try {
       // Use SMS as fallback since AT WhatsApp requires special business account approval
+      const to = toE164(phone);
+      if (!to) return { success: false, error: 'Invalid phone number' };
       const result = await instance.at.SMS.send({
-        to: [phone],
+        to: [to],
         message,
         ...(instance.creds.senderId ? { from: instance.creds.senderId } : {}),
       });

@@ -30,6 +30,12 @@ There is **no staff login**. The app is scoped to a business (`businessId` held 
 Browsing the menu works unauthenticated; ordering, order history, profile and loyalty
 require the OTP session.
 
+`request-otp` returns `expiresInSeconds` and `resendInSeconds`; `LoginGate` counts
+both down so the customer can see the code's 10-minute deadline and when Resend goes
+live, rather than discovering the 60s cooldown by being refused. Take the timings
+from the response — do not hardcode them, or the screen drifts from what the server
+enforces.
+
 ---
 
 ## Screens

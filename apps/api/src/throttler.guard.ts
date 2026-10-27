@@ -21,4 +21,20 @@ export class AppThrottlerGuard extends ThrottlerGuard {
     }
     return false;
   }
+
+  /**
+   * Key on `req.ip`, not the library default.
+   *
+   * The default is `req.ips[0]` — the *leftmost* X-Forwarded-For entry, which is
+   * whatever the caller sent and so trivially spoofed. `req.ip` is Express's own
+   * computation under `trust proxy` (set in main.ts), which counts hops from the
+   * socket inward and therefore lands on the address our proxy actually observed.
+   *
+   * Getting this right is what makes a per-caller limit per-caller: with no proxy
+   * trust configured at all, every request behind a load balancer reports the
+   * balancer's address and a 5/min endpoint becomes 5/min for the whole platform.
+   */
+  protected async getTracker(req: Record<string, any>): Promise<string> {
+    return req.ip ?? req.socket?.remoteAddress ?? 'unknown';
+  }
 }

@@ -51,6 +51,19 @@ async function bootstrap() {
       rawBody: true, // required for Paystack webhook signature verification
     });
 
+    // Behind Render (or any load balancer) the socket address is the proxy's, so
+    // without this every caller shares one rate-limit bucket — a 5/min endpoint
+    // becomes 5/min for the entire platform. `1` means "trust exactly one hop",
+    // so Express reads the address our proxy appended rather than anything a
+    // client put in X-Forwarded-For itself. Off by default locally, where there
+    // is no proxy and trusting the header would let callers forge their own IP.
+    const trustProxy = process.env.TRUST_PROXY ?? (process.env.NODE_ENV === 'production' ? '1' : '');
+    if (trustProxy) {
+      const hops = Number(trustProxy);
+      app.getHttpAdapter().getInstance().set('trust proxy', Number.isFinite(hops) ? hops : trustProxy);
+      logger.log(`Trusting ${trustProxy} proxy hop(s) for client IP resolution`);
+    }
+
     // Enable Socket.IO adapter for WebSocket/LAN sync support
     app.useWebSocketAdapter(new IoAdapter(app));
     app.useGlobalFilters(new AllExceptionsFilter());

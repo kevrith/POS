@@ -29,6 +29,12 @@ export class PortalService {
       return { paid: true, orderId, saleId: order.saleId };
     }
 
+    // A successful payment for some other order (or a KES 1 test charge) is not
+    // payment for this one: only the checkout we started for this order counts.
+    if (!checkoutRequestId || order.paymentRef !== checkoutRequestId) {
+      throw new BadRequestException('This payment does not belong to this order');
+    }
+
     // Trust M-Pesa, not the client, before flipping the order to paid.
     const status = await this.mpesa.querySTKStatus(checkoutRequestId);
     if (status.status !== 'paid') {
@@ -80,11 +86,29 @@ export class PortalService {
 
   /** Customer self-service M-Pesa STK push for an order they just placed. */
   async payOrder(dto: { phone: string; amountCents: number; reference: string }) {
-    return this.mpesa.initiateSTKPush({
+    // This route is public, so nothing the client says about the amount or the
+    // order can be trusted: charge the order's own total, and remember which
+    // checkout belongs to which order so confirmPayment can hold the line.
+    if (typeof dto.reference !== 'string' || !dto.reference.trim()) {
+      throw new BadRequestException('reference is required');
+    }
+    const order = await this.prisma.deliveryOrder.findUnique({
+      where: { orderNumber: dto.reference },
+      select: { id: true, totalCents: true, paymentStatus: true },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.paymentStatus === 'PAID') throw new BadRequestException('This order is already paid');
+
+    const stk = await this.mpesa.initiateSTKPush({
       phone: dto.phone,
-      amountCents: dto.amountCents,
+      amountCents: order.totalCents,
       accountReference: dto.reference,
     });
+    await this.prisma.deliveryOrder.update({
+      where: { id: order.id },
+      data: { paymentRef: stk.checkoutRequestId },
+    });
+    return stk;
   }
 
   /** Poll the STK result so the app can show paid/failed. */

@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Patch, Delete, Body, Param, Query, UseGuards, UploadedFile, UseInterceptors, Logger } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Body, Param, Query, UseGuards, UploadedFile, UseInterceptors, Logger, BadRequestException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { MpesaService } from './mpesa.service';
 import { ReconciliationService } from './reconciliation.service';
@@ -230,6 +230,7 @@ export class PaymentsController {
     @Body('businessId') businessId: string,
     @Body('storeId') storeId?: string,
   ) {
+    if (!file?.buffer) throw new BadRequestException('A CSV file is required (form field "file")');
     const csvContent = file.buffer.toString('utf8');
     return this.reconciliation.uploadStatement(businessId, file.originalname, csvContent, storeId);
   }

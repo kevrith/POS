@@ -2,6 +2,7 @@ import {
   Injectable,
   UnauthorizedException,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
@@ -228,6 +229,9 @@ export class AuthService {
     storeId?: string,
     userId?: string,
   ): Promise<{ accessToken: string; user: AuthUser }> {
+    if (typeof pin !== 'string' || !pin || typeof businessIdOrCode !== 'string' || !businessIdOrCode) {
+      throw new BadRequestException('pin and businessId are required');
+    }
     // Resolve shortCode → real businessId if the input doesn't look like a UUID
     let businessId = businessIdOrCode;
     const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(businessIdOrCode);
@@ -611,6 +615,9 @@ export class AuthService {
     pin: string,
     businessId: string,
   ): Promise<{ userId: string; name: string }> {
+    if (typeof pin !== 'string' || !pin || !businessId) {
+      throw new BadRequestException('pin and businessId are required');
+    }
     const users = await this.prisma.user.findMany({
       where: {
         businessId,
@@ -653,7 +660,7 @@ export class AuthService {
 
   async revokeSession(sessionId: string, userId: string) {
     const session = await this.prisma.userSession.findFirst({ where: { id: sessionId, userId } });
-    if (!session) throw new Error('Session not found');
+    if (!session) throw new NotFoundException('Session not found');
     await this.prisma.userSession.update({ where: { id: sessionId }, data: { isRevoked: true } });
     return { success: true };
   }

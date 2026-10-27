@@ -5,6 +5,7 @@ import { Logger, VersioningType, Catch, ArgumentsHost, HttpException, ExceptionF
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import helmet from 'helmet';
+import { Prisma } from '@prisma/client';
 
 @Catch()
 class AllExceptionsFilter implements ExceptionFilter {
@@ -12,11 +13,26 @@ class AllExceptionsFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const res = ctx.getResponse();
-    const status = exception instanceof HttpException ? exception.getStatus() : 500;
-    const message = exception instanceof HttpException
-      ? exception.message
-      : exception instanceof Error ? exception.message : 'Internal server error';
-    this.logger.error(`[${status}] ${message}`, exception instanceof Error ? exception.stack : '');
+    let status = 500;
+    let message = 'Internal server error';
+    if (exception instanceof HttpException) {
+      status = exception.getStatus();
+      message = exception.message;
+    } else if (exception instanceof Prisma.PrismaClientValidationError) {
+      // Bad or missing argument (e.g. an unparseable date from the query string).
+      status = 400;
+      message = 'Invalid or missing request parameter';
+    } else if (exception instanceof Prisma.PrismaClientKnownRequestError) {
+      if (exception.code === 'P2025') { status = 404; message = 'Record not found'; }
+      else if (exception.code === 'P2002') { status = 409; message = 'A record with these details already exists'; }
+      else if (exception.code === 'P2003') { status = 409; message = 'Referenced record does not exist or is still in use'; }
+    } else if (exception instanceof Error && process.env.NODE_ENV !== 'production') {
+      message = exception.message; // detail is for local debugging only
+    }
+    // The full Prisma message embeds the failing query, so log it but never send it.
+    const logged = exception instanceof Error ? exception.message : message;
+    if (status >= 500) this.logger.error(`[${status}] ${logged}`, exception instanceof Error ? exception.stack : '');
+    else this.logger.warn(`[${status}] ${logged.split('\n').pop()}`);
     res.status(status).json({ statusCode: status, message });
   }
 }

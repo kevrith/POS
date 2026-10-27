@@ -82,6 +82,9 @@ export class SalesService {
   ) {}
 
   async createSale(businessId: string, dto: CreateSaleDto) {
+    if (!Array.isArray(dto?.items) || dto.items.length === 0) {
+      throw new BadRequestException('A sale needs at least one item');
+    }
     // ── Check transaction limit (FREE tier only) ──
     const txLimitCheck = await this.subscriptionLimits.checkMonthlyTransactionLimit(businessId);
     if (!txLimitCheck.allowed) {
@@ -614,6 +617,7 @@ export class SalesService {
   }
 
   async verifyManagerPin(pin: string, businessId: string) {
+    if (!pin || !businessId) throw new BadRequestException('pin and businessId are required');
     return this.auth.verifyManagerPin(pin, businessId);
   }
 
@@ -766,6 +770,9 @@ export class SalesService {
   }
 
   async createProforma(dto: CreateProformaDto) {
+    if (!Array.isArray(dto?.items) || dto.items.length === 0) {
+      throw new BadRequestException('A proforma needs at least one item');
+    }
     const subtotalCents = dto.items.reduce((sum, i) => {
       const disc = i.discountPercent ? i.discountPercent / 100 : 0;
       return sum + Math.round(i.unitPriceCents * i.quantity * (1 - disc));

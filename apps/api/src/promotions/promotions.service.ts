@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -42,6 +42,7 @@ export class PromotionsService {
       where: { id: promotionId },
     });
 
+    if (!promotion) throw new NotFoundException('Promotion not found');
     if (!promotion.isActive) return 0;
 
     const now = new Date();

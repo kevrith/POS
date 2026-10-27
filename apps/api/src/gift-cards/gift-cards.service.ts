@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -38,6 +38,7 @@ export class GiftCardsService {
       where: { code },
     });
 
+    if (!giftCard) throw new NotFoundException('Gift card not found');
     if (giftCard.status !== 'ACTIVE') {
       throw new BadRequestException('Gift card is not active');
     }
@@ -74,6 +75,7 @@ export class GiftCardsService {
       where: { code },
     });
 
+    if (!giftCard) throw new NotFoundException('Gift card not found');
     const newBalance = giftCard.balanceCents + amountCents;
 
     await this.prisma.giftCard.update({

@@ -98,6 +98,7 @@ export class LoyaltyService {
 
   async getCustomerPoints(customerId: string) {
     const customer = await this.prisma.customer.findUnique({ where: { id: customerId } });
+    if (!customer) throw new NotFoundException('Customer not found');
     const transactions = await this.prisma.loyaltyTransaction.findMany({
       where: { customerId },
       orderBy: { createdAt: 'desc' },

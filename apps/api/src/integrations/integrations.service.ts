@@ -2,6 +2,8 @@ import { Injectable, NotFoundException, Logger, BadGatewayException, BadRequestE
 import { PrismaService } from '../prisma/prisma.service';
 import { createCipheriv, createDecipheriv } from 'crypto';
 
+import { requireString } from '../common/validate';
+
 @Injectable()
 export class IntegrationsService {
   private readonly logger = new Logger(IntegrationsService.name);
@@ -30,6 +32,10 @@ export class IntegrationsService {
     name: string;
     config: Record<string, unknown>;
   }) {
+    requireString(data.type, 'type');
+    if (!data.config || typeof data.config !== 'object') {
+      throw new BadRequestException('config is required');
+    }
     return this.prisma.integration.create({
       data: {
         businessId: data.businessId,
@@ -64,10 +70,16 @@ export class IntegrationsService {
       },
     });
 
-    return integrations.map(i => ({
-      ...i,
-      config: JSON.parse(this.decrypt(i.config)),
-    }));
+    // One row that will not decrypt (e.g. written under a previous ENCRYPTION_KEY)
+    // must not take the whole list down; surface it so the owner can reconnect.
+    return integrations.map(i => {
+      try {
+        return { ...i, config: JSON.parse(this.decrypt(i.config)) };
+      } catch {
+        this.logger.warn(`Integration ${i.id} config could not be decrypted`);
+        return { ...i, config: null, configError: 'Stored credentials could not be read. Reconnect this integration.' };
+      }
+    });
   }
 
   /** Look up the active integration record for a given businessId + type, decrypt config */
@@ -89,6 +101,8 @@ export class IntegrationsService {
       where: { id: saleId },
       include: { items: true, payments: true },
     });
+    if (!integration) throw new NotFoundException('Integration not found');
+    if (!sale) throw new NotFoundException('Sale not found');
 
     const config = JSON.parse(this.decrypt(integration.config));
 

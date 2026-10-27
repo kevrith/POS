@@ -180,10 +180,11 @@ export class CustomersService {
 
   async approveCredit(id: string) {
     const customer = await this.prisma.customer.findUnique({ where: { id } });
+    if (!customer) throw new NotFoundException('Customer not found');
     return this.prisma.customer.update({
       where: { id },
       data: {
-        creditLimitCents: customer!.creditLimitPendingCents,
+        creditLimitCents: customer.creditLimitPendingCents,
         creditLimitPendingCents: 0,
         creditApprovalStatus: 'APPROVED',
       },
@@ -206,6 +207,7 @@ export class CustomersService {
       creditLimit?: number;
     }>,
   ): Promise<{ created: number; skipped: number; errors: string[] }> {
+    if (!Array.isArray(rows)) throw new BadRequestException('rows must be an array');
     let created = 0;
     let skipped = 0;
     const errors: string[] = [];

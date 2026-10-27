@@ -36,7 +36,7 @@ export class NotificationsService {
     });
     if (!business?.atCredentialsEncrypted) return null;
     const creds = this.decryptAtCredentials(business.atCredentialsEncrypted);
-    if (!creds) return null;
+    if (!creds?.apiKey || !creds?.username) return null;
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const AfricasTalking = require('africastalking');
     const at = AfricasTalking({ apiKey: creds.apiKey, username: creds.username });

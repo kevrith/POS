@@ -7,6 +7,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { v4 as uuidv4 } from 'uuid';
 
+import { requireArray } from '../common/validate';
+
 interface CreateRouteDto {
   name: string;
   branchId?: string;
@@ -254,6 +256,7 @@ export class FieldSalesService {
       where: { id: businessId },
       select: { taxType: true },
     });
+    requireArray(dto.items, 'items');
     const subtotalCents = dto.items.reduce(
       (sum, item) => sum + item.quantity * item.unitPriceCents,
       0,

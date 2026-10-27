@@ -104,6 +104,8 @@ export class MpesaService {
   }
 
   async initiateSTKPush(data: STKPushRequest): Promise<{ checkoutRequestId: string; merchantRequestId: string }> {
+    if (typeof data.phone !== 'string' || !data.phone.trim()) throw new BadRequestException('phone is required');
+    if (!Number.isFinite(data.amountCents) || data.amountCents <= 0) throw new BadRequestException('amountCents must be a positive number');
     const phone = this.normalizePhone(data.phone);
     const amount = Math.max(1, Math.round(data.amountCents / 100));
     const shortcode = this.config.getOrThrow<string>('MPESA_SHORTCODE');

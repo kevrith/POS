@@ -236,6 +236,9 @@ export class EtimsService {
   }
 
   async getVatReturnData(businessId: string, period: string) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period ?? '')) {
+      throw new BadRequestException('period must be in YYYY-MM format');
+    }
     const [year, month] = period.split('-').map(Number);
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0, 23, 59, 59);

@@ -39,18 +39,6 @@ export class IntegrationsController {
     return this.integrationsService.getIntegrations(businessId, type);
   }
 
-  // ── Generic integration-id–based sync ─────────────────────────────────────
-
-  @Post(':id/sync-sale')
-  async syncSale(@Param('id') id: string, @Body('saleId') saleId: string) {
-    return this.integrationsService.syncSale(id, saleId);
-  }
-
-  @Post(':id/sync-inventory')
-  async syncInventory(@Param('id') id: string, @Body('itemId') itemId: string) {
-    return this.integrationsService.syncInventory(id, itemId);
-  }
-
   // ── Webhook (no auth required — Shopify/WooCommerce call this) ─────────────
 
   @Post('webhook/:type')
@@ -135,5 +123,20 @@ export class IntegrationsController {
     @Body('saleId') saleId: string,
   ) {
     return this.integrationsService.syncToWooCommerceBySaleId(businessId, saleId);
+  }
+
+  // ── Generic integration-id–based sync ─────────────────────────────────────
+  // Keep these LAST: Nest matches routes in declaration order, so `:id/sync-sale`
+  // declared earlier swallowed `quickbooks/sync-sale`, `xero/sync-sale`,
+  // `woocommerce/sync-sale` and `shopify/sync-inventory` (id = "quickbooks", ...).
+
+  @Post(':id/sync-sale')
+  async syncSale(@Param('id') id: string, @Body('saleId') saleId: string) {
+    return this.integrationsService.syncSale(id, saleId);
+  }
+
+  @Post(':id/sync-inventory')
+  async syncInventory(@Param('id') id: string, @Body('itemId') itemId: string) {
+    return this.integrationsService.syncInventory(id, itemId);
   }
 }

@@ -215,10 +215,11 @@ export class ExpenseController {
     limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
     fileFilter: (req, file, cb) => {
       if (file.mimetype.startsWith('image/')) cb(null, true);
-      else cb(new Error('Only images allowed'), false);
+      else cb(new BadRequestException('Only images allowed'), false);
     },
   }))
   uploadReceipt(@UploadedFile() file: any) {
+    if (!file) throw new BadRequestException('An image file is required (form field "file")');
     const url = `/uploads/receipts/${file.filename}`;
     return { url };
   }

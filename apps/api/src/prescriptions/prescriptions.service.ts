@@ -1,6 +1,8 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+import { requireArray } from '../common/validate';
+
 @Injectable()
 export class PrescriptionsService {
   constructor(private prisma: PrismaService) {}
@@ -156,6 +158,7 @@ export class PrescriptionsService {
   }
 
   async checkInteractions(businessId: string, drugNames: string[]) {
+    requireArray(drugNames, 'drugNames');
     if (drugNames.length < 2) return [];
     const interactions = await this.prisma.drugInteraction.findMany({ where: { businessId } });
     const found: any[] = [];

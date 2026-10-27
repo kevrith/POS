@@ -44,7 +44,11 @@ build alive.
 - CORS allows `FRONTEND_URL`, `ADMIN_URL`, anything in `EXTRA_ORIGINS`, any
   `*.vercel.app` preview, and origin-less requests (mobile apps, curl, health checks).
 - Socket.IO adapter for WebSocket / LAN sync.
-- `AllExceptionsFilter` as a global filter.
+- `AllExceptionsFilter` as a global filter. It keeps the status of `HttpException`s and
+  maps Prisma request errors to client errors (`PrismaClientValidationError` -> 400,
+  `P2025` -> 404, `P2002`/`P2003` -> 409). Anything else is a 500 with a generic
+  message in production; Prisma messages embed the failing query, so they are logged,
+  never returned.
 
 `GET /api/v1/health/config` reports which env vars are **set** as booleans only —
 never values — so a deployment can be verified at a glance without leaking secrets.
@@ -190,6 +194,14 @@ npm test                # unit
 npm run test:e2e        # e2e (--forceExit)
 ```
 
+To exercise real endpoints without touching a shared database, run a throwaway
+Postgres (`initdb` in a temp dir, `listen_addresses=127.0.0.1`), `prisma migrate
+deploy --schema prisma/schema.prisma` against it, seed, and start the built API with a
+scrubbed environment (explicit `DATABASE_URL`, `DIRECT_URL`, `JWT_SECRET`,
+`ENCRYPTION_KEY`, run from a directory with no `.env`) so no real M-Pesa, SMS or email
+credentials load. The seeded business trial expires into the FREE tier, so set it to
+ENTERPRISE first or most routes answer 403.
+
 CI runs the unit suite and a full build against a live PostgreSQL service on every
 push (`.github/workflows/ci.yml`).
 
@@ -216,6 +228,19 @@ push (`.github/workflows/ci.yml`).
   load balancer reports the balancer's address and a per-IP limit becomes global.
   `AppThrottlerGuard.getTracker` reads `req.ip`, not the library's spoofable
   `req.ips[0]`.
+- **Throw `HttpException` subclasses, never a plain `Error`, for anything a client can
+  cause.** A plain `Error` is a 500. There is no global `ValidationPipe`, so use
+  `requireArray` / `requireString` from `common/validate.ts` at service entry points
+  that take a body field you then dereference.
+- **Declare literal routes before `:param` routes in a controller.** Nest matches in
+  declaration order; `:id/sync-sale` placed first used to swallow
+  `quickbooks/sync-sale`, `xero/sync-sale` and `woocommerce/sync-sale`.
+- **Public portal payments trust nothing from the client.** `portal/pay-order` charges
+  the order's own `totalCents` (looked up by `orderNumber`) and stores the
+  `checkoutRequestId` on the order; `confirm-payment` only accepts that same id.
+- Migrations must match `schema.prisma`: check with `prisma migrate diff --from-url
+  <scratch db> --to-schema-datamodel prisma/schema.prisma`. `WebAuthnCredential` once
+  existed only through `db push`.
 
 ---
 

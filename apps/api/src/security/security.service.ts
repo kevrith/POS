@@ -3,6 +3,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import * as bcrypt from 'bcrypt';
 
+import { requireArray, requireString } from '../common/validate';
+
 interface CreateCustomRoleDto {
   businessId: string;
   name: string;
@@ -37,6 +39,7 @@ export class SecurityService {
   // ─── Custom Roles & Permissions ─────────────────────────────────────────────
 
   async createCustomRole(dto: CreateCustomRoleDto) {
+    requireArray(dto?.permissions, 'permissions');
     // Validate permissions exist
     const validPermissions = await this.prisma.permission.findMany({
       where: { id: { in: dto.permissions }, isActive: true },
@@ -262,6 +265,7 @@ export class SecurityService {
   }
 
   async validatePassword(password: string, businessId: string): Promise<{ valid: boolean; errors: string[] }> {
+    requireString(password, 'password');
     const policy = await this.getPasswordPolicy(businessId);
     const errors: string[] = [];
 
@@ -289,6 +293,9 @@ export class SecurityService {
   }
 
   async changePassword(dto: ChangePasswordDto) {
+    requireString(dto?.userId, 'userId');
+    requireString(dto.currentPassword, 'currentPassword');
+    requireString(dto.newPassword, 'newPassword');
     const user = await this.prisma.user.findUnique({
       where: { id: dto.userId },
     });

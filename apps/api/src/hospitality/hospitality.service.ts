@@ -4,6 +4,8 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { v4 as uuidv4 } from 'uuid';
 import { randomUUID } from 'crypto';
 
+import { requireArray } from '../common/validate';
+
 @Injectable()
 export class HospitalityService {
   constructor(
@@ -150,6 +152,7 @@ export class HospitalityService {
     course?: string;
     seatNumber?: number;
   }>) {
+    requireArray(items, 'items');
     return Promise.all(
       items.map(item => {
         // Support both legacy string[] modifiers and new priced modifier objects
@@ -264,6 +267,7 @@ export class HospitalityService {
   }
 
   async splitBill(orderId: string, splits: Array<{ itemIds: string[] }>) {
+    requireArray(splits, 'splits');
     const order = await this.getOrderDetails(orderId);
     const newOrders = [];
 

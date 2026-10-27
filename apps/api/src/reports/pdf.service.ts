@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -720,6 +720,9 @@ export class PdfService {
   }
 
   async generateExpenseReport(employeeId: string, month: string): Promise<string> {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month ?? '')) {
+      throw new BadRequestException('month must be in YYYY-MM format');
+    }
     const [year, m] = month.split('-').map(Number);
     const start = new Date(year, m - 1, 1);
     const end = new Date(year, m, 0, 23, 59, 59);

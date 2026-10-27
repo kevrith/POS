@@ -11,6 +11,8 @@ import * as bcrypt from 'bcrypt';
 import { createCipheriv, randomBytes } from 'crypto';
 import { UserRole } from '@pos/shared';
 
+import { requireString } from '../common/validate';
+
 interface UpdateBusinessDto {
   name?: string;
   taxType?: 'VAT' | 'TOT' | 'NONE';
@@ -165,6 +167,8 @@ export class BusinessService {
       throw new ForbiddenException(check.message);
     }
 
+    requireString(dto?.name, 'name');
+    requireString(dto?.storeCode, 'storeCode');
     return this.prisma.store.create({
       data: {
         businessId,

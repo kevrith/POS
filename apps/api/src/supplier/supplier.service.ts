@@ -1,3 +1,4 @@
+import { requireArray } from '../common/validate';
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
@@ -108,6 +109,7 @@ export class SupplierService {
     const supplier = await this.prisma.supplier.findUnique({
       where: { id: supplierId },
     });
+    if (!supplier) throw new NotFoundException('Supplier not found');
 
     const pos = await this.prisma.purchaseOrder.findMany({
       where: { supplierId },
@@ -501,6 +503,7 @@ export class SupplierService {
     storeId: string;
     items: Array<{ itemId: string; quantity: number; unitCostCents: number; reason?: string }>;
   }) {
+    requireArray(data?.items, 'items');
     const count = await this.prisma.supplierReturn.count({ where: { businessId } });
     const returnNumber = `RTS-${String(count + 1).padStart(4, '0')}`;
     const totalCents = data.items.reduce((s, i) => s + i.quantity * i.unitCostCents, 0);
@@ -772,6 +775,7 @@ export class SupplierService {
     supplierId: string,
     items: Array<{ name: string; sku?: string; barcode?: string; unitCostCents: number; unitLabel?: string }>,
   ) {
+    requireArray(items, 'items');
     const results = await Promise.all(
       items.map((item) =>
         this.prisma.supplierCatalogueItem.create({
@@ -791,6 +795,7 @@ export class SupplierService {
     supplierId: string,
     lines: Array<{ catalogueItemId: string; quantity: number }>,
   ) {
+    requireArray(lines, 'lines');
     const catalogueItems = await this.prisma.supplierCatalogueItem.findMany({
       where: { id: { in: lines.map((l) => l.catalogueItemId) } },
     });

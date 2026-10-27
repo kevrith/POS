@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+import { requireString } from '../common/validate';
+
 @Injectable()
 export class FranchiseService {
   constructor(private prisma: PrismaService) {}
@@ -11,6 +13,8 @@ export class FranchiseService {
     franchiseFee: number,
     royaltyRate: number,
   ) {
+    requireString(franchiseeId, 'franchiseeId');
+    requireString(parentBusinessId, 'parentBusinessId');
     const [franchisee, parent] = await Promise.all([
       this.prisma.business.findUnique({ where: { id: franchiseeId } }),
       this.prisma.business.findUnique({ where: { id: parentBusinessId } }),

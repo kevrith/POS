@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+import { requireString } from '../common/validate';
+
 @Injectable()
 export class ChannelManagerService {
   constructor(private prisma: PrismaService) {}
@@ -51,6 +53,7 @@ export class ChannelManagerService {
   }
 
   async syncFromChannel(businessId: string, channel: string) {
+    requireString(channel, 'channel');
     // Mock sync — returns simulated bookings from channel
     return {
       channel: channel.toUpperCase(),

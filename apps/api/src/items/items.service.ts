@@ -717,6 +717,7 @@ export class ItemsService {
   }
 
   async importBulk(businessId: string, storeId: string, rows: CreateItemDto[]) {
+    if (!Array.isArray(rows)) throw new BadRequestException('items must be an array');
     const created: string[] = [];
     for (const row of rows) {
       const item = await this.create({ ...row, businessId, storeId });
@@ -737,6 +738,7 @@ export class ItemsService {
     expiryDate?: string;
     lotNumber?: string;
   }>) {
+    if (!Array.isArray(rows)) throw new BadRequestException('rows must be an array');
     const results: Array<{ success: boolean; name: string; id?: string; error?: string }> = [];
     for (const row of rows) {
       try {
@@ -885,6 +887,7 @@ export class ItemsService {
   }
 
   decodeGS1Barcode(barcode: string): { itemBarcode?: string; weightGrams?: number; priceCents?: number; raw: string } {
+    if (typeof barcode !== 'string' || !barcode.trim()) throw new BadRequestException('barcode is required');
     // GS1-128: Application Identifiers (AI)
     // AI 01 = GTIN (14 digits)
     // AI 3100-3105 = net weight in kg (6 digits, implied decimal)

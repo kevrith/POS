@@ -3,6 +3,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { v4 as uuidv4 } from 'uuid';
 
+import { requireArray } from '../common/validate';
+
 interface CreateLayawayDto {
   storeId: string;
   customerId: string;
@@ -18,6 +20,7 @@ export class LayawayService {
   ) {}
 
   async create(businessId: string, dto: CreateLayawayDto) {
+    requireArray(dto?.items, 'items');
     return this.prisma.$transaction(async (tx) => {
       const items = await tx.item.findMany({
         where: { id: { in: dto.items.map(i => i.itemId) } },

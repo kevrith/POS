@@ -41,10 +41,10 @@ export default function LayawayPage() {
   const activeLayaways = layaways.filter((l) => l.status === 'ACTIVE');
 
   return (
-    <div className="p-6">
+    <div className="p-3 sm:p-6">
       <h1 className="text-2xl font-bold mb-6">Layaway Management</h1>
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
         <div className="bg-blue-50 p-4 rounded">
           <p className="text-sm text-blue-600 font-medium">Active Layaways</p>
           <p className="text-2xl font-bold">{activeLayaways.length}</p>

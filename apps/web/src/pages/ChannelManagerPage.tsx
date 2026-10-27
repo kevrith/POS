@@ -119,9 +119,9 @@ export default function ChannelManagerPage() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap gap-3 items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <Globe className="w-6 h-6 text-blue-500" />
@@ -142,7 +142,7 @@ export default function ChannelManagerPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-gray-700">
+      <div className="flex overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap gap-1 mb-6 border-b border-gray-200 dark:border-gray-700">
         {(['bookings', 'settings'] as const).map((t) => (
           <button
             key={t}

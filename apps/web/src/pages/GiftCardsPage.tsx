@@ -319,8 +319,8 @@ export default function GiftCardsPage() {
   };
 
   return (
-    <div className="p-6 max-w-4xl">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-3 sm:p-6 max-w-4xl">
+      <div className="flex flex-wrap gap-3 items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">Gift Cards</h1>
           <p className="text-sm text-gray-500 mt-1">Issue and manage store gift cards</p>
@@ -335,7 +335,7 @@ export default function GiftCardsPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
         <div className="bg-white rounded-xl border p-4">
           <p className="text-sm text-gray-500">Total Cards</p>
           <p className="text-2xl font-bold text-gray-900">{cards.length}</p>

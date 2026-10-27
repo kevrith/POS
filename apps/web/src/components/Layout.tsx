@@ -945,12 +945,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             ['/pos', '/supermart', '/hospitality', '/kds', '/fuel-pump', '/cybercafe'].some(p => location.pathname.startsWith(p))
               ? 'overflow-hidden'
               : 'overflow-y-auto'
+          } ${
+            // The phone tab bar is fixed over the page, so reserve its height. /pos draws its own
+            // cart bar above the tab bar and positions itself.
+            location.pathname.startsWith('/pos') ? '' : 'pb-[calc(57px+env(safe-area-inset-bottom))] md:pb-0'
           }`}
-          style={{
-            paddingBottom: ['/pos', '/supermart', '/hospitality', '/kds', '/fuel-pump', '/cybercafe'].some(p => location.pathname.startsWith(p))
-              ? undefined
-              : 'calc(57px + env(safe-area-inset-bottom))'
-          }}
         >
           {/* Subtle background pattern */}
           <div className="absolute inset-0 opacity-[0.02] dark:opacity-[0.01]">

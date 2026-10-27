@@ -115,10 +115,10 @@ export default function ProformaPage() {
   );
 
   return (
-    <div className="p-6">
+    <div className="p-3 sm:p-6">
       <h1 className="text-2xl font-bold mb-6">Proforma / Quotations</h1>
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
         <div className="bg-blue-50 p-4 rounded">
           <p className="text-sm text-blue-600 font-medium">Active Proformas</p>
           <p className="text-2xl font-bold">{activeProformas.length}</p>

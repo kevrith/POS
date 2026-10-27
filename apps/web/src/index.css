@@ -20,6 +20,53 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* iOS Safari zooms the page when a focused field is under 16px. Pinch-zoom stays enabled
+   (WCAG 1.4.4), so touch devices get 16px fields instead of a locked viewport. */
+@media (hover: none) and (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+}
+
+/* Data tables are built for desktop widths. On phones they scroll sideways inside their own box
+   instead of being clipped by an `overflow-hidden` card or stretching the whole page. */
+@media screen and (max-width: 767px) {
+  table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  th { white-space: nowrap; }
+  td { min-width: 4.5rem; }
+}
+
+/* 100vh on mobile browsers includes the area behind the collapsing URL bar, which pushes bottom
+   bars (cart totals, tab bars) off-screen. Use the dynamic viewport height where it exists. */
+@supports (height: 100dvh) {
+  .h-screen { height: 100dvh; }
+  .min-h-screen { min-height: 100dvh; }
+}
+
+/* Centered modal overlays: when a dialog is taller than the screen (phones, landscape) plain
+   centering clips its top and bottom with no way to scroll. `safe center` falls back to start
+   alignment on overflow, and the overlay scrolls. */
+.fixed.inset-0.items-center.justify-center {
+  align-items: safe center;
+  overflow-y: auto;
+}
+
+/* Desktop-sized gutters (24px/32px) eat a third of a 360px screen. Scale them down on phones;
+   `sm:` and larger variants are different classes, so tablets and desktops are untouched. */
+@media screen and (max-width: 639px) {
+  .p-6 { padding: 1rem; }
+  .px-6 { padding-left: 1rem; padding-right: 1rem; }
+  .p-8 { padding: 1.25rem; }
+  .px-8 { padding-left: 1.25rem; padding-right: 1.25rem; }
+}
+
 /* ─── Custom scrollbar ────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }

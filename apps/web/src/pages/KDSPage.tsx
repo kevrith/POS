@@ -281,33 +281,33 @@ export default function KDSPage() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-3 bg-gray-900 border-b border-gray-700 shrink-0">
-        <div className="flex items-center gap-3">
-          <ChefHat className="w-6 h-6 text-orange-400" />
-          <div>
+      <div className="flex items-center justify-between gap-2 px-3 md:px-6 py-3 bg-gray-900 border-b border-gray-700 shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <ChefHat className="w-6 h-6 text-orange-400 shrink-0" />
+          <div className="min-w-0">
             <h1 className="text-xl font-bold">Kitchen Display</h1>
-            <p className="text-xs text-gray-400">{sharedMode ? 'Shared Terminal' : user?.name} · Store {storeId}</p>
+            <p className="text-xs text-gray-400 truncate">{sharedMode ? 'Shared Terminal' : user?.name} · Store {storeId}</p>
           </div>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 md:gap-4 shrink-0">
           {/* Status counts */}
-          <div className="hidden md:flex items-center gap-3 text-sm">
-            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-orange-500"></span>{pendingCount} pending</span>
-            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400"></span>{inProgressCount} preparing</span>
-            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-green-500"></span>{readyCount} ready</span>
+          <div className="flex items-center gap-2 md:gap-3 text-xs md:text-sm">
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-orange-500"></span>{pendingCount}<span className="hidden md:inline"> pending</span></span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400"></span>{inProgressCount}<span className="hidden md:inline"> preparing</span></span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-green-500"></span>{readyCount}<span className="hidden md:inline"> ready</span></span>
           </div>
           {/* Shared terminal toggle */}
           <button
             onClick={toggleSharedMode}
             title={sharedMode ? 'Shared Terminal: PIN required per claim (click to disable)' : 'Enable Shared Terminal mode: require PIN to claim each KOT'}
-            className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+            className={`flex items-center gap-1.5 px-2 md:px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
               sharedMode
                 ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
                 : 'bg-gray-800 text-gray-500 border border-gray-700 hover:text-gray-300'
             }`}
           >
             <Users className="w-3.5 h-3.5" />
-            {sharedMode ? 'Shared' : 'Personal'}
+            <span className="hidden md:inline">{sharedMode ? 'Shared' : 'Personal'}</span>
             <KeyRound className="w-3 h-3 opacity-60" />
           </button>
           <div className="flex items-center gap-2 text-sm text-gray-400">
@@ -329,7 +329,7 @@ export default function KDSPage() {
             <p className="text-sm mt-1">No pending orders</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {activeOrders.map((kot) => {
               const ageMin = getAgeMinutes(kot.createdAt);
               const remainingMins = getRemainingMinutes(kot.estimatedReadyAt);

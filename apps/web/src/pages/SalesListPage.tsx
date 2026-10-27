@@ -449,7 +449,7 @@ export default function SalesListPage() {
           )}
         </div>
         {/* Date range + search */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+        <div className="flex items-center gap-2 overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap pb-1 scrollbar-none">
           <Calendar className="w-4 h-4 text-gray-400 flex-shrink-0" />
           {(['today', 'week', 'month', 'custom'] as SalesRange[]).map((r) => (
             <button key={r} onClick={() => setDateRange(r)}

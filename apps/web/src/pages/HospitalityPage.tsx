@@ -6,7 +6,7 @@ import {
   UtensilsCrossed, ArrowRight, Check, AlertCircle, Loader2,
   ArrowLeftRight, GitMerge, CalendarDays, Zap, Edit2, CheckCircle,
   BedDouble, KeyRound, LogIn, LogOut, Phone, FileText,
-  Sparkles, Wrench,
+  Sparkles, Wrench, ChevronLeft,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
@@ -2207,7 +2207,7 @@ function KDSView({ storeId, onClose, tablePrefix = 'T' }: KDSViewProps) {
 
   return (
     <div className="fixed inset-0 bg-gray-900 z-50 flex flex-col">
-      <div className="flex items-center justify-between px-6 py-4 bg-gray-800 border-b border-gray-700">
+      <div className="flex items-center justify-between px-3 sm:px-6 py-4 bg-gray-800 border-b border-gray-700">
         <div className="flex items-center gap-3">
           <ChefHat className="w-6 h-6 text-orange-400" />
           <h2 className="text-xl font-bold text-white">Kitchen Display</h2>
@@ -2265,7 +2265,7 @@ function KDSView({ storeId, onClose, tablePrefix = 'T' }: KDSViewProps) {
                   </div>
                   {kds.assignedChef && (
                     <div className="text-xs text-yellow-600 flex items-center gap-1 mb-2">
-                      <span>👨‍🍳</span> {kds.assignedChef.name}
+                      <ChefHat className="w-3 h-3" /> {kds.assignedChef.name}
                     </div>
                   )}
                   {kds.estimatedReadyAt && kds.status === 'IN_PROGRESS' && (
@@ -2662,11 +2662,11 @@ export default function HospitalityPage() {
   return (
     <div className="h-full flex flex-col bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+      <div className="bg-white border-b px-3 sm:px-6 py-3 sm:py-4">
+        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-gray-800">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-800">
                 {view === 'tables' ? 'Table Management' : view === 'bar-tabs' ? 'Bar Tabs' : 'Hotel Rooms'}
               </h1>
               {view === 'tables' && (
@@ -2707,7 +2707,7 @@ export default function HospitalityPage() {
               </button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 xl:pb-0 [&>button]:shrink-0 [&>button]:whitespace-nowrap">
             <button
               onClick={() => void refetch()}
               className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
@@ -2756,7 +2756,7 @@ export default function HospitalityPage() {
 
         {/* Status filter tabs — only shown in tables view */}
         {view === 'tables' && (
-          <div className="flex gap-1 mt-3">
+          <div className="flex gap-1 mt-3 overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap">
             {(['ALL', 'AVAILABLE', 'OCCUPIED', 'BILL_REQUESTED', 'RESERVED'] as const).map((s) => (
               <button
                 key={s}
@@ -2785,14 +2785,14 @@ export default function HospitalityPage() {
 
       {/* Happy Hour Active Banner */}
       {activeDiscount && activeDiscount.discountPct > 0 && (
-        <div className="mx-6 mt-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 flex items-center gap-2 text-amber-800 text-sm font-medium">
+        <div className="mx-3 sm:mx-6 mt-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 flex items-center gap-2 text-amber-800 text-sm font-medium">
           <Sparkles className="w-4 h-4 text-amber-500 flex-shrink-0" />
           <span>Happy Hour active! {activeDiscount.discountPct}% discount on applicable items</span>
         </div>
       )}
 
       {/* Table Grid */}
-      {view === 'tables' && <div className="flex-1 overflow-y-auto p-6">
+      {view === 'tables' && <div className="flex-1 overflow-y-auto p-3 sm:p-6">
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
@@ -2904,7 +2904,7 @@ export default function HospitalityPage() {
                           </div>
                         </button>
                         {/* Hover management actions */}
-                        <div className="absolute top-2 left-2 hidden group-hover:flex gap-1 z-10">
+                        <div className="absolute top-2 left-2 hidden group-hover:flex [@media(hover:none)]:flex [@media(hover:none)]:top-auto [@media(hover:none)]:left-auto [@media(hover:none)]:-bottom-3 [@media(hover:none)]:right-2 gap-1 z-10">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -2940,10 +2940,10 @@ export default function HospitalityPage() {
 
       {/* Bar Tabs View */}
       {view === 'bar-tabs' && (
-        <div className="flex-1 overflow-hidden p-6">
+        <div className="flex-1 overflow-hidden p-3 sm:p-6">
           <div className="flex h-full gap-4">
-            {/* Tab list (left panel) */}
-            <div className="w-64 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex flex-col">
+            {/* Tab list (left panel); on phones the list and the detail replace each other */}
+            <div className={`${selectedBarTab ? 'hidden md:flex' : 'flex'} w-full md:w-64 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex-col`}>
               <div className="p-3 border-b flex items-center justify-between">
                 <h3 className="font-semibold text-sm text-gray-700 dark:text-gray-300">Open Tabs ({barTabs.length})</h3>
                 <button
@@ -2980,11 +2980,14 @@ export default function HospitalityPage() {
             </div>
 
             {/* Tab detail (right panel) */}
-            <div className="flex-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex flex-col">
+            <div className={`${selectedBarTab ? 'flex' : 'hidden md:flex'} flex-1 min-w-0 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex-col`}>
               {selectedBarTab ? (
                 <>
-                  <div className="p-4 border-b flex items-center justify-between">
-                    <h3 className="font-semibold text-gray-900 dark:text-white">
+                  <div className="p-3 sm:p-4 border-b flex items-center justify-between gap-2">
+                    <button onClick={() => setSelectedBarTab(null)} aria-label="Back to open tabs" className="md:hidden -ml-1 p-1.5 text-gray-500 hover:text-gray-800">
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <h3 className="font-semibold text-gray-900 dark:text-white mr-auto">
                       Bar Tab #{selectedBarTab.id.slice(-4).toUpperCase()}
                     </h3>
                     <div className="flex gap-2">
@@ -3329,7 +3332,7 @@ export default function HospitalityPage() {
 
             {/* Tabs — only show when occupied */}
             {selectedRoom.status === 'OCCUPIED' && selectedRoom.bookings[0] && (
-              <div className="flex border-b dark:border-gray-700 px-6">
+              <div className="flex overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap border-b dark:border-gray-700 px-6">
                 {(['info', 'folio'] as const).map(tab => (
                   <button
                     key={tab}
@@ -3443,7 +3446,7 @@ export default function HospitalityPage() {
               {roomDetailTab === 'folio' && currentFolio && (
                 <div className="space-y-4">
                   {/* Folio summary */}
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     <div className="bg-gray-50 rounded-xl p-3 text-center border">
                       <p className="text-xs text-gray-400">Room Rate</p>
                       <p className="font-bold text-gray-700">{fmt(currentFolio.roomRateTotal)}</p>

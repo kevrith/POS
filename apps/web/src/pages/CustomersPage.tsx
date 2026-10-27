@@ -452,7 +452,7 @@ export default function CustomersPage() {
                         <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
                           Requested by <strong>{req.requestedByUser.name}</strong> · {new Date(req.createdAt).toLocaleDateString('en-KE')}
                         </div>
-                        <div className="grid grid-cols-3 gap-3 text-xs">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
                           <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-2">
                             <div className="text-gray-400 mb-0.5">Current Limit</div>
                             <div className="font-semibold text-gray-900 dark:text-white">{formatKES(req.currentLimitCents)}</div>
@@ -510,7 +510,7 @@ export default function CustomersPage() {
         {/* ── LIST TAB ── */}
         {activeTab === 'list' && (
           <>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Total Customers</p>
@@ -725,7 +725,7 @@ export default function CustomersPage() {
               </div>
 
               {selected && (
-                <div className="w-80 xl:w-96 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col overflow-hidden">
+                <div className="fixed inset-0 z-40 md:static md:inset-auto md:z-auto w-full md:w-80 xl:w-96 md:rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col overflow-hidden">
                   <div className="p-5 border-b border-gray-100 dark:border-gray-700">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">

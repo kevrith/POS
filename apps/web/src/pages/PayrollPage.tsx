@@ -877,7 +877,7 @@ export default function PayrollPage() {
               {selectedRun.status}
             </span>
           </div>
-          <div className="grid grid-cols-3 gap-4 mt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-4">
             <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
               <p className="text-xs text-gray-500 dark:text-gray-400">Total Gross</p>
               <p className="text-lg font-bold text-gray-900 dark:text-white">{fmt(selectedRun.totalGrossCents)}</p>

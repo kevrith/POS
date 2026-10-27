@@ -118,9 +118,9 @@ export default function SerialTrackingPage() {
   );
 
   return (
-    <div className="p-6">
+    <div className="p-3 sm:p-6">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-wrap gap-3 justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Serial / IMEI Tracking</h1>
         <button
           onClick={() => setShowForm(!showForm)}
@@ -131,7 +131,7 @@ export default function SerialTrackingPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
         <div className="bg-blue-50 p-4 rounded">
           <p className="text-sm text-blue-600 font-medium">Total Serials</p>
           <p className="text-2xl font-bold">{serials.length}</p>

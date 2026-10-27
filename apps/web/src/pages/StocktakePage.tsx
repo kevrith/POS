@@ -287,7 +287,7 @@ function CountSheet({
 
         {/* Variance summary (finalized) */}
         {finalized && variances.length > 0 && (
-          <div className="grid grid-cols-3 gap-3 mt-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-2">
             <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-3 text-center">
               <p className="text-2xl font-black text-gray-900 dark:text-white">{variances.length}</p>
               <p className="text-xs text-gray-500">Total variances</p>

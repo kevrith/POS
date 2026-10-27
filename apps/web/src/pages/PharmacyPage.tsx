@@ -155,14 +155,14 @@ export default function PharmacyPage() {
   ];
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-3 sm:p-6 space-y-4">
       <div className="flex items-center gap-2">
         <Pill className="w-6 h-6 text-blue-600" />
         <h1 className="text-2xl font-bold">Pharmacy Management</h1>
       </div>
 
       {/* Tab Bar */}
-      <div className="flex gap-1 border-b overflow-x-auto">
+      <div className="flex gap-1 border-b overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -458,7 +458,7 @@ export default function PharmacyPage() {
           {showLogForm && (
             <div className="bg-white border rounded-lg p-4 space-y-3">
               <h3 className="font-semibold text-sm">Log Controlled Substance Dispensing</h3>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <input className="border rounded px-3 py-1.5 text-sm" placeholder="Drug / item name" value={logForm.itemName} onChange={(e) => setLogForm({ ...logForm, itemName: e.target.value })} />
                 <select className="border rounded px-3 py-1.5 text-sm" value={logForm.scheduleClass} onChange={(e) => setLogForm({ ...logForm, scheduleClass: e.target.value })}>
                   {['II', 'III', 'IV', 'V'].map((s) => <option key={s} value={s}>Schedule {s}</option>)}
@@ -468,12 +468,12 @@ export default function PharmacyPage() {
                   <input className="border rounded px-3 py-1.5 text-sm flex-1" placeholder="Unit (tablets, ml...)" value={logForm.unit} onChange={(e) => setLogForm({ ...logForm, unit: e.target.value })} />
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <input className="border rounded px-3 py-1.5 text-sm" placeholder="Patient name" value={logForm.patientName} onChange={(e) => setLogForm({ ...logForm, patientName: e.target.value })} />
                 <input className="border rounded px-3 py-1.5 text-sm" placeholder="Patient ID / National ID" value={logForm.patientIdNumber} onChange={(e) => setLogForm({ ...logForm, patientIdNumber: e.target.value })} />
                 <input className="border rounded px-3 py-1.5 text-sm" placeholder="Dispensed by" value={logForm.dispensedBy} onChange={(e) => setLogForm({ ...logForm, dispensedBy: e.target.value })} />
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <input className="border rounded px-3 py-1.5 text-sm" placeholder="Prescriber name" value={logForm.prescriberName} onChange={(e) => setLogForm({ ...logForm, prescriberName: e.target.value })} />
                 <input className="border rounded px-3 py-1.5 text-sm" placeholder="Prescriber license #" value={logForm.prescriberLicense} onChange={(e) => setLogForm({ ...logForm, prescriberLicense: e.target.value })} />
                 <input className="border rounded px-3 py-1.5 text-sm" placeholder="Notes (optional)" value={logForm.notes} onChange={(e) => setLogForm({ ...logForm, notes: e.target.value })} />
@@ -530,7 +530,7 @@ export default function PharmacyPage() {
         <div className="space-y-4">
           <div className="bg-white border rounded-lg p-4 space-y-3">
             <h3 className="font-semibold text-sm">Add Insurance Provider</h3>
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <input className="border rounded px-3 py-1.5 text-sm" placeholder="Provider name" value={provForm.name} onChange={(e) => setProvForm({ ...provForm, name: e.target.value })} />
               <input className="border rounded px-3 py-1.5 text-sm" placeholder="Code (e.g. NHIF)" value={provForm.code} onChange={(e) => setProvForm({ ...provForm, code: e.target.value })} />
               <input className="border rounded px-3 py-1.5 text-sm" placeholder="Contact phone" value={provForm.contactPhone} onChange={(e) => setProvForm({ ...provForm, contactPhone: e.target.value })} />
@@ -573,7 +573,7 @@ export default function PharmacyPage() {
       {tab === 'claims' && (
         <div className="space-y-4">
           {claimStats && (
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {[
                 { label: 'Submitted', data: claimStats.submitted, color: 'blue', amt: claimStats.submitted._sum?.billedCents },
                 { label: 'Approved', data: claimStats.approved, color: 'green', amt: claimStats.approved._sum?.approvedCents },
@@ -866,7 +866,7 @@ function FormularyTab({ businessId }: { businessId: string }) {
         <input
           type="text" placeholder="Search formulary..."
           value={search} onChange={(e) => setSearch(e.target.value)}
-          className="border rounded-lg px-3 py-2 text-sm w-64"
+          className="border rounded-lg px-3 py-2 text-sm w-full sm:w-64"
         />
         <button
           onClick={() => setShowForm(!showForm)}

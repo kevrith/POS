@@ -261,7 +261,7 @@ function Shop({ session, onLogout }: { session: Session; onLogout: () => void })
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search the menu…"
               className="w-full border rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-2 mb-2">
+          <div className="flex gap-2 overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap pb-2 mb-2">
             {cats.map((c) => (
               <button key={c} onClick={() => setActiveCat(c)}
                 className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${activeCat === c ? 'bg-indigo-600 text-white' : 'bg-white border text-gray-600'}`}>

@@ -485,7 +485,7 @@ export default function BatchManagementPage() {
     <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900">
       {/* Header */}
       <div className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 px-6 py-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap gap-3 items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Batch Management</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">

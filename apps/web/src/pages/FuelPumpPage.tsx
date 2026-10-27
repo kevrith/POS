@@ -354,7 +354,7 @@ export default function FuelPumpPage() {
   ];
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-3 sm:p-6 space-y-4">
       {/* Header */}
       <div className="flex items-center gap-2">
         <Fuel className="w-6 h-6 text-orange-600" />
@@ -362,7 +362,7 @@ export default function FuelPumpPage() {
       </div>
 
       {/* Tab Bar */}
-      <div className="flex gap-1 border-b overflow-x-auto">
+      <div className="flex gap-1 border-b overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -432,7 +432,7 @@ export default function FuelPumpPage() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <input value={tcpHost} onChange={(e) => setTcpHost(e.target.value)} disabled={tcpConnected}
                     placeholder="Controller IP (e.g. 192.168.1.100)"
-                    className="border rounded px-2 py-1 text-xs w-52 disabled:opacity-50" />
+                    className="border rounded px-2 py-1 text-xs w-full sm:w-52 disabled:opacity-50" />
                   <input value={tcpPort} onChange={(e) => setTcpPort(e.target.value)} disabled={tcpConnected}
                     placeholder="Port" className="border rounded px-2 py-1 text-xs w-20 disabled:opacity-50" />
                   <select value={tcpProtocol} onChange={(e) => setTcpProtocol(e.target.value as PumpProtocol)}
@@ -590,7 +590,7 @@ export default function FuelPumpPage() {
         <div className="space-y-4">
           <div className="bg-white border rounded-lg p-4 space-y-3">
             <h3 className="font-semibold text-sm">Add Fuel Grade</h3>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <input className="border rounded px-3 py-1.5 text-sm" placeholder="Name (e.g. Petrol 91)"
                 value={gradeForm.name} onChange={(e) => setGradeForm({ ...gradeForm, name: e.target.value })} />
               <input className="border rounded px-3 py-1.5 text-sm" placeholder="Code (e.g. P91)"
@@ -725,7 +725,7 @@ export default function FuelPumpPage() {
           {dippingForm.tankId && (
             <div className="bg-white border rounded-lg p-4 space-y-3">
               <h3 className="font-semibold text-sm">Record Dipping (Manual Level Reading) — Tank {tanks.find((t: any) => t.id === dippingForm.tankId)?.tankNumber}</h3>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <input className="border rounded px-3 py-1.5 text-sm" placeholder="Litres (actual reading)" type="number" step="0.1"
                   value={dippingForm.litres} onChange={(e) => setDippingForm({ ...dippingForm, litres: e.target.value })} />
                 <input className="border rounded px-3 py-1.5 text-sm" placeholder="Recorded by"
@@ -746,7 +746,7 @@ export default function FuelPumpPage() {
           {deliveryForm.tankId && (
             <div className="bg-white border rounded-lg p-4 space-y-3">
               <h3 className="font-semibold text-sm">Record Fuel Delivery — Tank {tanks.find((t: any) => t.id === deliveryForm.tankId)?.tankNumber}</h3>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <input className="border rounded px-3 py-1.5 text-sm" placeholder="Litres delivered" type="number" step="0.1"
                   value={deliveryForm.litresDelivered} onChange={(e) => setDeliveryForm({ ...deliveryForm, litresDelivered: e.target.value })} />
                 <input className="border rounded px-3 py-1.5 text-sm" placeholder="Supplier name"
@@ -909,7 +909,7 @@ export default function FuelPumpPage() {
                     {expandedShift === s.id && shiftSummary && (
                       <tr key={`${s.id}-summary`} className="bg-orange-50">
                         <td colSpan={6} className="px-6 py-4">
-                          <div className="grid grid-cols-3 gap-4 mb-3">
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-3">
                             <div className="bg-white rounded p-3 text-center border">
                               <p className="text-xs text-gray-500">Total Revenue</p>
                               <p className="font-bold text-orange-600">{formatKES(shiftSummary.totalRevenueCents)}</p>
@@ -1042,7 +1042,7 @@ export default function FuelPumpPage() {
                   {/* Record payment */}
                   <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-2">
                     <p className="text-sm font-medium text-green-800">Record Payment</p>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       <input className="border rounded px-3 py-1.5 text-sm" placeholder="Amount (KES cents)" type="number"
                         value={paymentForm.amountCents} onChange={(e) => setPaymentForm({ ...paymentForm, amountCents: e.target.value })} />
                       <input className="border rounded px-3 py-1.5 text-sm" placeholder="Reference"
@@ -1146,7 +1146,7 @@ export default function FuelPumpPage() {
           </div>
           {stats && (
             <>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 <div className="bg-white border rounded-lg p-4">
                   <p className="text-sm text-gray-500">Total Revenue</p>
                   <p className="text-2xl font-bold text-orange-600">{formatKES(stats.totalRevenueCents)}</p>

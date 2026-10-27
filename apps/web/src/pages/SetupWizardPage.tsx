@@ -245,7 +245,7 @@ export default function SetupWizardPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Tax Type</label>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {([
                       { value: 'VAT', label: 'VAT', sub: '16% — turnover > KES 5M' },
                       { value: 'TOT', label: 'TOT', sub: '3% — turnover < KES 5M' },

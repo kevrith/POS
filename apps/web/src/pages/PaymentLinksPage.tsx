@@ -114,9 +114,9 @@ export default function PaymentLinksPage() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap gap-3 items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <Link2 className="w-6 h-6 text-violet-500" />
@@ -144,7 +144,7 @@ export default function PaymentLinksPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4">
           <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-semibold">Total Links</p>
           <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{links.length}</p>

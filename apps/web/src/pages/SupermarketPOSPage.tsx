@@ -123,6 +123,7 @@ export default function SupermarketPOSPage() {
   const [customerPhone, setCustomerPhone] = useState<string | null>(null);
   const [customerKraPin, setCustomerKraPin] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [cartOpen, setCartOpen] = useState(false);   // phones: cart is a full-screen sheet
   const [now, setNow] = useState(new Date());
 
   const scanRef = useRef<HTMLInputElement>(null);
@@ -230,6 +231,8 @@ export default function SupermarketPOSPage() {
   const vatCents = Math.round(vatApplicableAfterDiscount * 16 / 116);
   const totalCents = Math.max(0, taxBase);
   const totalItems = cart.reduce((s, i) => s + i.quantity, 0);
+
+  useEffect(() => { if (cart.length === 0) setCartOpen(false); }, [cart.length]);
 
   // ─── Scan / Add item ─────────────────────────────────────────
 
@@ -808,7 +811,7 @@ export default function SupermarketPOSPage() {
               </div>
 
               {/* Quick action buttons */}
-              <div className="flex-1 grid grid-cols-2 gap-1.5">
+              <div className="flex-1 grid grid-cols-5 lg:grid-cols-2 gap-1 lg:gap-1.5 [&>button]:min-w-0 [&>button]:overflow-hidden [&>button]:px-0.5 [&>button]:py-1.5 lg:[&>button]:py-2.5 [&>button]:text-[10px] [&>button]:leading-tight [&>button]:text-center lg:[&>button]:text-xs">
                 <button
                   onClick={() => { if (cart.length > 0) holdCurrentSale(); }}
                   disabled={cart.length === 0}
@@ -870,11 +873,14 @@ export default function SupermarketPOSPage() {
         </div>
 
         {/* ════ RIGHT PANEL — TRANSACTION ════ */}
-        <div className="flex flex-col w-80 lg:w-96 xl:w-[420px] shrink-0 bg-slate-900 overflow-hidden">
+        <div className={`${cartOpen ? 'flex' : 'hidden'} md:flex flex-col fixed inset-0 z-40 md:static md:inset-auto md:z-auto md:w-80 lg:w-96 xl:w-[420px] shrink-0 bg-slate-900 overflow-hidden`}>
 
           {/* Transaction header */}
           <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-2">
+              <button onClick={() => setCartOpen(false)} aria-label="Back to products" className="md:hidden -ml-1 p-1.5 text-slate-400 hover:text-slate-200">
+                <X className="w-5 h-5" />
+              </button>
               <ShoppingCart className="w-4 h-4 text-slate-500" />
               <span className="text-sm font-semibold text-slate-300">TRANSACTION</span>
               <span className="text-xs bg-slate-800 text-slate-500 px-2 py-0.5 rounded font-mono">
@@ -912,7 +918,7 @@ export default function SupermarketPOSPage() {
             ) : (
               <div className="divide-y divide-slate-800/60">
                 {/* Column headers */}
-                <div className="grid grid-cols-12 px-4 py-1.5 text-xs font-semibold text-slate-600 uppercase tracking-wider bg-slate-900 sticky top-0 z-10">
+                <div className="hidden md:grid grid-cols-12 px-4 py-1.5 text-xs font-semibold text-slate-600 uppercase tracking-wider bg-slate-900 sticky top-0 z-10">
                   <div className="col-span-3">Item</div>
                   <div className="col-span-2 text-center">Qty</div>
                   <div className="col-span-4 text-center">Discount</div>
@@ -924,19 +930,19 @@ export default function SupermarketPOSPage() {
                   return (
                     <div
                       key={item.id}
-                      className={`grid grid-cols-12 items-center px-4 py-2.5 transition-all duration-300 ${
+                      className={`grid grid-cols-12 gap-y-2 md:gap-y-0 items-center px-4 py-2.5 transition-all duration-300 ${
                         isNew ? 'bg-emerald-900/30' : idx % 2 === 0 ? 'bg-transparent' : 'bg-slate-800/20'
                       } hover:bg-slate-800/40 group`}
                     >
                       {/* Item name + SKU */}
-                      <div className="col-span-3 pr-1 min-w-0">
+                      <div className="col-span-7 md:col-span-3 order-1 md:order-none pr-1 min-w-0">
                         <p className="text-xs text-slate-200 font-medium leading-tight truncate">{item.name}</p>
                         {(item as any).sku && (
                           <p className="text-xs text-slate-600 font-mono truncate">{(item as any).sku}</p>
                         )}
                       </div>
                       {/* Qty controls */}
-                      <div className="col-span-2 flex items-center justify-center gap-1">
+                      <div className="col-span-5 md:col-span-2 order-4 md:order-none flex items-center justify-start md:justify-center gap-1">
                         <button
                           onClick={() => updateQuantity(item.id, item.quantity - 1)}
                           className="w-5 h-5 rounded bg-slate-700 hover:bg-slate-600 flex items-center justify-center text-slate-400 hover:text-red-400 transition-colors"
@@ -954,7 +960,7 @@ export default function SupermarketPOSPage() {
                         </button>
                       </div>
                       {/* Item discount — bidirectional % ↔ KES */}
-                      <div className="col-span-4 flex items-center gap-0.5 px-0.5">
+                      <div className="col-span-7 md:col-span-4 order-5 md:order-none flex items-center gap-0.5 px-0.5">
                         <input
                           type="number"
                           min="0"
@@ -986,17 +992,17 @@ export default function SupermarketPOSPage() {
                         <span className="text-slate-600 text-[10px]">K</span>
                       </div>
                       {/* Unit price */}
-                      <div className="col-span-2 text-right">
+                      <div className="col-span-4 md:col-span-2 order-2 md:order-none text-right">
                         <span className="text-xs text-slate-500 tabular-nums">{fmt(item.unitPriceCents)}</span>
                         {item.discountPercent && item.discountPercent > 0 && (
                           <div className="text-emerald-400 text-[10px]">-{item.discountPercent}%</div>
                         )}
                       </div>
                       {/* Void */}
-                      <div className="col-span-1 flex justify-end">
+                      <div className="col-span-1 order-3 md:order-none flex justify-end">
                         <button
                           onClick={() => removeFromCart(item.id)}
-                          className="w-5 h-5 rounded text-slate-700 hover:text-red-500 hover:bg-red-900/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+                          className="w-5 h-5 rounded text-slate-700 hover:text-red-500 hover:bg-red-900/30 flex items-center justify-center opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 transition-all"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -1175,6 +1181,22 @@ export default function SupermarketPOSPage() {
           </div>
         </div>
       </div>
+
+      {/* Phone cart bar: opens the transaction sheet */}
+      <button
+        onClick={() => setCartOpen(true)}
+        className="md:hidden shrink-0 flex items-center justify-between gap-3 px-4 py-3 bg-blue-600 active:bg-blue-700 text-white font-bold"
+        style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
+      >
+        <span className="flex items-center gap-2">
+          <ShoppingCart className="w-5 h-5" />
+          {totalItems} item{totalItems !== 1 ? 's' : ''}
+        </span>
+        <span className="flex items-center gap-1.5">
+          KES {fmt(totalCents)}
+          <ChevronUp className="w-4 h-4" />
+        </span>
+      </button>
 
       {/* ══════════════ CAMERA MODAL ══════════════ */}
       {showCamera && (

@@ -418,7 +418,7 @@ function GRNModal({ po, storeId, onClose, onSuccess }: GRNModalProps) {
                   Ordered: {r.ordered}
                 </span>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Qty Received *</label>
                   <input
@@ -1015,7 +1015,7 @@ function VendorCatalogueTab({
           <h3 className="font-semibold text-gray-700 text-sm">Add Items to Catalogue</h3>
           <div className="space-y-2">
             {catalogueItems.map((row, idx) => (
-              <div key={idx} className="grid grid-cols-4 gap-2 items-center">
+              <div key={idx} className="grid grid-cols-2 sm:grid-cols-4 gap-2 items-center">
                 <input
                   placeholder="Item name *"
                   value={row.name}
@@ -1474,7 +1474,7 @@ export default function SuppliersPage() {
     <div className="h-full flex flex-col bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b px-6 py-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap gap-3 items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Suppliers & Procurement</h1>
             <p className="text-sm text-gray-500 mt-0.5">

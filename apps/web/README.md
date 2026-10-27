@@ -65,6 +65,32 @@ src/
 
 ---
 
+## Phone layout
+
+The web app is used on phones, so every screen has to work at 360-430px wide. The shell hides the
+sidebar below `md` and shows `MobileNav` (a fixed bottom tab bar), and `Layout`'s `<main>` reserves its
+height with `pb-[calc(57px+env(safe-area-inset-bottom))] md:pb-0` (all routes except `/pos`, which
+positions its own cart bar above the tab bar).
+
+`src/index.css` carries the global phone rules, so new screens get them for free:
+
+- below 768px every `<table>` becomes its own horizontal scroll box (headers do not wrap)
+- below 640px the `p-6`/`px-6`/`p-8`/`px-8` gutters shrink (`sm:` and up are untouched)
+- centered modal overlays (`fixed inset-0 ... items-center justify-center`) scroll and use `safe center`,
+  so a dialog taller than the screen is never clipped
+- `h-screen`/`min-h-screen` use `100dvh` where supported (mobile URL bar)
+
+When you build a screen:
+
+- Master-detail and cart panels: full-width sheet below `md` (`fixed inset-0 z-40 md:static ...`), with a
+  close/back button and an in-flow summary bar that opens it. See `SupermarketPOSPage`, `KioskPage`,
+  the Bar Tabs view in `HospitalityPage` and the customer panel in `CustomersPage`.
+- Multi-column grids start at 1-2 columns: `grid-cols-2 sm:grid-cols-3`, never bare `grid-cols-3`/`4`
+  (numeric keypads are the exception).
+- Header rows use `flex-wrap gap-3`; tab and chip rows use `overflow-x-auto [&>button]:shrink-0
+  [&>button]:whitespace-nowrap`.
+- Hover-only controls need `[@media(hover:none)]:...` so touch users can reach them.
+
 ## Offline behaviour
 
 Sales taken while offline are written to IndexedDB (Dexie) with an `offlineId` UUID

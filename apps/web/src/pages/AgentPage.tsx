@@ -750,7 +750,7 @@ function HomeScreen({ user, businessId, onNavigate }: { user: { id: string; name
   return (
     <div className="p-4 space-y-4">
       {/* Greeting */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap gap-3 items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">{greeting(user.name)}</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">Your sales dashboard</p>
@@ -1131,7 +1131,7 @@ function CustomerDetailScreen({
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+      <div className="flex overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
         {(['history', 'new-order'] as CustomerTab[]).map(t => (
           <button key={t} onClick={() => setTab(t)} className={`flex-1 py-3 text-sm font-medium transition-colors ${tab === t ? 'border-b-2 border-blue-600 text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
             {t === 'history' ? 'Order History' : 'New Order'}
@@ -1196,7 +1196,7 @@ function OrderHistoryScreen({ agentId, businessId }: { agentId: string; business
         <h2 className="font-bold text-gray-900 dark:text-white">My Orders</h2>
         <button onClick={() => refetch()} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"><RefreshCw className="w-4 h-4 text-gray-500" /></button>
       </div>
-      <div className="flex gap-2 overflow-x-auto pb-1">
+      <div className="flex gap-2 overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap pb-1">
         {filters.map(f => (
           <button key={f.value} onClick={() => setFilter(f.value)} className={`shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-colors min-h-[36px] ${filter === f.value ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'}`}>
             {f.label}

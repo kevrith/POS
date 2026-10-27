@@ -188,7 +188,7 @@ export default function ReconciliationPage() {
       <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Bank Reconciliation</h1>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6 border-b border-gray-200 dark:border-gray-700">
+      <div className="flex overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap gap-2 mb-6 border-b border-gray-200 dark:border-gray-700">
         {([['statements', 'Bank Statements'], ['entries', 'Reconciliation'], ['paystack', 'Paystack'], ['summary', 'Summary']] as [Tab, string][]).map(([t, label]) => (
           <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tab === t ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}>
             {label}

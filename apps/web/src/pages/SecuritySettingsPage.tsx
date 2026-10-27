@@ -267,7 +267,7 @@ export default function SecuritySettingsPage() {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Minimum Password Length</label>
                   <input type="number" min={6} max={50} defaultValue={passwordPolicy.minLength}
                     onBlur={e => updatePolicyMut.mutate({ minLength: parseInt(e.target.value) })}
-                    className="w-40 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
+                    className="w-full sm:w-40 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   {[

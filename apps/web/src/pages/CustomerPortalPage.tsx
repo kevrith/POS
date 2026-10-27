@@ -650,7 +650,7 @@ function StatementTab({ session }: { session: PortalSession }) {
   return (
     <div className="space-y-5">
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <div className="bg-blue-900/20 border border-blue-800/50 rounded-2xl p-4 text-center">
           <p className="text-xs text-slate-400 mb-1">Credit Limit</p>
           <p className="text-base font-bold text-blue-400">{fmtKES(s?.creditLimitCents ?? 0)}</p>

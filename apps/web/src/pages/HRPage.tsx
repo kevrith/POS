@@ -526,7 +526,7 @@ function EditEmployeePanel({ employee, businessId, onClose, onSuccess }: {
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b bg-gray-50 flex-shrink-0">
+        <div className="flex overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap border-b bg-gray-50 flex-shrink-0">
           {TABS.map((t) => (
             <button
               key={t.key}
@@ -1316,7 +1316,7 @@ export default function HRPage() {
     <div className="h-full flex flex-col bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b px-6 py-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap gap-3 items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Human Resources</h1>
             <p className="text-sm text-gray-500 mt-0.5">
@@ -1330,7 +1330,7 @@ export default function HRPage() {
           </button>
         </div>
 
-        <div className="flex gap-1 mt-3 overflow-x-auto">
+        <div className="flex gap-1 mt-3 overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap">
           {tabs.map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setTab(id)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${

@@ -299,7 +299,7 @@ function QuoteForm({
           type="number" min="0" step="0.01" value={price}
           onChange={(e) => setPrice(e.target.value)}
           placeholder="Quoted total (KES)"
-          className="w-44 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+          className="w-full sm:w-44 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
         />
         <input
           type="number" min="0" value={days}
@@ -439,9 +439,9 @@ export default function RFQPage() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap gap-3 items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <FileText className="w-6 h-6 text-purple-500" />
@@ -462,7 +462,7 @@ export default function RFQPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-gray-700">
+      <div className="flex overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap gap-1 mb-6 border-b border-gray-200 dark:border-gray-700">
         {([{ id: 'list', label: 'RFQs' }, { id: 'create', label: 'Create RFQ' }] as const).map((t) => (
           <button
             key={t.id}
@@ -661,7 +661,7 @@ export default function RFQPage() {
               type="date"
               value={formDeadline}
               onChange={(e) => setFormDeadline(e.target.value)}
-              className="w-48 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full sm:w-48 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 

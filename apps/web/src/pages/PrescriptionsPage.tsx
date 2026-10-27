@@ -237,7 +237,7 @@ export default function PrescriptionsPage() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap gap-3 items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <Pill className="w-5 h-5 text-blue-600" /> Prescription Queue
@@ -657,8 +657,8 @@ export default function PrescriptionsPage() {
                         </div>
 
                         {/* Row 2: Dosage */}
-                        <div className="grid grid-cols-12 gap-2 items-center">
-                          <div className="col-span-2">
+                        <div className="grid grid-cols-6 sm:grid-cols-12 gap-2 items-center">
+                          <div className="col-span-3 sm:col-span-2">
                             <label className="block text-xs text-gray-500 mb-0.5">Dose</label>
                             <input type="number" min="0.5" step="0.5" value={item.dose ?? 1}
                               onChange={(e) => updateItem({ dose: Number(e.target.value) })}
@@ -672,7 +672,7 @@ export default function PrescriptionsPage() {
                               {UNIT_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}
                             </select>
                           </div>
-                          <div className="col-span-4">
+                          <div className="col-span-3 sm:col-span-4">
                             <label className="block text-xs text-gray-500 mb-0.5">Frequency</label>
                             <select value={item.frequency ?? 'BD'}
                               onChange={(e) => updateItem({ frequency: e.target.value })}
@@ -689,14 +689,14 @@ export default function PrescriptionsPage() {
                         </div>
 
                         {/* Row 3: Total qty + instructions */}
-                        <div className="grid grid-cols-12 gap-2 items-center">
-                          <div className="col-span-3">
+                        <div className="grid grid-cols-6 sm:grid-cols-12 gap-2 items-center">
+                          <div className="col-span-2 sm:col-span-3">
                             <label className="block text-xs text-gray-500 mb-0.5">Total Qty</label>
                             <input type="number" min="1" value={item.qty}
                               onChange={(e) => updateItem({ qty: Number(e.target.value) })}
                               className="w-full px-2 py-1.5 border rounded-lg text-sm text-center dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
                           </div>
-                          <div className="col-span-9">
+                          <div className="col-span-4 sm:col-span-9">
                             <label className="block text-xs text-gray-500 mb-0.5">Special Instructions</label>
                             <input value={item.instructions ?? ''}
                               onChange={(e) => updateItem({ instructions: e.target.value })}

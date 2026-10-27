@@ -1616,12 +1616,12 @@ function CategoryManager({ businessId, onClose }: CategoryManagerProps) {
                   <span className="flex-1 text-sm font-medium text-gray-800 dark:text-gray-200">{cat.name}</span>
                   <button
                     onClick={() => { setEditId(cat.id!); setEditName(cat.name); setEditColor(cat.color ?? '#6B7280'); }}
-                    className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-blue-600 p-1 transition-opacity"
+                    className="opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 text-gray-400 hover:text-blue-600 p-1 transition-opacity"
                   ><Edit2 className="w-3.5 h-3.5" /></button>
                   <button
                     onClick={async () => { const ok = await confirm({ title: 'Delete Category', message: `Delete "${cat.name}"? Items in this category will become uncategorised.`, variant: 'danger', confirmLabel: 'Delete' }); if (ok) deleteMut.mutate(cat.id!); }}
                     disabled={deleteMut.isPending}
-                    className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-600 p-1 transition-opacity disabled:opacity-50"
+                    className="opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 text-gray-400 hover:text-red-600 p-1 transition-opacity disabled:opacity-50"
                   ><Trash2 className="w-3.5 h-3.5" /></button>
                 </>
               )}
@@ -2448,7 +2448,7 @@ function MovementsTab({ businessId, storeId }: MovementsTabProps) {
     <div>
       <div className="mb-4">
         <label className="block text-sm font-medium text-gray-700 mb-1">Select Item</label>
-        <div className="relative w-72">
+        <div className="relative w-full sm:w-72">
           <select
             value={selectedItemId}
             onChange={(e) => setSelectedItemId(e.target.value)}
@@ -2776,9 +2776,9 @@ export default function InventoryPage() {
   ];
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-wrap gap-3 justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Inventory</h1>
           <p className="text-sm text-gray-500 mt-0.5">Manage items, stock levels and batches</p>
@@ -2786,7 +2786,7 @@ export default function InventoryPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b mb-6">
+      <div className="flex overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap gap-1 border-b mb-6">
         {tabs.map((tab) => (
           <button
             key={tab.key}

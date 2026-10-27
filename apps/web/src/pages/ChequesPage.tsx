@@ -111,9 +111,9 @@ export default function ChequesPage() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap gap-3 items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <CreditCard className="w-6 h-6 text-indigo-500" />
@@ -175,7 +175,7 @@ export default function ChequesPage() {
       </div>
 
       {/* Summary badges */}
-      <div className="grid grid-cols-4 gap-3 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
         {(['PENDING', 'CLEARED', 'BOUNCED', 'CANCELLED'] as ChequeStatus[]).map((s) => {
           const count = cheques.filter((c) => c.status === s).length;
           const total = cheques.filter((c) => c.status === s).reduce((sum, c) => sum + c.amountCents, 0);

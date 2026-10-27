@@ -349,7 +349,7 @@ export default function DeliveryManagementPage() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-4 gap-3 mb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
           {[
             { label: 'Pending', value: pending, color: 'yellow', icon: Clock },
             { label: 'In Transit', value: inTransit, color: 'blue', icon: Truck },

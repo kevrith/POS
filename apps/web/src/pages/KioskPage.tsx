@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   ShoppingCart, Plus, Minus, Trash2, CreditCard, Banknote,
   Phone, AlertCircle, CheckCircle2, Search, ScanLine,
-  ChevronRight, RotateCcw,
+  ChevronRight, RotateCcw, X,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
@@ -151,6 +151,7 @@ export default function KioskPage() {
   const [items, setItems] = useState<KioskItem[]>([]);
   const [cart, setCart] = useState<CartEntry[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [cartOpen, setCartOpen] = useState(false);   // phones: cart is a full-screen sheet
   const [search, setSearch] = useState('');
   const [screen, setScreen] = useState<'shop' | 'cash' | 'mpesa' | 'success' | 'staff'>('shop');
   const [staffNotified, setStaffNotified] = useState(false);
@@ -239,6 +240,8 @@ export default function KioskPage() {
   const totalCents = subtotalCents;
   const cartQty = cart.reduce((s, e) => s + e.qty, 0);
 
+  useEffect(() => { if (cart.length === 0) setCartOpen(false); }, [cart.length]);
+
   // Categories
   const categories = ['all', ...Array.from(new Set(items.map(i => i.category ?? 'Other')))];
   const filtered = (activeCategory === 'all' ? items : items.filter(i => (i.category ?? 'Other') === activeCategory))
@@ -284,9 +287,9 @@ export default function KioskPage() {
     <div className="h-screen flex flex-col bg-gray-950 overflow-hidden select-none" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="bg-gray-900 text-white flex items-center gap-4 px-5 py-3 shrink-0">
+      <header className="bg-gray-900 text-white flex flex-wrap md:flex-nowrap items-center gap-3 md:gap-4 px-3 md:px-5 py-3 shrink-0">
         {/* Logo / Business name */}
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-3 shrink-0 mr-auto md:mr-0">
           {logo ? (
             <img src={logo} alt="logo" className="h-10 w-10 object-contain rounded-lg" />
           ) : (
@@ -301,7 +304,7 @@ export default function KioskPage() {
         </div>
 
         {/* Search / Barcode input */}
-        <div className="flex-1 mx-4">
+        <div className="order-last md:order-none w-full md:w-auto flex-1 md:mx-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             <ScanLine className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
@@ -318,7 +321,7 @@ export default function KioskPage() {
 
         {/* Cart count pill */}
         {cartQty > 0 && (
-          <div className="flex items-center gap-2 bg-blue-600 px-4 py-2 rounded-xl text-sm font-bold shrink-0">
+          <div className="hidden md:flex items-center gap-2 bg-blue-600 px-4 py-2 rounded-xl text-sm font-bold shrink-0">
             <ShoppingCart className="w-4 h-4" />
             {cartQty} item{cartQty !== 1 ? 's' : ''}
           </div>
@@ -430,11 +433,14 @@ export default function KioskPage() {
         </div>
 
         {/* ── Cart Sidebar ──────────────────────────────────────────────────── */}
-        <div className="w-80 bg-gray-900 border-l border-gray-700 flex flex-col shrink-0 shadow-lg">
+        <div className={`${cartOpen ? 'flex' : 'hidden'} md:flex flex-col fixed inset-0 z-40 md:static md:inset-auto md:z-auto md:w-80 bg-gray-900 md:border-l border-gray-700 shrink-0 shadow-lg`}>
 
           {/* Cart header */}
           <div className="px-4 py-3 border-b border-gray-700 bg-gray-800 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
+              <button onClick={() => setCartOpen(false)} aria-label="Back to items" className="md:hidden -ml-1 p-1.5 text-gray-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
               <ShoppingCart className="w-5 h-5 text-blue-500" />
               <span className="font-bold text-white">Your Order</span>
               {cartQty > 0 && (
@@ -540,6 +546,19 @@ export default function KioskPage() {
           </div>
         </div>
       </div>
+
+      {/* Phone cart bar: opens the order sheet */}
+      <button
+        onClick={() => setCartOpen(true)}
+        className="md:hidden shrink-0 flex items-center justify-between gap-3 px-4 py-3 bg-blue-600 active:bg-blue-700 text-white font-bold"
+        style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
+      >
+        <span className="flex items-center gap-2">
+          <ShoppingCart className="w-5 h-5" />
+          {cartQty} item{cartQty !== 1 ? 's' : ''}
+        </span>
+        <span>KES {fmtShort(totalCents)}</span>
+      </button>
     </div>
   );
 }

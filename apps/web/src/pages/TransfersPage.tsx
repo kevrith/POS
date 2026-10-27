@@ -392,9 +392,9 @@ export default function TransfersPage() {
   const completed = transfers.filter((t) => t.status === 'COMPLETED').length;
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap gap-3 items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <ArrowRightLeft className="w-6 h-6 text-blue-600" />
@@ -414,7 +414,7 @@ export default function TransfersPage() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
         {[
           { label: 'Pending',   value: pending,                 color: 'text-yellow-600', bg: 'bg-yellow-50 dark:bg-yellow-900/20' },
           { label: 'Completed', value: completed,               color: 'text-green-600',  bg: 'bg-green-50  dark:bg-green-900/20'  },

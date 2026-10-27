@@ -1325,7 +1325,7 @@ export default function ReportsPage() {
           </div>
 
           {/* Group pills */}
-          <div className="flex items-center gap-1 overflow-x-auto pb-1 border-b border-gray-100">
+          <div className="flex items-center gap-1 overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap pb-1 border-b border-gray-100">
             {TAB_GROUPS.map((g) => {
               const GIcon = g.icon;
               const isActive = !reportSearch && (activeGroup.id === g.id || tabGroup === g.id);
@@ -1348,7 +1348,7 @@ export default function ReportsPage() {
 
           {/* Sub-tabs for active group */}
           {!reportSearch && (
-            <div className="flex gap-0.5 -mb-4 overflow-x-auto">
+            <div className="flex gap-0.5 -mb-4 overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap">
               {visibleTabs.map((t) => {
                 const Icon = t.icon;
                 return (
@@ -4863,7 +4863,7 @@ export default function ReportsPage() {
             {/* ── RECIPE COSTING ── */}
             {tab === 'recipe-costing' && (
               <div className="space-y-4">
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 text-center">
                     <p className="text-2xl font-bold text-green-700">{recipeCostData?.summary.totalItems ?? 0}</p>
                     <p className="text-xs text-gray-500">Recipe Items</p>
@@ -4933,7 +4933,7 @@ export default function ReportsPage() {
                 {!vatReturnLoading && vatReturnData && (
                   <>
                     {/* Summary cards */}
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                       <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4">
                         <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Output VAT (Sales)</p>
                         <p className="text-2xl font-bold text-green-700 dark:text-green-400">{formatKES(vatReturnData.outputVat.totalCents)}</p>

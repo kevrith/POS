@@ -81,7 +81,7 @@ export default function HotelPage() {
   const maintenance = rooms?.filter(r => r.status === 'MAINTENANCE').length ?? 0;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-3 sm:p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -117,7 +117,7 @@ export default function HotelPage() {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <div className="bg-white border rounded-xl p-4 text-center">
           <div className="text-3xl font-bold text-emerald-600">{occupied}</div>
           <div className="text-xs text-gray-500 mt-1 font-medium uppercase tracking-wide">Occupied</div>

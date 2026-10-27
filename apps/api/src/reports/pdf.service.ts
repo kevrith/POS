@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -48,7 +48,7 @@ export class PdfService {
         store: { select: { name: true, storeCode: true } },
       },
     });
-    if (!sale) throw new Error('Sale not found');
+    if (!sale) throw new NotFoundException('Sale not found');
 
     const business = await this.prisma.business.findUnique({ where: { id: sale.businessId } });
 
@@ -222,7 +222,7 @@ export class PdfService {
       where: { id: poId },
       include: { supplier: true, items: true },
     });
-    if (!po) throw new Error('PO not found');
+    if (!po) throw new NotFoundException('PO not found');
 
     const itemIds = po.items.map((i) => i.itemId);
     const items = await this.prisma.item.findMany({
@@ -284,7 +284,7 @@ export class PdfService {
           where: { id: employeeId },
           include: { user: true },
         });
-        if (!emp) throw new Error('Employee not found');
+        if (!emp) throw new NotFoundException('Employee not found');
         const content = `<h1>Payslip — ${month}/${year}</h1><p>Employee: ${(emp as any).user?.name ?? employeeId}</p><p>No payroll run found for this period.</p>`;
         return this.htmlWrapper('Payslip', content);
       }
@@ -332,7 +332,7 @@ export class PdfService {
         business: true,
       },
     });
-    if (!delivery) throw new Error('Delivery not found');
+    if (!delivery) throw new NotFoundException('Delivery not found');
 
     const business = delivery.business;
     const sale = delivery.sale;
@@ -454,7 +454,7 @@ export class PdfService {
 
   async generateCustomerStatement(customerId: string, startDate: Date, endDate: Date): Promise<string> {
     const customer = await this.prisma.customer.findUnique({ where: { id: customerId } });
-    if (!customer) throw new Error('Customer not found');
+    if (!customer) throw new NotFoundException('Customer not found');
 
     const business = await this.prisma.business.findUnique({ where: { id: customer.businessId } });
 
@@ -547,7 +547,7 @@ export class PdfService {
       where: { id: employeeId },
       include: { user: true },
     });
-    if (!emp) throw new Error('Employee not found');
+    if (!emp) throw new NotFoundException('Employee not found');
 
     const business = await this.prisma.business.findUnique({ where: { id: (emp as any).businessId } });
 
@@ -682,7 +682,7 @@ export class PdfService {
         supplier: true,
       },
     });
-    if (!ret) throw new Error('Return not found');
+    if (!ret) throw new NotFoundException('Return not found');
     const business = await this.prisma.business.findUnique({ where: { id: ret.businessId } });
 
     const rows = (ret as any).items.map((i: any) => `<tr>
@@ -1132,7 +1132,7 @@ export class PdfService {
         route: { select: { name: true } },
       },
     });
-    if (!order) throw new Error('Field order not found');
+    if (!order) throw new NotFoundException('Field order not found');
 
     const business = await this.prisma.business.findUnique({
       where: { id: order.businessId },
@@ -1303,7 +1303,7 @@ export class PdfService {
         },
       },
     });
-    if (!order) throw new Error('Field order not found');
+    if (!order) throw new NotFoundException('Field order not found');
 
     const business = await this.prisma.business.findUnique({
       where: { id: order.businessId },

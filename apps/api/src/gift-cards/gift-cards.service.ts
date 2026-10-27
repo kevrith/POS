@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -39,11 +39,11 @@ export class GiftCardsService {
     });
 
     if (giftCard.status !== 'ACTIVE') {
-      throw new Error('Gift card is not active');
+      throw new BadRequestException('Gift card is not active');
     }
 
     if (giftCard.balanceCents < amountCents) {
-      throw new Error('Insufficient gift card balance');
+      throw new BadRequestException('Insufficient gift card balance');
     }
 
     const newBalance = giftCard.balanceCents - amountCents;

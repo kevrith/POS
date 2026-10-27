@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -346,10 +346,10 @@ export class ExpenseService {
       where: { businessId, storeId: whereStoreId },
     });
     if (!float) {
-      throw new Error('No petty cash float found. Please top up first.');
+      throw new BadRequestException('No petty cash float found. Please top up first.');
     }
     if (float.balanceCents < amountCents) {
-      throw new Error(
+      throw new BadRequestException(
         `Insufficient balance. Available: KES ${(float.balanceCents / 100).toFixed(2)}`,
       );
     }

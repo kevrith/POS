@@ -144,8 +144,8 @@ export class CustomersService {
       this.prisma.customer.findFirst({ where: { id: primaryId, businessId } }),
       this.prisma.customer.findFirst({ where: { id: secondaryId, businessId } }),
     ]);
-    if (!primary || !secondary) throw new Error('Customer not found');
-    if (primaryId === secondaryId) throw new Error('Cannot merge with self');
+    if (!primary || !secondary) throw new NotFoundException('Customer not found');
+    if (primaryId === secondaryId) throw new BadRequestException('Cannot merge with self');
 
     await this.prisma.sale.updateMany({ where: { customerId: secondaryId }, data: { customerId: primaryId } });
     await this.prisma.customer.update({

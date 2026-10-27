@@ -54,17 +54,17 @@ export class AuthService {
 
   // ─── Password complexity validation ─────────────────────────
   private validatePasswordComplexity(password: string): void {
-    if (password.length < 8) {
-      throw new Error('Password must be at least 8 characters long');
+    if (typeof password !== 'string' || password.length < 8) {
+      throw new BadRequestException('Password must be at least 8 characters long');
     }
     if (!/[A-Z]/.test(password)) {
-      throw new Error('Password must contain at least one uppercase letter');
+      throw new BadRequestException('Password must contain at least one uppercase letter');
     }
     if (!/[a-z]/.test(password)) {
-      throw new Error('Password must contain at least one lowercase letter');
+      throw new BadRequestException('Password must contain at least one lowercase letter');
     }
     if (!/[0-9]/.test(password)) {
-      throw new Error('Password must contain at least one number');
+      throw new BadRequestException('Password must contain at least one number');
     }
   }
 
@@ -369,6 +369,12 @@ export class AuthService {
     businessName: string;
     affiliateCode?: string;
   }): Promise<{ accessToken: string; user: AuthUser }> {
+    for (const field of ['name', 'email', 'password', 'businessName'] as const) {
+      if (typeof data[field] !== 'string' || !data[field].trim()) {
+        throw new BadRequestException(`${field} is required`);
+      }
+    }
+
     const existing = await this.prisma.user.findUnique({ where: { email: data.email } });
     if (existing) throw new BadRequestException('Email already registered');
 

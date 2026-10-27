@@ -1048,8 +1048,8 @@ export class SalesService {
     const sale = await this.prisma.sale.findFirst({
       where: { id: saleId, businessId },
     });
-    if (!sale) throw new Error('Sale not found');
-    if (sale.status !== SaleStatus.CREDIT) throw new Error('Sale is not a credit sale');
+    if (!sale) throw new NotFoundException('Sale not found');
+    if (sale.status !== SaleStatus.CREDIT) throw new BadRequestException('Sale is not a credit sale');
 
     const paidAmount = amountCents ?? sale.totalCents;
 

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { createConnection } from 'net';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -83,7 +83,7 @@ export class PrintersService {
   async printToNetwork(printerId: string, data: string): Promise<{ success: boolean }> {
     const printer = await this.prisma.printer.findUnique({ where: { id: printerId } });
     if (!printer) throw new NotFoundException('Printer not found');
-    if (printer.connectionType !== 'NETWORK') throw new Error('Printer is not a network printer');
+    if (printer.connectionType !== 'NETWORK') throw new BadRequestException('Printer is not a network printer');
 
     const [host, portStr] = printer.connectionDetails.split(':');
     const port = parseInt(portStr ?? '9100', 10);

@@ -632,9 +632,9 @@ export class HrService {
 
   async biometricClockIn(businessId: string, pin: string, method = 'MANUAL') {
     const user = await this.prisma.user.findFirst({ where: { businessId, pin } });
-    if (!user) throw new Error('Invalid PIN');
+    if (!user) throw new BadRequestException('Invalid PIN');
     const employee = await this.prisma.employee.findFirst({ where: { businessId, userId: user.id } });
-    if (!employee) throw new Error('No active employee record for this PIN');
+    if (!employee) throw new BadRequestException('No active employee record for this PIN');
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const store = await this.prisma.store.findFirst({ where: { businessId } });
     const storeId = store?.id ?? businessId;
@@ -655,14 +655,14 @@ export class HrService {
 
   async biometricClockOut(businessId: string, pin: string, method = 'MANUAL') {
     const user = await this.prisma.user.findFirst({ where: { businessId, pin } });
-    if (!user) throw new Error('Invalid PIN');
+    if (!user) throw new BadRequestException('Invalid PIN');
     const employee = await this.prisma.employee.findFirst({ where: { businessId, userId: user.id } });
-    if (!employee) throw new Error('No active employee record for this PIN');
+    if (!employee) throw new BadRequestException('No active employee record for this PIN');
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const record = await this.prisma.attendanceRecord.findFirst({
       where: { employeeId: employee.id, shiftDate: today, clockOut: null },
     });
-    if (!record) throw new Error('No open clock-in found for today');
+    if (!record) throw new BadRequestException('No open clock-in found for today');
     return this.prisma.attendanceRecord.update({
       where: { id: record.id },
       data: { clockOut: new Date() },

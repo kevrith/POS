@@ -6,18 +6,34 @@
  * Redis required.  Exercises the full NestJS guard/pipe/controller stack.
  */
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication, VersioningType } from '@nestjs/common';
 import * as request from 'supertest';
 import { AuthModule } from '../src/auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { JwtAuthGuard } from '../src/auth/jwt-auth.guard';
-import * as bcrypt from 'bcryptjs';
+import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
 
 // ─── Shared mock data ────────────────────────────────────────────────────────
 
-const PASSWORD = 'password123';
+// Generated per run so no credential-shaped literal lives in the repo. The
+// 'Aa1' prefix satisfies the API's complexity rules (upper, lower, digit).
+const newPassword = () => `Aa1${randomBytes(8).toString('hex')}`;
+const PASSWORD = newPassword();
+const WRONG_PASSWORD = newPassword();
+const REGISTER_PASSWORD = newPassword();
+
+const mockBusiness = {
+  id: 'biz-001',
+  name: 'Test Cafe',
+  planName: 'PRO',
+  subscriptionTier: 'PRO',
+  subscriptionStatus: 'ACTIVE',
+  trialEndsAt: new Date(Date.now() + 30 * 86400000),
+  subscriptionActive: true,
+};
 
 const mockUser = {
   id: 'user-001',
@@ -35,15 +51,10 @@ const mockUser = {
   storeId: null,
   googleId: null,
   avatarUrl: null,
+  business: mockBusiness,
+  assignedStores: [],
 };
 
-const mockBusiness = {
-  id: 'biz-001',
-  name: 'Test Cafe',
-  planName: 'PRO',
-  trialEndsAt: new Date(Date.now() + 30 * 86400000),
-  subscriptionActive: true,
-};
 
 // ─── Prisma service mock ─────────────────────────────────────────────────────
 
@@ -51,17 +62,23 @@ const prismaMock = {
   user: {
     findUnique: jest.fn(),
     findFirst: jest.fn(),
+    findMany: jest.fn(),
     update: jest.fn(),
     create: jest.fn(),
   },
+  userSession: {
+    create: jest.fn().mockResolvedValue({}),
+  },
   business: {
     findUnique: jest.fn(),
+    findFirst: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
   },
   store: {
     create: jest.fn(),
   },
+  $transaction: jest.fn(),
   $connect: jest.fn(),
   $disconnect: jest.fn(),
 };
@@ -83,9 +100,8 @@ beforeAll(async () => {
     .compile();
 
   app = moduleFixture.createNestApplication();
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
   app.setGlobalPrefix('api');
-  app.enableVersioning();
+  app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
   await app.init();
 });
 
@@ -93,7 +109,11 @@ afterAll(async () => {
   await app.close();
 });
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.resetAllMocks();
+  prismaMock.userSession.create.mockResolvedValue({});
+  prismaMock.$transaction.mockImplementation((cb: (tx: typeof prismaMock) => unknown) => cb(prismaMock));
+});
 
 // ─── POST /api/v1/auth/login ──────────────────────────────────────────────────
 
@@ -103,7 +123,7 @@ describe('POST /api/v1/auth/login', () => {
 
     const res = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
-      .send({ email: 'nobody@test.co.ke', password: 'anything' });
+      .send({ email: 'nobody@test.co.ke', password: WRONG_PASSWORD });
 
     expect(res.status).toBe(401);
   });
@@ -114,12 +134,12 @@ describe('POST /api/v1/auth/login', () => {
 
     const res = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
-      .send({ email: 'owner@test.co.ke', password: 'wrong-password' });
+      .send({ email: 'owner@test.co.ke', password: WRONG_PASSWORD });
 
     expect(res.status).toBe(401);
     expect(prismaMock.user.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ loginAttempts: { increment: 1 } }),
+        data: expect.objectContaining({ loginAttempts: 1 }),
       }),
     );
   });
@@ -181,6 +201,16 @@ describe('POST /api/v1/auth/register', () => {
     expect(res.status).toBe(400);
   });
 
+  it('returns 400 (not 500) when the password is too weak', async () => {
+    prismaMock.user.findUnique.mockResolvedValue(null);
+
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send({ name: 'Weak', email: 'weak@test.co.ke', password: 'Aa1', businessName: 'Weak Cafe' });
+
+    expect(res.status).toBe(400);
+  });
+
   it('returns 409 or 400 when email is already registered', async () => {
     prismaMock.user.findUnique.mockResolvedValue(mockUser); // email already exists
 
@@ -189,7 +219,7 @@ describe('POST /api/v1/auth/register', () => {
       .send({
         name: 'Another Owner',
         email: 'owner@test.co.ke',
-        password: 'SecurePass123!',
+        password: REGISTER_PASSWORD,
         businessName: 'Another Cafe',
       });
 
@@ -198,6 +228,7 @@ describe('POST /api/v1/auth/register', () => {
 
   it('successfully creates a new business owner', async () => {
     prismaMock.user.findUnique.mockResolvedValue(null); // email not taken
+    prismaMock.business.findUnique.mockResolvedValue(null); // short code free
     prismaMock.business.create.mockResolvedValue(mockBusiness);
     prismaMock.store.create.mockResolvedValue({ id: 'store-001', storeCode: 'NRB01', receiptSequence: 0 });
     prismaMock.user.create.mockResolvedValue(mockUser);
@@ -208,7 +239,7 @@ describe('POST /api/v1/auth/register', () => {
       .send({
         name: 'New Owner',
         email: 'new@test.co.ke',
-        password: 'SecurePass123!',
+        password: REGISTER_PASSWORD,
         businessName: 'New Cafe',
       });
 
@@ -221,7 +252,8 @@ describe('POST /api/v1/auth/register', () => {
 
 describe('POST /api/v1/auth/login/pin', () => {
   it('returns 401 for wrong PIN', async () => {
-    prismaMock.user.findFirst.mockResolvedValue(null); // no user with that PIN
+    prismaMock.business.findFirst.mockResolvedValue({ id: 'biz-001' });
+    prismaMock.user.findMany.mockResolvedValue([]); // no user with that PIN
 
     const res = await request(app.getHttpServer())
       .post('/api/v1/auth/login/pin')

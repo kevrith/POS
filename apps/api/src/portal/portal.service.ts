@@ -106,7 +106,7 @@ export class PortalService {
     notes?: string;
   }) {
     const store = await this.prisma.store.findFirst({ where: { businessId: dto.businessId } });
-    if (!store) throw new Error('No store found');
+    if (!store) throw new BadRequestException('No store found');
 
     const when = new Date(dto.reservationTime);
     const tables = await this.prisma.table.findMany({
@@ -151,7 +151,7 @@ export class PortalService {
       return { ...reservation, tableNumber: table.number };
     }
 
-    throw new Error('No tables available at that time. Please try another slot.');
+    throw new BadRequestException('No tables available at that time. Please try another slot.');
   }
 
   async getMenu(businessId: string) {
@@ -227,7 +227,7 @@ export class PortalService {
 
     // Get first store for this business
     const store = await this.prisma.store.findFirst({ where: { businessId: dto.businessId } });
-    if (!store) throw new Error('No store found');
+    if (!store) throw new BadRequestException('No store found');
 
     // Link to the registered customer (created at OTP login) so the order shows
     // up in their authenticated history and earns loyalty when paid.

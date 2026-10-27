@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CashDrawerService } from '../cash-drawer/cash-drawer.service';
 
@@ -407,7 +407,7 @@ export class ReportsService {
       });
 
       if (!session) {
-        throw new Error('No open cash drawer session');
+        throw new BadRequestException('No open cash drawer session');
       }
 
       const sales = await tx.sale.findMany({

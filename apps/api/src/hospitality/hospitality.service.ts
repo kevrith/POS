@@ -50,7 +50,7 @@ export class HospitalityService {
         orderBy: { createdAt: 'asc' },
         select: { id: true },
       });
-      if (!store) throw new Error('No store found for this business');
+      if (!store) throw new BadRequestException('No store found for this business');
       storeId = store.id;
     }
     return this.prisma.table.create({
@@ -122,9 +122,9 @@ export class HospitalityService {
       where: { id: orderId },
       include: { items: true },
     });
-    if (!order) throw new Error('Order not found');
+    if (!order) throw new NotFoundException('Order not found');
     const booking = await this.prisma.roomBooking.findUnique({ where: { id: roomBookingId } });
-    if (!booking) throw new Error('Booking not found');
+    if (!booking) throw new NotFoundException('Booking not found');
     const totalCents = order.items.reduce((s, i) => s + i.totalCents, 0);
     return this.prisma.guestFolioCharge.create({
       data: {
@@ -937,11 +937,11 @@ export class HospitalityService {
       where: { id: orderId },
       include: { items: true },
     });
-    if (!order) throw new Error('Order not found');
-    if (['PAID', 'CANCELLED'].includes(order.status)) throw new Error('Cannot modify a completed order');
+    if (!order) throw new NotFoundException('Order not found');
+    if (['PAID', 'CANCELLED'].includes(order.status)) throw new BadRequestException('Cannot modify a completed order');
 
     const item = order.items.find(i => i.id === itemId);
-    if (!item) throw new Error('Item not found in order');
+    if (!item) throw new NotFoundException('Item not found in order');
 
     await this.prisma.orderItem.delete({ where: { id: itemId } });
 

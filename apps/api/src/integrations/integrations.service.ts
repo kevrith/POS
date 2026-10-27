@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, BadGatewayException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { createCipheriv, createDecipheriv } from 'crypto';
 
@@ -102,7 +102,7 @@ export class IntegrationsService {
       case 'SHOPIFY':
         return this.syncToShopify(config, sale);
       default:
-        throw new Error(`Unsupported integration type: ${integration.type}`);
+        throw new BadRequestException(`Unsupported integration type: ${integration.type}`);
     }
   }
 
@@ -125,7 +125,7 @@ export class IntegrationsService {
       body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: config.refreshToken }),
     });
     const tokens = await tokenResp.json() as { access_token?: string; refresh_token?: string; error?: string };
-    if (!tokenResp.ok) throw new Error(`QB token refresh error: ${tokens.error}`);
+    if (!tokenResp.ok) throw new BadGatewayException(`QB token refresh error: ${tokens.error}`);
 
     // Persist updated refresh token so it doesn't expire
     if (tokens.refresh_token) {
@@ -180,7 +180,7 @@ export class IntegrationsService {
     const result = await resp.json() as { Invoice?: { Id: string }; Fault?: unknown };
     if (!resp.ok) {
       this.logger.error(`QB Invoice creation failed for sale ${saleId}: ${JSON.stringify(result.Fault)}`);
-      throw new Error(`QB API error: ${JSON.stringify(result.Fault)}`);
+      throw new BadGatewayException(`QB API error: ${JSON.stringify(result.Fault)}`);
     }
 
     await this.prisma.integration.update({ where: { id: integrationId }, data: { lastSyncAt: new Date() } });
@@ -200,7 +200,7 @@ export class IntegrationsService {
       body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: config.refreshToken }),
     });
     const tokens = await tokenResp.json() as { access_token?: string; error?: string };
-    if (!tokenResp.ok) throw new Error(`QB token error: ${tokens.error}`);
+    if (!tokenResp.ok) throw new BadGatewayException(`QB token error: ${tokens.error}`);
 
     if (!sale) throw new NotFoundException('Sale not found');
 
@@ -237,7 +237,7 @@ export class IntegrationsService {
     });
 
     const result = await resp.json() as { Invoice?: { Id: string }; Fault?: unknown };
-    if (!resp.ok) throw new Error(`QB API error: ${JSON.stringify(result.Fault)}`);
+    if (!resp.ok) throw new BadGatewayException(`QB API error: ${JSON.stringify(result.Fault)}`);
     return { success: true, externalId: result.Invoice?.Id, provider: 'quickbooks' };
   }
 
@@ -260,7 +260,7 @@ export class IntegrationsService {
       body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: config.refreshToken }),
     });
     const tokens = await tokenResp.json() as { access_token?: string; refresh_token?: string; error?: string };
-    if (!tokenResp.ok) throw new Error(`Xero token refresh error: ${tokens.error}`);
+    if (!tokenResp.ok) throw new BadGatewayException(`Xero token refresh error: ${tokens.error}`);
 
     // Persist updated tokens
     if (tokens.refresh_token) {
@@ -310,7 +310,7 @@ export class IntegrationsService {
     const result = await resp.json() as { Invoices?: Array<{ InvoiceID: string; Status: string }> };
     if (!resp.ok) {
       this.logger.error(`Xero invoice creation failed for sale ${saleId}: ${resp.status}`);
-      throw new Error(`Xero API error: ${resp.status}`);
+      throw new BadGatewayException(`Xero API error: ${resp.status}`);
     }
 
     await this.prisma.integration.update({ where: { id: integrationId }, data: { lastSyncAt: new Date() } });
@@ -334,7 +334,7 @@ export class IntegrationsService {
       body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: config.refreshToken }),
     });
     const tokens = await tokenResp.json() as { access_token?: string; error?: string };
-    if (!tokenResp.ok) throw new Error(`Xero token error: ${tokens.error}`);
+    if (!tokenResp.ok) throw new BadGatewayException(`Xero token error: ${tokens.error}`);
 
     if (!sale) throw new NotFoundException('Sale not found');
 
@@ -369,7 +369,7 @@ export class IntegrationsService {
     });
 
     const result = await resp.json() as { Invoices?: Array<{ InvoiceID: string }> };
-    if (!resp.ok) throw new Error(`Xero API error: ${resp.status}`);
+    if (!resp.ok) throw new BadGatewayException(`Xero API error: ${resp.status}`);
     return { success: true, externalId: result.Invoices?.[0]?.InvoiceID, provider: 'xero' };
   }
 
@@ -397,7 +397,7 @@ export class IntegrationsService {
     const shopifyResp = await fetch(`${baseUrl}/products.json?limit=250`, { headers });
     if (!shopifyResp.ok) {
       const errText = await shopifyResp.text();
-      throw new Error(`Shopify products fetch failed: ${shopifyResp.status} ${errText}`);
+      throw new BadGatewayException(`Shopify products fetch failed: ${shopifyResp.status} ${errText}`);
     }
     const { products } = await shopifyResp.json() as {
       products: Array<{
@@ -488,7 +488,7 @@ export class IntegrationsService {
     const result = await resp.json() as { order?: { id: number; order_number: number }; errors?: unknown };
     if (!resp.ok) {
       this.logger.error(`Shopify order push failed for sale ${saleId}: ${JSON.stringify(result.errors)}`);
-      throw new Error(`Shopify order error: ${JSON.stringify(result.errors)}`);
+      throw new BadGatewayException(`Shopify order error: ${JSON.stringify(result.errors)}`);
     }
 
     await this.prisma.integration.update({ where: { id: integrationId }, data: { lastSyncAt: new Date() } });
@@ -529,7 +529,7 @@ export class IntegrationsService {
     });
 
     const result = await resp.json() as { order?: { id: number }; errors?: unknown };
-    if (!resp.ok) throw new Error(`Shopify order error: ${JSON.stringify(result.errors)}`);
+    if (!resp.ok) throw new BadGatewayException(`Shopify order error: ${JSON.stringify(result.errors)}`);
     return { success: true, externalId: String(result.order?.id), provider: 'shopify' };
   }
 
@@ -581,7 +581,7 @@ export class IntegrationsService {
     const result = await resp.json() as { id?: number; number?: string; message?: string; code?: string };
     if (!resp.ok) {
       this.logger.error(`WooCommerce order creation failed for sale ${saleId}: ${result.message}`);
-      throw new Error(`WooCommerce API error: ${result.message ?? resp.status}`);
+      throw new BadGatewayException(`WooCommerce API error: ${result.message ?? resp.status}`);
     }
 
     await this.prisma.integration.update({ where: { id: integrationId }, data: { lastSyncAt: new Date() } });
@@ -629,7 +629,7 @@ export class IntegrationsService {
     });
 
     const result = await resp.json() as { id?: number; message?: string };
-    if (!resp.ok) throw new Error(`WooCommerce API error: ${result.message ?? resp.status}`);
+    if (!resp.ok) throw new BadGatewayException(`WooCommerce API error: ${result.message ?? resp.status}`);
     return { success: true, externalId: String(result.id), provider: 'woocommerce' };
   }
 
@@ -671,7 +671,7 @@ export class IntegrationsService {
       case 'SHOPIFY_ORDER':
         return this.handleShopifyOrder(payload);
       default:
-        throw new Error(`Unsupported webhook type: ${type}`);
+        throw new BadRequestException(`Unsupported webhook type: ${type}`);
     }
   }
 

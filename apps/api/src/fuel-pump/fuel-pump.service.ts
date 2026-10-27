@@ -229,7 +229,7 @@ export class FuelPumpService {
 
   async recordDelivery(dto: { businessId: string; tankId: string; litresDelivered: number; supplierName?: string; docketNumber?: string; deliveredBy?: string; notes?: string }) {
     const tank = await this.prisma.fuelTank.findUnique({ where: { id: dto.tankId } });
-    if (!tank) throw new Error('Tank not found');
+    if (!tank) throw new NotFoundException('Tank not found');
     const newLevel = Math.min(tank.currentLitres + dto.litresDelivered, tank.capacityLitres);
     const [delivery] = await this.prisma.$transaction([
       this.prisma.fuelDelivery.create({ data: dto }),
@@ -525,10 +525,10 @@ export class FuelPumpService {
     businessId?: string,
   ) {
     const account = await this.prisma.fleetAccount.findUnique({ where: { id: fleetAccountId } });
-    if (!account) throw new Error('Fleet account not found');
+    if (!account) throw new NotFoundException('Fleet account not found');
     const newBalance = account.balanceCents - amountCents;
     if (account.creditLimitCents > 0 && Math.abs(newBalance) > account.creditLimitCents) {
-      throw new Error('Credit limit exceeded');
+      throw new BadRequestException('Credit limit exceeded');
     }
     const [tx] = await this.prisma.$transaction([
       this.prisma.fleetTransaction.create({

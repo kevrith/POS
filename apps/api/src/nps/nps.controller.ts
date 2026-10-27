@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Public } from '../auth/jwt-auth.guard';
 import { SkipSubscriptionCheck } from '../auth/subscription.guard';
@@ -11,7 +11,7 @@ export class NpsController {
   @Public()
   @SkipSubscriptionCheck()
   async submitNps(@Body() body: { businessId: string; saleId?: string; score: number; comment?: string }) {
-    if (body.score < 0 || body.score > 10) throw new Error('Score must be 0-10');
+    if (body.score < 0 || body.score > 10) throw new BadRequestException('Score must be 0-10');
     return this.prisma.npsResponse.create({
       data: {
         id: require('crypto').randomUUID(),

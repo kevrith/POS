@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, BadGatewayException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import * as crypto from 'crypto';
@@ -694,12 +694,12 @@ export class EtimsService {
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`eTIMS API error ${response.status}: ${text}`);
+      throw new BadGatewayException(`eTIMS API error ${response.status}: ${text}`);
     }
 
     const json = await response.json() as any;
     if (json.resultCd !== '000') {
-      throw new Error(`eTIMS error ${json.resultCd}: ${json.resultMsg}`);
+      throw new BadGatewayException(`eTIMS error ${json.resultCd}: ${json.resultMsg}`);
     }
 
     return json.data ?? json;
@@ -729,12 +729,12 @@ export class EtimsService {
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`eTIMS API error ${response.status}: ${text}`);
+      throw new BadGatewayException(`eTIMS API error ${response.status}: ${text}`);
     }
 
     const json = await response.json() as any;
     if (json.resultCd !== '000') {
-      throw new Error(`eTIMS error ${json.resultCd}: ${json.resultMsg}`);
+      throw new BadGatewayException(`eTIMS error ${json.resultCd}: ${json.resultMsg}`);
     }
 
     return json.data ?? json;
@@ -755,7 +755,7 @@ export class EtimsService {
     });
 
     if (!response.ok) {
-      throw new Error(`iTax API error ${response.status}`);
+      throw new BadGatewayException(`iTax API error ${response.status}`);
     }
 
     return response.json();

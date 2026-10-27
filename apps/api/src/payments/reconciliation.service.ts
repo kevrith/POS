@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 interface ParsedEntry {
@@ -100,7 +100,7 @@ export class ReconciliationService {
     storeId?: string,
   ) {
     const entries = this.parseCSV(csvContent);
-    if (entries.length === 0) throw new Error('No valid entries found in CSV');
+    if (entries.length === 0) throw new BadRequestException('No valid entries found in CSV');
 
     const dates = entries.map((e) => e.date);
     const periodStart = new Date(Math.min(...dates.map((d) => d.getTime())));

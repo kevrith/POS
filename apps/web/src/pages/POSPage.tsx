@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { MessageSquare, X, ShoppingCart, Clock } from 'lucide-react';
+import { MessageSquare, X, ShoppingCart, Clock, Printer, Rocket, CheckCircle2 } from 'lucide-react';
 import { BrowserMultiFormatReader as _BrowserMultiFormatReader } from '@zxing/browser'; // kept for HW scanner
 import { api } from '../lib/api';
 import { usePOSStore, type ApiItem, type PriceLevel, type CartItem, type ItemUOM } from '../stores/pos';
@@ -18,7 +18,7 @@ import PriceOverrideModal from '../components/pos/PriceOverrideModal';
 import ExpiryWarningModal from '../components/pos/ExpiryWarningModal';
 import CameraModal from '../components/pos/CameraModal';
 import type { ReceiptData } from '../lib/printer';
-import { autoPrintReceipt } from '../lib/receiptPrint';
+import { autoPrintReceipt, printErrorMessage, printWithPreferredPrinter } from '../lib/receiptPrint';
 import { subscribeToEvent, SocketEvents } from '../lib/socket';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -105,6 +105,18 @@ export default function POSPage() {
   const [showHeld, setShowHeld] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
+  const [printNotice, setPrintNotice] = useState('');
+
+  /** Print button: use the printer configured in Settings; only show the picker when none is set or it fails. */
+  async function handlePrintClick() {
+    if (!receiptData) return;
+    try {
+      if (await printWithPreferredPrinter(receiptData, enableCashDrawer)) return;
+    } catch (err) {
+      setPrintNotice(`Could not print: ${printErrorMessage(err)}`);
+    }
+    setShowPrintModal(true);
+  }
   const [showCartMobile, setShowCartMobile] = useState(false);
   const [lastReceipt, setLastReceipt] = useState<SaleResult | null>(null);
   const [freeTxCount, setFreeTxCount] = useState<number | null>(null);
@@ -525,7 +537,8 @@ export default function POSPage() {
           // Enterprise flow: print silently to the printer configured for this
           // terminal (Settings → Printers). Falls back to the picker only if the
           // device is unavailable, so a receipt is never silently lost.
-          void autoPrintReceipt(printReceipt, enableCashDrawer).catch(() => {
+          void autoPrintReceipt(printReceipt, enableCashDrawer).catch((err) => {
+            setPrintNotice(`Auto-print failed: ${printErrorMessage(err)}`);
             setReceiptData(printReceipt);
             setShowPrintModal(true);
           });
@@ -805,7 +818,7 @@ export default function POSPage() {
       {showFreeLimitModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl p-8 max-w-md w-full shadow-2xl text-center">
-            <div className="text-5xl mb-4">🚀</div>
+            <Rocket className="w-12 h-12 text-blue-400 mx-auto mb-4" aria-hidden="true" />
             <h2 className="text-xl font-bold text-white mb-2">You've reached your free limit</h2>
             <p className="text-slate-400 text-sm mb-2">
               Your business has completed <span className="text-white font-semibold">200 transactions</span> this month — the maximum on the Free plan.
@@ -1004,7 +1017,7 @@ export default function POSPage() {
         >
           <div className="flex items-start justify-between gap-3 mb-2">
             <div>
-              <div className="font-bold text-base">✅ Sale Complete!</div>
+              <div className="font-bold text-base inline-flex items-center gap-1.5"><CheckCircle2 className="w-5 h-5" aria-hidden="true" />Sale Complete!</div>
               <div className="text-sm opacity-90 mt-0.5">Receipt #{lastReceipt.receiptNumber}</div>
               <div className="text-sm font-bold mt-0.5">{formatKES(lastReceipt.totalCents)}</div>
             </div>
@@ -1017,15 +1030,16 @@ export default function POSPage() {
           </div>
           {receiptData && (receiptData.pointsEarned ?? 0) > 0 && (
             <div className="text-sm font-medium text-yellow-200 mb-2">
-              🌟 +{receiptData.pointsEarned} pts earned · Balance: {(receiptData.loyaltyBalance ?? 0).toLocaleString()} pts
+              +{receiptData.pointsEarned} pts earned · Balance: {(receiptData.loyaltyBalance ?? 0).toLocaleString()} pts
             </div>
           )}
           <div className="flex gap-2">
             <button
-              onClick={() => setShowPrintModal(true)}
-              className="flex-1 py-2.5 bg-white text-green-600 rounded-xl text-sm font-bold hover:bg-green-50"
+              onClick={() => void handlePrintClick()}
+              className="flex-1 inline-flex items-center justify-center gap-2 min-h-[44px] py-2.5 bg-white text-green-600 rounded-xl text-sm font-bold hover:bg-green-50"
             >
-              🖨️ Print Receipt
+              <Printer className="w-4 h-4" />
+              Print Receipt
             </button>
             {customerPhone && (
               <button
@@ -1051,7 +1065,7 @@ export default function POSPage() {
       )}
 
       {showPrintModal && receiptData && (
-        <PrintModal receipt={receiptData} onClose={() => setShowPrintModal(false)} enableCashDrawer={enableCashDrawer} />
+        <PrintModal receipt={receiptData} onClose={() => { setShowPrintModal(false); setPrintNotice(''); }} enableCashDrawer={enableCashDrawer} notice={printNotice || undefined} />
       )}
 
       {pendingAgeItem && (

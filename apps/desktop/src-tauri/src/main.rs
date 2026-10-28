@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod printer;
+mod system_printer;
 mod lan_sync;
 mod vscu;
 mod cash_drawer;
@@ -60,6 +61,8 @@ fn main() {
             // Printer
             printer::connect_printer,
             printer::print_to_network,
+            printer::list_system_printers,
+            printer::print_to_system_printer,
             // LAN sync
             lan_sync::get_lan_ip,
             lan_sync::get_local_ip,

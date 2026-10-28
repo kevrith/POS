@@ -45,3 +45,24 @@ pub async fn print_to_network(host: String, port: u16, data_base64: String) -> R
 
     Ok(true)
 }
+
+/// Printers installed on this computer (Windows spooler or CUPS), default first.
+#[tauri::command]
+pub async fn list_system_printers() -> Result<Vec<crate::system_printer::SystemPrinter>, String> {
+    tauri::async_runtime::spawn_blocking(crate::system_printer::list)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Send ESC/POS data (base64 encoded) to an installed printer by name, with no print dialog.
+#[tauri::command]
+pub async fn print_to_system_printer(printer_name: String, data_base64: String) -> Result<bool, String> {
+    use base64::Engine;
+    let data = base64::engine::general_purpose::STANDARD
+        .decode(&data_base64)
+        .map_err(|e| format!("Base64 decode error: {}", e))?;
+    tauri::async_runtime::spawn_blocking(move || crate::system_printer::print_raw(&printer_name, &data))
+        .await
+        .map_err(|e| e.to_string())??;
+    Ok(true)
+}

@@ -18,6 +18,7 @@ import HeldSalesModal from '../components/HeldSalesModal';
 import CustomerSelectModal from '../components/CustomerSelectModal';
 import PrintModal from '../components/PrintModal';
 import type { ReceiptData } from '../lib/printer';
+import { autoPrintReceipt, printErrorMessage } from '../lib/receiptPrint';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -112,6 +113,7 @@ export default function SupermarketPOSPage() {
   const [showHeld, setShowHeld] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
+  const [printNotice, setPrintNotice] = useState('');
   const [showCamera, setShowCamera] = useState(false);
   const [_lastReceipt, setLastReceipt] = useState<SaleResult | null>(null);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
@@ -409,21 +411,33 @@ export default function SupermarketPOSPage() {
       };
       setReceiptData(receipt);
 
+      // Keep a local copy so the auto-print includes the eTIMS QR once it resolves.
+      let printReceipt: ReceiptData = receipt;
+
       api.post<{ success: boolean; controlNumber?: string; intrlData?: string; qrUrl?: string }>(`/etims/submit/${result.id}`)
         .then((res) => {
-          setReceiptData((prev) => prev ? {
-            ...prev,
+          const etims = {
             etimsSubmitted: res.success,
             kraQRCode: res.qrUrl ?? res.intrlData ?? res.controlNumber,
             etimsControlNumber: res.controlNumber,
-          } : prev);
+          };
+          printReceipt = { ...printReceipt, ...etims };
+          setReceiptData((prev) => prev ? { ...prev, ...etims } : prev);
         })
         .catch(() => {
+          printReceipt = { ...printReceipt, etimsSubmitted: false };
           setReceiptData((prev) => prev ? { ...prev, etimsSubmitted: false } : prev);
         })
         .finally(() => {
           setLastReceipt(result);
-          setShowPrintModal(true);
+          // Print to the printer configured in Settings; show the picker only when none is set or it fails.
+          void autoPrintReceipt(printReceipt)
+            .then((printed) => { if (!printed) setShowPrintModal(true); })
+            .catch((err) => {
+              setPrintNotice(`Auto-print failed: ${printErrorMessage(err)}`);
+              setReceiptData(printReceipt);
+              setShowPrintModal(true);
+            });
         });
 
       clearCart();
@@ -1239,7 +1253,8 @@ export default function SupermarketPOSPage() {
       {showPrintModal && receiptData && (
         <PrintModal
           receipt={receiptData}
-          onClose={() => { setShowPrintModal(false); setLastReceipt(null); setReceiptData(null); }}
+          onClose={() => { setShowPrintModal(false); setPrintNotice(''); setLastReceipt(null); setReceiptData(null); }}
+          notice={printNotice || undefined}
         />
       )}
     </div>

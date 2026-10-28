@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Printer, Bluetooth, Usb, Globe, Wifi } from 'lucide-react';
+import { X, Printer, Bluetooth, Usb, Globe, Wifi, Archive } from 'lucide-react';
 import {
   printToBrowser, printToUSB, printToBluetooth, openDrawerViaUSB,
   printToStarWebPRNT, printToEpsonEPOS,
@@ -10,9 +10,11 @@ interface PrintModalProps {
   receipt: ReceiptData;
   onClose: () => void;
   enableCashDrawer?: boolean;
+  /** Why the picker opened, e.g. the configured printer was unreachable. */
+  notice?: string;
 }
 
-export default function PrintModal({ receipt, onClose, enableCashDrawer = false }: PrintModalProps) {
+export default function PrintModal({ receipt, onClose, enableCashDrawer = false, notice }: PrintModalProps) {
   const [printing, setPrinting] = useState(false);
   const [error, setError] = useState('');
   const [drawerMsg, setDrawerMsg] = useState('');
@@ -66,6 +68,11 @@ export default function PrintModal({ receipt, onClose, enableCashDrawer = false 
         </div>
 
         <div className="p-6 space-y-3 overflow-y-auto flex-1">
+          {notice && !error && (
+            <div role="alert" className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+              {notice}
+            </div>
+          )}
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
               {error}
@@ -79,8 +86,8 @@ export default function PrintModal({ receipt, onClose, enableCashDrawer = false 
           >
             <Globe className="w-6 h-6 text-blue-600" />
             <div className="text-left flex-1">
-              <div className="font-semibold text-gray-800">Browser Print</div>
-              <div className="text-xs text-gray-500">Print using system printer</div>
+              <div className="font-semibold text-gray-800">System Printer</div>
+              <div className="text-xs text-gray-500">Choose any printer installed on this computer</div>
             </div>
           </button>
 
@@ -91,8 +98,8 @@ export default function PrintModal({ receipt, onClose, enableCashDrawer = false 
           >
             <Usb className="w-6 h-6 text-green-600" />
             <div className="text-left flex-1">
-              <div className="font-semibold text-gray-800">USB Thermal (ESC/POS)</div>
-              <div className="text-xs text-gray-500">Direct ESC/POS via WebUSB</div>
+              <div className="font-semibold text-gray-800">USB Thermal, direct</div>
+              <div className="text-xs text-gray-500">Advanced: ESC/POS over WebUSB, needs pairing</div>
             </div>
           </button>
 
@@ -149,7 +156,7 @@ export default function PrintModal({ receipt, onClose, enableCashDrawer = false 
                 onClick={handleOpenDrawer}
                 className="w-full flex items-center gap-3 p-3 border-2 border-dashed rounded-xl hover:border-yellow-400 hover:bg-yellow-50 transition-colors text-gray-600"
               >
-                <span className="text-xl">🗄️</span>
+                <Archive className="w-5 h-5 text-yellow-600" />
                 <div className="text-left flex-1">
                   <div className="font-semibold text-sm">Open Cash Drawer</div>
                   <div className="text-xs text-gray-400">Sends pulse via USB printer (RJ11)</div>

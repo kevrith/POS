@@ -1,6 +1,10 @@
 // ESC/POS Receipt Template Engine
 // Generates thermal printer commands and browser-printable HTML
 
+import api from './api';
+import { printRawToSystemPrinter } from './desktopPrinter';
+import { asciiSafe, bytesToBase64, chunkBytes, encodeEscPos, escapeHtml, row, wrapText } from './printEncoding';
+
 export interface ReceiptData {
   receiptNumber: string;
   businessName: string;
@@ -104,10 +108,26 @@ function formatKES(cents: number): string {
   })}`;
 }
 
-function pad(text: string, width: number, align: 'left' | 'right' = 'left'): string {
-  if (text.length >= width) return text.substring(0, width);
-  const padding = ' '.repeat(width - text.length);
-  return align === 'left' ? text + padding : padding + text;
+/** Roll width of the thermal printer. Small Bluetooth printers use 58 mm; counter printers use 80 mm. */
+export type PaperWidth = 58 | 80;
+
+/** Characters per line in the standard font. */
+export const PAPER_COLUMNS: Record<PaperWidth, number> = { 58: 32, 80: 48 };
+
+const PAPER_KEY = 'receipt-paper-width';
+
+/** The roll width chosen in Settings -> Printers, or null when the user never chose one. */
+export function getPaperWidth(): PaperWidth | null {
+  try {
+    const v = Number(localStorage.getItem(PAPER_KEY));
+    return v === 58 || v === 80 ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setPaperWidth(width: PaperWidth): void {
+  try { localStorage.setItem(PAPER_KEY, String(width)); } catch { /* storage unavailable */ }
 }
 
 function line(char: string = '-', width: number = 32): string {
@@ -170,7 +190,35 @@ function groupPayments(payments: ReceiptData['payments']): GroupedPayment[] {
 }
 
 // Generate ESC/POS commands for thermal printer
-export function generateESCPOS(receipt: ReceiptData, enableCashDrawer = false): string {
+/** Reduce every user-entered string on a receipt to printable ASCII (thermal printers have no UTF-8). */
+function sanitizeForEscPos(r: ReceiptData): ReceiptData {
+  const t = (v?: string) => (v === undefined ? undefined : asciiSafe(v));
+  return {
+    ...r,
+    receiptNumber: asciiSafe(r.receiptNumber),
+    businessName: asciiSafe(r.businessName),
+    storeName: asciiSafe(r.storeName),
+    storeAddress: t(r.storeAddress),
+    storePhone: t(r.storePhone),
+    cashierName: asciiSafe(r.cashierName),
+    customerName: t(r.customerName),
+    customerKraPin: t(r.customerKraPin),
+    etimsControlNumber: t(r.etimsControlNumber),
+    kraControlNumber: t(r.kraControlNumber),
+    receiptHeader: t(r.receiptHeader),
+    receiptFooter: t(r.receiptFooter),
+    items: r.items.map((i) => ({ ...i, name: asciiSafe(i.name) })),
+    payments: r.payments.map((p) => ({ ...p, method: asciiSafe(p.method), reference: t(p.reference) })),
+  };
+}
+
+export function generateESCPOS(
+  rawReceipt: ReceiptData,
+  enableCashDrawer = false,
+  paperWidth: PaperWidth = getPaperWidth() ?? 58,
+): string {
+  const receipt = sanitizeForEscPos(rawReceipt);
+  const cols = PAPER_COLUMNS[paperWidth];
   // Open cash drawer first if any payment is cash (drawer is wired to printer's RJ11 port)
   const hasCash = enableCashDrawer && receipt.payments.some(p => p.method === 'CASH' || p.method === 'CASH_EXACT');
   let output = hasCash ? ESCPOS.OPEN_DRAWER : '';
@@ -186,7 +234,7 @@ export function generateESCPOS(receipt: ReceiptData, enableCashDrawer = false): 
   // Credit sale banner
   if (receipt.isCreditSale && !receipt.voided) {
     output += ESCPOS.ALIGN_CENTER + ESCPOS.BOLD_ON;
-    output += '*** CREDIT SALE — AMOUNT DUE ***' + ESCPOS.FEED;
+    output += '*** CREDIT SALE - AMOUNT DUE ***' + ESCPOS.FEED;
     if (receipt.customerName) output += `Debtor: ${receipt.customerName}` + ESCPOS.FEED;
     output += ESCPOS.BOLD_OFF;
   }
@@ -209,9 +257,9 @@ export function generateESCPOS(receipt: ReceiptData, enableCashDrawer = false): 
 
   // Receipt info
   output += ESCPOS.ALIGN_LEFT + ESCPOS.FONT_SMALL;
-  output += line('=', 32) + ESCPOS.FEED;
+  output += line('=', cols) + ESCPOS.FEED;
   output += `Receipt: ${receipt.receiptNumber}` + ESCPOS.FEED;
-  output += `Date: ${new Date(receipt.date).toLocaleString('en-KE')}` + ESCPOS.FEED;
+  output += `Date: ${asciiSafe(new Date(receipt.date).toLocaleString('en-KE'))}` + ESCPOS.FEED;
   output += `Cashier: ${receipt.cashierName}` + ESCPOS.FEED;
   if (receipt.customerName) {
     output += `Customer: ${receipt.customerName}` + ESCPOS.FEED;
@@ -219,18 +267,17 @@ export function generateESCPOS(receipt: ReceiptData, enableCashDrawer = false): 
   if (receipt.customerKraPin) {
     output += `Buyer PIN: ${receipt.customerKraPin}` + ESCPOS.FEED;
   }
-  output += line('=', 32) + ESCPOS.FEED;
+  output += line('=', cols) + ESCPOS.FEED;
   output += ESCPOS.FEED;
 
   // Items
   output += ESCPOS.FONT_NORMAL;
   receipt.items.forEach((item) => {
-    const itemName = item.name.substring(0, 20);
-    output += itemName + ESCPOS.FEED;
+    for (const nameLine of wrapText(item.name, cols)) output += nameLine + ESCPOS.FEED;
     
     const qtyPrice = `${item.quantity} x ${formatKES(item.unitPriceCents)}`;
     const total = formatKES(item.totalCents);
-    output += pad(qtyPrice, 20) + pad(total, 12, 'right') + ESCPOS.FEED;
+    output += row(qtyPrice, total, cols) + ESCPOS.FEED;
     
     if (item.discountPercent && item.discountPercent > 0) {
       output += `  Discount: -${item.discountPercent}%` + ESCPOS.FEED;
@@ -240,43 +287,43 @@ export function generateESCPOS(receipt: ReceiptData, enableCashDrawer = false): 
   // Totals
   const taxCents = (receipt.vatCents ?? 0) + (receipt.totCents ?? 0);
   const subtotalLabel = receipt.vatCents && receipt.vatCents > 0 ? 'Subtotal(ex-VAT):' : receipt.totCents && receipt.totCents > 0 ? 'Subtotal(ex-TOT):' : 'Subtotal:';
-  output += ESCPOS.FEED + line('-', 32) + ESCPOS.FEED;
-  output += pad(subtotalLabel, 20) + pad(formatKES(receipt.subtotalCents - taxCents), 12, 'right') + ESCPOS.FEED;
+  output += ESCPOS.FEED + line('-', cols) + ESCPOS.FEED;
+  output += row(subtotalLabel, formatKES(receipt.subtotalCents - taxCents), cols) + ESCPOS.FEED;
 
   if (receipt.serviceChargeCents && receipt.serviceChargeCents > 0) {
-    output += pad('Service (10%):', 20) + pad(formatKES(receipt.serviceChargeCents), 12, 'right') + ESCPOS.FEED;
+    output += row('Service (10%):', formatKES(receipt.serviceChargeCents), cols) + ESCPOS.FEED;
   }
 
   if (receipt.vatCents && receipt.vatCents > 0) {
-    output += pad('VAT (16%):', 20) + pad(formatKES(receipt.vatCents), 12, 'right') + ESCPOS.FEED;
+    output += row('VAT (16%):', formatKES(receipt.vatCents), cols) + ESCPOS.FEED;
   }
 
   if (receipt.totCents && receipt.totCents > 0) {
-    output += pad('TOT (3%):', 20) + pad(formatKES(receipt.totCents), 12, 'right') + ESCPOS.FEED;
+    output += row('TOT (3%):', formatKES(receipt.totCents), cols) + ESCPOS.FEED;
   }
   if (receipt.tipCents && receipt.tipCents > 0) {
-    output += pad('Tip/Gratuity:', 20) + pad(formatKES(receipt.tipCents), 12, 'right') + ESCPOS.FEED;
+    output += row('Tip/Gratuity:', formatKES(receipt.tipCents), cols) + ESCPOS.FEED;
   }
 
-  output += line('-', 32) + ESCPOS.FEED;
+  output += line('-', cols) + ESCPOS.FEED;
   output += ESCPOS.BOLD_ON + ESCPOS.DOUBLE_HEIGHT;
-  output += pad('TOTAL:', 20) + pad(formatKES(receipt.totalCents), 12, 'right') + ESCPOS.FEED;
+  output += row('TOTAL:', formatKES(receipt.totalCents), cols) + ESCPOS.FEED;
   output += ESCPOS.NORMAL_SIZE + ESCPOS.BOLD_OFF;
-  output += line('-', 32) + ESCPOS.FEED;
+  output += line('-', cols) + ESCPOS.FEED;
 
   // Payments
   output += ESCPOS.FEED;
   if (receipt.isCreditSale && !receipt.voided) {
     output += ESCPOS.BOLD_ON;
-    output += pad('CREDIT THIS SALE:', 20) + pad(formatKES(receipt.totalCents), 12, 'right') + ESCPOS.FEED;
+    output += row('CREDIT THIS SALE:', formatKES(receipt.totalCents), cols) + ESCPOS.FEED;
     output += ESCPOS.BOLD_OFF;
     if (receipt.previousBalanceCents !== undefined && receipt.previousBalanceCents < 0) {
-      output += pad('PREV BALANCE OWED:', 20) + pad(formatKES(Math.abs(receipt.previousBalanceCents)), 12, 'right') + ESCPOS.FEED;
+      output += row('PREV BALANCE OWED:', formatKES(Math.abs(receipt.previousBalanceCents)), cols) + ESCPOS.FEED;
     }
     if (receipt.newBalanceCents !== undefined) {
-      output += line('-', 32) + ESCPOS.FEED;
+      output += line('-', cols) + ESCPOS.FEED;
       output += ESCPOS.BOLD_ON;
-      output += pad('TOTAL OUTSTANDING:', 20) + pad(formatKES(Math.abs(receipt.newBalanceCents)), 12, 'right') + ESCPOS.FEED;
+      output += row('TOTAL OUTSTANDING:', formatKES(Math.abs(receipt.newBalanceCents)), cols) + ESCPOS.FEED;
       output += ESCPOS.BOLD_OFF;
     }
   } else {
@@ -285,28 +332,28 @@ export function generateESCPOS(receipt: ReceiptData, enableCashDrawer = false): 
       if (group.isGroup) {
         // Group header with total
         output += ESCPOS.BOLD_ON;
-        output += pad(group.label + ':', 20) + pad(formatKES(group.totalCents), 12, 'right') + ESCPOS.FEED;
+        output += row(group.label + ':', formatKES(group.totalCents), cols) + ESCPOS.FEED;
         output += ESCPOS.BOLD_OFF;
         // Sub-lines indented
         group.lines.forEach((p) => {
           const label = '  ' + p.method + (p.reference ? ` (${p.reference})` : '');
-          output += pad(label, 20) + pad(formatKES(p.amountCents), 12, 'right') + ESCPOS.FEED;
+          output += row(label, formatKES(p.amountCents), cols) + ESCPOS.FEED;
         });
       } else {
         const p = group.lines[0];
         const label = group.label + (p.reference ? ` (${p.reference})` : '');
-        output += pad(label, 20) + pad(formatKES(p.amountCents), 12, 'right') + ESCPOS.FEED;
+        output += row(label, formatKES(p.amountCents), cols) + ESCPOS.FEED;
       }
     });
     if (receipt.changeCents && receipt.changeCents > 0) {
       output += ESCPOS.BOLD_ON;
-      output += pad('CHANGE:', 20) + pad(formatKES(receipt.changeCents), 12, 'right') + ESCPOS.FEED;
+      output += row('CHANGE:', formatKES(receipt.changeCents), cols) + ESCPOS.FEED;
       output += ESCPOS.BOLD_OFF;
     }
   }
 
   if ((receipt.pointsEarned ?? 0) > 0 || (receipt.loyaltyBalance ?? 0) > 0) {
-    output += ESCPOS.FEED + line('-', 32) + ESCPOS.FEED;
+    output += ESCPOS.FEED + line('-', cols) + ESCPOS.FEED;
     output += ESCPOS.ALIGN_CENTER + ESCPOS.BOLD_ON;
     if ((receipt.pointsEarned ?? 0) > 0) {
       output += `+${receipt.pointsEarned} LOYALTY POINTS EARNED` + ESCPOS.FEED;
@@ -319,7 +366,7 @@ export function generateESCPOS(receipt: ReceiptData, enableCashDrawer = false): 
   // KRA eTIMS Section
   const kraRef = receipt.etimsControlNumber ?? receipt.kraControlNumber;
   if (receipt.etimsSubmitted && kraRef) {
-    output += ESCPOS.FEED + line('=', 32) + ESCPOS.FEED;
+    output += ESCPOS.FEED + line('=', cols) + ESCPOS.FEED;
     output += ESCPOS.ALIGN_CENTER + ESCPOS.BOLD_ON;
     output += 'KRA eTIMS VERIFIED' + ESCPOS.FEED;
     output += ESCPOS.BOLD_OFF;
@@ -330,7 +377,7 @@ export function generateESCPOS(receipt: ReceiptData, enableCashDrawer = false): 
       output += ESCPOS.FEED;
       output += ESCPOS.FONT_SMALL + 'Scan QR to verify on KRA portal' + ESCPOS.FEED + ESCPOS.FONT_NORMAL;
     }
-    output += line('-', 32) + ESCPOS.FEED;
+    output += line('-', cols) + ESCPOS.FEED;
   } else if (receipt.etimsSubmitted === false && !receipt.voided) {
     output += ESCPOS.FEED + ESCPOS.ALIGN_CENTER + ESCPOS.FONT_SMALL;
     output += '** PENDING KRA SUBMISSION **' + ESCPOS.FEED;
@@ -357,7 +404,7 @@ export function generateESCPOS(receipt: ReceiptData, enableCashDrawer = false): 
 
 
 // Generate HTML for browser printing
-export function generateHTML(receipt: ReceiptData): string {
+export function generateHTML(receipt: ReceiptData, paperWidth: PaperWidth = getPaperWidth() ?? 80): string {
   // Pre-compute loyalty section before the template literal
   const pe = receipt.pointsEarned ?? 0;
   const lb = receipt.loyaltyBalance ?? 0;
@@ -365,8 +412,8 @@ export function generateHTML(receipt: ReceiptData): string {
     ? '<div style="border-top:2px solid #000;margin:6px 0"></div>'
       + '<div style="text-align:center;padding:8px 4px;background:#fffbeb;border:1px dashed #d97706;border-radius:6px;margin:4px 0">'
       + (pe > 0
-        ? '<div style="font-weight:bold;font-size:14px;color:#92400e">\u2B50 +' + pe + ' Loyalty Points Earned!</div>'
-        : '<div style="font-weight:bold;font-size:14px;color:#92400e">\u2B50 Loyalty Points</div>')
+        ? '<div style="font-weight:bold;font-size:14px;color:#92400e">+' + pe + ' Loyalty Points Earned!</div>'
+        : '<div style="font-weight:bold;font-size:14px;color:#92400e">Loyalty Points</div>')
       + '<div style="font-size:12px;color:#78350f;margin-top:3px">Your balance: <strong>' + lb.toLocaleString() + ' pts</strong></div>'
       + '</div>'
     : '';
@@ -380,7 +427,7 @@ export function generateHTML(receipt: ReceiptData): string {
   <title>Receipt ${receipt.receiptNumber}</title>
   <style>
     @media print {
-      @page { margin: 0; size: 80mm auto; }
+      @page { margin: 0; size: ${paperWidth}mm auto; }
       body { margin: 0; }
       .no-print { display: none !important; }
     }
@@ -389,7 +436,7 @@ export function generateHTML(receipt: ReceiptData): string {
       font-family: 'Courier New', monospace;
       font-size: 12px;
       line-height: 1.4;
-      max-width: 80mm;
+      max-width: ${paperWidth}mm;
       width: 100%;
       margin: 0 auto;
       padding: 8mm 10mm;
@@ -460,30 +507,30 @@ export function generateHTML(receipt: ReceiptData): string {
 </head>
 <body>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"><\/script>
-  <button class="print-btn no-print" onclick="window.print()">🖨 Print Receipt</button>
-  ${receipt.voided ? `<div class="void-watermark">★ VOID ★</div>` : ''}
-  ${receipt.isCreditSale && !receipt.voided ? `<div class="credit-watermark">★ CREDIT SALE — AMOUNT DUE: ${formatKES(receipt.totalCents)} ★</div>` : ''}
-  ${receipt.etimsSubmitted === false && !receipt.voided ? `<div class="pending-watermark">⚠ PENDING KRA SUBMISSION</div>` : ''}
-  <div class="center bold large">${receipt.businessName}</div>
-  <div class="center">${receipt.storeName}</div>
-  ${receipt.storeAddress ? `<div class="center small">${receipt.storeAddress}</div>` : ''}
-  ${receipt.storePhone ? `<div class="center small">${receipt.storePhone}</div>` : ''}
+  <button class="print-btn no-print" onclick="window.print()">Print Receipt</button>
+  ${receipt.voided ? `<div class="void-watermark">*** VOID ***</div>` : ''}
+  ${receipt.isCreditSale && !receipt.voided ? `<div class="credit-watermark">*** CREDIT SALE - AMOUNT DUE: ${formatKES(receipt.totalCents)} ***</div>` : ''}
+  ${receipt.etimsSubmitted === false && !receipt.voided ? `<div class="pending-watermark">** PENDING KRA SUBMISSION **</div>` : ''}
+  <div class="center bold large">${escapeHtml(receipt.businessName)}</div>
+  <div class="center">${escapeHtml(receipt.storeName)}</div>
+  ${receipt.storeAddress ? `<div class="center small">${escapeHtml(receipt.storeAddress)}</div>` : ''}
+  ${receipt.storePhone ? `<div class="center small">${escapeHtml(receipt.storePhone)}</div>` : ''}
   
   <div class="line"></div>
   
   <table class="small">
-    <tr><td>Receipt:</td><td class="right bold">${receipt.receiptNumber}</td></tr>
+    <tr><td>Receipt:</td><td class="right bold">${escapeHtml(receipt.receiptNumber)}</td></tr>
     <tr><td>Date:</td><td class="right">${new Date(receipt.date).toLocaleString('en-KE')}</td></tr>
-    <tr><td>Cashier:</td><td class="right">${receipt.cashierName}</td></tr>
-    ${receipt.customerName ? `<tr><td>Customer:</td><td class="right">${receipt.customerName}</td></tr>` : ''}
-    ${receipt.customerKraPin ? `<tr><td>Buyer PIN:</td><td class="right">${receipt.customerKraPin}</td></tr>` : ''}
+    <tr><td>Cashier:</td><td class="right">${escapeHtml(receipt.cashierName)}</td></tr>
+    ${receipt.customerName ? `<tr><td>Customer:</td><td class="right">${escapeHtml(receipt.customerName)}</td></tr>` : ''}
+    ${receipt.customerKraPin ? `<tr><td>Buyer PIN:</td><td class="right">${escapeHtml(receipt.customerKraPin)}</td></tr>` : ''}
   </table>
 
   <div class="line"></div>
   
   ${receipt.items.map(item => `
     <div>
-      <div class="bold">${item.name}</div>
+      <div class="bold">${escapeHtml(item.name)}</div>
       <div class="row small">
         <span>${item.quantity} × ${formatKES(item.unitPriceCents)}</span>
         <span class="bold">${formatKES(item.totalCents)}</span>
@@ -511,7 +558,7 @@ export function generateHTML(receipt: ReceiptData): string {
         <td>CREDIT (This Sale)</td>
         <td class="right">${formatKES(receipt.totalCents)}</td>
       </tr>
-      ${receipt.customerName ? `<tr><td>Debtor:</td><td class="right">${receipt.customerName}</td></tr>` : ''}
+      ${receipt.customerName ? `<tr><td>Debtor:</td><td class="right">${escapeHtml(receipt.customerName)}</td></tr>` : ''}
       ${receipt.previousBalanceCents !== undefined && receipt.previousBalanceCents < 0 ? `
         <tr style="color:#b45309"><td>Previous Balance Owed:</td><td class="right">${formatKES(Math.abs(receipt.previousBalanceCents))}</td></tr>
       ` : ''}
@@ -529,13 +576,13 @@ export function generateHTML(receipt: ReceiptData): string {
               </tr>
               ${group.lines.map(p => `
                 <tr>
-                  <td style="padding-left:12px;color:#6b7280;font-size:10px">${p.method}${p.reference ? ` — ${p.reference}` : ''}</td>
+                  <td style="padding-left:12px;color:#6b7280;font-size:10px">${escapeHtml(p.method)}${p.reference ? ` - ${escapeHtml(p.reference)}` : ''}</td>
                   <td class="right" style="color:#6b7280;font-size:10px">${formatKES(p.amountCents)}</td>
                 </tr>
               `).join('')}`;
           }
           const p = group.lines[0];
-          return `<tr><td>${group.label}${p.reference ? ` (${p.reference})` : ''}</td><td class="right">${formatKES(p.amountCents)}</td></tr>`;
+          return `<tr><td>${group.label}${p.reference ? ` (${escapeHtml(p.reference)})` : ''}</td><td class="right">${formatKES(p.amountCents)}</td></tr>`;
         }).join('');
       })()}
     ${receipt.changeCents && receipt.changeCents > 0 && !receipt.isCreditSale ? `<tr class="bold"><td>CHANGE:</td><td class="right">${formatKES(receipt.changeCents)}</td></tr>` : ''}
@@ -546,28 +593,28 @@ export function generateHTML(receipt: ReceiptData): string {
   ${receipt.etimsSubmitted && (receipt.etimsControlNumber ?? receipt.kraControlNumber) ? `
     <div class="line"></div>
     <div class="center small">
-      <div style="font-weight:bold;font-size:11px;letter-spacing:0.5px">✔ KRA eTIMS VERIFIED</div>
-      <div style="margin:2px 0">Control No: <strong>${receipt.etimsControlNumber ?? receipt.kraControlNumber}</strong></div>
+      <div style="font-weight:bold;font-size:11px;letter-spacing:0.5px">KRA eTIMS VERIFIED</div>
+      <div style="margin:2px 0">Control No: <strong>${escapeHtml(receipt.etimsControlNumber ?? receipt.kraControlNumber)}</strong></div>
       ${receipt.kraQRCode ? `
         <div id="kra-qr" style="margin:6px auto;display:inline-block"></div>
         <script>
           (function(){
             var el=document.getElementById('kra-qr');
-            new QRCode(el,{text:'${receipt.kraQRCode.replace(/'/g,"\\'")}',width:90,height:90,colorDark:'#000000',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});
+            new QRCode(el,{text:${JSON.stringify(receipt.kraQRCode).replace(/</g, '\\u003c')},width:90,height:90,colorDark:'#000000',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});
           })();
         <\/script>
         <div style="font-size:9px;margin-top:2px">Scan to verify on KRA eTIMS portal</div>
       ` : ''}
     </div>
   ` : receipt.etimsSubmitted === false && !receipt.voided ? `
-    <div class="center small" style="color:#b45309;font-size:10px;margin:4px 0">⚠ PENDING KRA SUBMISSION</div>
+    <div class="center small" style="color:#b45309;font-size:10px;margin:4px 0">** PENDING KRA SUBMISSION **</div>
   ` : ''}
   
   <div class="line"></div>
-  ${receipt.receiptHeader ? `<div class="center small" style="margin-bottom:4px">${receipt.receiptHeader}</div>` : ''}
+  ${receipt.receiptHeader ? `<div class="center small" style="margin-bottom:4px">${escapeHtml(receipt.receiptHeader)}</div>` : ''}
   <div class="center small">
     <div>Thank you for your business!</div>
-    ${receipt.receiptFooter ? `<div style="margin-top:4px">${receipt.receiptFooter}</div>` : ''}
+    ${receipt.receiptFooter ? `<div style="margin-top:4px">${escapeHtml(receipt.receiptFooter)}</div>` : ''}
     <div style="margin-top:4px;color:#888">Powered by: Kastra Systems</div>
   </div>
 </body>
@@ -575,29 +622,39 @@ export function generateHTML(receipt: ReceiptData): string {
   `.trim();
 }
 
-// Print to browser
-export function printToBrowser(receipt: ReceiptData): void {
-  console.log('[PRINTER] pointsEarned:', receipt.pointsEarned, 'loyaltyBalance:', receipt.loyaltyBalance, 'customerName:', receipt.customerName);
-  const html = generateHTML(receipt);
-  const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-  const winFeatures = isMobile
-    ? 'width=400,height=700,scrollbars=yes'
-    : 'width=420,height=700,scrollbars=yes,resizable=yes';
-  const printWindow = window.open('', '_blank', winFeatures);
-  if (printWindow) {
-    printWindow.document.write(html);
-    printWindow.document.close();
-    printWindow.focus();
-    // Wait for content to render, then print.
-    // Use afterprint event to close the window AFTER the dialog is dismissed
-    // (window.print() is async in Firefox — closing immediately kills the dialog)
-    setTimeout(() => {
-      printWindow.addEventListener('afterprint', () => {
-        printWindow.close();
-      });
-      printWindow.print();
-    }, 500);
+/**
+ * Print an HTML document through a hidden iframe. Unlike window.open this is not
+ * subject to popup blocking, which matters because receipts, reprints and kitchen
+ * tickets are printed after awaiting the network, when the click that started
+ * them no longer counts as a user gesture. Throws if the document cannot be set up.
+ */
+function printHtml(html: string, delayMs = 500): void {
+  const iframe = document.createElement('iframe');
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+  document.body.appendChild(iframe);
+
+  const win = iframe.contentWindow;
+  if (!win) {
+    iframe.remove();
+    throw new Error('Could not open the print preview');
   }
+  const cleanup = () => { setTimeout(() => iframe.remove(), 1000); };
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  win.addEventListener('afterprint', cleanup);
+  // Let fonts and the QR script settle before the print dialog snapshots the page.
+  setTimeout(() => {
+    try { win.focus(); win.print(); } catch { cleanup(); }
+  }, delayMs);
+  // Some browsers never fire afterprint (dialog dismissed on mobile); do not leak the frame.
+  setTimeout(cleanup, 120000);
+}
+
+// Print to browser / OS print dialog
+export function printToBrowser(receipt: ReceiptData): void {
+  printHtml(generateHTML(receipt));
 }
 
 // ─── Bill (Pre-receipt for table) ─────────────────────────────────────────────
@@ -626,6 +683,7 @@ export interface BillData {
 }
 
 export function generateBillHTML(bill: BillData): string {
+  const paperMm = getPaperWidth() ?? 80;
   // Tax is whatever the caller charges. This used to hardcode 16/116 of the
   // total, so a business with tax turned off (or on TOT) still printed a VAT
   // line it never charged.
@@ -638,11 +696,11 @@ export function generateBillHTML(bill: BillData): string {
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Bill — Table ${bill.tableNumber}</title>
+  <title>Bill - Table ${escapeHtml(bill.tableNumber)}</title>
   <style>
-    @media print { @page { margin: 0; size: 80mm auto; } body { margin: 0; } }
+    @media print { @page { margin: 0; size: ${paperMm}mm auto; } body { margin: 0; } }
     body { font-family: 'Courier New', monospace; font-size: 13px; line-height: 1.5;
-           max-width: 80mm; margin: 0 auto; padding: 8mm; }
+           max-width: ${paperMm}mm; margin: 0 auto; padding: 8mm; }
     .center { text-align: center; }
     .bold { font-weight: bold; }
     .large { font-size: 16px; }
@@ -656,22 +714,22 @@ export function generateBillHTML(bill: BillData): string {
   </style>
 </head>
 <body>
-  <div class="bill-header">★ BILL</div>
-  <div class="center bold large">${bill.businessName}</div>
-  <div class="center xl">Table ${bill.tableNumber}</div>
-  <div class="center small">${new Date(bill.date).toLocaleString('en-KE')}${bill.waiterName ? ` · Served by: ${bill.waiterName}` : ''}</div>
+  <div class="bill-header">BILL</div>
+  <div class="center bold large">${escapeHtml(bill.businessName)}</div>
+  <div class="center xl">Table ${escapeHtml(bill.tableNumber)}</div>
+  <div class="center small">${new Date(bill.date).toLocaleString('en-KE')}${bill.waiterName ? ` - Served by: ${escapeHtml(bill.waiterName)}` : ''}</div>
   <div class="line"></div>
   ${bill.items.map((item) => `
     <div style="margin-bottom:4px">
-      <div class="bold">${item.name}</div>
-      <div class="row small"><span>${item.quantity} × KES ${(item.unitPriceCents / 100).toFixed(2)}</span><span class="bold">KES ${(item.totalCents / 100).toFixed(2)}</span></div>
+      <div class="bold">${escapeHtml(item.name)}</div>
+      <div class="row small"><span>${item.quantity} x KES ${(item.unitPriceCents / 100).toFixed(2)}</span><span class="bold">KES ${(item.totalCents / 100).toFixed(2)}</span></div>
     </div>
   `).join('')}
   <div class="line"></div>
   <div class="row bold large" style="margin-bottom:4px"><span>${totalLabel}</span><span>KES ${(bill.totalCents / 100).toFixed(2)}</span></div>
   ${taxCents > 0 ? `<div class="row small muted"><span>  ${taxLabel}:</span><span>KES ${(taxCents / 100).toFixed(2)}</span></div>` : ''}
   <div class="line"></div>
-  ${bill.footer ? `<div class="center small" style="margin-top:6px">${bill.footer}</div>` : ''}
+  ${bill.footer ? `<div class="center small" style="margin-top:6px">${escapeHtml(bill.footer)}</div>` : ''}
   <div class="center small" style="margin-top:6px">Please check your bill and inform staff of any errors.</div>
   <div class="center small">Thank you for dining with us!</div>
   <div class="center small muted" style="margin-top:8px">Powered by: Kastra Systems</div>
@@ -680,17 +738,7 @@ export function generateBillHTML(bill: BillData): string {
 }
 
 export function printBill(bill: BillData): void {
-  const html = generateBillHTML(bill);
-  const w = window.open('', '_blank', 'width=320,height=560');
-  if (w) {
-    w.document.write(html);
-    w.document.close();
-    w.focus();
-    setTimeout(() => {
-      w.addEventListener('afterprint', () => w.close());
-      w.print();
-    }, 400);
-  }
+  printHtml(generateBillHTML(bill), 400);
 }
 
 // ─── KOT (Kitchen Order Ticket) ───────────────────────────────────────────────
@@ -726,49 +774,69 @@ function categorizeKOTItem(itemName: string, category?: string): string {
   return 'KOT_FOOD'; // default to food printer
 }
 
-/**
- * Print KOT with printer routing: split items by destination printer handle.
- * Items without a matching printer handle go to the first available KOT printer,
- * or fall back to browser print if no printers are configured.
- */
-export function printKOTWithRouting(
-  kot: KOTData,
-  printers: Array<{ handles: string[]; connectionType: string; connectionDetails: string }>,
-): void {
-  // Group items by routing handle
-  const groups: Record<string, typeof kot.items> = {};
-  for (const item of kot.items) {
-    const handle = categorizeKOTItem(item.name, item.category);
-    if (!groups[handle]) groups[handle] = [];
-    groups[handle].push(item);
-  }
+export interface RoutablePrinter {
+  id?: string;
+  connectionType: string;
+  connectionDetails: string;
+  /** The API stores handles as a JSON string; older callers pass the parsed array. */
+  handles: string[] | string;
+}
 
-  // Find which printers service which handles
-  const printed = new Set<string>();
-  for (const [handle, items] of Object.entries(groups)) {
-    const printer = printers.find((p) => p.handles.includes(handle));
-    const kotSlice: KOTData = { ...kot, items };
-    // Print to browser regardless (real hardware routing would need native bridge)
-    printKOT(kotSlice);
-    if (printer) printed.add(handle);
-  }
+function parseHandles(handles: RoutablePrinter['handles']): string[] {
+  if (Array.isArray(handles)) return handles;
+  try { const parsed = JSON.parse(handles); return Array.isArray(parsed) ? parsed : []; } catch { return []; }
+}
 
-  // If nothing was routed, print whole KOT
-  if (Object.keys(groups).length === 0) {
-    printKOT(kot);
+/** How a configured printer row is reached, or null when only a browser/OS print can serve it. */
+function printerToKotConfig(p: RoutablePrinter): KOTPrinterConfig | null {
+  const details = p.connectionDetails?.trim();
+  switch (p.connectionType) {
+    case 'STAR': return details ? { type: 'STAR', host: details } : null;
+    case 'EPSON': return details ? { type: 'EPSON', host: details } : null;
+    case 'NETWORK': return p.id ? { type: 'NETWORK_ESCPOS', networkPrinterId: p.id } : null;
+    default: return null;
   }
 }
 
+/**
+ * Print a KOT with printer routing: items are split by destination handle
+ * (KOT_FOOD, KOT_DRINKS, KOT_DESSERTS) and each group is sent to the printer
+ * that handles it. Items with no reachable printer are combined into a single
+ * browser ticket, so a kitchen order is never lost and never opens one popup
+ * per category. printKOTDirect itself falls back to the browser on a send error.
+ */
+export async function printKOTWithRouting(kot: KOTData, printers: RoutablePrinter[]): Promise<void> {
+  const groups: Record<string, KOTData['items']> = {};
+  for (const item of kot.items) {
+    const handle = categorizeKOTItem(item.name, item.category);
+    (groups[handle] ??= []).push(item);
+  }
+
+  const unrouted: KOTData['items'] = [];
+  const jobs: Array<Promise<void>> = [];
+  for (const [handle, items] of Object.entries(groups)) {
+    const printer = printers.find((p) => parseHandles(p.handles).includes(handle));
+    const config = printer ? printerToKotConfig(printer) : null;
+    if (config) jobs.push(printKOTDirect(config, { ...kot, items }));
+    else unrouted.push(...items);
+  }
+  if (unrouted.length > 0 || Object.keys(groups).length === 0) {
+    printKOT({ ...kot, items: Object.keys(groups).length === 0 ? kot.items : unrouted });
+  }
+  await Promise.all(jobs);
+}
+
 export function generateKOTHTML(kot: KOTData): string {
+  const paperMm = getPaperWidth() ?? 80;
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>KOT T${kot.tableNumber}</title>
+  <title>KOT T${escapeHtml(kot.tableNumber)}</title>
   <style>
-    @media print { @page { margin: 0; size: 80mm auto; } body { margin: 0; } }
+    @media print { @page { margin: 0; size: ${paperMm}mm auto; } body { margin: 0; } }
     body { font-family: 'Courier New', monospace; font-size: 14px; line-height: 1.6;
-           max-width: 80mm; margin: 0 auto; padding: 8mm; }
+           max-width: ${paperMm}mm; margin: 0 auto; padding: 8mm; }
     h1 { font-size: 20px; text-align: center; margin: 0 0 2px; letter-spacing: 2px; }
     .table { font-size: 36px; font-weight: 900; text-align: center; margin: 4px 0; }
     .meta { font-size: 11px; text-align: center; color: #444; margin-bottom: 4px; }
@@ -786,14 +854,14 @@ export function generateKOTHTML(kot: KOTData): string {
 </head>
 <body>
   <h1>KITCHEN ORDER</h1>
-  <div class="table">T${kot.tableNumber}</div>
-  <div class="meta">${new Date(kot.createdAt).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}${kot.waiterName ? ` · ${kot.waiterName}` : ''}${kot.kotNumber ? ` · KOT #${kot.kotNumber}` : ''}</div>
-  <div class="type-wrap"><span class="type-badge">${kot.orderType === 'ADDITION' ? '+ ADDITION' : '★ NEW ORDER'}</span></div>
+  <div class="table">T${escapeHtml(kot.tableNumber)}</div>
+  <div class="meta">${new Date(kot.createdAt).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}${kot.waiterName ? ` - ${escapeHtml(kot.waiterName)}` : ''}${kot.kotNumber ? ` - KOT #${escapeHtml(kot.kotNumber)}` : ''}</div>
+  <div class="type-wrap"><span class="type-badge">${kot.orderType === 'ADDITION' ? '+ ADDITION' : 'NEW ORDER'}</span></div>
   <div class="line"></div>
   ${kot.items.map((item) => `
-    <div class="item"><span class="qty">${item.quantity}×</span><span class="item-name">${item.name}</span></div>
-    ${item.specialInstructions ? `<div class="note">⚠ ${item.specialInstructions}</div>` : ''}
-    ${(item.modifiers ?? []).map((m) => `<div class="mod">• ${m}</div>`).join('')}
+    <div class="item"><span class="qty">${item.quantity}×</span><span class="item-name">${escapeHtml(item.name)}</span></div>
+    ${item.specialInstructions ? `<div class="note">!! ${escapeHtml(item.specialInstructions)}</div>` : ''}
+    ${(item.modifiers ?? []).map((m) => `<div class="mod">+ ${escapeHtml(m)}</div>`).join('')}
   `).join('')}
   <div class="line"></div>
 </body>
@@ -801,126 +869,202 @@ export function generateKOTHTML(kot: KOTData): string {
 }
 
 export function printKOT(kot: KOTData): void {
-  const html = generateKOTHTML(kot);
-  const w = window.open('', '_blank', 'width=320,height=480');
-  if (w) {
-    w.document.write(html);
-    w.document.close();
-    w.focus();
-    setTimeout(() => {
-      w.addEventListener('afterprint', () => w.close());
-      w.print();
-    }, 300);
+  printHtml(generateKOTHTML(kot), 300);
+}
+
+// ─── Raw ESC/POS transports ───────────────────────────────────────────────────
+// USB, Bluetooth and LAN all end up as "write these bytes to the printer". A
+// printer is paired once from Settings -> Printers; after that a sale prints
+// without any picker. Browsers only allow a device chooser during a user
+// gesture, so the paired device is looked up silently (getDevices) at print time.
+
+export interface PairedPrinter { id?: string; vendorId?: number; productId?: number; name: string }
+
+const USB_PAIRED_KEY = 'usb-printer';
+const BT_PAIRED_KEY = 'bt-printer';
+
+function readPaired(key: string): PairedPrinter | null {
+  try { const s = localStorage.getItem(key); return s ? (JSON.parse(s) as PairedPrinter) : null; } catch { return null; }
+}
+function writePaired(key: string, value: PairedPrinter): void {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage unavailable */ }
+}
+
+export const getPairedUsbPrinter = () => readPaired(USB_PAIRED_KEY);
+export const getPairedBluetoothPrinter = () => readPaired(BT_PAIRED_KEY);
+
+// ---- USB (WebUSB: Chrome, Edge, Android Chrome)
+
+const USB_FILTERS = [{ classCode: 7 }, { classCode: 255 }]; // printer class, vendor-specific
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function usbApi(): any {
+  const usb = (navigator as any).usb;
+  if (!usb) throw new Error('This browser cannot talk to USB printers (WebUSB). Use Chrome or Edge, or choose a network printer.');
+  return usb;
+}
+
+/** Ask the user to pick a USB printer and remember it. Must run from a click. */
+export async function pairUsbPrinter(): Promise<PairedPrinter> {
+  const device = await usbApi().requestDevice({ filters: USB_FILTERS });
+  const paired: PairedPrinter = {
+    vendorId: device.vendorId,
+    productId: device.productId,
+    name: device.productName || `USB ${device.vendorId.toString(16)}:${device.productId.toString(16)}`,
+  };
+  writePaired(USB_PAIRED_KEY, paired);
+  return paired;
+}
+
+async function findUsbDevice(): Promise<any> {
+  const usb = usbApi();
+  const paired = getPairedUsbPrinter();
+  const granted: any[] = await usb.getDevices();
+  const match = paired
+    ? granted.find((d) => d.vendorId === paired.vendorId && d.productId === paired.productId)
+    : granted.length === 1 ? granted[0] : undefined;
+  if (match) return match;
+  try {
+    // Only succeeds while a click is still being handled (manual "Print" buttons).
+    return await usb.requestDevice({ filters: USB_FILTERS });
+  } catch {
+    throw new Error('No USB printer is paired on this device. Open Settings -> Printers and pair it.');
   }
 }
 
-// ─── Cash Drawer ──────────────────────────────────────────────────────────────
+/** Send raw bytes to the paired USB printer, finding its bulk OUT endpoint instead of assuming one. */
+export async function printRawUSB(bytes: Uint8Array): Promise<void> {
+  const device = await findUsbDevice();
+  await device.open();
+  try {
+    if (device.configuration === null) await device.selectConfiguration(1);
+    const candidates: Array<{ iface: any; alt: any; ep: any }> = [];
+    for (const iface of device.configuration.interfaces) {
+      for (const alt of iface.alternates) {
+        const ep = alt.endpoints.find((e: any) => e.direction === 'out' && e.type === 'bulk');
+        if (ep) candidates.push({ iface, alt, ep });
+      }
+    }
+    candidates.sort((a, b) => Number(b.alt.interfaceClass === 7) - Number(a.alt.interfaceClass === 7));
+    const target = candidates[0];
+    if (!target) throw new Error('This USB device has no writable endpoint, so it is not a printer.');
+    await device.claimInterface(target.iface.interfaceNumber);
+    try {
+      if (target.alt.alternateSetting) await device.selectAlternateInterface(target.iface.interfaceNumber, target.alt.alternateSetting);
+      for (const chunk of chunkBytes(bytes, 4096)) await device.transferOut(target.ep.endpointNumber, chunk);
+    } finally {
+      await device.releaseInterface(target.iface.interfaceNumber).catch(() => undefined);
+    }
+  } finally {
+    await device.close().catch(() => undefined);
+  }
+}
+
+// ---- Bluetooth (Web Bluetooth: Chrome, Edge, Android Chrome; not iOS Safari)
+
+// GATT services that cheap and branded BLE thermal printers expose for raw data.
+const BT_SERVICES = [
+  '000018f0-0000-1000-8000-00805f9b34fb',
+  '49535343-fe7d-4ae5-8fa9-9fafd205e455',
+  'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
+  '0000ffe0-0000-1000-8000-00805f9b34fb',
+];
+
+let btDevice: any = null; // Kept for the page lifetime: a reload needs getDevices() or a re-pair.
+
+function btApi(): any {
+  const bt = (navigator as any).bluetooth;
+  if (!bt) throw new Error('This browser cannot talk to Bluetooth printers. Use Chrome or Edge on Android or desktop, or choose a network printer.');
+  return bt;
+}
+
+/** Ask the user to pick a Bluetooth printer and remember it. Must run from a click. */
+export async function pairBluetoothPrinter(): Promise<PairedPrinter> {
+  const device = await btApi().requestDevice({ acceptAllDevices: true, optionalServices: BT_SERVICES });
+  btDevice = device;
+  const paired: PairedPrinter = { id: device.id, name: device.name || 'Bluetooth printer' };
+  writePaired(BT_PAIRED_KEY, paired);
+  return paired;
+}
+
+async function findBluetoothDevice(): Promise<any> {
+  if (btDevice) return btDevice;
+  const bt = btApi();
+  const paired = getPairedBluetoothPrinter();
+  if (paired?.id && typeof bt.getDevices === 'function') {
+    const known: any[] = await bt.getDevices();
+    const match = known.find((d) => d.id === paired.id);
+    if (match) { btDevice = match; return match; }
+  }
+  try {
+    btDevice = await bt.requestDevice({ acceptAllDevices: true, optionalServices: BT_SERVICES });
+    return btDevice;
+  } catch {
+    throw new Error('Bluetooth printer is not connected. Open Settings -> Printers and pair it again.');
+  }
+}
+
+async function findWritableCharacteristic(server: any): Promise<any> {
+  const services: any[] = await server.getPrimaryServices();
+  services.sort((a, b) => BT_SERVICES.indexOf(a.uuid) - BT_SERVICES.indexOf(b.uuid) || 0);
+  for (const service of services) {
+    const characteristics: any[] = await service.getCharacteristics();
+    const writable = characteristics.find((c) => c.properties.write || c.properties.writeWithoutResponse);
+    if (writable) return writable;
+  }
+  throw new Error('The Bluetooth device has no writable channel, so it is not a supported printer.');
+}
+
+export async function printRawBluetooth(bytes: Uint8Array): Promise<void> {
+  const device = await findBluetoothDevice();
+  const server = device.gatt.connected ? device.gatt : await device.gatt.connect();
+  const characteristic = await findWritableCharacteristic(server);
+  // BLE writes are limited by the negotiated MTU; 100 bytes is safe on every stack.
+  for (const chunk of chunkBytes(bytes, 100)) {
+    if (characteristic.properties.writeWithoutResponse) await characteristic.writeValueWithoutResponse(chunk);
+    else await characteristic.writeValue(chunk);
+  }
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+// ---- LAN printer reached through the API (the API host must be on the same LAN as the printer)
+
+export async function printRawNetwork(printerId: string, bytes: Uint8Array): Promise<void> {
+  await api.post(`/printers/${printerId}/print`, { data: bytesToBase64(bytes) });
+}
+
+// ---- Receipt / drawer entry points
+
+const DRAWER_PULSE = encodeEscPos(ESCPOS.OPEN_DRAWER);
 
 /** Send cash drawer open pulse to a network printer (connected via RJ11 to printer). */
 export async function openDrawerOnNetwork(printerId: string): Promise<void> {
-  const encoder = new TextEncoder();
-  const bytes = encoder.encode(ESCPOS.OPEN_DRAWER);
-  let binary = '';
-  bytes.forEach((b) => (binary += String.fromCharCode(b)));
-  const base64 = btoa(binary);
-  await fetch(`/api/v1/printers/${printerId}/print`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data: base64 }),
-  });
+  await printRawNetwork(printerId, DRAWER_PULSE);
 }
 
-/** Send cash drawer open pulse via WebUSB (printer must already be claimed). */
+/** Send cash drawer open pulse via the paired USB printer. */
 export async function openDrawerViaUSB(): Promise<void> {
-  if (!('usb' in navigator)) return;
-  try {
-    const device = await (navigator as any).usb.requestDevice({ filters: [{ classCode: 7 }] });
-    await device.open();
-    await device.selectConfiguration(1);
-    await device.claimInterface(0);
-    const data = new TextEncoder().encode(ESCPOS.OPEN_DRAWER);
-    await device.transferOut(1, data);
-    await device.close();
-  } catch { /* drawer open is best-effort */ }
+  await printRawUSB(DRAWER_PULSE);
 }
 
 // Print to Network/LAN thermal printer via API proxy
 export async function printToNetwork(printerId: string, receipt: ReceiptData, enableCashDrawer = false): Promise<void> {
-  const escpos = generateESCPOS(receipt, enableCashDrawer);
-  const encoder = new TextEncoder();
-  const bytes = encoder.encode(escpos);
-  // Convert to base64
-  let binary = '';
-  bytes.forEach((b) => (binary += String.fromCharCode(b)));
-  const base64 = btoa(binary);
+  await printRawNetwork(printerId, encodeEscPos(generateESCPOS(receipt, enableCashDrawer)));
+}
 
-  const response = await fetch(`/api/v1/printers/${printerId}/print`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data: base64 }),
-  });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error((err as any)?.message ?? 'Network printer error');
-  }
+// Print to a printer installed on this computer, silently, through the desktop app
+export async function printToSystemPrinter(printerName: string, receipt: ReceiptData, enableCashDrawer = false): Promise<void> {
+  await printRawToSystemPrinter(printerName, encodeEscPos(generateESCPOS(receipt, enableCashDrawer)));
 }
 
 // Print to USB thermal printer (WebUSB)
 export async function printToUSB(receipt: ReceiptData, enableCashDrawer = false): Promise<void> {
-  if (!('usb' in navigator)) {
-    throw new Error('WebUSB not supported in this browser');
-  }
-
-  try {
-    const device = await (navigator as any).usb.requestDevice({
-      filters: [{ classCode: 7 }] // Printer class
-    });
-
-    await device.open();
-    await device.selectConfiguration(1);
-    await device.claimInterface(0);
-
-    const escpos = generateESCPOS(receipt, enableCashDrawer);
-    const encoder = new TextEncoder();
-    const data = encoder.encode(escpos);
-
-    await device.transferOut(1, data);
-    await device.close();
-  } catch (error) {
-    console.error('USB print error:', error);
-    throw new Error('Failed to print to USB printer');
-  }
+  await printRawUSB(encodeEscPos(generateESCPOS(receipt, enableCashDrawer)));
 }
-
-// Standard Bluetooth GATT service/characteristic UUIDs for generic thermal printers
-const BT_PRINTER_SERVICE_UUID        = '000018f0-0000-1000-8000-00805f9b34fb';
-const BT_PRINTER_CHARACTERISTIC_UUID = '00002af1-0000-1000-8000-00805f9b34fb';
 
 // Print to Bluetooth thermal printer
 export async function printToBluetooth(receipt: ReceiptData, enableCashDrawer = false): Promise<void> {
-  if (!('bluetooth' in navigator)) {
-    throw new Error('Web Bluetooth not supported in this browser');
-  }
-
-  try {
-    const device = await (navigator as any).bluetooth.requestDevice({
-      filters: [{ services: [BT_PRINTER_SERVICE_UUID] }]
-    });
-
-    const server = await device.gatt.connect();
-    const service = await server.getPrimaryService(BT_PRINTER_SERVICE_UUID);
-    const characteristic = await service.getCharacteristic(BT_PRINTER_CHARACTERISTIC_UUID);
-
-    const escpos = generateESCPOS(receipt, enableCashDrawer);
-    const encoder = new TextEncoder();
-    const data = encoder.encode(escpos);
-
-    await characteristic.writeValue(data);
-  } catch (error) {
-    console.error('Bluetooth print error:', error);
-    throw new Error('Failed to print to Bluetooth printer');
-  }
+  await printRawBluetooth(encodeEscPos(generateESCPOS(receipt, enableCashDrawer)));
 }
 
 // ─── ZPL (Zebra Programming Language) Barcode Labels ─────────────────────────
@@ -1033,7 +1177,7 @@ export function printBarcodeLabel(label: BarcodeLabelData): void {
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Label ${label.barcode}</title>
+  <title>Label ${escapeHtml(label.barcode)}</title>
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
   <style>
     @media print { @page { margin: 0; size: 50.8mm 25.4mm; } body { margin: 0; } }
@@ -1048,15 +1192,15 @@ export function printBarcodeLabel(label: BarcodeLabelData): void {
   </style>
 </head>
 <body>
-  ${label.businessName ? `<div class="biz">${label.businessName}</div>` : ''}
-  <div class="name">${label.itemName}</div>
+  ${label.businessName ? `<div class="biz">${escapeHtml(label.businessName)}</div>` : ''}
+  <div class="name">${escapeHtml(label.itemName)}</div>
   <canvas id="bc"></canvas>
   <div class="footer">
-    ${label.sku ? `<span class="sku">${label.sku}</span>` : '<span></span>'}
+    ${label.sku ? `<span class="sku">${escapeHtml(label.sku)}</span>` : '<span></span>'}
     <span class="price">${price}</span>
   </div>
   <script>
-    JsBarcode('#bc', '${label.barcode}', { format: 'CODE128', displayValue: true,
+    JsBarcode('#bc', ${JSON.stringify(label.barcode).replace(/</g, '\\u003c')}, { format: 'CODE128', displayValue: true,
       fontSize: 7, height: 35, margin: 0, width: 1.2 });
     setTimeout(() => { window.print(); window.addEventListener('afterprint', () => window.close()); }, 400);
   <\/script>
@@ -1196,7 +1340,7 @@ export async function printKOTToStar(config: StarPrinterConfig, kot: KOTData): P
     <bold><text width="2" height="2">KITCHEN ORDER</text></bold>
     <bold><text width="3" height="3">T${esc(kot.tableNumber)}</text></bold>
     <text>${new Date(kot.createdAt).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}${kot.waiterName ? ` · ${esc(kot.waiterName)}` : ''}${kot.kotNumber ? ` · KOT #${esc(kot.kotNumber)}` : ''}</text>
-    <text>${kot.orderType === 'ADDITION' ? '+ ADDITION' : '★ NEW ORDER'}</text>
+    <text>${kot.orderType === 'ADDITION' ? '+ ADDITION' : '* NEW ORDER'}</text>
     <align value="left"/>
     <line><text>================================</text></line>
     ${itemLines}
@@ -1326,7 +1470,7 @@ export async function printKOTToEpson(config: EpsonPrinterConfig, kot: KOTData):
       <text align="center" bold="true" width="2" height="2">KITCHEN ORDER&#10;</text>
       <text align="center" bold="true" width="3" height="3">T${esc(kot.tableNumber)}&#10;</text>
       <text align="center">${new Date(kot.createdAt).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}${kot.waiterName ? ` · ${esc(kot.waiterName)}` : ''}${kot.kotNumber ? ` · KOT #${esc(kot.kotNumber)}` : ''}&#10;</text>
-      <text align="center">${kot.orderType === 'ADDITION' ? '+ ADDITION' : '★ NEW ORDER'}&#10;</text>
+      <text align="center">${kot.orderType === 'ADDITION' ? '+ ADDITION' : '* NEW ORDER'}&#10;</text>
       <text align="left">================================&#10;</text>
       ${itemLines}
       <text>================================&#10;</text>
@@ -1375,18 +1519,9 @@ export async function printKOTDirect(config: KOTPrinterConfig, kot: KOTData): Pr
     }
     if (config.type === 'NETWORK_ESCPOS' && config.networkPrinterId) {
       // Build ESC/POS KOT bytes and send via API proxy
-      const kotEscpos = buildKOTEscPos(kot);
-      const encoder = new TextEncoder();
-      const bytes = encoder.encode(kotEscpos);
-      let binary = '';
-      bytes.forEach((b) => (binary += String.fromCharCode(b)));
-      const base64 = btoa(binary);
-      const res = await fetch(`/api/v1/printers/${config.networkPrinterId}/print`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: base64 }),
+      await api.post(`/printers/${config.networkPrinterId}/print`, {
+        data: bytesToBase64(encodeEscPos(buildKOTEscPos(kot))),
       });
-      if (!res.ok) throw new Error(`Network KOT print error: ${res.status}`);
       return;
     }
   } catch (err) {
@@ -1397,29 +1532,30 @@ export async function printKOTDirect(config: KOTPrinterConfig, kot: KOTData): Pr
 }
 
 /** Build raw ESC/POS bytes for a KOT (for network/USB ESC/POS printers). */
-function buildKOTEscPos(kot: KOTData): string {
+function buildKOTEscPos(kot: KOTData, paperWidth: PaperWidth = getPaperWidth() ?? 58): string {
+  const rule = '='.repeat(PAPER_COLUMNS[paperWidth]);
   let out = ESCPOS.INIT;
   out += ESCPOS.ALIGN_CENTER + ESCPOS.BOLD_ON + ESCPOS.DOUBLE_HEIGHT;
   out += 'KITCHEN ORDER' + ESCPOS.FEED;
   out += ESCPOS.NORMAL_SIZE + ESCPOS.BOLD_OFF;
   out += ESCPOS.BOLD_ON + ESCPOS.DOUBLE_HEIGHT;
-  out += `T${kot.tableNumber}` + ESCPOS.FEED;
+  out += `T${asciiSafe(kot.tableNumber)}` + ESCPOS.FEED;
   out += ESCPOS.NORMAL_SIZE + ESCPOS.BOLD_OFF;
-  out += new Date(kot.createdAt).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' });
-  if (kot.waiterName) out += ` · ${kot.waiterName}`;
-  if (kot.kotNumber) out += ` · KOT #${kot.kotNumber}`;
+  out += asciiSafe(new Date(kot.createdAt).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' }));
+  if (kot.waiterName) out += ` - ${asciiSafe(kot.waiterName)}`;
+  if (kot.kotNumber) out += ` - KOT #${asciiSafe(kot.kotNumber)}`;
   out += ESCPOS.FEED;
   out += (kot.orderType === 'ADDITION' ? '+ ADDITION' : '* NEW ORDER') + ESCPOS.FEED;
   out += ESCPOS.ALIGN_LEFT;
-  out += '================================' + ESCPOS.FEED;
+  out += rule + ESCPOS.FEED;
   for (const item of kot.items) {
     out += ESCPOS.BOLD_ON + ESCPOS.DOUBLE_HEIGHT;
-    out += `${item.quantity}x ${item.name}` + ESCPOS.FEED;
+    out += `${item.quantity}x ${asciiSafe(item.name)}` + ESCPOS.FEED;
     out += ESCPOS.NORMAL_SIZE + ESCPOS.BOLD_OFF;
-    if (item.specialInstructions) out += `  !! ${item.specialInstructions}` + ESCPOS.FEED;
-    for (const mod of item.modifiers ?? []) out += `  + ${mod}` + ESCPOS.FEED;
+    if (item.specialInstructions) out += `  !! ${asciiSafe(item.specialInstructions)}` + ESCPOS.FEED;
+    for (const mod of item.modifiers ?? []) out += `  + ${asciiSafe(mod)}` + ESCPOS.FEED;
   }
-  out += '================================' + ESCPOS.FEED + ESCPOS.FEED;
+  out += rule + ESCPOS.FEED + ESCPOS.FEED;
   out += ESCPOS.CUT;
   return out;
 }

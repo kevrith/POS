@@ -218,12 +218,53 @@ respond it times out and you can retry or switch method.
 
 After a sale you can:
 
-- **Print** to a thermal receipt printer
+- **Print** to a thermal receipt printer. Choose the printer once in **Settings, Printers,
+  Receipt printing (this device)** and every sale prints to it without asking. See
+  *Setting up your receipt printer* below
 - **Send by SMS or WhatsApp** — automatic when the sale has a customer with a phone
   number
 - **Email** it
 - Show a **digital receipt** on screen for the customer to photograph
 - Print an **A4 invoice** instead of a receipt, for business customers
+
+### Setting up your receipt printer
+
+Each till or phone keeps its own printer choice. New devices start on **System printer**, which
+works the way printing works in any other program: the print window lists every printer installed
+on that computer, including thermal printers, and you pick one. Nothing has to be paired.
+
+1. Install the thermal printer on the computer as usual (its driver and a test page).
+2. Open **Settings, Printers**. Under **Receipt printing (this device)** keep **System printer**.
+3. Choose the **Paper size**: 58 mm for small rolls, 80 mm for standard thermal printers.
+4. Press **Print test receipt**, pick your thermal printer in the print window, and check the slip.
+
+In the **KASTRA POS desktop app** the first choice is **Installed printer, no print window**. Pick your
+thermal printer from the list of printers installed on the computer, press **Print test receipt**, and every
+sale then prints straight to it with no window. It needs a thermal receipt printer (it sends receipt
+commands, so a laser or inkjet printer would print them as text).
+
+In the browser, after a sale press **Print** and choose the printer in the window; the browser remembers your last
+choice. To skip the window, make the thermal printer the computer's default printer, start Chrome or
+Edge with the `--kiosk-printing` option, and switch on **Print automatically after each sale**.
+
+#### Advanced: direct thermal printing
+
+Under **Advanced** you can choose USB thermal, Bluetooth thermal, LAN thermal (through the server),
+Star or Epson. These send the receipt straight to one device instead of using the installed-printer
+list, so they ignore the computer's drivers. Use them for phones, or for printers with no driver.
+
+- For USB or Bluetooth press **Pair** and pick the printer. On Windows a printer that already has
+  its driver installed is usually not available for USB pairing; use the system printer instead.
+- For a Star or Epson printer type its address and press **Save**.
+- For a LAN printer, first add it below with connection type NETWORK and an address such as
+  `192.168.1.50:9100`.
+- Once a direct printer is chosen, **Print automatically after each sale** is switched on, and the
+  Print and Reprint buttons go straight to it. Turn the switch off to print only on request.
+- Choose **Ask each time** to see the picker every time.
+
+USB and Bluetooth printing needs Chrome or Edge (on a computer or an Android phone); it does not
+work in Safari on iPhone or iPad. In those browsers use the system printer, or a LAN, Star or Epson
+printer.
 
 You can customise the header, footer, logo and wording in **Settings → Receipt**.
 
@@ -480,7 +521,7 @@ require the customer to install anything.**
 |---|---|---|
 | **Web storefront** | `/shop/<your business>` | Browsing and ordering online |
 | **QR menu** | `/menu/<your business>` | Table menus in a restaurant |
-| **Online ordering** | `/order/<your business>` | Takeaway and delivery orders |
+| **Older ordering link** | `/order/<your business>` | Sends the customer to the web storefront, so links you already printed keep working |
 | **Payment link** | `/pay/<code>` | Send someone a link to pay you |
 | **Order tracking** | `/track/<order number>` | Customer follows their delivery |
 | **Customer portal** | `/portal` | Customers sign in with a phone code to see orders, points and account |
@@ -552,9 +593,18 @@ installer will give you this. It defaults to the cloud service.
 
 **Receipt printing on mobile** is off by default, because most mobile selling has no
 printer and sends the receipt by SMS or WhatsApp instead. Turn it on in the app's
-Settings and a Print button appears after each sale. It prints through the phone's
-own print system, so it works with a printer already paired to the phone, or saves a
-PDF.
+Settings, then choose how the phone reaches the printer:
+
+- **Bluetooth** for small receipt printers. Pair the printer in the phone's Bluetooth
+  settings first, then choose it in the app. Android only.
+- **Wi-Fi / LAN** for counter printers: type the printer's address, for example
+  `192.168.1.50`. The phone must be on the same Wi-Fi.
+- **Print dialog** to use the phone's own print system or save a PDF.
+
+Also choose the **paper size**: 58 mm for the small Bluetooth printers, 80 mm for
+standard thermal printers. The receipt is laid out to fit the paper you choose. With
+Bluetooth or Wi-Fi you can switch on **Print automatically** so each sale prints the
+moment it completes. Use **Print test receipt** to check the setup.
 
 ---
 
@@ -571,7 +621,7 @@ PDF.
 | **Payments** | M-Pesa, Paystack, bank details |
 | **Users** | Add staff, set roles and PINs |
 | **Stores** | Multiple branches |
-| **Printers** | Which printer gets food, which gets drinks |
+| **Printers** | The receipt printer for this device, and which printer gets food and which gets drinks |
 | **Loyalty** | Earn and redeem rates |
 | **Security** | Two-factor, password rules, lockouts |
 
@@ -648,8 +698,12 @@ The sale would put the customer past their limit. A manager can raise it on the
 customer's record, or take part payment now.
 
 **The receipt printer does nothing**
-Check power and cable first, then that the right printer is selected in Settings.
-For kitchen tickets, check the category is routed to that printer.
+Check power and cable first. Then open **Settings, Printers** and press **Print test
+receipt**; the message beside the button says what is wrong. A USB or Bluetooth printer
+must be paired on this device (press **Pair**), and a browser can forget a Bluetooth
+pairing after a restart. For kitchen tickets, check the category is routed to that
+printer. If the printer cannot be reached during a sale, the print choices open so the
+receipt is not lost.
 
 **Stock looks wrong**
 Open the item's movement history. Every change is listed with a reason and a name.

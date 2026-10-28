@@ -54,7 +54,9 @@ src/
 
 | File | What it drives |
 |---|---|
-| `printer.ts`, `receiptPrint.ts` | Thermal receipts (WebUSB / Web Bluetooth) |
+| `printer.ts` | Builds receipts, bills and kitchen tickets (ESC/POS bytes and HTML) and sends them over USB, Bluetooth, LAN (via the API) or the browser |
+| `receiptPrint.ts` | The per-device printer preference (`receipt-print-pref` in localStorage), auto-print and explicit print |
+| `printEncoding.ts` | Byte encoding and HTML escaping shared by every print path |
 | `scale.ts` | Weighing scales (Web Serial / Bluetooth) |
 | `cardTerminal.ts`, `terminal.ts` | Card terminals |
 | `nfc.ts`, `biometric.ts` | NFC taps, WebAuthn login |
@@ -186,3 +188,39 @@ this app before building the desktop app** or Tauri ships a stale bundle.
 
 When you add a page, route, gated feature, hardware lib or public link, update this
 README in the same change.
+
+## Printing notes
+
+- **System printer is the default** (`DEFAULT_PREF` in `receiptPrint.ts`). It opens the browser
+  print dialog, which lists every printer installed on the computer, so a thermal printer with
+  its normal driver needs no pairing. The direct modes (WebUSB, Bluetooth, LAN, Star, Epson)
+  are grouped under "Advanced" in Settings because they bypass the installed-printer list;
+  on Windows a driver-claimed USB printer usually cannot be opened over WebUSB. The dialog
+  can only be skipped with Chrome's `--kiosk-printing` (default printer) or, in the desktop
+  app, the `system` method below.
+- **Silent printing to an installed printer (desktop app only).** `lib/desktopPrinter.ts` calls the Tauri
+  commands `list_system_printers` / `print_to_system_printer` (`apps/desktop/src-tauri/src/system_printer.rs`),
+  which use the Windows spooler (RAW datatype) or CUPS (`lp -o raw`). The `system` print method
+  (`systemPrinterName` in the pref) builds the same ESC/POS bytes as the USB path and sends them to the
+  named queue, so it needs a thermal receipt printer. The option only appears when `isDesktopApp()`.
+  Receipts only; bills and kitchen tickets still use their own paths.
+- **Pair once, print silently** (direct modes). Settings, Printers pairs a USB or Bluetooth printer
+  (`pairUsbPrinter` / `pairBluetoothPrinter`, which must run from a click) and stores the
+  choice for this device. Checkout, Reprint and the Print button all go through
+  `receiptPrint.ts`; `PrintModal` is only the fallback when no printer is set or the
+  printer fails.
+- **ESC/POS is bytes, not UTF-8.** `TextEncoder` turns every byte above 0x7F into two,
+  which corrupts commands such as the cash drawer pulse. Always use `encodeEscPos`, and
+  pass user text through `asciiSafe`. Anything written into receipt HTML goes through
+  `escapeHtml`.
+- **Paper size** (58 mm small Bluetooth printers, 32 columns; 80 mm standard thermal, 48
+  columns) is chosen in Settings, Printers and read by `getPaperWidth()`. Unset keeps the
+  old behaviour: a 32-column ESC/POS layout, which also prints on wider paper, and an
+  80 mm browser page. Amount columns size to their content, so large totals are never cut.
+- **Browser printing uses a hidden iframe**, not `window.open`: a popup opened after an
+  `await` is blocked by the browser and fails silently.
+- **LAN printing goes through the API** (`POST /printers/:id/print`), so the API host must
+  be on the same network as the printer. A cloud-hosted API cannot reach a printer at
+  `192.168.x.x`; use Star/Epson (browser to printer) or a LAN-hosted server there.
+- Web Bluetooth and WebUSB exist only in Chromium browsers; there is no support in Safari
+  or on iOS.

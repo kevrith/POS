@@ -9,6 +9,7 @@ import VoidModal from '../components/VoidModal';
 import ReturnModal from '../components/ReturnModal';
 import PrintModal from '../components/PrintModal';
 import type { ReceiptData } from '../lib/printer';
+import { printErrorMessage, printWithPreferredPrinter } from '../lib/receiptPrint';
 
 interface Sale {
   id: string;
@@ -244,6 +245,7 @@ export default function SalesListPage() {
   const [showVoidModal, setShowVoidModal] = useState(false);
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
+  const [printNotice, setPrintNotice] = useState('');
   const [reprintData, setReprintData] = useState<ReceiptData | null>(null);
   const [reprintLoading, setReprintLoading] = useState<string | null>(null);
   const [sendingWhatsApp, setSendingWhatsApp] = useState<string | null>(null);
@@ -351,6 +353,12 @@ export default function SalesListPage() {
         pointsEarned: earnedTx?.points ?? 0,
         loyaltyBalance: loyaltyData?.balance ?? 0,
       };
+      // Reprint to the printer configured in Settings; fall back to the picker when none is set or it fails.
+      try {
+        if (await printWithPreferredPrinter(receipt)) return;
+      } catch (err) {
+        setPrintNotice(`Could not print: ${printErrorMessage(err)}`);
+      }
       setReprintData(receipt);
       setShowPrintModal(true);
     } catch (err) {
@@ -880,8 +888,10 @@ export default function SalesListPage() {
           receipt={reprintData}
           onClose={() => {
             setShowPrintModal(false);
+            setPrintNotice('');
             setReprintData(null);
           }}
+          notice={printNotice || undefined}
         />
       )}
     </div>

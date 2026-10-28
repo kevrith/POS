@@ -52,6 +52,7 @@ Releases are automated by `.github/workflows/desktop-release.yml`.
 | Module | Capability |
 |---|---|
 | `printer.rs` | Network ESC/POS printers over a raw TCP socket, with connect timeout |
+| `system_printer.rs` | Printers installed on this computer: lists them and sends raw ESC/POS to one by name with no print dialog (Windows spooler RAW datatype; CUPS `lpstat` / `lp -o raw` on Linux and macOS). Commands `list_system_printers` and `print_to_system_printer` live in `printer.rs`; the web side is `apps/web/src/lib/desktopPrinter.ts`. The platform code has no Tauri dependency, so its unit tests run from a scratch crate that includes the file |
 | `cash_drawer.rs` | Drawer kick — ESC/POS `ESC p` pulse over USB/serial |
 | `discovery.rs` | LAN server auto-discovery. UDP :47474 — client broadcasts `KASTRA_DISCOVER`, servers reply `KASTRA_SERVER:{api_port}:{hostname}`; client collects responses for 2 s |
 | `lan_sync.rs` | TCP peer sync — a server terminal holds a registry of connected client streams and pushes events to all of them |

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
-import { getReceiptPrintPref, setReceiptPrintPref, type PrintMethod } from '../lib/receiptPrint';
+import ReceiptPrinterSettings from '../components/ReceiptPrinterSettings';
 import { useAuthStore } from '../stores/auth';
 import {
   Save,
@@ -42,6 +42,7 @@ import {
   Activity,
   Filter,
   Fingerprint,
+  Wallet, Puzzle, Headphones, MessageCircle,
 } from 'lucide-react';
 import { UserRole } from '@pos/shared';
 import { hasFeature } from '../lib/featureGates';
@@ -613,16 +614,6 @@ export default function SettingsPage() {
     handles: ['RECEIPT'] as string[],
   });
 
-  // Per-terminal default receipt printer (localStorage; used for silent auto-print on checkout)
-  const [receiptPrint, setReceiptPrint] = useState(getReceiptPrintPref);
-  function updateReceiptPrint(patch: Partial<{ method: PrintMethod; autoPrint: boolean }>) {
-    setReceiptPrint((prev) => {
-      const next = { ...prev, ...patch };
-      setReceiptPrintPref(next);
-      return next;
-    });
-  }
-
   // ─── API Keys ──────────────────────────────────────────────────────────────
   const [newKeyName, setNewKeyName] = useState('');
   const [newKeyScopes, setNewKeyScopes] = useState<string[]>(['sales:read', 'sales:write']);
@@ -1115,7 +1106,12 @@ export default function SettingsPage() {
   const createPrinterMutation = useMutation({
     mutationFn: (data: typeof printerForm) =>
       api.post(`/printers`, { storeId: user?.storeId, ...data }),
-    onSuccess: () => {
+    onSuccess: (created, variables) => {
+      // The KDS prints tickets to this printer; for a LAN printer it needs the saved row's id, not its address.
+      if (variables.connectionType === 'NETWORK' && variables.handles.some((h) => h.startsWith('KOT'))) {
+        const id = (created as { id?: string } | undefined)?.id;
+        if (id) localStorage.setItem('kot-printer-config', JSON.stringify({ type: 'NETWORK_ESCPOS', networkPrinterId: id }));
+      }
       void refetchPrinters();
       setShowAddPrinter(false);
       setPrinterForm({ name: '', connectionType: 'USB', connectionDetails: '', isDefault: false, handles: ['RECEIPT'] });
@@ -1353,7 +1349,7 @@ export default function SettingsPage() {
                 const code = settings?.shortCode ?? businessId;
                 void navigator.clipboard.writeText(code);
                 const btn = document.getElementById('copy-biz-id-btn');
-                if (btn) { btn.textContent = '✓ Copied!'; setTimeout(() => { if (btn) btn.textContent = 'Copy'; }, 2000); }
+                if (btn) { btn.textContent = 'Copied'; setTimeout(() => { if (btn) btn.textContent = 'Copy'; }, 2000); }
               }}
               id="copy-biz-id-btn"
               className="flex-shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors"
@@ -1383,7 +1379,7 @@ export default function SettingsPage() {
                       onClick={() => {
                         void navigator.clipboard.writeText(shopUrl);
                         const btn = document.getElementById('copy-shop-link-btn');
-                        if (btn) { btn.textContent = '✓ Copied!'; setTimeout(() => { if (btn) btn.textContent = 'Copy link'; }, 2000); }
+                        if (btn) { btn.textContent = 'Copied'; setTimeout(() => { if (btn) btn.textContent = 'Copy link'; }, 2000); }
                       }}
                       className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors"
                     >
@@ -1505,7 +1501,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <p className="text-xs text-amber-600">
-                  ⚠ TOT applies to businesses with annual turnover between KES 1M–25M. Verify current rate at <strong>kra.go.ke</strong> before changing.
+                  TOT applies to businesses with annual turnover between KES 1M–25M. Verify current rate at <strong>kra.go.ke</strong> before changing.
                 </p>
               </div>
             )}
@@ -2810,11 +2806,11 @@ export default function SettingsPage() {
                       {/* Reason selection */}
                       <div className="space-y-2 mb-5">
                         {[
-                          { value: 'PRICE',           label: 'Too expensive',                icon: '💰' },
-                          { value: 'COMPETITOR',      label: 'Switching to a competitor',    icon: '🔄' },
-                          { value: 'MISSING_FEATURE', label: 'Missing a feature I need',     icon: '🧩' },
-                          { value: 'POOR_SUPPORT',    label: 'Poor customer support',        icon: '🎧' },
-                          { value: 'OTHER',           label: 'Other reason',                 icon: '💬' },
+                          { value: 'PRICE',           label: 'Too expensive',                icon: Wallet },
+                          { value: 'COMPETITOR',      label: 'Switching to a competitor',    icon: RefreshCw },
+                          { value: 'MISSING_FEATURE', label: 'Missing a feature I need',     icon: Puzzle },
+                          { value: 'POOR_SUPPORT',    label: 'Poor customer support',        icon: Headphones },
+                          { value: 'OTHER',           label: 'Other reason',                 icon: MessageCircle },
                         ].map(r => (
                           <label key={r.value} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${cancelReason === r.value ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}>
                             <input
@@ -2825,7 +2821,7 @@ export default function SettingsPage() {
                               onChange={() => setCancelReason(r.value)}
                               className="accent-blue-600"
                             />
-                            <span className="text-base">{r.icon}</span>
+                            <r.icon className="w-4 h-4 text-gray-500 shrink-0" aria-hidden="true" />
                             <span className="text-sm font-medium text-gray-700">{r.label}</span>
                           </label>
                         ))}
@@ -3263,50 +3259,8 @@ export default function SettingsPage() {
       {/* ── Printers Tab ─────────────────────────────────────────────────── */}
       {activeTab === 'printers' && (
         <div className="space-y-4">
-          {/* Per-terminal default receipt printer — silent auto-print on checkout */}
-          <div className="bg-white rounded-xl shadow p-5">
-            <div className="flex items-start gap-3 mb-4">
-              <Printer className="w-5 h-5 text-blue-600 mt-0.5" />
-              <div>
-                <h3 className="font-semibold text-gray-800">Receipt Printing (this device)</h3>
-                <p className="text-sm text-gray-500 mt-0.5">
-                  Choose how this till prints receipts. Set it once — every sale prints automatically, no pop-up.
-                </p>
-              </div>
-            </div>
-
-            <label className="block text-sm font-medium text-gray-700 mb-1">Receipt printer</label>
-            <select
-              value={receiptPrint.method}
-              onChange={(e) => updateReceiptPrint({ method: e.target.value as PrintMethod })}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm mb-1 bg-white"
-            >
-              <option value="ask">Ask each time (show the picker)</option>
-              <option value="browser">Browser / System printer (A4 / PDF)</option>
-              <option value="usb">USB Thermal (ESC/POS via WebUSB)</option>
-              <option value="bluetooth">Bluetooth Thermal printer</option>
-              <option value="star">Network — Star (WebPRNT)</option>
-              <option value="epson">Network — Epson (ePOS)</option>
-            </select>
-            <p className="text-xs text-gray-400 mb-4">
-              USB &amp; Bluetooth ask the browser to pick the device the first time, then remember it. Network printers
-              use the IP saved in their own section. {receiptPrint.method === 'ask' && 'With “Ask each time”, the picker shows after every sale.'}
-            </p>
-
-            <label className={`flex items-center justify-between p-3 rounded-lg border ${receiptPrint.method === 'ask' ? 'border-gray-100 bg-gray-50 opacity-60' : 'border-gray-200'}`}>
-              <div>
-                <p className="text-sm font-medium text-gray-800">Auto-print after each sale</p>
-                <p className="text-xs text-gray-500">Print silently on checkout with no confirmation pop-up.</p>
-              </div>
-              <input
-                type="checkbox"
-                checked={receiptPrint.autoPrint && receiptPrint.method !== 'ask'}
-                disabled={receiptPrint.method === 'ask'}
-                onChange={(e) => updateReceiptPrint({ autoPrint: e.target.checked })}
-                className="w-5 h-5 accent-blue-600"
-              />
-            </label>
-          </div>
+          {/* Per-terminal receipt printer: pair once, then every sale prints with no picker */}
+          <ReceiptPrinterSettings businessName={settings?.name} printers={printers} />
 
           <div className="flex items-center justify-between pt-2">
             <p className="text-sm text-gray-500">{printers.length} routing printer(s) configured</p>
@@ -3479,17 +3433,13 @@ export default function SettingsPage() {
                   // Save Star/Epson config to localStorage for PrintModal + KDS
                   if (printerForm.connectionType === 'STAR' && printerForm.connectionDetails) {
                     localStorage.setItem('star-printer', JSON.stringify({ host: printerForm.connectionDetails }));
-                    if (printerForm.handles.includes('KOT')) {
+                    if (printerForm.handles.some((h) => h.startsWith('KOT'))) {
                       localStorage.setItem('kot-printer-config', JSON.stringify({ type: 'STAR', host: printerForm.connectionDetails }));
                     }
                   } else if (printerForm.connectionType === 'EPSON' && printerForm.connectionDetails) {
                     localStorage.setItem('epson-printer', JSON.stringify({ host: printerForm.connectionDetails }));
-                    if (printerForm.handles.includes('KOT')) {
+                    if (printerForm.handles.some((h) => h.startsWith('KOT'))) {
                       localStorage.setItem('kot-printer-config', JSON.stringify({ type: 'EPSON', host: printerForm.connectionDetails }));
-                    }
-                  } else if (printerForm.connectionType === 'NETWORK' && printerForm.connectionDetails) {
-                    if (printerForm.handles.includes('KOT')) {
-                      localStorage.setItem('kot-printer-config', JSON.stringify({ type: 'NETWORK_ESCPOS', networkPrinterId: printerForm.connectionDetails }));
                     }
                   }
                   createPrinterMutation.mutate(printerForm);
@@ -4647,7 +4597,7 @@ export default function SettingsPage() {
               <h2 className="text-base font-semibold text-gray-900 dark:text-white">
                 Assign Stores — {storeAssignUser.name}
               </h2>
-              <button onClick={() => setStoreAssignUser(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">✕</button>
+              <button onClick={() => setStoreAssignUser(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" aria-label="Close"><X className="w-4 h-4" /></button>
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400">
               Select which stores this manager can access. If none are selected, they have access to all stores.

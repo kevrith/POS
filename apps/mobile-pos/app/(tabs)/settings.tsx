@@ -6,7 +6,6 @@ import {
   StyleSheet,
   TextInput,
   Alert,
-  Switch,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,7 +22,7 @@ import { useCartStore } from '../../stores/cart';
 import { Colors } from '../../constants/theme';
 import { processSyncQueue } from '../../lib/sync';
 import { clearPushToken } from '../../lib/push';
-import { isPrintingEnabled, setPrintingEnabled } from '../../lib/receiptPrint';
+import PrinterSettingsCard from '../../components/PrinterSettingsCard';
 
 const SERVER_URL_KEY = 'pos_server_url';
 const DEFAULT_URL = 'https://pos-bhe5.onrender.com/api/v1';
@@ -47,7 +46,6 @@ export default function SettingsScreen() {
   const [urlInput, setUrlInput] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ synced: number; failed: number } | null>(null);
-  const [printOn, setPrintOn] = useState(false);
 
   // Load stored server URL
   useEffect(() => {
@@ -59,13 +57,7 @@ export default function SettingsScreen() {
         setUrlInput(DEFAULT_URL);
       }
     });
-    void isPrintingEnabled().then(setPrintOn);
   }, []);
-
-  async function togglePrinting(on: boolean) {
-    setPrintOn(on);
-    await setPrintingEnabled(on);
-  }
 
   const { data: businessInfo } = useQuery<BusinessInfo>({
     queryKey: ['business-settings', businessId],
@@ -262,22 +254,7 @@ export default function SettingsScreen() {
         {/* Receipt Printing */}
         <Text style={styles.sectionTitle}>Receipt Printing</Text>
         <View style={styles.card}>
-          <View style={styles.printRow}>
-            <View style={{ flex: 1, paddingRight: 12 }}>
-              <Text style={styles.printTitle}>Print receipts</Text>
-              <Text style={styles.printDesc}>
-                {printOn
-                  ? 'A “Print Receipt” button shows after each sale (opens the system print sheet — Bluetooth/Wi-Fi printer or PDF).'
-                  : 'Off — receipts are digital only (sent by SMS/WhatsApp when the sale has a customer).'}
-              </Text>
-            </View>
-            <Switch
-              value={printOn}
-              onValueChange={togglePrinting}
-              trackColor={{ true: Colors.primary }}
-              thumbColor={printOn ? Colors.primary : '#f4f3f4'}
-            />
-          </View>
+          <PrinterSettingsCard businessName={businessInfo?.name} />
         </View>
 
         {/* Offline Sync */}
@@ -411,9 +388,6 @@ const styles = StyleSheet.create({
   cancelEditBtn: { alignSelf: 'flex-start', marginTop: 8 },
   cancelEditText: { fontSize: 13, color: Colors.error },
   syncDesc: { fontSize: 13, color: Colors.textSecondary, marginBottom: 12 },
-  printRow: { flexDirection: 'row', alignItems: 'center' },
-  printTitle: { fontSize: 15, fontWeight: '600', color: Colors.text },
-  printDesc: { fontSize: 12, color: Colors.textSecondary, marginTop: 3, lineHeight: 17 },
   syncResult: {
     flexDirection: 'row',
     alignItems: 'center',

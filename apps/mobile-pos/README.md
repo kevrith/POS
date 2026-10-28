@@ -111,12 +111,39 @@ Items are cached locally for offline lookup.
 
 **Off by default.** Most mobile selling has no printer and relies on the digital
 receipt the API sends by SMS/WhatsApp when the sale has a customer. Switch it on in
-Settings and a "Print Receipt" button appears on the success screen.
+Settings (Receipt Printing) and choose how to reach the printer and what paper it takes.
 
-Transport is the **OS print sheet** (`expo-print`) — on Android it can target a
-system-paired Bluetooth/Wi-Fi printer or save/share a PDF. Direct silent ESC/POS over
-Bluetooth would need a native module and per-model device testing; it is not
-implemented.
+| Method | How it prints | Platform |
+|---|---|---|
+| **Print dialog** | OS print sheet (`expo-print`): a system-paired printer or a PDF. Needs a tap each time | Android, iOS |
+| **Bluetooth** | Raw ESC/POS to a printer already paired in the phone's Bluetooth settings (`react-native-bluetooth-classic`, SPP). Silent | Android only |
+| **Wi-Fi / LAN** | Raw ESC/POS to `host:9100` (`react-native-tcp-socket`). Silent | Android, iOS |
+
+**Paper size.** 58 mm (small Bluetooth printers, 32 characters per line) or 80 mm
+(standard thermal printers, 48 per line). The receipt is laid out for the chosen roll:
+item names wrap instead of being cut off, and the amount column grows so a large total
+is never truncated. The print dialog uses the same width for its page.
+
+Bluetooth and LAN can **print automatically** when a sale completes. If the printer
+cannot be reached the success screen shows the reason and keeps the Print Receipt
+button, so a receipt is never silently lost. iOS cannot talk to ordinary Bluetooth
+printers (only Apple MFi devices), which is why iPhone users get LAN or the dialog.
+
+Code map (`lib/`):
+
+- `escpos.ts`, `receiptModel.ts`, `receiptHtml.ts`, `printerConfig.ts`, `printDispatch.ts`:
+  **pure TypeScript**, unit-tested in `__tests__/printing.test.ts` with fake transports.
+- `printTransport.ts`: the only file that touches native modules. They are loaded
+  lazily inside each call, so a binary built before they existed (the app also gets OTA
+  updates) still starts and only shows "update the app" when someone tries to print.
+- `receiptPrint.ts`: saved settings (AsyncStorage `mobile-printer-settings`) and the
+  public `printReceipt` / `printTestReceipt`.
+- `plugins/with-printer-permissions.js`: removes the `ACCESS_FINE_LOCATION` permission
+  the Bluetooth library adds (it is only needed for discovery, which this app does not use).
+
+Needs a **new native build** (the app version was raised to 1.2.0 so OTA updates cannot
+reach older binaries). Test on a real printer before rolling out: the Bluetooth path
+has been compiled and unit-tested but not run against hardware.
 
 ---
 

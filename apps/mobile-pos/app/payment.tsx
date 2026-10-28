@@ -13,7 +13,8 @@ import { useAuthStore } from '../stores/auth';
 import { useActiveStore } from '../lib/useActiveStore';
 import { useCartStore } from '../stores/cart';
 import { queueSale } from '../lib/db';
-import { isPrintingEnabled, printReceipt, type PrintableReceipt } from '../lib/receiptPrint';
+import { loadPrinterSettings, printReceipt, type PrintableReceipt } from '../lib/receiptPrint';
+import type { PrinterSettings } from '../lib/printerConfig';
 import { Colors } from '../constants/theme';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -442,10 +443,23 @@ export default function PaymentScreen() {
   const [splitCard, setSplitCard] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [completedSale, setCompletedSale] = useState<SaleResult | null>(null);
-  const [printOn, setPrintOn] = useState(false);
+  const [printSettings, setPrintSettings] = useState<PrinterSettings | null>(null);
   const [receiptSnap, setReceiptSnap] = useState<PrintableReceipt | null>(null);
+  const [printError, setPrintError] = useState('');
+  const printOn = printSettings?.enabled === true;
 
-  useEffect(() => { void isPrintingEnabled().then(setPrintOn); }, []);
+  useEffect(() => { void loadPrinterSettings().then(setPrintSettings); }, []);
+
+  /** Print with the saved settings. The OS print dialog can be cancelled, so only silent transports report failures. */
+  async function printNow(snap: PrintableReceipt) {
+    setPrintError('');
+    try {
+      await printReceipt(snap, printSettings ?? undefined);
+    } catch (e) {
+      if (printSettings?.method === 'system') return;
+      setPrintError(e instanceof Error ? e.message : 'The printer did not respond.');
+    }
+  }
 
   // ── Discount ────────────────────────────────────────────────────────────────
   const discountVal = parseFloat(discountInput || '0') || 0;
@@ -522,7 +536,7 @@ export default function PaymentScreen() {
       if (customerId && redeemPoints > 0) {
         void mobileApi.post('/loyalty/redeem', { customerId, points: redeemPoints, saleId: result.id }).catch(() => {});
       }
-      setReceiptSnap({
+      const snap: PrintableReceipt = {
         businessName: bizSettings?.name ?? 'KASTRA POS',
         receiptNumber: result.receiptNumber,
         dateISO: new Date().toISOString(),
@@ -533,7 +547,10 @@ export default function PaymentScreen() {
         totalCents: totalAfterDiscount,
         paymentMethod: payMethod,
         changeCents: payMethod === 'CASH' ? change : 0,
-      });
+      };
+      setReceiptSnap(snap);
+      setPrintError('');
+      if (printSettings?.enabled && printSettings.autoPrint && printSettings.method !== 'system') void printNow(snap);
       clearCart();
       setCompletedSale(result);
       setShowSuccess(true);
@@ -879,10 +896,13 @@ export default function PaymentScreen() {
                 <Text style={styles.changeCardValue}>{formatKES(change)}</Text>
               </View>
             )}
+            {printOn && printError !== '' && (
+              <Text style={styles.printErrorText} accessibilityRole="alert">Receipt did not print: {printError}</Text>
+            )}
             {printOn && receiptSnap && (
               <TouchableOpacity
                 style={styles.printReceiptBtn}
-                onPress={() => { void printReceipt(receiptSnap).catch(() => {}); }}
+                onPress={() => { void printNow(receiptSnap); }}
                 activeOpacity={0.85}>
                 <Ionicons name="print-outline" size={20} color={Colors.primary} />
                 <Text style={styles.printReceiptBtnText}>Print Receipt</Text>
@@ -1017,6 +1037,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 8,
     marginTop: 12, width: '100%', justifyContent: 'center',
   },
+  printErrorText: { color: Colors.error, fontSize: 13, fontWeight: '600', textAlign: 'center', marginBottom: 8, lineHeight: 18 },
   printReceiptBtnText: { color: Colors.primary, fontSize: 16, fontWeight: '700' },
 });
 

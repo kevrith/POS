@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState, useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useAuthStore } from './stores/auth';
@@ -60,7 +60,16 @@ const ReservationWidgetPage = lazy(() => import('./pages/ReservationWidgetPage')
 const SecuritySettingsPage = lazy(() => import('./pages/SecuritySettingsPage'));
 const DeliveryManagementPage = lazy(() => import('./pages/DeliveryManagementPage'));
 const QRMenuPage = lazy(() => import('./pages/QRMenuPage'));
-const OnlineOrderPage = lazy(() => import('./pages/OnlineOrderPage'));
+/**
+ * /order/:businessId used to be a separate ordering page that posted to a staff-only
+ * endpoint, so it could never place an order for a logged-out customer. Printed
+ * links keep working by landing on the storefront, which is the supported flow.
+ */
+function OrderLinkRedirect() {
+  const { businessId } = useParams<{ businessId: string }>();
+  useEffect(() => { window.location.replace(`/shop/${encodeURIComponent(businessId ?? '')}`); }, [businessId]);
+  return <div className="min-h-screen bg-white" />;
+}
 const OnlineOrdersPage = lazy(() => import('./pages/OnlineOrdersPage'));
 const ShopPage = lazy(() => import('./pages/ShopPage'));
 const AffiliatePortalPage = lazy(() => import('./pages/AffiliatePortalPage'));
@@ -229,9 +238,7 @@ export default function App() {
   }
   if (window.location.pathname.startsWith('/order/')) {
     return (
-      <Suspense fallback={<div className="min-h-screen bg-white" />}>
-        <Routes><Route path="/order/:businessId" element={<OnlineOrderPage />} /></Routes>
-      </Suspense>
+      <Routes><Route path="/order/:businessId" element={<OrderLinkRedirect />} /></Routes>
     );
   }
   if (window.location.pathname.startsWith('/shop/')) {

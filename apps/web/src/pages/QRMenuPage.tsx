@@ -31,12 +31,15 @@ export default function QRMenuPage() {
 
   useEffect(() => {
     if (!businessId) return;
-    Promise.all([
-      fetch(`/api/v1/business/${businessId}/settings`).then(r => r.json()),
-      fetch(`/api/v1/items?businessId=${businessId}&activeOnly=true`).then(r => r.json()),
-    ])
-      .then(([settings, items]) => {
-        setData({ name: (settings as { name?: string }).name ?? 'Menu', items: items as MenuItem[] });
+    // The public portal menu needs no login; the staff endpoints (settings, items) answer 401 to a diner.
+    fetch(`/api/v1/portal/menu?businessId=${encodeURIComponent(businessId)}`)
+      .then(r => { if (!r.ok) throw new Error('menu unavailable'); return r.json(); })
+      .then((menu: { business: { name?: string } | null; categories: Array<{ name: string; items: Array<Omit<MenuItem, 'category'>> }> }) => {
+        if (!menu.business) { setData(null); return; }
+        setData({
+          name: menu.business.name ?? 'Menu',
+          items: menu.categories.flatMap(c => c.items.map(i => ({ ...i, category: c.name }))),
+        });
       })
       .catch(() => setData(null))
       .finally(() => setLoading(false));

@@ -154,11 +154,11 @@ function LoginView({ businessId, bizName, onName, onLogin }: {
             <>
               <label className="text-sm font-medium text-gray-700">Phone number</label>
               <div className="flex gap-2">
-                <span className="px-3 py-2 bg-gray-100 rounded-lg text-sm font-semibold text-gray-700 flex items-center">+254</span>
+                <span className="px-3 py-2 bg-gray-100 rounded-lg text-sm font-semibold text-gray-700 flex items-center shrink-0">+254</span>
                 <input autoFocus value={phoneInput} onChange={(e) => { setPhoneInput(e.target.value); setError(''); }}
                   onKeyDown={(e) => e.key === 'Enter' && requestOtp()}
                   placeholder="7XX XXX XXX" inputMode="tel"
-                  className="flex-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                  className="flex-1 min-w-0 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
               </div>
               <button onClick={requestOtp} disabled={loading}
                 className="w-full bg-indigo-600 text-white rounded-lg py-2.5 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-60">

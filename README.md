@@ -300,7 +300,7 @@ PDF · WhatsApp/SMS notification on invoice · invoice ageing report (0-30/31-60
 ### Delivery & customer-facing
 Delivery orders and driver assignment · live driver location and public tracking page
 (`/track/:orderNumber`) · web storefront (`/shop/:businessId`) · QR menu
-(`/menu/:businessId`) · online ordering (`/order/:businessId`) · payment links
+(`/menu/:businessId`) · `/order/:businessId` (redirects to the storefront) · payment links
 (`/pay/:code`) · supplier quote portal (`/quote/:token`) · phone-OTP customer portal
 (`/portal`) · affiliate portal (`/affiliate`).
 

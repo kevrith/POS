@@ -238,6 +238,11 @@ push (`.github/workflows/ci.yml`).
 - **Public portal payments trust nothing from the client.** `portal/pay-order` charges
   the order's own `totalCents` (looked up by `orderNumber`) and stores the
   `checkoutRequestId` on the order; `confirm-payment` only accepts that same id.
+- **Printers are tenant-scoped and LAN-only.** Every `/printers` route needs a login and
+  resolves the printer through its store's `businessId`. `POST /printers/:id/print` opens
+  a raw TCP connection from the API host, so it only accepts private IPv4 addresses
+  (`printers/network-target.ts`); loopback, link-local and public hosts are refused. The
+  API host must share a network with the printer.
 - Migrations must match `schema.prisma`: check with `prisma migrate diff --from-url
   <scratch db> --to-schema-datamodel prisma/schema.prisma`. `WebAuthnCredential` once
   existed only through `db push`.

@@ -82,7 +82,9 @@ export default function LoginPage() {
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [regConfirm, setRegConfirm] = useState('');
-  const [regBusiness, setRegBusiness] = useState('');
+  const [regBusiness, setRegBusiness] = useState(() => {
+    try { return localStorage.getItem('desktop-business-name') ?? ''; } catch { return ''; }
+  });
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [regLoading, setRegLoading] = useState(false);
   const [regError, setRegError] = useState('');
@@ -172,7 +174,9 @@ export default function LoginPage() {
   });
 
   // Google register — needs businessName first
-  const [googleRegBusiness, setGoogleRegBusiness] = useState('');
+  const [googleRegBusiness, setGoogleRegBusiness] = useState(() => {
+    try { return localStorage.getItem('desktop-business-name') ?? ''; } catch { return ''; }
+  });
   const [showGoogleRegPrompt, setShowGoogleRegPrompt] = useState(false);
   const [pendingGoogleToken, setPendingGoogleToken] = useState('');
   const [googleRegLoading, setGoogleRegLoading] = useState(false);
@@ -454,6 +458,7 @@ export default function LoginPage() {
                 } catch { /* ignore */ }
                 localStorage.removeItem('desktop-setup-done');
                 localStorage.removeItem('desktop-device-role');
+                localStorage.removeItem('desktop-business-name');
                 localStorage.removeItem('kastra-server-url');
                 window.location.reload();
               }}

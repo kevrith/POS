@@ -16,6 +16,8 @@ pub struct SetupConfig {
     pub license_key: Option<String>,
     /// Display name for this terminal (shown in admin panel)
     pub terminal_name: Option<String>,
+    /// Business name entered in the wizard; pre-fills registration
+    pub business_name: Option<String>,
 }
 
 fn get_config_path() -> PathBuf {
@@ -39,6 +41,7 @@ pub async fn get_setup_mode() -> Result<SetupConfig, String> {
             store_id: None,
             license_key: None,
             terminal_name: None,
+            business_name: None,
         });
     }
     let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
@@ -53,6 +56,7 @@ pub async fn set_setup_mode(
     store_id: Option<String>,
     license_key: Option<String>,
     terminal_name: Option<String>,
+    business_name: Option<String>,
 ) -> Result<bool, String> {
     let config = SetupConfig {
         mode,
@@ -61,6 +65,7 @@ pub async fn set_setup_mode(
         store_id,
         license_key,
         terminal_name,
+        business_name,
     };
     let content = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
     let path = get_config_path();

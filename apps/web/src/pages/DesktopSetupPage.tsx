@@ -266,6 +266,7 @@ export default function DesktopSetupPage() {
   const [discovered,    setDiscovered]    = useState<DiscoveredServer[]>([]);
   const [cloudUrl,      setCloudUrl]      = useState('https://pos-bhe5.onrender.com');
   const [terminalName,  setTerminalName]  = useState('');
+  const [businessName,  setBusinessName]  = useState('');
   const [saving,        setSaving]        = useState(false);
 
   /* Derive which steps to show in the step bar */
@@ -381,6 +382,7 @@ export default function DesktopSetupPage() {
         storeId:      null,
         licenseKey:   licenseValid ? licenseKey : null,
         terminalName: terminalName || null,
+        businessName: businessName.trim() || null,
       });
 
       if (needsServerUrl) {
@@ -391,6 +393,8 @@ export default function DesktopSetupPage() {
       }
 
       localStorage.setItem('desktop-setup-done', '1');
+      if (businessName.trim()) localStorage.setItem('desktop-business-name', businessName.trim());
+      else localStorage.removeItem('desktop-business-name');
       localStorage.setItem('desktop-device-role', role);
 
       // Full reload so api.ts re-resolves the API URL from localStorage.
@@ -579,6 +583,17 @@ export default function DesktopSetupPage() {
                     </div>
                   </button>
                 ))}
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Business Name <span className="text-gray-400 font-normal">(optional)</span></label>
+                <input
+                  value={businessName}
+                  onChange={(e) => setBusinessName(e.target.value)}
+                  placeholder="e.g. Premier Cafe Ltd"
+                  className="w-full border-2 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                />
+                <p className="text-xs text-gray-400 mt-1">Pre-fills the registration form when you create the business account on this device.</p>
               </div>
 
               <div className="flex gap-3 pt-1">
@@ -823,6 +838,12 @@ export default function DesktopSetupPage() {
                   <div className="px-4 py-3 flex items-center justify-between">
                     <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Server</span>
                     <span className="text-xs font-mono text-gray-700 truncate max-w-[260px]">{serverUrl}</span>
+                  </div>
+                )}
+                {businessName.trim() && (
+                  <div className="px-4 py-3 flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Business</span>
+                    <span className="text-sm font-semibold text-gray-800">{businessName.trim()}</span>
                   </div>
                 )}
                 {terminalName && (

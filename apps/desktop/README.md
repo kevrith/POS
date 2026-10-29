@@ -74,6 +74,19 @@ Auto-updates use the built-in Tauri updater against signed GitHub Releases.
   decides which UI it boots into (full POS, cashier-only, kiosk, kitchen display, or
   manager).
 
+## First-run setup and reinstalls
+
+The setup wizard (`web/src/pages/DesktopSetupPage.tsx`) shows whenever
+`get_setup_mode` reports `UNCONFIGURED`. The choice is saved in `mode.json` under
+the OS config dir (`%APPDATA%\kastra-pos\` on Windows), including the optional
+`business_name` that pre-fills the registration form.
+
+On Windows, `src-tauri/wix/setup-cleanup.wxs` deletes `mode.json` when the MSI is
+uninstalled (not on upgrades), so a fresh install opens the wizard. This fragment
+is untested on a real Windows build: confirm it after the next release by
+reinstalling and checking the wizard appears. To reset by hand, delete the file or
+use Reconfigure on the login page.
+
 ---
 
 When you add a Tauri command, change the discovery/sync protocol, or alter the

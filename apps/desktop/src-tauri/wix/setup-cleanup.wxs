@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Removes the saved setup config (%APPDATA%\kastra-pos\mode.json) when KASTRA POS
+  is uninstalled, so the next fresh install opens the setup wizard instead of
+  jumping straight to login. The condition skips upgrades: during a major upgrade
+  Windows Installer removes the old product with UPGRADINGPRODUCTCODE set.
+
+  The registry component only exists so tauri.conf.json can reference this
+  fragment through componentRefs; that pulls the custom action in with it.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Fragment>
+    <DirectoryRef Id="TARGETDIR">
+      <Component Id="KastraSetupCleanup" Guid="*">
+        <RegistryKey Root="HKCU" Key="Software\KASTRA\POS" Action="createAndRemoveOnUninstall">
+          <RegistryValue Name="SetupCleanup" Type="integer" Value="1" KeyPath="yes" />
+        </RegistryKey>
+      </Component>
+    </DirectoryRef>
+
+    <CustomAction
+      Id="KastraRemoveSetupConfig"
+      Directory="TARGETDIR"
+      ExeCommand="cmd.exe /c del /q &quot;%APPDATA%\kastra-pos\mode.json&quot;"
+      Execute="immediate"
+      Return="ignore" />
+
+    <InstallExecuteSequence>
+      <Custom Action="KastraRemoveSetupConfig" After="InstallInitialize">REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>
+    </InstallExecuteSequence>
+  </Fragment>
+</Wix>

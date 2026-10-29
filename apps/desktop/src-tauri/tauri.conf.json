@@ -44,7 +44,11 @@
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
-      "timestampUrl": ""
+      "timestampUrl": "",
+      "wix": {
+        "fragmentPaths": ["wix/setup-cleanup.wxs"],
+        "componentRefs": ["KastraSetupCleanup"]
+      }
     }
   }
 }

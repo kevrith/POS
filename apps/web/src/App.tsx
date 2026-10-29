@@ -168,6 +168,7 @@ export default function App() {
       if (!cfg || cfg.mode === 'UNCONFIGURED') {
         localStorage.removeItem('desktop-setup-done');
         localStorage.removeItem('desktop-device-role');
+        localStorage.removeItem('desktop-business-name');
         setShowSetupWizard(true);
       }
       setTauriSetupVerified(true);

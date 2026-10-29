@@ -344,6 +344,7 @@ Optional — leave blank to disable the feature:
 | `PAYSTACK_SECRET_KEY` + `PAYSTACK_*_PLAN` | Subscriptions and card payments |
 | `SENTRY_DSN` | Error tracking |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth login |
+| `GOOGLE_DESKTOP_CLIENT_ID` / `GOOGLE_DESKTOP_CLIENT_SECRET` | Google OAuth client of type "Desktop app", used by Google sign-in inside the desktop app |
 | `ETIMS_ENV` | `test` (default) or `production` |
 | `EXPO_PUBLIC_API_URL` | Default API the mobile apps ship with |
 | `KASTRA_WEB_ORIGIN` / `KASTRA_API_ORIGIN` | Rewritten into the landing site at deploy |

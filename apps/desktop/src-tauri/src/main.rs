@@ -7,6 +7,7 @@ mod vscu;
 mod cash_drawer;
 mod backup;
 mod setup;
+mod oauth;
 mod license;
 mod discovery;
 
@@ -83,6 +84,7 @@ fn main() {
             setup::get_setup_mode,
             setup::set_setup_mode,
             setup::reset_setup,
+            oauth::oauth_browser_login,
             setup::test_server_connection,
             setup::get_cloud_url,
             // License

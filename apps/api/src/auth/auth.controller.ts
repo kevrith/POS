@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Req, Get, Redirect, Delete, Param, UnauthorizedException, Query, Res } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Req, Get, Redirect, Delete, Param, UnauthorizedException, BadRequestException, ServiceUnavailableException, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { AuthGuard } from '@nestjs/passport';
@@ -164,6 +164,56 @@ export class AuthController {
       name: profile.name ?? 'Google User',
       avatarUrl: profile.picture ?? null,
     });
+  }
+
+  /**
+   * Desktop (Tauri) Google sign-in. The app opens Google in the system browser and
+   * catches the authorization code on a loopback address, then asks this endpoint
+   * for the OAuth client id (public) before building the consent URL.
+   */
+  @Public()
+  @SkipThrottle()
+  @Get('google/desktop-config')
+  desktopGoogleConfig() {
+    const clientId = process.env.GOOGLE_DESKTOP_CLIENT_ID ?? '';
+    if (!clientId) throw new ServiceUnavailableException('Google sign-in is not configured for the desktop app');
+    return { clientId };
+  }
+
+  /**
+   * Swaps the authorization code (+ PKCE verifier) from the desktop loopback flow for
+   * a Google access token. Google's desktop client type needs the client secret for
+   * this call, so it happens here rather than inside the installed app. The returned
+   * token is then used with google/token or google/register like any other.
+   */
+  @Public()
+  @Post('google/desktop-exchange')
+  async desktopGoogleExchange(
+    @Body() body: { code: string; codeVerifier: string; redirectUri: string },
+  ) {
+    const clientId = process.env.GOOGLE_DESKTOP_CLIENT_ID ?? '';
+    const clientSecret = process.env.GOOGLE_DESKTOP_CLIENT_SECRET ?? '';
+    if (!clientId || !clientSecret) {
+      throw new ServiceUnavailableException('Google sign-in is not configured for the desktop app');
+    }
+    if (!body?.code || !body.codeVerifier || !/^http:\/\/127\.0\.0\.1:\d+$/.test(body.redirectUri ?? '')) {
+      throw new BadRequestException('Invalid Google sign-in request');
+    }
+    const res = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code: body.code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        code_verifier: body.codeVerifier,
+        redirect_uri: body.redirectUri,
+        grant_type: 'authorization_code',
+      }).toString(),
+    });
+    const data = await res.json() as { access_token?: string };
+    if (!res.ok || !data.access_token) throw new UnauthorizedException('Google sign-in failed');
+    return { accessToken: data.access_token };
   }
 
   @Public()

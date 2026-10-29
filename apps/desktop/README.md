@@ -87,6 +87,17 @@ is untested on a real Windows build: confirm it after the next release by
 reinstalling and checking the wizard appears. To reset by hand, delete the file or
 use Reconfigure on the login page.
 
+## Google sign-in
+
+The popup flow used on the web cannot work in the desktop webview, so
+`oauth_browser_login` (`src-tauri/src/oauth.rs`) opens Google in the system browser and
+catches the redirect on a one-shot `127.0.0.1` port. `web/src/lib/googleDesktop.ts`
+drives it with PKCE; the API's `POST /auth/google/desktop-exchange` swaps the code for a
+Google token (it holds the client secret), and the normal `google/token` or
+`google/register` endpoint finishes the login. The API needs
+`GOOGLE_DESKTOP_CLIENT_ID` and `GOOGLE_DESKTOP_CLIENT_SECRET` from a Google OAuth client
+of type "Desktop app"; the desktop build itself needs no Google variable.
+
 ---
 
 When you add a Tauri command, change the discovery/sync protocol, or alter the

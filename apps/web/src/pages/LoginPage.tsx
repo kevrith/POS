@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGoogleLogin } from '@react-oauth/google';
+import { isDesktopApp, getDesktopGoogleAccessToken } from '../lib/googleDesktop';
 import { useAuthStore } from '../stores/auth';
 import type { AuthUser } from '../stores/auth';
 import { Eye, EyeOff, Delete, ChevronLeft, Building2, Sparkles, Fingerprint, Settings } from 'lucide-react';
@@ -151,27 +152,41 @@ export default function LoginPage() {
   }, [loginWithOAuth]);
 
   // Google login via @react-oauth/google (frontend-initiated flow)
+  async function finishGoogleLogin(accessToken: string) {
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_URL}/auth/google/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessToken }),
+      });
+      const data = await res.json() as { accessToken?: string; user?: AuthUser; message?: string };
+      if (!res.ok) throw new Error(data.message ?? 'Google login failed');
+      setToken(data.accessToken!);
+      await loginWithOAuth(data.accessToken!, data.user!);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Google login failed');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   const handleGoogleLogin = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
-      try {
-        setLoading(true);
-        const res = await fetch(`${API_URL}/auth/google/token`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accessToken: tokenResponse.access_token }),
-        });
-        const data = await res.json() as { accessToken?: string; user?: AuthUser; message?: string };
-        if (!res.ok) throw new Error(data.message ?? 'Google login failed');
-        setToken(data.accessToken!);
-        await loginWithOAuth(data.accessToken!, data.user!);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Google login failed');
-      } finally {
-        setLoading(false);
-      }
-    },
+    onSuccess: (tokenResponse) => finishGoogleLogin(tokenResponse.access_token),
     onError: () => setError('Google sign-in was cancelled or failed'),
   });
+
+  // Desktop app: system-browser flow instead of the popup
+  async function desktopGoogleLogin() {
+    setError('');
+    setLoading(true);
+    try {
+      await finishGoogleLogin(await getDesktopGoogleAccessToken());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Google login failed');
+      setLoading(false);
+    }
+  }
 
   // Google register — needs businessName first
   const [googleRegBusiness, setGoogleRegBusiness] = useState(() => {
@@ -188,6 +203,16 @@ export default function LoginPage() {
     },
     onError: () => setRegError('Google sign-in was cancelled or failed'),
   });
+
+  async function desktopGoogleRegister() {
+    setRegError('');
+    try {
+      setPendingGoogleToken(await getDesktopGoogleAccessToken());
+      setShowGoogleRegPrompt(true);
+    } catch (err) {
+      setRegError(err instanceof Error ? err.message : 'Google sign-in failed');
+    }
+  }
 
   async function submitGoogleRegister() {
     if (!googleRegBusiness.trim()) return;
@@ -662,6 +687,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => {
+                    if (isDesktopApp()) { void desktopGoogleRegister(); return; }
                     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
                     if (!clientId || clientId === 'disabled') {
                       setRegError('Google sign-in is not configured. Use email registration above, or contact your administrator.');
@@ -826,6 +852,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => {
+                  if (isDesktopApp()) { void desktopGoogleLogin(); return; }
                   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
                   if (!clientId || clientId === 'disabled') {
                     setError('Google sign-in is not configured. Please use email and password, or contact your administrator to enable Google OAuth.');

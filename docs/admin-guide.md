@@ -204,6 +204,7 @@ and your customers get `localhost` links.
 | `PAYSTACK_SECRET_KEY`, `PAYSTACK_*_PLAN` | Card payments and subscriptions |
 | `SENTRY_DSN` | Error tracking |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google sign-in |
+| `GOOGLE_DESKTOP_CLIENT_ID`, `GOOGLE_DESKTOP_CLIENT_SECRET` | Google sign-in inside the desktop app (OAuth client of type "Desktop app") |
 | `ETIMS_ENV` | `test` (default) or `production` |
 | `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD`, `SUPER_ADMIN_SECRET` | The admin console login |
 | `EXTRA_ORIGINS` | Additional allowed CORS origins, comma-separated |

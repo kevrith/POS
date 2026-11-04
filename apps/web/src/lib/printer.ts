@@ -9,7 +9,7 @@ import { fetchReceiptCopy, logPrint, queuePrint, type ClientPrintMethod, type Pr
 import { printRawBluetooth, printRawUSB, printRawUSBPicked } from './printTransports';
 import {
   DRAWER_PULSE, PAPER_COLUMNS, billHtml, drawerPulseBytes, encodeLatin1, escapeHtml,
-  kotEpsonXml, kotEscPos, kotHtml, kotStarXml, receiptEpsonXml, receiptEscPos, receiptHtml, receiptStarXml,
+  kotEpsonXml, kotEscPos, kotHtml, kotStarXml, receiptEpsonXml, receiptEscPos, receiptHtml, receiptOpensDrawer, receiptStarXml,
   routeKotItems, asciiSafe,
   type BillDocument, type KotDocument, type PaperWidth, type ReceiptDocument, type RoutablePrinter,
 } from '@pos/print-core';
@@ -65,8 +65,16 @@ async function withCopyNumber(receipt: ReceiptData): Promise<ReceiptData> {
   return copy === (receipt.copyNumber ?? 0) ? receipt : { ...receipt, copyNumber: copy };
 }
 
-/** Print a receipt on this device and record the outcome. The error, if any, still reaches the caller. */
-async function printLocally(method: ClientPrintMethod, receipt: ReceiptData, send: (r: ReceiptData) => Promise<void> | void): Promise<void> {
+/**
+ * Print a receipt on this device and record the outcome. When the receipt also pops the cash drawer, that is
+ * recorded as its own DRAWER entry with the reason SALE, so every drawer open can be accounted for.
+ */
+async function printLocally(
+  method: ClientPrintMethod,
+  receipt: ReceiptData,
+  send: (r: ReceiptData) => Promise<void> | void,
+  enableCashDrawer = false,
+): Promise<void> {
   const r = await withCopyNumber(receipt);
   const meta = { saleId: r.saleId, refNumber: r.receiptNumber, copyNumber: r.copyNumber ?? 0 };
   try {
@@ -76,6 +84,7 @@ async function printLocally(method: ClientPrintMethod, receipt: ReceiptData, sen
     throw err;
   }
   logPrint(receiptKind(r), method, true, undefined, meta);
+  if (receiptOpensDrawer(r, enableCashDrawer)) logPrint('DRAWER', method, true, undefined, { saleId: r.saleId, refNumber: r.receiptNumber, reason: 'SALE' });
 }
 
 /** Print to the browser / OS print dialog. */
@@ -93,20 +102,22 @@ export async function printToNetwork(printerId: string, receipt: ReceiptData, en
   const r = await withCopyNumber(receipt);
   await queuePrint(printerId, receiptKind(r), receiptBytes(r, enableCashDrawer), {
     saleId: r.saleId, refNumber: r.receiptNumber, copyNumber: r.copyNumber ?? 0,
+    // The pulse travels inside the receipt job; the reason makes it count as a drawer open in the audit.
+    ...(receiptOpensDrawer(r, enableCashDrawer) && { reason: 'DRAWER_WITH_SALE' }),
   });
 }
 
 /** Print to a printer installed on this computer, silently, through the desktop app. */
 export function printToSystemPrinter(printerName: string, receipt: ReceiptData, enableCashDrawer = false): Promise<void> {
-  return printLocally('SYSTEM', receipt, (r) => printRawToSystemPrinter(printerName, receiptBytes(r, enableCashDrawer)));
+  return printLocally('SYSTEM', receipt, (r) => printRawToSystemPrinter(printerName, receiptBytes(r, enableCashDrawer)), enableCashDrawer);
 }
 
 export function printToUSB(receipt: ReceiptData, enableCashDrawer = false): Promise<void> {
-  return printLocally('USB', receipt, (r) => printRawUSB(receiptBytes(r, enableCashDrawer)));
+  return printLocally('USB', receipt, (r) => printRawUSB(receiptBytes(r, enableCashDrawer)), enableCashDrawer);
 }
 
 export function printToBluetooth(receipt: ReceiptData, enableCashDrawer = false): Promise<void> {
-  return printLocally('BLUETOOTH', receipt, (r) => printRawBluetooth(receiptBytes(r, enableCashDrawer)));
+  return printLocally('BLUETOOTH', receipt, (r) => printRawBluetooth(receiptBytes(r, enableCashDrawer)), enableCashDrawer);
 }
 
 /** Open the cash drawer wired to a network printer. Recorded with who asked and why. */
@@ -181,7 +192,7 @@ export const printToStarWebPRNT = (config: StarPrinterConfig, receipt: ReceiptDa
   printLocally('STAR', receipt, (r) => sendStar(config, receiptStarXml(r, { paperWidth: rawWidth() })));
 
 export const printToEpsonEPOS = (config: EpsonPrinterConfig, receipt: ReceiptData, enableCashDrawer = false) =>
-  printLocally('EPSON', receipt, (r) => sendEpson(config, receiptEpsonXml(r, { paperWidth: rawWidth(), enableCashDrawer })));
+  printLocally('EPSON', receipt, (r) => sendEpson(config, receiptEpsonXml(r, { paperWidth: rawWidth(), enableCashDrawer })), enableCashDrawer);
 
 // ─── Table bill ───────────────────────────────────────────────────────────────
 

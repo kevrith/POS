@@ -104,6 +104,21 @@ describe('receipt print preference', () => {
     expect(logPrint).toHaveBeenLastCalledWith('RECEIPT', 'USB', false, 'No USB printer is paired', expect.objectContaining({ saleId: 'sale-1' }));
   });
 
+  it('records a drawer open for a cash sale that pops the drawer, and none for a copy', async () => {
+    await printer.printToUSB({ ...receipt, saleId: 'sale-1' }, true);
+    expect(logPrint).toHaveBeenCalledWith('DRAWER', 'USB', true, undefined, { saleId: 'sale-1', refNumber: 'R-1', reason: 'SALE' });
+    logPrint.mockClear();
+    fetchReceiptCopy.mockResolvedValue(1);
+    await printer.printToUSB({ ...receipt, saleId: 'sale-1' }, true);
+    expect(logPrint.mock.calls.some((c) => c[0] === 'DRAWER')).toBe(false);
+  });
+
+  it('flags a queued receipt that carries the drawer pulse', async () => {
+    receiptPrint.setReceiptPrintPref({ method: 'network', networkPrinterId: 'p1', autoPrint: true });
+    await receiptPrint.autoPrintReceipt({ ...receipt, saleId: 'sale-1' }, true);
+    expect(queuePrint.mock.calls[0][3]).toEqual(expect.objectContaining({ reason: 'DRAWER_WITH_SALE' }));
+  });
+
   it('a settings test print is logged as TEST, never as a receipt', async () => {
     await printer.printToBrowser({ ...receipt, receiptNumber: 'TEST-0001' });
     expect(logPrint).toHaveBeenLastCalledWith('TEST', 'BROWSER', true, undefined, expect.anything());

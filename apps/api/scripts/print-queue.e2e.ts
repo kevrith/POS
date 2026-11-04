@@ -18,6 +18,7 @@ import { createServer, createConnection, type Server } from 'net';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { PrintersService } from '../src/printers/printers.service';
 import { PrintJobsService } from '../src/print-jobs/print-jobs.service';
+import { PrintStationsService } from '../src/print-jobs/print-stations.service';
 
 const LAN_IP = process.env.LAN_IP as string;
 const PORT = 19100;
@@ -54,7 +55,7 @@ async function main() {
   await prisma.$connect();
   const printers = new PrintersService(prisma);
 
-  await prisma.printJob.deleteMany({}); await prisma.sale.deleteMany({}); await prisma.printer.deleteMany({}); await prisma.store.deleteMany({}); await prisma.business.deleteMany({});
+  await prisma.printStation.deleteMany({}); await prisma.printJob.deleteMany({}); await prisma.sale.deleteMany({}); await prisma.printer.deleteMany({}); await prisma.store.deleteMany({}); await prisma.business.deleteMany({});
   await prisma.business.create({ data: { id: 'bizA', name: 'Biz A' } as any });
   await prisma.business.create({ data: { id: 'bizB', name: 'Biz B' } as any });
   await prisma.store.create({ data: { id: 'storeA', businessId: 'bizA', name: 'Main', storeCode: 'A01' } as any });
@@ -169,6 +170,30 @@ async function main() {
   await queued.log({ storeId: 'storeA', kind: 'RECEIPT', method: 'BROWSER', ok: true, saleId: 'sale-1', refNumber: 'R-1' }, cashierA);
   const copies = await queued.nextReceiptCopy('sale-1', { ...cashierA }).catch((e) => e.constructor.name);
   check('copy number counts the bridge print AND the browser print', JSON.stringify(copies) === '{"copyNumber":2}', copies);
+
+  // 12. print stations: token auth, online flag, revoke
+  const stationsSvc = new PrintStationsService(prisma);
+  const created = await stationsSvc.create({ storeId: 'storeA', name: 'Front till' }, actorA);
+  const rowToken = await prisma.printStation.findUniqueOrThrow({ where: { id: created.station.id } });
+  check('station token is stored hashed, never in clear', rowToken.tokenHash !== created.token && !JSON.stringify(rowToken).includes(created.token));
+  const auth1 = await stationsSvc.authenticate(created.token);
+  check('station authenticates and is scoped to its store', auth1?.storeId === 'storeA' && auth1?.businessId === 'bizA', auth1);
+  check('a wrong token does not authenticate', (await stationsSvc.authenticate('pst_' + 'A'.repeat(43))) === null);
+  const listed = await stationsSvc.list('storeA', actorA);
+  check('station shows online after it was seen', listed.length === 1 && (listed[0] as any).online === true, listed);
+  check('another business sees none of this store\'s stations', (await stationsSvc.list('storeA', actorB)).length === 0);
+  await stationsSvc.revoke(created.station.id, actorA);
+  check('a revoked station can no longer authenticate', (await stationsSvc.authenticate(created.token)) === null);
+
+  // 13. audit summary over real rows
+  await queued.log({ storeId: 'storeA', kind: 'RECEIPT', method: 'USB', ok: true, saleId: 'sale-1', copyNumber: 1 }, cashierA);
+  await queued.log({ storeId: 'storeA', kind: 'RECEIPT', method: 'USB', ok: true, saleId: 'sale-1', copyNumber: 2 }, cashierA);
+  await queued.log({ storeId: 'storeA', kind: 'DRAWER', method: 'USB', ok: true, reason: 'MANUAL' }, cashierA);
+  await queued.log({ storeId: 'storeA', kind: 'DRAWER', method: 'USB', ok: true, reason: 'SALE' }, cashierA);
+  const sum = await queued.summary('storeA', 7, actorA);
+  check('summary counts the two reprints by that person', sum.reprintsByPerson.length === 1 && sum.reprintsByPerson[0].count === 2, sum.reprintsByPerson);
+  check('summary counts only the MANUAL drawer open', sum.manualDrawerOpensByPerson.length === 1 && sum.manualDrawerOpensByPerson[0].count === 1, sum.manualDrawerOpensByPerson);
+  check('summary has totals and failure counts', sum.total > 10 && sum.sent > 0 && sum.failed >= 2, { total: sum.total, sent: sum.sent, failed: sum.failed });
 
   fp2.server.close();
   await prisma.$disconnect();

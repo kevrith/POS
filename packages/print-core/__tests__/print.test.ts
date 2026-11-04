@@ -1,7 +1,7 @@
 import {
   DRAWER_PULSE, PAPER_COLUMNS, asciiSafe, billEscPos, billHtml, bytesToBase64, formatAmount, formatKES, groupPayments,
   kotEpsonXml, kotEscPos, kotHtml, kotStarXml, qrMatrix, qrSvg, receiptEpsonXml, receiptEscPos, receiptHtml,
-  receiptStarXml, resolveStation, routeKotItems, row, wrapText,
+  receiptOpensDrawer, receiptStarXml, resolveStation, routeKotItems, row, wrapText,
   type BillDocument, type KotDocument, type ReceiptDocument,
 } from '../src';
 
@@ -144,6 +144,15 @@ describe('ESC/POS output', () => {
     expect(open({ payments: [{ method: 'MPESA', amountCents: 95000 }] })).toBe(false);
     expect(open({ copyNumber: 1 })).toBe(false);
     expect(open({ voided: true })).toBe(false);
+  });
+
+  it('receiptOpensDrawer agrees with the bytes that are printed', () => {
+    for (const patch of [{}, { copyNumber: 1 }, { voided: true }, { payments: [{ method: 'MPESA', amountCents: 95000 }] }] as Array<Partial<ReceiptDocument>>) {
+      const doc = { ...base, ...patch };
+      const pulses = receiptEscPos(doc, { paperWidth: 58, enableCashDrawer: true })[1] === 0x70;
+      expect(receiptOpensDrawer(doc, true)).toBe(pulses);
+    }
+    expect(receiptOpensDrawer(base, false)).toBe(false);
   });
 
   it('keeps every line within the paper width and wraps long item names', () => {

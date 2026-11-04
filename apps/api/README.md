@@ -291,6 +291,15 @@ push (`.github/workflows/ci.yml`).
   logged with `POST /print-jobs/log`, and `POST /print-jobs/receipt-copy` counts how often a sale's receipt has been
   printed so reprints are marked COPY. Listing, retry and cancel are owner/manager only; payloads are never listed.
   `scripts/print-queue.e2e.ts` runs the whole flow against a throwaway Postgres.
+- **Print stations (`print-stations/`, `print-bridge/`).** A bridge can sign in with a long-lived station token
+  instead of a person's login (which expires). An owner/manager creates a station with `POST /print-stations`
+  (the `pst_...` token is returned ONCE; only its SHA-256 is stored), lists them with an `online` flag (seen in the
+  last 30 s) and revokes with `DELETE`. The station then calls `POST /print-bridge/claim` and `/:id/result` with
+  the `x-print-station-token` header. Those routes are `@Public` to the JWT guard, guarded by `PrintStationGuard`,
+  exempt from the per-IP write throttle (it polls), and a station can only ever touch its own store's jobs.
+- **Print audit summary.** `GET /print-jobs/summary?storeId&days=7` (owner/manager): totals, failures, reprints per
+  person and cash drawers opened by hand (`reason=MANUAL`) per person. A drawer that opens with a cash sale is
+  logged with `reason=SALE` (device prints) or `DRAWER_WITH_SALE` on the receipt job (queued prints).
 - Migrations must match `schema.prisma`: check with `prisma migrate diff --from-url
   <scratch db> --to-schema-datamodel prisma/schema.prisma`. `WebAuthnCredential` once
   existed only through `db push`.

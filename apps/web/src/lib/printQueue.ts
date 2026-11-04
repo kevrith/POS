@@ -95,3 +95,31 @@ export function listPrintJobs(storeId: string, status?: string): Promise<PrintJo
 
 export const retryPrintJob = (id: string) => api.post<PrintJobSummary>(`/print-jobs/${id}/retry`, {});
 export const cancelPrintJob = (id: string) => api.post<PrintJobSummary>(`/print-jobs/${id}/cancel`, {});
+
+// ─── Print stations and the audit summary (owner / manager) ──────────────────
+
+export interface PrintStationSummary {
+  id: string;
+  storeId: string;
+  name: string;
+  lastSeenAt: string | null;
+  online: boolean;
+}
+
+export const listPrintStations = (storeId: string) => api.get<PrintStationSummary[]>(`/print-stations?storeId=${encodeURIComponent(storeId)}`);
+/** The token is in the response ONCE and is never retrievable again. */
+export const createPrintStation = (storeId: string, name: string) =>
+  api.post<{ station: PrintStationSummary; token: string }>('/print-stations', { storeId, name });
+export const revokePrintStation = (id: string) => api.delete<{ message: string }>(`/print-stations/${id}`);
+
+export interface PrintSummary {
+  days: number;
+  total: number;
+  sent: number;
+  failed: number;
+  waiting: number;
+  reprintsByPerson: Array<{ userId: string | null; name: string; count: number }>;
+  manualDrawerOpensByPerson: Array<{ userId: string | null; name: string; count: number }>;
+}
+
+export const getPrintSummary = (storeId: string, days = 7) => api.get<PrintSummary>(`/print-jobs/summary?storeId=${encodeURIComponent(storeId)}&days=${days}`);

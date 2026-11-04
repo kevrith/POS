@@ -19,7 +19,9 @@ function makeService(mode?: 'queue') {
       findMany: jest.fn().mockResolvedValue([]),
       findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'j1', status: 'QUEUED' }),
       count: jest.fn().mockResolvedValue(0),
+      groupBy: jest.fn().mockResolvedValue([]),
     },
+    user: { findMany: jest.fn().mockResolvedValue([]) },
   };
   const printers: any = { printToNetwork: jest.fn().mockResolvedValue({ success: true }) };
   return { prisma, printers, service: new PrintJobsService(prisma, printers) };
@@ -233,5 +235,39 @@ describe('print bridge', () => {
     t.prisma.printJob.findFirst.mockResolvedValue(null);
     await expect(t.service.complete('jX', { ok: true }, 'bridge-1', cashier)).rejects.toBeInstanceOf(NotFoundException);
     expect(t.prisma.printJob.findFirst).toHaveBeenCalledWith({ where: { id: 'jX', businessId: 'biz-A' } });
+  });
+});
+
+describe('audit summary', () => {
+  it('is for owners and managers only', async () => {
+    const t = makeService();
+    await expect(t.service.summary('s1', 7, cashier)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('counts reprints and manual drawer opens per person and names them, scoped to the business', async () => {
+    const t = makeService();
+    t.prisma.printJob.groupBy
+      .mockResolvedValueOnce([
+        { kind: 'RECEIPT', status: 'SENT', _count: { _all: 40 } },
+        { kind: 'KOT', status: 'FAILED', _count: { _all: 2 } },
+        { kind: 'KOT', status: 'QUEUED', _count: { _all: 1 } },
+      ])
+      .mockResolvedValueOnce([{ createdById: 'u2', _count: { _all: 9 } }, { createdById: 'u3', _count: { _all: 1 } }])
+      .mockResolvedValueOnce([{ createdById: 'u2', _count: { _all: 4 } }]);
+    t.prisma.user.findMany.mockResolvedValue([{ id: 'u2', name: 'Amina' }, { id: 'u3', name: 'Joy' }]);
+
+    const res = await t.service.summary('s1', 7, owner);
+    expect(res).toEqual(expect.objectContaining({ total: 43, sent: 40, failed: 2, waiting: 1, days: 7 }));
+    expect(res.reprintsByPerson).toEqual([{ userId: 'u2', name: 'Amina', count: 9 }, { userId: 'u3', name: 'Joy', count: 1 }]);
+    expect(res.manualDrawerOpensByPerson).toEqual([{ userId: 'u2', name: 'Amina', count: 4 }]);
+    expect(t.prisma.user.findMany).toHaveBeenCalledWith({ where: { id: { in: ['u2', 'u3'] }, businessId: 'biz-A' }, select: { id: true, name: true } });
+    for (const call of t.prisma.printJob.groupBy.mock.calls) expect(call[0].where.businessId).toBe('biz-A');
+  });
+
+  it('clamps the window to 1-90 days', async () => {
+    const t = makeService();
+    expect((await t.service.summary('s1', 5000, owner)).days).toBe(90);
+    expect((await t.service.summary('s1', -3, owner)).days).toBe(1);
+    expect((await t.service.summary('s1', undefined, owner)).days).toBe(7);
   });
 });

@@ -22,20 +22,21 @@ export interface PrintOptions {
   enableCashDrawer?: boolean;
 }
 
-function drawerShouldOpen(doc: ReceiptDocument, enabled: boolean | undefined): boolean {
+/** Whether printing this receipt pops the cash drawer: enabled, paid in cash, an original and not voided. */
+export function receiptOpensDrawer(doc: ReceiptDocument, enabled: boolean | undefined): boolean {
   return !!enabled && hasCashPayment(doc) && !doc.voided && !((doc.copyNumber ?? 0) > 0);
 }
 
 // ─── Receipt ──────────────────────────────────────────────────────────────────
 
 export const receiptEscPos = (doc: ReceiptDocument, o: PrintOptions): Uint8Array =>
-  renderEscPos(layoutReceipt(doc), { paperWidth: o.paperWidth, openDrawer: drawerShouldOpen(doc, o.enableCashDrawer) });
+  renderEscPos(layoutReceipt(doc), { paperWidth: o.paperWidth, openDrawer: receiptOpensDrawer(doc, o.enableCashDrawer) });
 
 export const receiptHtml = (doc: ReceiptDocument, o: PrintOptions): string =>
   renderHtml(layoutReceipt(doc), { paperWidth: o.paperWidth, title: `Receipt ${doc.receiptNumber}` });
 
 export const receiptEpsonXml = (doc: ReceiptDocument, o: PrintOptions): string =>
-  renderEpsonXml(layoutReceipt(doc), { paperWidth: o.paperWidth, openDrawer: drawerShouldOpen(doc, o.enableCashDrawer) });
+  renderEpsonXml(layoutReceipt(doc), { paperWidth: o.paperWidth, openDrawer: receiptOpensDrawer(doc, o.enableCashDrawer) });
 
 export const receiptStarXml = (doc: ReceiptDocument, o: PrintOptions): string =>
   renderStarXml(layoutReceipt(doc), { paperWidth: o.paperWidth });

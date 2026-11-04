@@ -4,7 +4,8 @@ import { AlertCircle, CheckCircle2, Clock, RefreshCw, X } from 'lucide-react';
 import { useAuthStore } from '../stores/auth';
 import { isBridgeEnabled, setBridgeEnabled } from '../lib/printBridge';
 import { isDesktopApp } from '../lib/desktopPrinter';
-import { cancelPrintJob, listPrintJobs, retryPrintJob, type PrintJobSummary } from '../lib/printQueue';
+import { cancelPrintJob, getPrintSummary, listPrintJobs, retryPrintJob, type PrintJobSummary } from '../lib/printQueue';
+import PrintStationsPanel from './PrintStationsPanel';
 
 const STATUS_STYLE: Record<PrintJobSummary['status'], string> = {
   QUEUED: 'bg-amber-100 text-amber-800',
@@ -44,6 +45,13 @@ export default function PrintQueuePanel() {
     refetchInterval: 10000,
   });
 
+  const { data: summary } = useQuery({
+    queryKey: ['print-summary', storeId],
+    queryFn: () => getPrintSummary(storeId as string, 7),
+    enabled: allowed && !!storeId,
+    refetchInterval: 60000,
+  });
+
   const act = useMutation({
     mutationFn: ({ id, action }: { id: string; action: 'retry' | 'cancel' }) => (action === 'retry' ? retryPrintJob(id) : cancelPrintJob(id)),
     onSettled: () => { void qc.invalidateQueries({ queryKey: ['print-jobs', storeId] }); },
@@ -75,6 +83,15 @@ export default function PrintQueuePanel() {
           <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
         </button>
       </div>
+
+      {summary && (summary.reprintsByPerson.length > 0 || summary.manualDrawerOpensByPerson.length > 0) && (
+        <div className="grid sm:grid-cols-2 gap-3 mb-3">
+          <SummaryList title={`Reprints, last ${summary.days} days`} rows={summary.reprintsByPerson} />
+          <SummaryList title={`Cash drawer opened by hand, last ${summary.days} days`} rows={summary.manualDrawerOpensByPerson} />
+        </div>
+      )}
+
+      <PrintStationsPanel />
 
       {desktop && (
         <label className="flex items-start gap-2 mb-3 p-3 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-700">
@@ -144,6 +161,26 @@ export default function PrintQueuePanel() {
                 </button>
               )}
               {j.status === 'SENT' && <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0 mt-1" aria-hidden="true" />}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function SummaryList({ title, rows }: { title: string; rows: Array<{ userId: string | null; name: string; count: number }> }) {
+  return (
+    <div className="p-3 rounded-lg border border-gray-200 bg-gray-50">
+      <p className="text-xs font-medium text-gray-600 mb-1">{title}</p>
+      {rows.length === 0 ? (
+        <p className="text-sm text-gray-500">None</p>
+      ) : (
+        <ul className="text-sm text-gray-800 space-y-0.5">
+          {rows.slice(0, 5).map((r) => (
+            <li key={r.userId ?? 'unknown'} className="flex justify-between gap-2">
+              <span className="truncate">{r.name}</span>
+              <span className="font-medium">{r.count}</span>
             </li>
           ))}
         </ul>

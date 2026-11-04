@@ -59,10 +59,10 @@ src/
 | `printHtml.ts` | The ONE way a page is printed: a hidden, script-less sandboxed iframe. Never use `window.open` for printing |
 | `receiptPrint.ts` | The per-device printer preference (`receipt-print-pref` in localStorage), auto-print and explicit print |
 | `printQueue.ts` | Client for the server print queue (`/print-jobs`): queue a LAN print, log a print made on this device, ask how many times a sale's receipt was printed (so reprints are COPY) |
-| `printBridge.ts` | Desktop app only: polls `/print-jobs/claim` and writes queued jobs to LAN printers with the Tauri `print_to_network` command, so a cloud API can reach printers it cannot see. On by default in the desktop app; switch off in Settings -> Printers |
+| `printBridge.ts` | Desktop app only: polls for queued jobs and writes them to LAN printers with the Tauri `print_to_network` command, so a cloud API can reach printers it cannot see. Signs in with a long-lived **print station key** (`print-station-token`, no one needs to be logged in; a revoked key is dropped on the first 401) or, without one, the signed-in person's login. On by default in the desktop app; switch off in Settings -> Printers. `PrintBridge` is mounted on the login screen too |
 | `kotPrintFeedback.ts` | Toast with a "Print here" action when a kitchen printer cannot be reached |
 
-Settings -> Printers ends with **Print history** (`components/PrintQueuePanel.tsx`, owner/manager): every receipt, ticket and drawer open, with Retry for failed ones.
+Settings -> Printers ends with **Print history** (`components/PrintQueuePanel.tsx`, owner/manager): a 7-day audit (reprints and hand-opened cash drawers per person), **Print stations** (`PrintStationsPanel.tsx`: create a key, use this computer as a station, see online/offline, remove) and every receipt, ticket and drawer open with Retry for failed ones.
 What a receipt/ticket/bill contains lives in [`packages/print-core`](../../packages/print-core/README.md), shared with the mobile app.
 Tests: `npm test` (vitest) covers the print preference, routing and failure reporting.
 | `scale.ts` | Weighing scales (Web Serial / Bluetooth) |

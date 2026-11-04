@@ -25,7 +25,7 @@ ReceiptDocument / KotDocument / BillDocument      (model.ts)
 - Status banners come first and cannot be skipped by a printer type: VOID, CREDIT SALE, PENDING KRA
   SUBMISSION and `COPY n - NOT THE ORIGINAL` (set `copyNumber` on a reprint).
 - A voided receipt never reads "KRA eTIMS VERIFIED" and prints no QR; it shows the original control number.
-- The cash drawer pulse is only added for an original cash sale. A reprint (`copyNumber > 0`) or a void never
+- The cash drawer pulse is only added for an original cash sale (`receiptOpensDrawer` is the one rule the bytes and the audit log both use). A reprint (`copyNumber > 0`) or a void never
   opens it, so repeated "Print" presses cannot be used to pop the drawer.
 - ESC/POS text is reduced to printable ASCII (`asciiSafe`) and command bytes are emitted as raw bytes, never
   through UTF-8. The KRA QR uses the printer's built-in QR commands (`GS ( k`).

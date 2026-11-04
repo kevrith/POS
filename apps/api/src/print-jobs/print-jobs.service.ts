@@ -219,6 +219,43 @@ export class PrintJobsService {
     });
   }
 
+  /**
+   * What the owner needs to spot misuse: how often receipts were reprinted and who by, who opened the cash
+   * drawer by hand (no sale), and how many prints are failing. Counts only; never any print content.
+   */
+  async summary(storeId: string, days: number | undefined, actor: PrintActor) {
+    this.requireManager(actor);
+    await this.assertStore(storeId, actor.businessId);
+    const span = Math.min(Math.max(Math.floor(Number(days) || 7), 1), 90);
+    const since = new Date(Date.now() - span * 86_400_000);
+    const base = { businessId: actor.businessId, storeId, createdAt: { gte: since } };
+
+    const [byKindStatus, reprints, manualDrawer] = await Promise.all([
+      this.prisma.printJob.groupBy({ by: ['kind', 'status'], where: base, _count: { _all: true } }),
+      this.prisma.printJob.groupBy({ by: ['createdById'], where: { ...base, kind: 'RECEIPT', copyNumber: { gt: 0 }, status: { in: ['SENT', 'QUEUED', 'SENDING'] } }, _count: { _all: true } }),
+      this.prisma.printJob.groupBy({ by: ['createdById'], where: { ...base, kind: 'DRAWER', reason: 'MANUAL', status: { in: ['SENT', 'QUEUED', 'SENDING'] } }, _count: { _all: true } }),
+    ]);
+
+    const ids = Array.from(new Set([...reprints, ...manualDrawer].map((r) => r.createdById).filter((v): v is string => !!v)));
+    const users = ids.length ? await this.prisma.user.findMany({ where: { id: { in: ids }, businessId: actor.businessId }, select: { id: true, name: true } }) : [];
+    const nameOf = (id: string | null) => (id ? users.find((u) => u.id === id)?.name ?? 'Unknown' : 'Unknown');
+    const byPerson = (rows: typeof reprints) =>
+      rows.map((r) => ({ userId: r.createdById, name: nameOf(r.createdById), count: r._count._all })).sort((a, b) => b.count - a.count);
+    const count = (status: string) => byKindStatus.filter((r) => r.status === status).reduce((s, r) => s + r._count._all, 0);
+
+    return {
+      days: span,
+      since,
+      total: byKindStatus.reduce((s, r) => s + r._count._all, 0),
+      sent: count('SENT'),
+      failed: count('FAILED') + count('EXPIRED'),
+      waiting: count('QUEUED') + count('SENDING'),
+      byKind: byKindStatus.map((r) => ({ kind: r.kind, status: r.status, count: r._count._all })),
+      reprintsByPerson: byPerson(reprints),
+      manualDrawerOpensByPerson: byPerson(manualDrawer),
+    };
+  }
+
   async retry(id: string, actor: PrintActor) {
     this.requireManager(actor);
     const job = await this.findOwnedJob(id, actor.businessId);

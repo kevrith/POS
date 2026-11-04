@@ -5,12 +5,17 @@
  * (which can) claims it, writes the bytes to the printer's port 9100 through the Tauri `print_to_network`
  * command, and reports the result. The server decides what is claimable and retries failures with a delay, so
  * several tills can run the bridge at once without printing a job twice.
+ *
+ * Two ways to authenticate. A STATION TOKEN (Settings -> Printers -> Print stations) is long-lived and needs no
+ * one signed in, so a till or small computer by the printers can deliver all day. Without a token the bridge
+ * falls back to the signed-in person's login, which expires.
  */
-import api from './api';
+import api, { getApiUrl } from './api';
 import { isDesktopApp } from './desktopPrinter';
 
 const ID_KEY = 'print-bridge-id';
 const ENABLED_KEY = 'print-bridge-enabled';
+const TOKEN_KEY = 'print-station-token';
 const POLL_MS = 3000;
 const IDLE_BACKOFF_MS = 15000;
 
@@ -53,13 +58,41 @@ export function setBridgeEnabled(on: boolean): void {
   try { localStorage.setItem(ENABLED_KEY, on ? '1' : '0'); } catch { /* storage unavailable */ }
 }
 
+export function getStationToken(): string | null {
+  try { return localStorage.getItem(TOKEN_KEY); } catch { return null; }
+}
+
+export const BRIDGE_CONFIG_EVENT = 'print-bridge-config';
+
+export function setStationToken(token: string | null): void {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch { /* storage unavailable */ }
+  try { window.dispatchEvent(new Event(BRIDGE_CONFIG_EVENT)); } catch { /* not in a browser */ }
+}
+
+class StationTokenRejected extends Error {}
+
+/** Talk to the station endpoints with the token. A 401 means the station was revoked. */
+async function stationPost<T>(path: string, token: string, body: unknown): Promise<T> {
+  const res = await fetch(`${getApiUrl()}/print-bridge${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-print-station-token': token },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) throw new StationTokenRejected('This print station was removed');
+  if (!res.ok) throw new Error(`Print server error ${res.status}`);
+  return (await res.json()) as T;
+}
+
 function errorText(err: unknown): string {
   if (err instanceof Error && err.message) return err.message;
   return typeof err === 'string' && err ? err : 'The printer did not respond';
 }
 
 /** Deliver one claimed job and tell the server how it went. */
-async function deliver(job: ClaimedJob, invoke: Invoke, id: string): Promise<void> {
+async function deliver(job: ClaimedJob, invoke: Invoke, report: (jobId: string, ok: boolean, error?: string) => Promise<void>): Promise<void> {
   let ok = false;
   let error: string | undefined;
   try {
@@ -68,7 +101,7 @@ async function deliver(job: ClaimedJob, invoke: Invoke, id: string): Promise<voi
   } catch (err) {
     error = errorText(err);
   }
-  await api.post(`/print-jobs/${job.id}/result`, { bridgeId: id, ok, error }).catch(() => undefined);
+  await report(job.id, ok, error).catch(() => undefined);
 }
 
 /**
@@ -86,15 +119,25 @@ export function startPrintBridge(getStoreId: () => string | undefined, isActive:
   const tick = async () => {
     let next = POLL_MS;
     try {
+      const token = getStationToken();
       const storeId = getStoreId();
-      if (!stopped && isActive() && storeId && document.visibilityState !== 'hidden') {
+      const visible = document.visibilityState !== 'hidden';
+      if (!stopped && isActive() && visible && token) {
+        const jobs = await stationPost<ClaimedJob[]>('/claim', token, { limit: 5 });
+        for (const job of jobs) {
+          await deliver(job, invoke, (jobId, ok, error) => stationPost(`/${jobId}/result`, token, { ok, error }).then(() => undefined));
+        }
+      } else if (!stopped && isActive() && visible && storeId) {
         const jobs = await api.post<ClaimedJob[]>('/print-jobs/claim', { storeId, bridgeId: id, limit: 5 });
-        for (const job of jobs) await deliver(job, invoke, id);
+        for (const job of jobs) {
+          await deliver(job, invoke, (jobId, ok, error) => api.post(`/print-jobs/${jobId}/result`, { bridgeId: id, ok, error }).then(() => undefined));
+        }
       } else {
         next = IDLE_BACKOFF_MS;
       }
-    } catch {
-      // Offline or signed out: try again later, quietly.
+    } catch (err) {
+      // A revoked station must stop using its token; anything else (offline, server restarting) is retried quietly.
+      if (err instanceof StationTokenRejected) setStationToken(null);
       next = IDLE_BACKOFF_MS;
     }
     if (!stopped) timer = setTimeout(() => void tick(), next);

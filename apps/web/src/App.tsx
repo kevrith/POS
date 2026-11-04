@@ -276,6 +276,7 @@ export default function App() {
   if (!isAuthenticated) {
     return (
       <GoogleOAuthProvider clientId={googleClientId || 'disabled'}>
+        <PrintBridge />
         <LoginPage />
       </GoogleOAuthProvider>
     );

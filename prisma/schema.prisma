@@ -3002,3 +3002,20 @@ model PrintJob {
   @@index([saleId, kind])
   @@index([printerId])
 }
+
+/// A till (or small computer) on the shop network that delivers queued print jobs to LAN printers.
+/// It signs in with a long-lived token instead of a person's login, which expires. Only the SHA-256 of
+/// the token is stored; the token itself is shown once when the station is created.
+model PrintStation {
+  id          String    @id @default(uuid())
+  businessId  String
+  storeId     String
+  name        String
+  tokenHash   String    @unique
+  lastSeenAt  DateTime?
+  revokedAt   DateTime?
+  createdById String?
+  createdAt   DateTime  @default(now())
+
+  @@index([businessId, storeId])
+}

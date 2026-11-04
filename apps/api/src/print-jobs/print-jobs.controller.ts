@@ -35,6 +35,11 @@ export class PrintJobsController {
     return this.jobs.list(storeId, status, limit ? Number(limit) : undefined, actorOf(req));
   }
 
+  @Get('summary')
+  summary(@Query('storeId') storeId: string, @Query('days') days: string | undefined, @Req() req: AuthedRequest) {
+    return this.jobs.summary(storeId, days ? Number(days) : undefined, actorOf(req));
+  }
+
   @Post(':id/retry')
   retry(@Param('id') id: string, @Req() req: AuthedRequest) {
     return this.jobs.retry(id, actorOf(req));

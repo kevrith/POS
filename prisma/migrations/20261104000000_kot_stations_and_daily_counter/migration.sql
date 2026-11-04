@@ -1,3 +1,6 @@
+-- Safe to run more than once: every statement tolerates objects that already exist,
+-- so a half-applied or retried deploy cannot fail on "already exists".
+--
 -- Kitchen tickets: stations, a real "sent" marker, a daily ticket counter, and
 -- per-business optional modules.
 --
@@ -17,18 +20,19 @@
 --                       posMode (a fuel station with a restaurant, a hotel with
 --                       a shop).
 
-ALTER TABLE "Item" ADD COLUMN "station" TEXT;
-ALTER TABLE "OrderItem" ADD COLUMN "sentToKitchenAt" TIMESTAMP(3);
-ALTER TABLE "KOT" ADD COLUMN "station" TEXT NOT NULL DEFAULT 'KITCHEN';
-ALTER TABLE "Business" ADD COLUMN "enabledModules" TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE "Item" ADD COLUMN IF NOT EXISTS "station" TEXT;
+ALTER TABLE "OrderItem" ADD COLUMN IF NOT EXISTS "sentToKitchenAt" TIMESTAMP(3);
+ALTER TABLE "KOT" ADD COLUMN IF NOT EXISTS "station" TEXT NOT NULL DEFAULT 'KITCHEN';
+ALTER TABLE "Business" ADD COLUMN IF NOT EXISTS "enabledModules" TEXT NOT NULL DEFAULT '[]';
 
 -- Lines that already have a ticket count as sent, otherwise every historical
 -- open order would offer to send its whole bill to the kitchen again.
 UPDATE "OrderItem" oi
 SET "sentToKitchenAt" = COALESCE(oi."firedAt", oi."createdAt")
-WHERE EXISTS (SELECT 1 FROM "KOT" k WHERE k."orderId" = oi."orderId");
+WHERE oi."sentToKitchenAt" IS NULL
+  AND EXISTS (SELECT 1 FROM "KOT" k WHERE k."orderId" = oi."orderId");
 
-CREATE TABLE "KotCounter" (
+CREATE TABLE IF NOT EXISTS "KotCounter" (
     "storeId" TEXT NOT NULL,
     "day" TEXT NOT NULL,
     "last" INTEGER NOT NULL DEFAULT 0,
@@ -36,7 +40,7 @@ CREATE TABLE "KotCounter" (
     CONSTRAINT "KotCounter_pkey" PRIMARY KEY ("storeId","day")
 );
 
-CREATE INDEX "KOT_station_idx" ON "KOT"("station");
+CREATE INDEX IF NOT EXISTS "KOT_station_idx" ON "KOT"("station");
 
 -- Same backstop the lock-down migration applied to every table that existed then.
 ALTER TABLE "KotCounter" ENABLE ROW LEVEL SECURITY;

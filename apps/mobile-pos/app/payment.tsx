@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect, useRef } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { mobileApi, formatKES } from '../lib/api';
@@ -13,6 +13,11 @@ import { useAuthStore } from '../stores/auth';
 import { useActiveStore } from '../lib/useActiveStore';
 import { useCartStore } from '../stores/cart';
 import { queueSale } from '../lib/db';
+import { saleTypeFor } from '../lib/saleType';
+import {
+  orderPayable, billFromOrder, unitPriceOf, buildOrderCheckout, methodsForOrder, AFTER_ORDER_PAYMENT_ROUTE,
+  type PayableOrder,
+} from '../lib/orderPayment';
 import { loadPrinterSettings, printReceipt, type PrintableReceipt } from '../lib/receiptPrint';
 import type { PrinterSettings } from '../lib/printerConfig';
 import { Colors } from '../constants/theme';
@@ -26,10 +31,12 @@ interface SaleResult { id: string; receiptNumber: string; totalCents: number; }
 
 interface SalePayload {
   offlineId: string; businessId: string; storeId: string; cashierId: string;
-  customerId?: string; type: 'NORMAL'; priceLevel: 'RETAIL' | 'WHOLESALE' | 'VIP';
-  items: Array<{ itemId: string; quantity: number; unitPriceCents: number; discountPercent?: number }>;
+  customerId?: string; type: 'NORMAL' | 'CREDIT'; priceLevel: 'RETAIL' | 'WHOLESALE' | 'VIP';
+  items: Array<{ itemId: string; quantity: number; unitPriceCents?: number; discountPercent?: number }>;
   payments: Array<{ method: string; amountCents: number; reference?: string }>;
   discountCents?: number; serviceChargeCents?: number; promotionId?: string;
+  /** Set when paying a table: the server bills the order itself and closes it. */
+  orderId?: string; expectedTotalCents?: number;
 }
 
 interface GiftCard { code: string; balanceCents: number; status: string; }
@@ -383,8 +390,24 @@ export default function PaymentScreen() {
   const { user } = useAuthStore();
   const {
     items: cartItems, subtotalCents, promoDiscountCents,
-    clearCart, customerId, customerName, priceLevel, appliedPromotion,
+    clearCart, customerId: cartCustomerId, customerName: cartCustomerName, priceLevel, appliedPromotion,
   } = useCartStore();
+
+  // Opened from a table's order screen: the bill is that order, not the cart.
+  const { orderId } = useLocalSearchParams<{ orderId?: string }>();
+  const orderMode = !!orderId;
+  const orderQ = useQuery<PayableOrder>({
+    queryKey: ['order', orderId],
+    queryFn: () => mobileApi.get<PayableOrder>(`/hospitality/orders/${orderId}`),
+    enabled: orderMode,
+    // Always the bill as it is now: a line may have been added or voided since the waiter last looked.
+    staleTime: 0,
+    refetchOnMount: 'always',
+  });
+  const order = orderQ.data;
+  // The cart's customer, loyalty and promotion belong to a counter sale and do not follow a table.
+  const customerId = orderMode ? null : cartCustomerId;
+  const customerName = orderMode ? null : cartCustomerName;
   const { businessId, storeId } = useActiveStore();
   const cashierId = user?.id ?? '';
 
@@ -415,8 +438,12 @@ export default function PaymentScreen() {
   const [redeemLoyalty, setRedeemLoyalty] = useState(false);
 
   const taxType = (bizSettings?.taxType as string | undefined) ?? 'NONE';
-  const subtotal = subtotalCents();
-  const promoDiscount = promoDiscountCents();
+  const orderBill = billFromOrder(order);
+  const billLines = orderMode
+    ? orderBill.lines
+    : cartItems.map((i) => ({ id: i.id, name: i.name, quantity: i.quantity, totalCents: i.unitPriceCents * i.quantity }));
+  const subtotal = orderMode ? orderBill.subtotalCents : subtotalCents();
+  const promoDiscount = orderMode ? 0 : promoDiscountCents();
   const subtotalAfterPromo = Math.max(0, subtotal - promoDiscount);
 
   // Loyalty redeem: use as many points as possible without over-discounting.
@@ -546,6 +573,9 @@ export default function PaymentScreen() {
       } catch (err) {
         const msg = (err as Error)?.message ?? '';
         if (msg.includes('Network request failed')) {
+          // A table cannot be paid offline: the order has to be closed on the server, and a
+          // queued sale would leave the table open for someone else to bill again.
+          if (payload.orderId) throw new Error('No connection. The table is still open. Check your signal and try again.');
           await queueSale(payload.offlineId, payload);
           throw new Error('__OFFLINE__');
         }
@@ -554,6 +584,11 @@ export default function PaymentScreen() {
     },
     onSuccess: (result: SaleResult) => {
       qc.invalidateQueries({ queryKey: ['sales'] });
+      if (orderMode) {
+        qc.invalidateQueries({ queryKey: ['tables'] });
+        qc.invalidateQueries({ queryKey: ['order'] });
+        qc.invalidateQueries({ queryKey: ['kitchen'] });
+      }
       // Deduct redeemed loyalty points against the created sale.
       if (customerId && redeemPoints > 0) {
         void mobileApi.post('/loyalty/redeem', { customerId, points: redeemPoints, saleId: result.id }).catch(() => {});
@@ -562,7 +597,7 @@ export default function PaymentScreen() {
         businessName: bizSettings?.name ?? 'KASTRA POS',
         receiptNumber: result.receiptNumber,
         dateISO: new Date().toISOString(),
-        lines: cartItems.map((i) => ({ name: i.name, quantity: i.quantity, unitPriceCents: i.unitPriceCents })),
+        lines: billLines.map((l) => ({ name: l.name, quantity: l.quantity, unitPriceCents: unitPriceOf(l) })),
         subtotalCents: subtotal,
         taxLabel,
         taxCents: finalTax,
@@ -583,7 +618,8 @@ export default function PaymentScreen() {
         setReceiptSnap(withEtims);
         if (autoPrint) void printNow(withEtims);
       });
-      clearCart();
+      // A table payment must not wipe an unrelated sale the cashier has open in the cart.
+      if (!orderMode) clearCart();
       setCompletedSale(result);
       setShowSuccess(true);
     },
@@ -601,14 +637,27 @@ export default function PaymentScreen() {
   function handleCompleteSale(
     overridePayments?: Array<{ method: string; amountCents: number; reference?: string }>
   ) {
-    if (cartItems.length === 0) { Alert.alert('Empty Cart', 'No items in cart.'); return; }
+    if (orderMode) {
+      const payable = orderPayable(order);
+      if (!payable.ok) { Alert.alert('Cannot take payment', payable.reason); return; }
+    } else if (cartItems.length === 0) { Alert.alert('Empty Cart', 'No items in cart.'); return; }
     const payments = overridePayments ?? buildPayments();
     if (!payments) return;
+    if (orderMode && orderId) {
+      completeSale(buildOrderCheckout({
+        offlineId: generateOfflineId(),
+        businessId, storeId, cashierId, orderId, payments,
+        discountCents: effectiveDiscount,
+        serviceChargeCents,
+        expectedTotalCents: totalAfterDiscount,
+      }));
+      return;
+    }
     completeSale({
       offlineId: generateOfflineId(),
       businessId, storeId, cashierId,
       customerId: customerId ?? undefined,
-      type: 'NORMAL', priceLevel,
+      type: saleTypeFor(payments), priceLevel,
       items: cartItems.map((i) => ({
         itemId: i.id, quantity: i.quantity,
         unitPriceCents: i.unitPriceCents,
@@ -622,6 +671,31 @@ export default function PaymentScreen() {
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────
+  // A table's bill is only shown once it has loaded and is still payable: the amounts below
+  // would otherwise read zero and invite a payment against nothing.
+  const payable = orderPayable(order);
+  const orderBlock = orderMode && !showSuccess
+    ? (orderQ.isLoading ? 'loading' : payable.ok ? null : payable.reason)
+    : null;
+  if (orderBlock) {
+    return (
+      <SafeAreaView edges={['top']} style={styles.safe}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <Ionicons name="arrow-back" size={22} color={Colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Checkout</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 12 }}>
+          {orderBlock === 'loading'
+            ? <ActivityIndicator size="large" color={Colors.primary} />
+            : <Text style={{ fontSize: 15, color: Colors.textSecondary, textAlign: 'center' }}>{orderBlock}</Text>}
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -633,7 +707,9 @@ export default function PaymentScreen() {
           </TouchableOpacity>
           <View>
             <Text style={styles.headerTitle}>Checkout</Text>
-            {customerName ? <Text style={styles.headerSub}>{customerName}</Text> : null}
+            {orderMode && order?.table?.number
+              ? <Text style={styles.headerSub}>Table {order.table.number}</Text>
+              : customerName ? <Text style={styles.headerSub}>{customerName}</Text> : null}
           </View>
           <View style={{ width: 40 }} />
         </View>
@@ -643,11 +719,11 @@ export default function PaymentScreen() {
           {/* Order Summary */}
           <Text style={styles.sectionTitle}>Order Summary</Text>
           <View style={styles.card}>
-            {cartItems.map((item) => (
+            {billLines.map((item) => (
               <View key={item.id} style={styles.cartRow}>
                 <Text style={styles.cartItemName} numberOfLines={1}>{item.name}</Text>
                 <Text style={styles.cartItemQty}>{item.quantity}x</Text>
-                <Text style={styles.cartItemTotal}>{formatKES(item.unitPriceCents * item.quantity)}</Text>
+                <Text style={styles.cartItemTotal}>{formatKES(item.totalCents)}</Text>
               </View>
             ))}
             <View style={styles.divider} />
@@ -736,7 +812,7 @@ export default function PaymentScreen() {
           <Text style={styles.sectionTitle}>Payment Method</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}
             contentContainerStyle={{ gap: 8, paddingHorizontal: 0 }}>
-            {PAYMENT_METHODS.map((m) => (
+            {(orderMode ? methodsForOrder(PAYMENT_METHODS) : PAYMENT_METHODS).map((m) => (
               <TouchableOpacity
                 key={m.key}
                 style={[styles.methodBtn, payMethod === m.key && { borderColor: m.color, borderWidth: 2, backgroundColor: m.color + '12' }]}
@@ -942,10 +1018,10 @@ export default function PaymentScreen() {
             )}
             <TouchableOpacity
               style={styles.newSaleBtn}
-              onPress={() => { setShowSuccess(false); setCompletedSale(null); router.replace('/(tabs)/pos' as any); }}
+              onPress={() => { setShowSuccess(false); setCompletedSale(null); router.replace((orderMode ? AFTER_ORDER_PAYMENT_ROUTE : '/(tabs)/pos') as any); }}
               activeOpacity={0.85}>
               <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
-              <Text style={styles.newSaleBtnText}>New Sale</Text>
+              <Text style={styles.newSaleBtnText}>{orderMode ? 'Back to tables' : 'New Sale'}</Text>
             </TouchableOpacity>
           </View>
         </View>

@@ -169,6 +169,8 @@ Trust boundaries in `hospitality` (the global `TenantGuard` already rejects a fo
   sale from the order's own lines (price plus priced modifiers, times quantity), links `Sale.orderId`
   (unique, so an order has at most one sale) and claims the order `OPEN`/`BILL_REQUESTED` -> `PAID`
   inside the sale's transaction, so a failure rolls back both and two tills cannot both pay it;
+  an optional `expectedTotalCents` makes it refuse (409) if the bill has moved on since the payer was shown it
+  (the phone sends it; the web till does not);
 - a PIN must be unique within a business (`assertPinAvailable`); a PIN shared before that
   rule logs nobody in without a `userId` (the staff picker passes it) and cannot attribute a manager override.
 

@@ -463,6 +463,19 @@ describe('SalesService.createSale paying an order', () => {
     expect(t.prisma.sale.create).not.toHaveBeenCalled();
   });
 
+  it('refuses to charge an amount the payer was not shown', async () => {
+    const { svc, dto, prisma } = ready(orderRow());
+    await expect(svc.createSale('biz-001', { ...dto, expectedTotalCents: 50_000 })).rejects.toThrow('bill changed');
+    expect(prisma.sale.create).not.toHaveBeenCalled();
+    expect(prisma.order.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('goes through when the shown total matches', async () => {
+    const { svc, dto, captured } = ready(orderRow());
+    await svc.createSale('biz-001', { ...dto, expectedTotalCents: 80_000 });
+    expect(captured.sale.totalCents).toBe(80_000);
+  });
+
   it('will not accept a payment that does not cover the order', async () => {
     const { svc, dto, prisma } = ready(orderRow(), [{ method: 'CASH', amountCents: 100 }]);
     await expect(svc.createSale('biz-001', dto)).rejects.toThrow('do not cover the total');

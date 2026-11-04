@@ -60,8 +60,14 @@ interface CreateSaleDto {
    *  Falls back to business.serviceChargeRate only when omitted (old clients). */
   serviceChargeCents?: number;
   tipCents?: number;
-  /** Hospitality order ID — if provided, mark it PAID and free its table after checkout */
+  /** Hospitality order ID. The sale is built from the order and the order is closed with it. */
   orderId?: string;
+  /**
+   * With `orderId`: the total the client showed the payer. If the bill has moved on since
+   * (a line added or voided on another screen) the checkout is refused so nobody pays an
+   * amount they were not shown. Optional, so tills that don't send it behave as before.
+   */
+  expectedTotalCents?: number;
 }
 
 /** "Pilau" or "Pilau (Extra cheese, No onion)": the modifiers travel with the line they priced. */
@@ -247,6 +253,12 @@ export class SalesService {
     const vatCents = store.business.taxType === 'VAT' ? calculateVAT(taxBase) : 0;
     const totCents = store.business.taxType === 'TOT' ? calculateTOT(taxBase, store.business.totRate ?? 3) : 0;
     const totalCents = taxBase + serviceChargeCents + tipCents;
+
+    if (order && dto.expectedTotalCents !== undefined && dto.expectedTotalCents !== totalCents) {
+      throw new ConflictException(
+        `The bill changed while you were paying: it is now ${totalCents} cents, not ${dto.expectedTotalCents}. Open the order again to check it.`,
+      );
+    }
 
     // A normal sale is paid for when it is rung up: what was tendered must cover
     // the total. Checkout used to store whatever payments it was handed, so a

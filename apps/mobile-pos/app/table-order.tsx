@@ -114,7 +114,10 @@ export default function TableOrderScreen() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['order', orderId] });
       qc.invalidateQueries({ queryKey: ['tables'] });
-      Alert.alert('Bill requested', 'Take payment on the POS screen to close the table.');
+      Alert.alert('Bill requested', 'Take payment now, or leave it until the guest is ready to pay.', [
+        { text: 'Later', style: 'cancel' },
+        { text: 'Take payment', onPress: goToPayment },
+      ]);
     },
     onError: (e: any) => Alert.alert('Could not request the bill', e?.message ?? 'Please try again.'),
   });
@@ -127,6 +130,11 @@ export default function TableOrderScreen() {
     },
     onError: (e: any) => Alert.alert('Could not cancel', e?.message ?? 'Please try again.'),
   });
+
+  // The payment screen bills the order itself and closes the table, so no cart is involved.
+  function goToPayment() {
+    router.push(`/payment?orderId=${orderId}` as any);
+  }
 
   const order = orderQ.data;
   const lines = order?.items ?? [];
@@ -256,6 +264,15 @@ export default function TableOrderScreen() {
                     <Text style={s.footBtnText}>Send {pending.length}</Text>
                   </>
                 )}
+              </TouchableOpacity>
+            ) : order?.status === 'BILL_REQUESTED' ? (
+              <TouchableOpacity
+                style={[s.footBtn, { backgroundColor: Colors.success }]}
+                onPress={goToPayment}
+                accessibilityLabel="Take payment for this table"
+              >
+                <Ionicons name="cash-outline" size={18} color="#FFF" />
+                <Text style={s.footBtnText}>Take payment</Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity

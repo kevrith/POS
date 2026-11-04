@@ -345,6 +345,16 @@ continue its order. Tables can be **merged**, **transferred** to another table, 
 keeps *orders* (what the kitchen is making) separate from *sales* (money that
 changed hands). The order becomes a sale when the bill is settled.
 
+**Taking payment on a phone.** On the table's order screen, tap **Bill** when the guest
+asks for it, then **Take payment** (it appears once the bill is requested, and you can
+also choose it straight from the "Bill requested" message). The checkout shows exactly
+what is on the table, with no cart involved, and the table is freed when payment goes
+through. If someone adds or voids a line on another screen while you are at the
+checkout, the payment is refused with a message and you reopen the order to see the new
+total, so nobody is charged an amount they were not shown. A table cannot be paid
+while offline, because the order has to be closed on the server; the phone tells you the
+table is still open instead of queuing the payment.
+
 **The bill is the order.** When you take payment for a table, the sale is built from
 what is on the order, at the prices it was taken at, with any priced extras included. It
 does not depend on what the till screen sends. The payments must cover the total, and

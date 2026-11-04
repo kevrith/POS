@@ -19,7 +19,7 @@ import { useActiveStoreOverride } from '../../stores/activeStore';
 import { canManage, canManageBusiness, canSeeFinance } from '../../lib/roles';
 import { usePosMode } from '../../lib/usePosMode';
 import { useApprovals } from '../../lib/useApprovals';
-import { isVisibleForMode, type PosMode } from '../../lib/posMode';
+import { isVisibleForMode, type OptionalModule, type PosMode } from '../../lib/posMode';
 import { Colors } from '../../constants/theme';
 
 interface SalesReportResp {
@@ -56,6 +56,8 @@ interface NavCard {
   finance?: boolean;
   /** Business types this belongs to; omitted = every vertical. */
   modes?: readonly PosMode[];
+  /** Optional modules that also reveal it (e.g. a fuel station that enabled RESTAURANT). */
+  modules?: readonly OptionalModule[];
 }
 
 const NAV_CARDS: NavCard[] = [
@@ -76,8 +78,8 @@ const NAV_CARDS: NavCard[] = [
   { key: 'damaged', group: 'Stock', title: 'Damaged Goods', desc: 'Log breakages & write-offs', icon: 'trash-outline', color: Colors.error, route: '/manage-damaged' },
 
   // ── Service (mode-specific) ──
-  { key: 'tables', group: 'Service', title: 'Tables', desc: 'Floor status & open bills', icon: 'grid-outline', color: '#F97316', route: '/manage-tables', modes: ['HOSPITALITY', 'FAST_FOOD', 'BAR_TAB'] },
-  { key: 'kitchen', group: 'Service', title: 'Kitchen Display', desc: 'Live tickets & mark ready', icon: 'restaurant-outline', color: '#EA580C', route: '/manage-kitchen', modes: ['HOSPITALITY', 'FAST_FOOD', 'BAR_TAB'] },
+  { key: 'tables', group: 'Service', title: 'Tables', desc: 'Floor status & open bills', icon: 'grid-outline', color: '#F97316', route: '/manage-tables', modes: ['HOSPITALITY', 'FAST_FOOD', 'BAR_TAB'], modules: ['RESTAURANT'] },
+  { key: 'kitchen', group: 'Service', title: 'Kitchen Display', desc: 'Live tickets & mark ready', icon: 'restaurant-outline', color: '#EA580C', route: '/manage-kitchen', modes: ['HOSPITALITY', 'FAST_FOOD', 'BAR_TAB'], modules: ['RESTAURANT'] },
 
   // ── People ──
   { key: 'hr', group: 'People', title: 'Team & Attendance', desc: 'Who is clocked in today', icon: 'time-outline', color: '#0D9488', route: '/manage-attendance' },
@@ -88,7 +90,7 @@ const NAV_CARDS: NavCard[] = [
 export default function ManageScreen() {
   const router = useRouter();
   const role = useAuthStore((s) => s.user?.role);
-  const { mode, label: modeLabel } = usePosMode();
+  const { mode, modules, label: modeLabel } = usePosMode();
   const { items: approvals } = useApprovals();
   const { businessId, storeId, stores } = useActiveStore();
   const setOverride = useActiveStoreOverride((s) => s.setOverride);
@@ -138,7 +140,7 @@ export default function ManageScreen() {
    * must only ever see the money tiles — never stock or staff.
    */
   const cards = NAV_CARDS.filter((c) => {
-    if (!isVisibleForMode(c.modes, mode)) return false;
+    if (!isVisibleForMode(c.modes, mode, { enabled: modules, modules: c.modules })) return false;
     if (c.ownerOnly) return canManageBusiness(role);
     if (!canManage(role)) return !!c.finance && canSeeFinance(role);
     return true;

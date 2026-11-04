@@ -203,7 +203,8 @@ export default function LoginScreen() {
       await SecureStore.setItemAsync('pos_token', token);
       setAuth(data.user, token);
       void syncPushToken(data.user.id);
-      router.replace('/(tabs)/pos');
+      // A kitchen account has one screen, so it signs straight in to the tickets.
+      router.replace(data.user.role === 'KITCHEN' ? ('/manage-kitchen' as any) : '/(tabs)/pos');
     } catch (e: any) {
       Alert.alert('Login Failed', friendlyError(e, 'Incorrect PIN. Please try again.'));
       setPin('');
@@ -240,7 +241,8 @@ export default function LoginScreen() {
       await SecureStore.setItemAsync('pos_token', token);
       setAuth(data.user, token);
       void syncPushToken(data.user.id);
-      router.replace('/(tabs)/pos');
+      // A kitchen account has one screen, so it signs straight in to the tickets.
+      router.replace(data.user.role === 'KITCHEN' ? ('/manage-kitchen' as any) : '/(tabs)/pos');
     } catch (e: any) {
       Alert.alert('Login Failed', friendlyError(e, 'Invalid email or password.'));
     } finally {

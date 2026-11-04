@@ -86,6 +86,11 @@ Modes: `RETAIL` `SUPERMARKET` `HOSPITALITY` `FAST_FOOD` `BAR_TAB` `FUEL_PUMP`
 Capabilities: `tables` `kitchen` `serviceCharge` `pumps` `appointments`
 `prescriptions` `layaway` `batches` `recipes` `delivery`.
 
+A business can also switch on **optional modules** next to its main till (web
+Settings, "Also run"). `RESTAURANT` adds the `tables` and `kitchen` capabilities to any
+mode, so a fuel station with a restaurant keeps its pump flow and gains the Tables and
+Kitchen tiles. The list comes from `enabledModules` on the business settings.
+
 Adding a vertical is **one row in the map**, not an `if` scattered across a dozen
 screens. Cybercafé stations are deliberately excluded — they sit at a fixed counter
 that already runs the web app.
@@ -133,6 +138,11 @@ Code map (`lib/`):
 
 - `escpos.ts`, `receiptModel.ts`, `receiptHtml.ts`, `printerConfig.ts`, `printDispatch.ts`:
   **pure TypeScript**, unit-tested in `__tests__/printing.test.ts` with fake transports.
+  The receipt layout itself is `@pos/print-core` (shared with the web app); `receiptModel.ts#toReceiptDocument`
+  adapts the screen's receipt to it, so mobile receipts carry the KRA eTIMS control number and QR code,
+  PENDING / VOID banners and a COPY banner on every print after the first. After a sale, `payment.tsx` registers it
+  with KRA (`POST /etims/submit/:id`, 8 s cap) before the receipt prints; if KRA cannot be reached the receipt says
+  PENDING and the batch submit picks it up.
 - `printTransport.ts`: the only file that touches native modules. They are loaded
   lazily inside each call, so a binary built before they existed (the app also gets OTA
   updates) still starts and only shows "update the app" when someone tries to print.

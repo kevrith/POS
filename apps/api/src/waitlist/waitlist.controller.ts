@@ -1,40 +1,53 @@
 import { Feature } from '@pos/shared';
 import { RequiresFeature } from '../auth/subscription.guard';
-import { Controller, Get, Post, Patch, Body, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, Req, UseGuards } from '@nestjs/common';
+import type { Request } from 'express';
+import type { AuthUser } from '../auth/auth.service';
 import { WaitlistService } from './waitlist.service';
+import { HospitalityAccessGuard } from '../hospitality/hospitality-access.guard';
 
+type AuthedRequest = Request & { user: AuthUser };
+
+@UseGuards(HospitalityAccessGuard)
 @RequiresFeature(Feature.WAITLIST)
 @Controller('hospitality/waitlist')
 export class WaitlistController {
   constructor(private readonly svc: WaitlistService) {}
 
   @Get()
-  list(@Query('businessId') businessId: string, @Query('storeId') storeId: string, @Query('status') status: string) {
-    return this.svc.list(businessId, storeId, status);
+  list(@Req() req: AuthedRequest, @Query('storeId') storeId: string, @Query('status') status: string) {
+    return this.svc.list(req.user.businessId, storeId, status);
   }
 
   @Post()
-  add(@Body() dto: any) {
-    return this.svc.add(dto);
+  add(@Req() req: AuthedRequest, @Body() dto: {
+    storeId: string;
+    customerName: string;
+    customerPhone?: string;
+    partySize: number;
+    notes?: string;
+    estimatedWaitMinutes?: number;
+  }) {
+    return this.svc.add(dto, req.user.businessId);
   }
 
   @Patch(':id/seat')
-  seat(@Param('id') id: string, @Body('tableId') tableId?: string) {
-    return this.svc.seat(id, tableId);
+  seat(@Req() req: AuthedRequest, @Param('id') id: string, @Body('tableId') tableId?: string) {
+    return this.svc.seat(id, req.user.businessId, tableId);
   }
 
   @Patch(':id/notify')
-  notify(@Param('id') id: string) {
-    return this.svc.notify(id);
+  notify(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.svc.notify(id, req.user.businessId);
   }
 
   @Patch(':id/cancel')
-  cancel(@Param('id') id: string) {
-    return this.svc.cancel(id);
+  cancel(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.svc.cancel(id, req.user.businessId);
   }
 
   @Patch(':id/no-show')
-  noShow(@Param('id') id: string) {
-    return this.svc.noShow(id);
+  noShow(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.svc.noShow(id, req.user.businessId);
   }
 }

@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import * as bcrypt from 'bcrypt';
+import { usersWithPin } from './pin.util';
 import * as speakeasy from 'speakeasy';
 import { UserRole } from '@pos/shared';
 
@@ -256,13 +257,15 @@ export class AuthService {
       ? await this.prisma.user.findMany({ where: { id: userId, businessId, pinHash: { not: null } } })
       : await this.prisma.user.findMany({ where: { businessId, pinHash: { not: null } } });
 
-    let matchedUser: (typeof users)[0] | undefined;
-    for (const u of users) {
-      if (u.pinHash && (await bcrypt.compare(pin, u.pinHash))) {
-        matchedUser = u;
-        break;
-      }
+    const matches = await usersWithPin(users, pin);
+
+    // Two people with the same PIN and no name to tell them apart: signing in as
+    // whichever came first would put one person's actions on the other's account.
+    // Ask for the name instead (the staff picker passes userId).
+    if (matches.length > 1) {
+      throw new BadRequestException('More than one person has this PIN. Choose your name first, then enter your PIN.');
     }
+    const matchedUser = matches[0];
 
     if (!matchedUser) {
       this.recordPinFailure(businessId);
@@ -626,11 +629,12 @@ export class AuthService {
       },
     });
 
-    for (const user of users) {
-      if (user.pinHash && (await bcrypt.compare(pin, user.pinHash))) {
-        return { userId: user.id, name: user.name };
-      }
+    const matches = await usersWithPin(users, pin);
+    // An override is recorded against the manager who gave it, so it must be one person.
+    if (matches.length > 1) {
+      throw new BadRequestException('Two managers share this PIN, so the override cannot be attributed. Ask the owner to give each manager their own PIN.');
     }
+    if (matches[0]) return { userId: matches[0].id, name: matches[0].name };
 
     throw new BadRequestException('Invalid manager PIN. Check the PIN and try again.');
   }

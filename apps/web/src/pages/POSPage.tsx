@@ -106,12 +106,20 @@ export default function POSPage() {
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [printNotice, setPrintNotice] = useState('');
+  /** How many times each receipt has reached a printer on this terminal; the second print is a marked copy. */
+  const printsRef = useRef<Record<string, number>>({});
 
   /** Print button: use the printer configured in Settings; only show the picker when none is set or it fails. */
   async function handlePrintClick() {
     if (!receiptData) return;
     try {
-      if (await printWithPreferredPrinter(receiptData, enableCashDrawer)) return;
+      // A second print of the same sale is a copy: marked as such, and it never opens the cash drawer.
+      const copies = printsRef.current[receiptData.receiptNumber] ?? 0;
+      const toPrint = copies > 0 ? { ...receiptData, copyNumber: copies } : receiptData;
+      if (await printWithPreferredPrinter(toPrint, enableCashDrawer)) {
+        printsRef.current[receiptData.receiptNumber] = copies + 1;
+        return;
+      }
     } catch (err) {
       setPrintNotice(`Could not print: ${printErrorMessage(err)}`);
     }
@@ -537,7 +545,9 @@ export default function POSPage() {
           // Enterprise flow: print silently to the printer configured for this
           // terminal (Settings → Printers). Falls back to the picker only if the
           // device is unavailable, so a receipt is never silently lost.
-          void autoPrintReceipt(printReceipt, enableCashDrawer).catch((err) => {
+          void autoPrintReceipt(printReceipt, enableCashDrawer).then((printed) => {
+            if (printed) printsRef.current[printReceipt.receiptNumber] = 1;
+          }).catch((err) => {
             setPrintNotice(`Auto-print failed: ${printErrorMessage(err)}`);
             setReceiptData(printReceipt);
             setShowPrintModal(true);

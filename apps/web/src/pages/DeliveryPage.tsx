@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { formatKES } from '@pos/shared';
 import { Plus, Truck, MapPin, User, Clock, CheckCircle, XCircle, Package } from 'lucide-react';
+import { printHtml } from '../lib/printHtml';
 
 interface DeliveryOrder {
   id: string;
@@ -106,10 +107,8 @@ export default function DeliveryPage() {
   const resetForm = () => setForm({ customerName: '', customerPhone: '', deliveryAddress: '', driverId: '', scheduledAt: '', deliveryFeeCents: 0, notes: '' });
 
   const handlePrint = (d: DeliveryOrder) => {
-    const win = window.open('', '_blank', 'width=400,height=500');
-    if (!win) return;
     const driverName = users.find((u) => u.id === d.driverId)?.name ?? 'Unassigned';
-    win.document.write(`<html><head><title>Delivery Note ${d.orderNumber}</title>
+    printHtml(`<html><head><title>Delivery Note ${d.orderNumber}</title>
     <style>body{font-family:monospace;font-size:12px;padding:12px}h2{text-align:center}hr{margin:8px 0}</style>
     </head><body>
     <h2>DELIVERY NOTE</h2>
@@ -122,9 +121,6 @@ export default function DeliveryPage() {
     ${d.notes ? `<hr/><p>${d.notes}</p>` : ''}
     <hr/><p style="margin-top:24px">${d.status === 'DELIVERED' && d.receivedBy ? `Received by: <b>${d.receivedBy}</b> &nbsp; Date: <b>${d.deliveredAt ? new Date(d.deliveredAt).toLocaleString() : ''}</b>` : 'Received by: _____________________ Date: _________'}</p>
     </body></html>`);
-    win.document.close();
-    win.onafterprint = () => win.close();
-    win.print();
   };
 
   const canManage = user?.role === 'OWNER' || user?.role === 'MANAGER';

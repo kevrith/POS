@@ -1,4 +1,6 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useDialog } from '../components/Dialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -12,6 +14,7 @@ import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import PaymentModal from '../components/PaymentModal';
 import { printKOT, printBill, printKOTWithRouting } from '../lib/printer';
+import { reportKotPrint } from '../lib/kotPrintFeedback';
 import type { KOTData } from '../lib/printer';
 import { calculateVAT, calculateTOT } from '@pos/shared';
 
@@ -36,6 +39,8 @@ interface OrderItem {
   name: string;
   quantity: number;
   unitPriceCents: number;
+  /** Saved lines carry the server's total: price plus any priced modifiers, times quantity. */
+  totalCents?: number;
   specialInstructions?: string;
   modifiers?: string | string[];
   kotSent?: boolean;
@@ -51,7 +56,7 @@ interface HospOrder {
   totalCents: number;
   items: OrderItem[];
   createdAt: string;
-  kots?: Array<{ id: string; status: string; type: string; createdAt: string }>;
+  kots?: Array<{ id: string; kotNumber?: number; station?: string; status: string; type: string; createdAt: string }>;
   coverCount?: number;
   tableNotes?: string;
 }
@@ -60,9 +65,16 @@ interface MenuItem {
   id: string;
   name: string;
   retailPriceCents: number;
-  category?: string;
+  /** The items API returns the category as { id, name, color }; older rows may be a plain string. */
+  category?: string | { name?: string } | null;
   sku?: string;
   allergens?: string; // JSON array string
+  /** KITCHEN / BAR / DESSERT, set on the item; empty means "guess from name". */
+  station?: string | null;
+}
+
+function categoryName(c: MenuItem['category']): string | undefined {
+  return typeof c === 'string' ? c : c?.name;
 }
 
 interface Reservation {
@@ -75,22 +87,6 @@ interface Reservation {
   status: string;
   notes?: string;
   table: { number: string; capacity: number };
-}
-
-interface KdsItem {
-  id: string;
-  kotNumber: number;
-  status: string;
-  createdAt: string;
-  assignedChef?: { id: string; name: string } | null;
-  estimatedReadyAt?: string;
-  estimatedPrepMinutes?: number;
-  order: {
-    id: string;
-    table: { number: string } | null;
-    waiter?: { id: string; name: string } | null;
-    items: Array<{ id: string; name: string; quantity: number; specialInstructions?: string | null }>;
-  };
 }
 
 type PendingItem = {
@@ -201,6 +197,11 @@ const COMMON_MODIFIERS = [
 const fmt = (cents: number) =>
   `KES ${(cents / 100).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+/** What a line costs: the server's total once saved (it includes priced modifiers), else price x quantity. */
+function lineTotal(i: { unitPriceCents: number; quantity: number; totalCents?: number }): number {
+  return i.totalCents ?? i.unitPriceCents * i.quantity;
+}
+
 function uuid(): string {
   return crypto.randomUUID();
 }
@@ -283,7 +284,7 @@ function ItemPicker({ businessId, storeId, coverCount = 1, onAdd, onClose }: Ite
   );
 
   const grouped = filtered.reduce<Record<string, MenuItem[]>>((acc, item) => {
-    const cat = item.category ?? 'Other';
+    const cat = categoryName(item.category) ?? 'Other';
     if (!acc[cat]) acc[cat] = [];
     acc[cat].push(item);
     return acc;
@@ -729,7 +730,7 @@ function FastFoodPanel({ businessId, storeId, userId, userName, onClose }: FastF
   const [isBusy, setIsBusy] = useState(false);
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
 
-  const subtotal = pendingItems.reduce((s, i) => s + i.unitPriceCents * i.quantity, 0);
+  const subtotal = pendingItems.reduce((s, i) => s + lineTotal(i), 0);
 
   function handleAddFromPicker(item: MenuItem, qty: number, note: string, modifiers: string[]) {
     setPendingItems((prev) => {
@@ -856,7 +857,7 @@ function FastFoodPanel({ businessId, storeId, userId, userName, onClose }: FastF
                   )}
                 </div>
                 <span className="text-sm font-bold text-amber-800 whitespace-nowrap">
-                  {fmt(item.unitPriceCents * item.quantity)}
+                  {fmt(lineTotal(item))}
                 </span>
                 <button
                   onClick={() => setPendingItems((prev) => prev.filter((_, i) => i !== idx))}
@@ -982,8 +983,8 @@ function SplitBillModal({ order, table, tablePrefix, businessId, storeId, userId
 
   const unassigned = order.items.filter((i) => !assignments[i.id] || assignments[i.id] === 0);
   const allAssigned = unassigned.length === 0;
-  const guestTotal = (g: number) => (guestGroups[g] ?? []).reduce((s, i) => s + i.unitPriceCents * i.quantity, 0);
-  const orderTotal = order.items.reduce((s, i) => s + i.unitPriceCents * i.quantity, 0);
+  const guestTotal = (g: number) => (guestGroups[g] ?? []).reduce((s, i) => s + lineTotal(i), 0);
+  const orderTotal = order.items.reduce((s, i) => s + lineTotal(i), 0);
 
   function toggleAssign(itemId: string) {
     setAssignments((prev) => ({ ...prev, [itemId]: activeGuest }));
@@ -1147,7 +1148,7 @@ function SplitBillModal({ order, table, tablePrefix, businessId, storeId, userId
                         <span className="text-sm text-gray-800 truncate">{item.quantity}× {item.name}</span>
                       </div>
                       <span className="text-sm font-bold text-gray-700 flex-shrink-0 ml-2">
-                        {fmt(item.unitPriceCents * item.quantity)}
+                        {fmt(lineTotal(item))}
                       </span>
                     </button>
                   );
@@ -1212,7 +1213,7 @@ function SplitBillModal({ order, table, tablePrefix, businessId, storeId, userId
                         {sub.items.map((item) => (
                           <div key={item.id} className="flex justify-between text-sm py-1.5">
                             <span className="text-gray-700">{item.quantity}× {item.name}</span>
-                            <span className="text-gray-600 font-medium">{fmt(item.unitPriceCents * item.quantity)}</span>
+                            <span className="text-gray-600 font-medium">{fmt(lineTotal(item))}</span>
                           </div>
                         ))}
                       </div>
@@ -1308,6 +1309,8 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
     staleTime: 5 * 60_000,
   });
   const allergenLookup = new Map(menuItemsForAllergens.map(i => [i.id, i.allergens ?? '[]']));
+  // Which station makes each item, so drinks go to the bar printer and not the kitchen's.
+  const routingLookup = new Map(menuItemsForAllergens.map(i => [i.id, { category: categoryName(i.category), station: i.station ?? undefined }]));
 
   const { data: order, isLoading: orderLoading, refetch: refetchOrder } = useQuery<HospOrder | null>({
     queryKey: ['hosp-order', table.id],
@@ -1374,13 +1377,15 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
 
   const voidItemMutation = useMutation({
     mutationFn: ({ orderId, itemId, reason }: { orderId: string; itemId: string; reason: string }) =>
-      api.patch(`/hospitality/orders/${orderId}/items/${itemId}/void`, { reason, managerId: user?.id ?? '' }),
+      api.patch(`/hospitality/orders/${orderId}/items/${itemId}/void`, { reason }),
     onSuccess: () => {
       setVoidingItemId(null);
       setVoidReason('');
       void refetchOrder();
       void qc.invalidateQueries({ queryKey: ['hospitality-orders'] });
     },
+    // Voiding something the kitchen already has needs a manager; say so rather than failing silently.
+    onError: (err: unknown) => toast.error(err instanceof Error ? err.message : 'Could not void the item'),
   });
 
   const sendKOTMutation = useMutation({
@@ -1415,7 +1420,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
           name: i.name,
           quantity: i.quantity,
           unitPriceCents: i.unitPriceCents,
-          totalCents: i.unitPriceCents * i.quantity,
+          totalCents: lineTotal(i),
         }));
         printBill({
           tableNumber: table.number,
@@ -1502,7 +1507,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
     ...(activeOrder?.items ?? []),
     ...pendingItems.map((p) => ({ ...p, id: `pending-${p.itemId}-${Math.random()}`, kotSent: false })),
   ];
-  const subtotal = allItems.reduce((s, i) => s + i.unitPriceCents * i.quantity, 0);
+  const subtotal = allItems.reduce((s, i) => s + lineTotal(i), 0);
   const hasPendingItems = pendingItems.length > 0;
 
   const availableForTransfer = allTables.filter((t) => t.id !== table.id && t.status === 'AVAILABLE');
@@ -1543,7 +1548,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
 
     let orderId: string;
     let orderType: 'NEW_ORDER' | 'ADDITION';
-    let kotItems: Array<{ name: string; quantity: number; specialInstructions?: string; modifiers?: string[] }>;
+    let kotItems: Array<{ itemId?: string; name: string; quantity: number; specialInstructions?: string; modifiers?: string[] }>;
 
     let kotItemIds: string[] | undefined;
 
@@ -1566,6 +1571,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
       } else {
         orderType = 'NEW_ORDER';
         kotItems = activeOrder.items.map((i) => ({
+          itemId: i.itemId,
           name: i.name,
           quantity: i.quantity,
           specialInstructions: i.specialInstructions,
@@ -1580,11 +1586,11 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
     const kotData: KOTData = {
       tableNumber: table.number,
       orderType,
-      items: kotItems,
+      items: kotItems.map(({ itemId, ...line }) => ({ ...line, ...(itemId ? routingLookup.get(itemId) : undefined) })),
       createdAt: new Date().toISOString(),
       waiterName: userName ?? user?.name,
     };
-    printKOTWithRouting(kotData, printers);
+    void printKOTWithRouting(kotData, printers).then(reportKotPrint);
   }
 
   const isBusy =
@@ -1773,7 +1779,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
                               )}
                             </div>
                             <span className="text-sm font-bold text-gray-800 whitespace-nowrap">
-                              {fmt(item.unitPriceCents * item.quantity)}
+                              {fmt(lineTotal(item))}
                             </span>
                             {table.status !== 'BILL_REQUESTED' && (
                               <button
@@ -1846,7 +1852,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
                     )}
                   </div>
                   <span className="text-sm font-bold text-amber-800 whitespace-nowrap">
-                    {fmt(item.unitPriceCents * item.quantity)}
+                    {fmt(lineTotal(item))}
                   </span>
                   <button
                     onClick={() => setPendingItems((prev) => prev.filter((_, i) => i !== idx))}
@@ -1917,7 +1923,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
                     name: i.name,
                     quantity: i.quantity,
                     unitPriceCents: i.unitPriceCents,
-                    totalCents: i.unitPriceCents * i.quantity,
+                    totalCents: lineTotal(i),
                   })),
                   subtotalCents: subtotal,
                   totalCents: subtotal,
@@ -1972,7 +1978,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
                                                        'bg-orange-400'
                       }`} />
                       <span className="text-xs text-gray-600 truncate">
-                        {kot.type.replace('_', ' ')}
+                        {kot.kotNumber ? `#${kot.kotNumber} ` : ''}{kot.station === 'BAR' ? 'Bar' : kot.station === 'DESSERT' ? 'Dessert' : 'Kitchen'} · {kot.type.replace('_', ' ').toLowerCase()}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
@@ -2181,159 +2187,15 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
   );
 }
 
-// ─── KDS View ─────────────────────────────────────────────────────────────────
-
-interface KDSViewProps {
-  storeId: string;
-  onClose: () => void;
-  tablePrefix?: string;
-}
-
-function KDSView({ storeId, onClose, tablePrefix = 'T' }: KDSViewProps) {
-  const qc = useQueryClient();
-
-  const { data: kdsOrders = [], isLoading } = useQuery<KdsItem[]>({
-    queryKey: ['kds', storeId],
-    queryFn: () => api.get<KdsItem[]>(`/hospitality/kds/orders?storeId=${storeId}`),
-    refetchInterval: 10000,
-    enabled: !!storeId,
-  });
-
-  const updateKOT = useMutation({
-    mutationFn: (vars: { kotId: string; status: string }) =>
-      api.patch(`/hospitality/kot/${vars.kotId}/status`, { status: vars.status }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['kds'] }),
-  });
-
-  return (
-    <div className="fixed inset-0 bg-gray-900 z-50 flex flex-col">
-      <div className="flex items-center justify-between px-3 sm:px-6 py-4 bg-gray-800 border-b border-gray-700">
-        <div className="flex items-center gap-3">
-          <ChefHat className="w-6 h-6 text-orange-400" />
-          <h2 className="text-xl font-bold text-white">Kitchen Display</h2>
-          <span className="bg-orange-500 text-white text-xs px-2 py-1 rounded-full">
-            {kdsOrders.length} orders
-          </span>
-        </div>
-        <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-700 text-gray-400 hover:text-white">
-          <X className="w-5 h-5" />
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-6">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-10 h-10 text-orange-400 animate-spin" />
-          </div>
-        ) : kdsOrders.length === 0 ? (
-          <div className="text-center py-20">
-            <ChefHat className="w-16 h-16 mx-auto text-gray-600 mb-4" />
-            <p className="text-gray-400 text-lg font-medium">No pending orders</p>
-            <p className="text-gray-600 text-sm mt-1">Kitchen is all caught up!</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {kdsOrders.map((kds) => {
-              const age = Math.floor((Date.now() - new Date(kds.createdAt).getTime()) / 60000);
-              const isOld = age >= 15;
-              return (
-                <div
-                  key={kds.id}
-                  className={`rounded-xl border-2 p-4 ${
-                    kds.status === 'READY' ? 'border-green-500 bg-green-900/20' :
-                    isOld ? 'border-red-500 bg-red-900/20 animate-pulse' :
-                    'border-orange-400 bg-orange-900/20'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <span className="text-white font-bold text-lg">{kds.order.table?.number ? fmtTable(kds.order.table.number, tablePrefix) : '?'}</span>
-                      <span className="ml-2 text-xs text-gray-400">
-                        {new Date(kds.createdAt).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {isOld && <span className="text-xs text-red-400 font-bold">{age}m</span>}
-                      <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
-                        kds.status === 'READY' ? 'bg-green-600 text-white' :
-                        kds.status === 'IN_PROGRESS' ? 'bg-orange-500 text-white' :
-                        'bg-gray-600 text-gray-200'
-                      }`}>
-                        {kds.status}
-                      </span>
-                    </div>
-                  </div>
-                  {kds.assignedChef && (
-                    <div className="text-xs text-yellow-600 flex items-center gap-1 mb-2">
-                      <ChefHat className="w-3 h-3" /> {kds.assignedChef.name}
-                    </div>
-                  )}
-                  {kds.estimatedReadyAt && kds.status === 'IN_PROGRESS' && (
-                    <div className="text-xs text-blue-600 mb-2">
-                      Ready ~{new Date(kds.estimatedReadyAt).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                  )}
-
-                  <div className="space-y-2 mb-4">
-                    {kds.order.items.map((item, idx) => (
-                      <div key={idx} className="flex items-start gap-2">
-                        <span className="text-orange-300 font-bold text-sm w-6">{item.quantity}×</span>
-                        <div>
-                          <span className="text-white text-sm font-medium">{item.name}</span>
-                          {item.specialInstructions && (
-                            <p className="text-amber-300 text-xs mt-0.5 flex items-center gap-1">
-                              <AlertCircle className="w-3 h-3" />
-                              {item.specialInstructions}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="flex gap-2">
-                    {kds.status === 'PENDING' && (
-                      <button
-                        onClick={() => updateKOT.mutate({ kotId: kds.id, status: 'IN_PROGRESS' })}
-                        className="flex-1 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors"
-                      >
-                        Start
-                      </button>
-                    )}
-                    {kds.status === 'IN_PROGRESS' && (
-                      <button
-                        onClick={() => updateKOT.mutate({ kotId: kds.id, status: 'READY' })}
-                        className="flex-1 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium transition-colors"
-                      >
-                        Ready
-                      </button>
-                    )}
-                    {kds.status === 'READY' && (
-                      <div className="flex-1 py-2 bg-green-900/30 border border-green-500/40 text-green-400 rounded-lg text-xs font-semibold text-center flex items-center justify-center gap-1.5">
-                        <CheckCircle className="w-3.5 h-3.5" />
-                        At the pass
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function HospitalityPage() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const { confirm } = useDialog();
   const [view, setView] = useState<'tables' | 'bar-tabs' | 'rooms'>('tables');
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
-  const [showKDS, setShowKDS] = useState(false);
   const [showReservations, setShowReservations] = useState(false);
   const [showFastFood, setShowFastFood] = useState(false);
   const [filterStatus, setFilterStatus] = useState<Table['status'] | 'ALL'>('ALL');
@@ -2738,7 +2600,7 @@ export default function HospitalityPage() {
               Happy Hours
             </button>
             <button
-              onClick={() => setShowKDS(true)}
+              onClick={() => navigate('/kds')}
               className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors"
             >
               <ChefHat className="w-4 h-4" />
@@ -4197,11 +4059,6 @@ export default function HospitalityPage() {
           tablePrefix={tablePrefix}
           onClose={() => setShowReservations(false)}
         />
-      )}
-
-      {/* KDS View */}
-      {showKDS && (
-        <KDSView storeId={storeId} tablePrefix={tablePrefix} onClose={() => setShowKDS(false)} />
       )}
 
       {/* ── Add Table Modal ─────────────────────────────────────────────────── */}

@@ -9,7 +9,12 @@
 
 export type TableStatus = 'AVAILABLE' | 'OCCUPIED' | 'BILL_REQUESTED' | 'RESERVED';
 
-export type KotStatus = 'PENDING' | 'IN_PROGRESS' | 'READY' | 'SERVED';
+export type KotStatus = 'PENDING' | 'IN_PROGRESS' | 'READY' | 'SERVED' | 'CANCELLED';
+
+/** The preparation area that makes a ticket's items. Mirrors KOT_STATIONS in @pos/shared. */
+export type KotStation = 'KITCHEN' | 'BAR' | 'DESSERT';
+export const KOT_STATIONS: readonly KotStation[] = ['KITCHEN', 'BAR', 'DESSERT'];
+export const STATION_LABELS: Record<KotStation, string> = { KITCHEN: 'Kitchen', BAR: 'Bar', DESSERT: 'Dessert' };
 
 export interface FloorTable {
   id: string;
@@ -31,16 +36,33 @@ export interface OrderLine {
   unitPriceCents: number;
   totalCents: number;
   specialInstructions?: string | null;
+  /** JSON list of modifier names, or of { name, priceCents } objects. */
+  modifiers?: string | null;
   course?: string | null;
+  seatNumber?: number | null;
+  /** Stamped when the line goes onto a kitchen ticket. (`firedAt` is the course-fire marker; not this.) */
+  sentToKitchenAt?: string | null;
   firedAt?: string | null;
 }
 
-export interface KitchenTicket {
+/** One kitchen ticket as the displays receive it (GET /hospitality/kds/orders). */
+export interface KdsTicket {
   id: string;
+  kotNumber: number;
+  type: string;
+  station: KotStation;
+  status: string;
   createdAt: string;
-  table?: { number: string } | null;
-  waiter?: { name: string } | null;
-  items: OrderLine[];
+  assignedChef?: { id: string; name: string } | null;
+  order: {
+    id: string;
+    isVIP?: boolean;
+    priority?: number;
+    roomNumber?: string | null;
+    table?: { number: string } | null;
+    waiter?: { name: string } | null;
+    items: OrderLine[];
+  };
 }
 
 /** Normalise whatever the API sends into a known status. */
@@ -118,13 +140,15 @@ export function orderTotalCents(lines: OrderLine[]): number {
 }
 
 /**
- * Lines added since the last KOT — i.e. what "Send to kitchen" would fire.
+ * Lines added since the last KOT — i.e. what "Send to kitchen" would send.
  *
- * `firedAt` is stamped when a line goes to the kitchen, so anything still null
- * has never been sent. Firing an already-fired line would cook it twice.
+ * `sentToKitchenAt` is stamped by the server when a line goes onto a ticket, so
+ * anything still null has never been sent. Sending a sent line would cook it
+ * twice. (This used to read `firedAt`, which the ticket never set: the line kept
+ * reading "not sent" after it had been, and a second tap made a duplicate.)
  */
-export function unfiredLines(lines: OrderLine[]): OrderLine[] {
-  return lines.filter((l) => !l.firedAt);
+export function unsentLines(lines: OrderLine[]): OrderLine[] {
+  return lines.filter((l) => !l.sentToKitchenAt);
 }
 
 /** Minutes a ticket has been waiting, for the kitchen's ageing colour. */
@@ -159,4 +183,59 @@ export function buildAddItemsPayload(
       unitPriceCents: p.unitPriceCents,
       ...(p.note?.trim() ? { specialInstructions: p.note.trim() } : {}),
     }));
+}
+
+/** Modifiers are stored as a JSON list of names or of { name, priceCents } objects. */
+export function modifierNames(raw?: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const list = JSON.parse(raw) as Array<string | { name?: string }>;
+    return Array.isArray(list)
+      ? list.map((m) => (typeof m === 'string' ? m : m?.name ?? '')).filter(Boolean)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Where a ticket is going: the table, the room, or the counter. */
+export function ticketLocation(t: Pick<KdsTicket, 'order'>): string {
+  if (t.order.table?.number) return `Table ${t.order.table.number}`;
+  if (t.order.roomNumber) return `Room ${t.order.roomNumber}`;
+  return 'Takeaway';
+}
+
+/** Tickets for one station, or all of them. */
+export function ticketsForStation(tickets: KdsTicket[], station: KotStation | 'ALL'): KdsTicket[] {
+  return station === 'ALL' ? tickets : tickets.filter((t) => t.station === station);
+}
+
+export interface TicketAction {
+  label: string;
+  to: KotStatus;
+  tone: 'primary' | 'success' | 'neutral';
+}
+
+/**
+ * The buttons a ticket offers, in order. Mirrors the server's transition table:
+ * a bar has nothing to cook so a drink goes straight to ready; a ready ticket can
+ * be recalled; only non-kitchen roles may mark it served (the cook's job ends at
+ * the pass).
+ */
+export function ticketActions(t: Pick<KdsTicket, 'status' | 'station'>, role?: string | null): TicketAction[] {
+  switch (t.status) {
+    case 'PENDING':
+      return t.station === 'BAR'
+        ? [{ label: 'Mark ready', to: 'READY', tone: 'success' }]
+        : [{ label: 'Start cooking', to: 'IN_PROGRESS', tone: 'primary' }];
+    case 'IN_PROGRESS':
+      return [{ label: 'Mark ready', to: 'READY', tone: 'success' }];
+    case 'READY': {
+      const out: TicketAction[] = [{ label: 'Recall', to: 'IN_PROGRESS', tone: 'neutral' }];
+      if ((role ?? '').toUpperCase() !== 'KITCHEN') out.push({ label: 'Served', to: 'SERVED', tone: 'success' });
+      return out;
+    }
+    default:
+      return [];
+  }
 }

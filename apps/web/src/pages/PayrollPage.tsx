@@ -9,6 +9,7 @@ import {
 import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
+import { printHtml } from '../lib/printHtml';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -161,14 +162,7 @@ function printPayslips(run: PayrollRun) {
     </html>
   `;
 
-  const win = window.open('', '_blank');
-  if (win) {
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    win.onafterprint = () => win.close();
-    win.print();
-  }
+  printHtml(html);
 }
 
 // ─── Payslip Detail Table ─────────────────────────────────────────────────────

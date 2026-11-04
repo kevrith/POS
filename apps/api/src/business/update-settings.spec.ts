@@ -37,6 +37,12 @@ describe('BusinessService.updateSettings', () => {
     expect(data).not.toHaveProperty('id');
   });
 
+  it('stores only known optional modules, as a JSON list', async () => {
+    const { service, prisma } = make();
+    await service.updateSettings('biz-1', { enabledModules: ['RESTAURANT', 'NOT_A_MODULE'] } as any);
+    expect(prisma.business.update.mock.calls[0][0].data).toEqual({ enabledModules: '["RESTAURANT"]' });
+  });
+
   it('refuses to let a customer set their own plan', async () => {
     const { service, prisma } = make();
     await service.updateSettings('biz-1', {

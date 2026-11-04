@@ -32,7 +32,7 @@ export default function PrintModal({ receipt, onClose, enableCashDrawer = false,
     setError('');
     try {
       switch (method) {
-        case 'browser':   printToBrowser(receipt); break;
+        case 'browser':   await printToBrowser(receipt); break;
         case 'usb':       await printToUSB(receipt, enableCashDrawer); break;
         case 'bluetooth': await printToBluetooth(receipt, enableCashDrawer); break;
         case 'star':      await printToStarWebPRNT(savedStar!, receipt); break;

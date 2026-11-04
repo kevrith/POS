@@ -79,6 +79,8 @@ export const SocketEvents = {
   INVENTORY_UPDATED: 'inventory_updated',
   TABLE_UPDATED: 'table_updated',
   KOT_CREATED: 'kot_created',
+  KOT_UPDATED: 'kot_updated',
+  KOT_VOIDED: 'kot_voided',
   ORDER_UPDATED: 'order_updated',
   DELIVERY_UPDATED: 'delivery_updated',
   NOTIFICATION_CREATED: 'notification_created',

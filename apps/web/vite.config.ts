@@ -82,6 +82,7 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
       // Resolve the shared package locally — no workspace install needed
       '@pos/shared': path.resolve(__dirname, '../../packages/shared/index.ts'),
+      '@pos/print-core': path.resolve(__dirname, '../../packages/print-core/src/index.ts'),
     },
   },
   server: {

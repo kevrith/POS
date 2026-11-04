@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { formatKES } from '@pos/shared';
 import { printBarcodeLabel } from '../lib/printer';
+import { printHtml } from '../lib/printHtml';
 
 type Tab = 'drugs' | 'interactions' | 'refill-queue' | 'controlled-log' | 'providers' | 'claims' | 'labels' | 'formulary';
 
@@ -701,7 +702,7 @@ function DrugLabelsTab({ drugs, businessName }: { drugs: any[]; businessName: st
     ].filter(Boolean).join(' ');
 
     // Print the barcode/item label
-    printBarcodeLabel({
+    void printBarcodeLabel({
       itemName: labelName,
       barcode: selected.barcode ?? selected.id.slice(0, 12).toUpperCase(),
       priceCents: selected.sellingPriceCents ?? 0,
@@ -719,8 +720,7 @@ function DrugLabelsTab({ drugs, businessName }: { drugs: any[]; businessName: st
       dispensedDate: new Date().toLocaleDateString('en-KE'),
       scheduleClass: selected.scheduleClass,
     });
-    const w = window.open('', '_blank', 'width=380,height=260');
-    if (w) { w.document.write(html); w.document.close(); w.focus(); setTimeout(() => { w.addEventListener('afterprint', () => w.close()); w.print(); }, 400); }
+    printHtml(html, 400);
   };
 
   return (

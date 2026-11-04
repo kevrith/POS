@@ -136,6 +136,42 @@ recording revenue.
 **Hospitality & hotel** — `hospitality` `housekeeping` `channel-manager` `events`
 `waitlist` `appointments`
 
+Kitchen tickets (`hospitality/orders/:id/kot`, `hospitality/kot/:id/status`,
+`hospitality/kds/orders`):
+- one ticket per station (`KITCHEN` / `BAR` / `DESSERT`, from `Item.station` or inferred
+  by `inferStation` in `@pos/shared`), numbered per store per service day (`KotCounter`);
+- lines are claimed with `OrderItem.sentToKitchenAt`, so a repeated send is refused rather
+  than duplicated (`firedAt` is the course-fire marker and is not used for this);
+- status changes follow `KOT_TRANSITIONS`; an unchanged status is a no-op, a lost race is a 409;
+- cancelling an order cancels its open tickets; voiding a sent line needs a manager and
+  pulls it off its ticket (`kot_voided` socket event);
+- every order, ticket and store id is checked against the caller's business, and
+  `HospitalityAccessGuard` (on the hospitality, housekeeping and waitlist controllers) refuses
+  restaurant routes (tables, orders, kitchen, kds, kot, reservations, bar-tabs, happy-hours,
+  revpash, waitlist) unless the till is a restaurant till or `RESTAURANT` is in
+  `Business.enabledModules`, and hotel routes (hotel-rooms, room-bookings, folio-charges,
+  housekeeping, housekeeping-assignments, hotel-dashboard) unless the till is `HOSPITALITY` or `HOTEL` is enabled;
+- the socket gateway verifies the JWT and joins a client only to its own business room.
+
+Trust boundaries in `hospitality` (the global `TenantGuard` already rejects a foreign
+`businessId`/`storeId` in the query, params or body; these cover everything it cannot see):
+- routes that name a thing only by id (table, order, tab, room, booking, folio charge,
+  happy hour, reservation, waitlist entry, housekeeping assignment) look it up with the
+  caller's business and answer 404 otherwise; a body `storeId`/`roomId`/`tableId` is checked
+  the same way, and the waiter, poster and assigner come from the login, not the body;
+- order and bar-tab lines are priced from the menu (`priceLines`): name and unit price are
+  read from `Item`, quantity must be a whole number 1 to 999, and priced modifiers must be
+  non-negative and capped. There is no modifier catalogue, so a modifier price is bounded, not verified;
+- a tab settles once (claimed inside the transaction) and only when payments cover it;
+- checkout looks items up within the business, rejects non-positive quantities and
+  out-of-range discount/tip/service charge, and requires a `NORMAL` sale's payments to cover its total;
+- when a checkout names an `orderId`, `SalesService.createSale` ignores the client's cart and builds the
+  sale from the order's own lines (price plus priced modifiers, times quantity), links `Sale.orderId`
+  (unique, so an order has at most one sale) and claims the order `OPEN`/`BILL_REQUESTED` -> `PAID`
+  inside the sale's transaction, so a failure rolls back both and two tills cannot both pay it;
+- a PIN must be unique within a business (`assertPinAvailable`); a PIN shared before that
+  rule logs nobody in without a `userId` (the staff picker passes it) and cannot attribute a manager override.
+
 **Verticals** — `pharmacy` `prescriptions` `fuel-pump` `cybercafe`
 
 **Money** — `expense` `budget` `ledger` `cheque` `layaway` `gift-cards` `loyalty`
@@ -243,6 +279,16 @@ push (`.github/workflows/ci.yml`).
   a raw TCP connection from the API host, so it only accepts private IPv4 addresses
   (`printers/network-target.ts`); loopback, link-local and public hosts are refused. The
   API host must share a network with the printer.
+- **Print jobs are queued, audited and retried (`print-jobs/`).** `POST /print-jobs` queues ESC/POS bytes for a
+  LAN printer: with `PRINT_DELIVERY_MODE=direct` (default) the server sends at once and only queues a failure;
+  with `queue` (cloud) a print bridge delivers. The bridge is a desktop till on the shop network: `POST
+  /print-jobs/claim` takes jobs under a conditional UPDATE lock (one bridge per job), `POST /print-jobs/:id/result`
+  reports back, failures retry with 5 s, 10 s, 20 s... backoff up to 5 attempts, then FAILED. Jobs expire (drawer
+  pulse 2 min, kitchen ticket 15 min, receipt 24 h) so a stale ticket never prints late. The bridge only ever gets
+  a printer's private IP literal. Prints made on the till itself (browser, USB, Bluetooth, installed printer) are
+  logged with `POST /print-jobs/log`, and `POST /print-jobs/receipt-copy` counts how often a sale's receipt has been
+  printed so reprints are marked COPY. Listing, retry and cancel are owner/manager only; payloads are never listed.
+  `scripts/print-queue.e2e.ts` runs the whole flow against a throwaway Postgres.
 - Migrations must match `schema.prisma`: check with `prisma migrate diff --from-url
   <scratch db> --to-schema-datamodel prisma/schema.prisma`. `WebAuthnCredential` once
   existed only through `db push`.

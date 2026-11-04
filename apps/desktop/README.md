@@ -51,7 +51,7 @@ Releases are automated by `.github/workflows/desktop-release.yml`.
 
 | Module | Capability |
 |---|---|
-| `printer.rs` | Network ESC/POS printers over a raw TCP socket, with connect timeout |
+| `printer.rs` | Network ESC/POS printers over a raw TCP socket, with connect timeout. `print_to_network` is what the web **print bridge** (`apps/web/src/lib/printBridge.ts`) calls to deliver queued jobs; it only connects to a private IPv4 literal (`private_printer_addr`: 10.x, 172.16-31.x, 192.168.x), so a hostile or wrong job cannot make this computer connect to loopback, a public host or a metadata address. `private_printer_addr` is unit-tested by compiling it in a scratch crate; the full crate still cannot be built on every machine |
 | `system_printer.rs` | Printers installed on this computer: lists them and sends raw ESC/POS to one by name with no print dialog (Windows spooler RAW datatype; CUPS `lpstat` / `lp -o raw` on Linux and macOS). Commands `list_system_printers` and `print_to_system_printer` live in `printer.rs`; the web side is `apps/web/src/lib/desktopPrinter.ts`. The platform code has no Tauri dependency, so its unit tests run from a scratch crate that includes the file |
 | `cash_drawer.rs` | Drawer kick — ESC/POS `ESC p` pulse over USB/serial |
 | `discovery.rs` | LAN server auto-discovery. UDP :47474 — client broadcasts `KASTRA_DISCOVER`, servers reply `KASTRA_SERVER:{api_port}:{hostname}`; client collects responses for 2 s |

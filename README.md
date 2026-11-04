@@ -212,6 +212,7 @@ pos/
 │   └── mobile-agent/    # Expo — field sales agent
 ├── packages/
 │   ├── shared/          # Shared types, enums, formatKES(), VAT/TOT helpers
+│   ├── print-core/      # One receipt/KOT/bill layout -> ESC/POS, HTML, Star, Epson (web + mobile)
 │   └── mobile-push/     # Shared Expo push registration used by all 4 apps
 ├── prisma/
 │   ├── schema.prisma    # 151 models — single source of truth
@@ -277,7 +278,9 @@ label printing · bundles/kits · recipes and BOM costing · supplier POs, GRN, 
 inter-store transfers · stocktake sessions · damaged goods.
 
 ### Hospitality & hotel
-Floor-grouped table layouts · KOT routing (food → kitchen, drinks → bar) · KDS ·
+Floor-grouped table layouts · per-station kitchen tickets (kitchen / bar / dessert, daily
+numbering, duplicate-send protection) · live KDS on web and phone · voids reach the kitchen ·
+optional Restaurant module for non-restaurant businesses ·
 bar tabs · room charge · priced modifiers · reservations, merge, transfer ·
 hotel rooms, guest folios, housekeeping queue · channel manager · QR menu ·
 waitlist · appointments.
@@ -415,6 +418,7 @@ All four apps are currently at **1.1.0**.
 | Mobile — agent | [apps/mobile-agent/README.md](apps/mobile-agent/README.md) |
 | Shared package | [packages/shared/README.md](packages/shared/README.md) |
 | Push package | [packages/mobile-push/README.md](packages/mobile-push/README.md) |
+| Print core | [packages/print-core/README.md](packages/print-core/README.md) |
 
 Engineering rules and coding standards live in [claude.md](claude.md); the product
 blueprint in [masterplan.md](masterplan.md).

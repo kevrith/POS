@@ -20,6 +20,7 @@ import { toast } from 'sonner';
 import SyncStatusBadge, { OfflineBanner } from './SyncStatusBadge';
 import MobileNav from './MobileNav';
 import { hasFeature } from '../lib/featureGates';
+import { parseEnabledModules } from '@pos/shared';
 
 interface NavItem {
   to: string;
@@ -36,6 +37,10 @@ interface NavGroup {
 
 interface NavItemWithBusinessTypes extends NavItem {
   businessTypes?: string[];
+  /** Optional modules that also reveal this item, whatever the business type. */
+  modules?: string[];
+  /** Business types that already have this elsewhere, so the module entry is hidden for them. */
+  notForTypes?: string[];
   newTab?: boolean; // open in new browser tab
 }
 
@@ -57,7 +62,9 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
     items: [
       // /pos is the universal entry-point; POSRouterPage redirects to the right UI per posMode
       { to: '/pos', icon: ShoppingCart, label: 'Point of Sale', roles: ['OWNER', 'MANAGER', 'CASHIER', 'WAITER'] },
-      { to: '/kds', icon: Monitor, label: 'Kitchen Display', roles: ['OWNER', 'MANAGER', 'WAITER', 'KITCHEN'], businessTypes: ['HOSPITALITY', 'FAST_FOOD', 'BAR_TAB'] },
+      { to: '/kds', icon: Monitor, label: 'Kitchen Display', roles: ['OWNER', 'MANAGER', 'WAITER', 'KITCHEN'], businessTypes: ['HOSPITALITY', 'FAST_FOOD', 'BAR_TAB'], modules: ['RESTAURANT'] },
+      // A fuel station or shop that runs a restaurant on the side: the till stays its main POS, tables live here.
+      { to: '/hospitality', icon: Coffee, label: 'Restaurant Tables', roles: ['OWNER', 'MANAGER', 'WAITER', 'CASHIER'], businessTypes: [], modules: ['RESTAURANT'], notForTypes: ['HOSPITALITY', 'FAST_FOOD', 'BAR_TAB'] },
       // Kiosk mode is launched from within the POS page (not a permanent nav item)
       { to: '/layaway', icon: Layers, label: 'Layaway', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['RETAIL', 'SUPERMARKET'] },
       { to: '/proforma', icon: CreditCard, label: 'Proformas', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
@@ -76,8 +83,8 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
       { to: '/field-orders', icon: ClipboardList, label: 'Field Orders', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
       { to: '/delivery-routes', icon: MapPin, label: 'Delivery Routes', roles: ['OWNER', 'MANAGER'] },
       { to: '/waitlist', icon: Clock, label: 'Waitlist', roles: ['OWNER', 'MANAGER', 'WAITER'], businessTypes: ['HOSPITALITY', 'FAST_FOOD'] },
-      { to: '/hotel', icon: BedDouble, label: 'Hotel Integration', roles: ['OWNER', 'MANAGER'], businessTypes: ['HOSPITALITY'] },
-      { to: '/channel-manager', icon: Radio, label: 'Channel Manager', roles: ['OWNER', 'MANAGER'], businessTypes: ['HOSPITALITY'] },
+      { to: '/hotel', icon: BedDouble, label: 'Hotel Integration', roles: ['OWNER', 'MANAGER'], businessTypes: ['HOSPITALITY'], modules: ['HOTEL'] },
+      { to: '/channel-manager', icon: Radio, label: 'Channel Manager', roles: ['OWNER', 'MANAGER'], businessTypes: ['HOSPITALITY'], modules: ['HOTEL'] },
       { to: '/fuel-pump', icon: Fuel, label: 'Fuel Pumps', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['FUEL_PUMP'] },
       { to: '/cybercafe', icon: Monitor, label: 'Cybercafe', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['CYBERCAFE'] },
     ],
@@ -206,7 +213,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     retry: false,
   });
 
-  const { data: businessSettings } = useQuery<{ posMode: string; name: string; subscriptionTier: string; stores?: { id: string; name: string; storeCode: string }[] }>({
+  const { data: businessSettings } = useQuery<{ posMode: string; enabledModules?: string; name: string; subscriptionTier: string; stores?: { id: string; name: string; storeCode: string }[] }>({
     queryKey: ['business-settings', user?.businessId],
     queryFn: () => api.get(`/business/${user!.businessId}/settings`),
     enabled: !!user?.businessId,
@@ -215,6 +222,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   });
 
   const businessType = businessSettings?.posMode ?? 'RETAIL';
+  const enabledModules = parseEnabledModules(businessSettings?.enabledModules);
   const businessName = businessSettings?.name ?? 'KASTRA POS';
   const currentStore = businessSettings?.stores?.find(s => s.id === user?.storeId);
 
@@ -394,7 +402,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       const res = await fetch('/api/v1/auth/login/pin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin: p, businessId: user?.businessId }),
+        // Unlocking proves it is the SAME person: without their id, any colleague's PIN unlocked this session.
+        body: JSON.stringify({ pin: p, businessId: user?.businessId, userId: user?.id }),
       });
       if (res.ok) {
         setIsLocked(false);
@@ -461,8 +470,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   })();
 
   const canSee = (roles?: string[]) => !roles || roles.includes(userRole);
-  const canSeeBusinessType = (businessTypes?: string[]) =>
-    !businessTypes || businessTypes.includes(businessType);
+  const canSeeBusinessType = (businessTypes?: string[], modules?: string[], notForTypes?: string[]) => {
+    if (notForTypes?.includes(businessType)) return false;
+    if (!businessTypes && !modules) return true;
+    if (businessTypes?.includes(businessType)) return true;
+    return !!modules?.some((m) => (enabledModules as string[]).includes(m));
+  };
 
   const userPlan = user?.planName ?? 'STARTER';
   const subStatus = subscription?.subscriptionStatus;
@@ -477,7 +490,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     .map((g) => ({
       ...g,
       items: g.items.filter(
-        (item) => canSee(item.roles) && canSeeBusinessType(item.businessTypes) && canSeePlan(item.to),
+        (item) => canSee(item.roles) && canSeeBusinessType(item.businessTypes, item.modules, item.notForTypes) && canSeePlan(item.to),
       ),
     }))
     .filter((g) => g.items.length > 0);
@@ -817,7 +830,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* ── Content area ────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <MobileNav isOpen={mobileMenuOpen} onOpen={() => setMobileMenuOpen(true)} onClose={() => setMobileMenuOpen(false)} businessType={businessType} userPlan={userPlan} subscriptionStatus={subStatus} subscriptionTier={subTier} />
+        <MobileNav isOpen={mobileMenuOpen} onOpen={() => setMobileMenuOpen(true)} onClose={() => setMobileMenuOpen(false)} businessType={businessType} enabledModules={enabledModules} userPlan={userPlan} subscriptionStatus={subStatus} subscriptionTier={subTier} />
         <OfflineBanner />
 
         {/* ── Top header bar (desktop) ──────────────────────────────────── */}

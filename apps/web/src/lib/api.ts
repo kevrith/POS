@@ -170,6 +170,20 @@ export const api = {
     return handleResponse<T>(res);
   },
 
+  /**
+   * PATCH as another signed-in person. A shared kitchen screen stays logged in as
+   * the terminal; when a chef types their PIN to claim a ticket the change must be
+   * made under THEIR token, or the server records the terminal as the cook.
+   */
+  async patchAs<T>(token: string, endpoint: string, data: unknown): Promise<T> {
+    const res = await fetch(`${API_URL}${endpoint}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<T>(res);
+  },
+
   async put<T>(endpoint: string, data: unknown): Promise<T> {
     await maybeRefreshToken();
     const res = await fetch(`${API_URL}${endpoint}`, {

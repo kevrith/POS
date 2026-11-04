@@ -6,7 +6,7 @@
  * chosen queue, so no print dialog appears. Outside the desktop app every function here reports that
  * it is unavailable, and the Settings screen hides the option.
  */
-import { bytesToBase64 } from './printEncoding';
+import { bytesToBase64 } from '@pos/print-core';
 
 export interface SystemPrinter {
   name: string;

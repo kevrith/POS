@@ -83,6 +83,31 @@ const CAPABILITY_MODES: Record<Capability, readonly PosMode[]> = {
 };
 
 /**
+ * Optional modules a business switches on next to its main till (Settings on the
+ * web). A fuel station with a restaurant keeps FUEL_PUMP as its mode and enables
+ * RESTAURANT, which brings tables + kitchen without changing the till.
+ * Mirrors OPTIONAL_MODULES in @pos/shared (mobile is outside the workspace).
+ */
+export const OPTIONAL_MODULES = ['RESTAURANT', 'HOTEL'] as const;
+export type OptionalModule = (typeof OPTIONAL_MODULES)[number];
+
+const MODULE_CAPABILITIES: Record<OptionalModule, readonly Capability[]> = {
+  RESTAURANT: ['tables', 'kitchen'],
+  // The hotel (rooms, folios) is a web-only flow; it adds no phone capability.
+  HOTEL: [],
+};
+
+/** Parse the stored JSON list (or an already-parsed array), ignoring unknown modules. */
+export function parseEnabledModules(raw?: string | string[] | null): OptionalModule[] {
+  let list: unknown = raw;
+  if (typeof raw === 'string') {
+    try { list = JSON.parse(raw); } catch { list = []; }
+  }
+  if (!Array.isArray(list)) return [];
+  return list.filter((m): m is OptionalModule => (OPTIONAL_MODULES as readonly string[]).includes(m as string));
+}
+
+/**
  * Modes whose specialised flow is intentionally web-only. The app still works
  * for them (cart, payment, reports all behave); they just get no bespoke
  * pre-cart step. Kept explicit so it reads as a decision, not an oversight.
@@ -104,9 +129,14 @@ export function normalizePosMode(raw?: string | null): PosMode {
     : DEFAULT_POS_MODE;
 }
 
-/** True when the given mode supports the capability. */
-export function hasCapability(mode: PosMode | string | null | undefined, cap: Capability): boolean {
-  return CAPABILITY_MODES[cap].includes(normalizePosMode(mode as string));
+/** True when the given mode, or a module the business enabled, supports the capability. */
+export function hasCapability(
+  mode: PosMode | string | null | undefined,
+  cap: Capability,
+  modules: readonly OptionalModule[] = [],
+): boolean {
+  if (CAPABILITY_MODES[cap].includes(normalizePosMode(mode as string))) return true;
+  return modules.some((m) => MODULE_CAPABILITIES[m]?.includes(cap));
 }
 
 // Thin named wrappers — these read better at the call site than
@@ -132,9 +162,12 @@ export const hasDelivery = (m?: string | null) => hasCapability(m, 'delivery');
 export function isVisibleForMode(
   modes: readonly PosMode[] | undefined,
   mode: PosMode | string | null | undefined,
+  /** Modules the business enabled, and the ones that also reveal this item. */
+  extra?: { enabled: readonly OptionalModule[]; modules?: readonly OptionalModule[] },
 ): boolean {
   if (!modes || modes.length === 0) return true;
-  return modes.includes(normalizePosMode(mode as string));
+  if (modes.includes(normalizePosMode(mode as string))) return true;
+  return !!extra?.modules?.some((m) => extra.enabled.includes(m));
 }
 
 /** Label for the current mode, for settings + the Manage header. */

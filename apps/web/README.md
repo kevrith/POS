@@ -54,14 +54,24 @@ src/
 
 | File | What it drives |
 |---|---|
-| `printer.ts` | Builds receipts, bills and kitchen tickets (ESC/POS bytes and HTML) and sends them over USB, Bluetooth, LAN (via the API) or the browser |
+| `printer.ts` | Print entry points: renders with `@pos/print-core` and sends receipts, bills and kitchen tickets to the browser, USB, Bluetooth, LAN (via the API), an installed printer (desktop app) or a Star/Epson HTTP printer. KOT printing reports failures instead of hiding them |
+| `printTransports.ts` | Raw byte transports: WebUSB, Web Bluetooth, LAN through the API |
+| `printHtml.ts` | The ONE way a page is printed: a hidden, script-less sandboxed iframe. Never use `window.open` for printing |
 | `receiptPrint.ts` | The per-device printer preference (`receipt-print-pref` in localStorage), auto-print and explicit print |
-| `printEncoding.ts` | Byte encoding and HTML escaping shared by every print path |
+| `printQueue.ts` | Client for the server print queue (`/print-jobs`): queue a LAN print, log a print made on this device, ask how many times a sale's receipt was printed (so reprints are COPY) |
+| `printBridge.ts` | Desktop app only: polls `/print-jobs/claim` and writes queued jobs to LAN printers with the Tauri `print_to_network` command, so a cloud API can reach printers it cannot see. On by default in the desktop app; switch off in Settings -> Printers |
+| `kotPrintFeedback.ts` | Toast with a "Print here" action when a kitchen printer cannot be reached |
+
+Settings -> Printers ends with **Print history** (`components/PrintQueuePanel.tsx`, owner/manager): every receipt, ticket and drawer open, with Retry for failed ones.
+What a receipt/ticket/bill contains lives in [`packages/print-core`](../../packages/print-core/README.md), shared with the mobile app.
+Tests: `npm test` (vitest) covers the print preference, routing and failure reporting.
 | `scale.ts` | Weighing scales (Web Serial / Bluetooth) |
 | `cardTerminal.ts`, `terminal.ts` | Card terminals |
 | `nfc.ts`, `biometric.ts` | NFC taps, WebAuthn login |
 | `fuelPumpController.ts` | Fuel dispenser control |
-| `socket.ts` | Live updates (KDS, pole display, driver location) |
+| `socket.ts` | Live updates (KDS, pole display, driver location). The server only joins a socket to the business in its token |
+| `useKdsRealtime.ts` | Keeps a kitchen screen live: refreshes on ticket events, chimes for a new ticket, warns loudly when a sent line is voided |
+| `useRestaurantAccess.ts` | Whether tables and the kitchen display are on: a restaurant till, or any till with the Restaurant module enabled |
 | `db.ts`, `syncEngine.ts` | Dexie/IndexedDB offline store + replay |
 | `whatsapp.ts` | WhatsApp receipt handoff |
 
@@ -204,6 +214,8 @@ README in the same change.
   (`systemPrinterName` in the pref) builds the same ESC/POS bytes as the USB path and sends them to the
   named queue, so it needs a thermal receipt printer. The option only appears when `isDesktopApp()`.
   Receipts only; bills and kitchen tickets still use their own paths.
+- **Reprints are marked copies.** A second print of the same sale (POS Print button, Sales list) sets
+  `copyNumber`, prints a COPY banner and never opens the cash drawer.
 - **Pair once, print silently** (direct modes). Settings, Printers pairs a USB or Bluetooth printer
   (`pairUsbPrinter` / `pairBluetoothPrinter`, which must run from a click) and stores the
   choice for this device. Checkout, Reprint and the Print button all go through

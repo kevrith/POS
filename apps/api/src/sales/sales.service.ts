@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { AuditService } from '../audit/audit.service';
@@ -64,6 +64,18 @@ interface CreateSaleDto {
   orderId?: string;
 }
 
+/** "Pilau" or "Pilau (Extra cheese, No onion)": the modifiers travel with the line they priced. */
+function orderLineName(name: string, modifiers: string | null): string {
+  if (!modifiers) return name;
+  try {
+    const list = JSON.parse(modifiers) as Array<string | { name?: string }>;
+    const names = (Array.isArray(list) ? list : []).map((m) => (typeof m === 'string' ? m : m?.name ?? '')).filter(Boolean);
+    return names.length > 0 ? `${name} (${names.join(', ')})` : name;
+  } catch {
+    return name;
+  }
+}
+
 @Injectable()
 export class SalesService {
   constructor(
@@ -82,7 +94,8 @@ export class SalesService {
   ) {}
 
   async createSale(businessId: string, dto: CreateSaleDto) {
-    if (!Array.isArray(dto?.items) || dto.items.length === 0) {
+    // An order's sale is built from the order itself, so the cart may be empty then.
+    if (!dto?.orderId && (!Array.isArray(dto?.items) || dto.items.length === 0)) {
       throw new BadRequestException('A sale needs at least one item');
     }
     // ── Check transaction limit (FREE tier only) ──
@@ -126,27 +139,64 @@ export class SalesService {
       // (sale already in progress — hard blocking mid-transaction is bad UX)
     }
 
+    // ── Paying an order: the order IS the bill ────────────────────────────────
+    // When a checkout names an order, the sale is built from the order's own
+    // lines at the prices they were taken at, modifiers included, and the cart
+    // the client sent is ignored. The sale used to be built from the client's
+    // `{ itemId, quantity }` list re-priced at retail, so a priced modifier never
+    // reached the sale, and nothing tied what was sold to what was served.
+    const order = dto.orderId
+      ? await this.prisma.order.findFirst({ where: { id: dto.orderId, businessId }, include: { items: true } })
+      : null;
+    if (dto.orderId) {
+      if (!order) throw new BadRequestException('Order not found');
+      if (!['OPEN', 'BILL_REQUESTED'].includes(order.status)) {
+        throw new BadRequestException('This order has already been paid or cancelled');
+      }
+      if (order.storeId !== dto.storeId) throw new BadRequestException('This order belongs to a different store');
+      if (order.items.length === 0) throw new BadRequestException('This order has nothing on it');
+    }
+
+    interface CartLine { itemId: string; quantity: number; name?: string; totalCents?: number }
+    const cart: CartLine[] = order
+      ? order.items.map((l) => ({
+          itemId: l.itemId,
+          quantity: l.quantity,
+          name: orderLineName(l.name, l.modifiers),
+          totalCents: l.totalCents,
+        }))
+      : dto.items;
+
+    // The business's own menu only: with the id alone, a sale could be rung up
+    // against another business's item and read its name and price.
     const items = await this.prisma.item.findMany({
-      where: { id: { in: dto.items.map(i => i.itemId) } },
+      where: { id: { in: cart.map(i => i.itemId) }, businessId },
     });
 
     let subtotalCents = 0;
     const saleItems = [];
 
-    for (const cartItem of dto.items) {
+    for (const cartItem of cart) {
       const item = items.find(i => i.id === cartItem.itemId);
       if (!item) throw new BadRequestException(`Item not found`);
+      // Weighed and fractional items sell by decimals, so a quantity need not be
+      // whole, but it must be a real positive number: a negative one is a refund
+      // that skips the refund rules, and it lowers the total.
+      if (!Number.isFinite(cartItem.quantity) || cartItem.quantity <= 0) {
+        throw new BadRequestException(`Quantity of ${item.name} must be greater than zero`);
+      }
 
       const priceKey = `${dto.priceLevel.toLowerCase()}PriceCents` as keyof typeof item;
       const unitPrice = (item[priceKey] as number) ?? item.retailPriceCents;
-      const totalCents = unitPrice * cartItem.quantity;
+      // An order line carries its own total (price plus modifiers, times quantity).
+      const totalCents = cartItem.totalCents ?? unitPrice * cartItem.quantity;
 
       subtotalCents += totalCents;
       saleItems.push({
         itemId: item.id,
-        name: item.name,
+        name: cartItem.name ?? item.name,
         quantity: cartItem.quantity,
-        unitPriceCents: unitPrice,
+        unitPriceCents: cartItem.totalCents !== undefined ? Math.round(cartItem.totalCents / cartItem.quantity) : unitPrice,
         totalCents,
       });
 
@@ -185,14 +235,50 @@ export class SalesService {
         : 0;
     const discountCents = dto.discountCents ?? 0;
     const tipCents = dto.tipCents ?? 0;
+    // Money adjustments are whole, non-negative amounts, and a discount can't
+    // exceed what was sold. A negative discount raised the taxable base; a
+    // discount past the subtotal drove the sale below zero.
+    for (const [label, value] of [['Discount', discountCents], ['Tip', tipCents], ['Service charge', serviceChargeCents]] as const) {
+      if (!Number.isInteger(value) || value < 0) throw new BadRequestException(`${label} must be zero or a positive whole amount`);
+    }
+    if (discountCents > subtotalCents) throw new BadRequestException('The discount is larger than the sale');
     const taxBase = subtotalCents - discountCents;
     // VAT/TOT are inclusive in item prices — extract for reporting only, do NOT add to total
     const vatCents = store.business.taxType === 'VAT' ? calculateVAT(taxBase) : 0;
     const totCents = store.business.taxType === 'TOT' ? calculateTOT(taxBase, store.business.totRate ?? 3) : 0;
     const totalCents = taxBase + serviceChargeCents + tipCents;
 
+    // A normal sale is paid for when it is rung up: what was tendered must cover
+    // the total. Checkout used to store whatever payments it was handed, so a
+    // KES 1 payment closed a KES 1,000 bill. (Credit and layaway sales are
+    // deliberately short of cash and are not held to this.)
+    if (dto.type === SaleType.NORMAL) {
+      const payments = Array.isArray(dto.payments) ? dto.payments : [];
+      for (const p of payments) {
+        if (!Number.isInteger(p?.amountCents) || p.amountCents < 0) {
+          throw new BadRequestException('Every payment must be a whole, non-negative amount');
+        }
+      }
+      const tendered = payments.reduce((sum, p) => sum + p.amountCents, 0);
+      if (tendered < totalCents) {
+        throw new BadRequestException(`Payments (${tendered}) do not cover the total (${totalCents})`);
+      }
+    }
+
     // ── Write transaction (kept minimal: sale + sequence + stock movements) ──
     const sale = await this.prisma.$transaction(async (tx) => {
+      // Close the order in the same transaction as the sale. It used to be closed
+      // afterwards with any failure swallowed, so a sale could commit while its
+      // order stayed open and be paid a second time. Claiming it here means two
+      // tills paying one order cannot both win, and a failure rolls everything back.
+      if (order) {
+        const claimed = await tx.order.updateMany({
+          where: { id: order.id, businessId, status: { in: ['OPEN', 'BILL_REQUESTED'] } },
+          data: { status: 'PAID' },
+        });
+        if (claimed.count !== 1) throw new ConflictException('This order was just paid on another till');
+      }
+
       // Atomically increment sequence first so concurrent requests can't share a number
       const updatedStore = await tx.store.update({
         where: { id: dto.storeId },
@@ -206,6 +292,7 @@ export class SalesService {
           businessId,
           storeId: dto.storeId,
           receiptNumber,
+          orderId: order?.id,
           cashierId: dto.cashierId,
           customerId: dto.customerId,
           type: dto.type,
@@ -240,7 +327,7 @@ export class SalesService {
         });
       }
 
-      for (const cartItem of dto.items) {
+      for (const cartItem of cart) {
         const item = items.find(i => i.id === cartItem.itemId);
         if (item?.trackStock) {
           await tx.inventoryMovement.create({
@@ -261,18 +348,12 @@ export class SalesService {
       return createdSale;
     }, { timeout: 15000 });
 
-    // ── Close hospitality order + free table (if applicable) ──
-    if (dto.orderId) {
-      const order = await this.prisma.order.update({
-        where: { id: dto.orderId },
-        data: { status: 'PAID' },
+    // ── Free the table (the order itself was closed inside the transaction) ──
+    if (order?.tableId) {
+      await this.prisma.table.update({
+        where: { id: order.tableId },
+        data: { status: 'AVAILABLE' },
       }).catch(() => null);
-      if (order?.tableId) {
-        await this.prisma.table.update({
-          where: { id: order.tableId },
-          data: { status: 'AVAILABLE' },
-        }).catch(() => null);
-      }
     }
 
     // ── Post-transaction: audit log + webhook dispatch ──

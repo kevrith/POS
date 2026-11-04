@@ -10,6 +10,7 @@ import {
   type PairedPrinter, type PaperWidth,
 } from '../lib/printer';
 import { isDesktopApp, listSystemPrinters, type SystemPrinter } from '../lib/desktopPrinter';
+import PrintQueuePanel from './PrintQueuePanel';
 
 interface NetworkPrinterRow {
   id: string;
@@ -341,6 +342,7 @@ export default function ReceiptPrinterSettings({ businessName, printers }: Props
           </p>
         )}
       </div>
+      <PrintQueuePanel />
     </div>
   );
 }

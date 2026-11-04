@@ -1,8 +1,9 @@
 import {
   normalizeTableStatus, tableAction, sortFloor, summariseFloor,
-  orderTotalCents, unfiredLines, minutesSince, ticketAge, buildAddItemsPayload,
+  orderTotalCents, unsentLines, minutesSince, ticketAge, buildAddItemsPayload,
+  modifierNames, ticketLocation, ticketsForStation, ticketActions,
   TABLE_STATUS_LABELS,
-  type FloorTable, type OrderLine,
+  type FloorTable, type OrderLine, type KdsTicket,
 } from '../lib/hospitality';
 
 const table = (over: Partial<FloorTable> = {}): FloorTable => ({
@@ -106,19 +107,71 @@ describe('orderTotalCents', () => {
   });
 });
 
-describe('unfiredLines', () => {
-  // firedAt is stamped when a line goes to the kitchen — re-firing would cook it twice.
+describe('unsentLines', () => {
+  // sentToKitchenAt is stamped by the server when a line goes onto a ticket;
+  // sending it again would cook it twice.
   it('returns only lines never sent to the kitchen', () => {
     const lines = [
-      line({ id: 'sent', firedAt: '2026-08-13T10:00:00Z' }),
+      line({ id: 'sent', sentToKitchenAt: '2026-08-13T10:00:00Z' }),
       line({ id: 'new' }),
-      line({ id: 'also-new', firedAt: null }),
+      line({ id: 'also-new', sentToKitchenAt: null }),
     ];
-    expect(unfiredLines(lines).map((l) => l.id)).toEqual(['new', 'also-new']);
+    expect(unsentLines(lines).map((l) => l.id)).toEqual(['new', 'also-new']);
   });
 
-  it('returns nothing once the whole order is fired', () => {
-    expect(unfiredLines([line({ firedAt: '2026-08-13T10:00:00Z' })])).toHaveLength(0);
+  it('returns nothing once the whole order is sent', () => {
+    expect(unsentLines([line({ sentToKitchenAt: '2026-08-13T10:00:00Z' })])).toHaveLength(0);
+  });
+
+  it('does not treat a fired course as sent (firedAt is the course marker, not the ticket)', () => {
+    expect(unsentLines([line({ firedAt: '2026-08-13T10:00:00Z' })])).toHaveLength(1);
+  });
+});
+
+const ticket = (over: Partial<KdsTicket> = {}): KdsTicket => ({
+  id: 'k1', kotNumber: 7, type: 'NEW_ORDER', station: 'KITCHEN', status: 'PENDING',
+  createdAt: '2026-08-13T10:00:00Z', order: { id: 'o1', table: { number: '5' }, items: [] },
+  ...over,
+});
+
+describe('kitchen ticket helpers', () => {
+  it('reads modifiers whether stored as names or priced objects', () => {
+    expect(modifierNames(JSON.stringify(['No onion', { name: 'Extra cheese', priceCents: 5000 }]))).toEqual(['No onion', 'Extra cheese']);
+    expect(modifierNames(null)).toEqual([]);
+    expect(modifierNames('not json')).toEqual([]);
+  });
+
+  it('names where a ticket is going', () => {
+    expect(ticketLocation(ticket())).toBe('Table 5');
+    expect(ticketLocation(ticket({ order: { id: 'o', roomNumber: '204', items: [] } }))).toBe('Room 204');
+    expect(ticketLocation(ticket({ order: { id: 'o', items: [] } }))).toBe('Takeaway');
+  });
+
+  it('filters tickets to one station, or shows all', () => {
+    const list = [ticket({ id: 'a' }), ticket({ id: 'b', station: 'BAR' })];
+    expect(ticketsForStation(list, 'BAR').map((t) => t.id)).toEqual(['b']);
+    expect(ticketsForStation(list, 'ALL')).toHaveLength(2);
+  });
+});
+
+describe('ticketActions', () => {
+  it('starts a kitchen ticket, then marks it ready', () => {
+    expect(ticketActions(ticket({ status: 'PENDING' }), 'KITCHEN').map((a) => a.to)).toEqual(['IN_PROGRESS']);
+    expect(ticketActions(ticket({ status: 'IN_PROGRESS' }), 'KITCHEN').map((a) => a.to)).toEqual(['READY']);
+  });
+
+  it('lets a bar ticket go straight to ready, since a drink needs no cooking', () => {
+    expect(ticketActions(ticket({ status: 'PENDING', station: 'BAR' }), 'KITCHEN').map((a) => a.to)).toEqual(['READY']);
+  });
+
+  it('offers recall to everyone but served only to non-kitchen roles', () => {
+    expect(ticketActions(ticket({ status: 'READY' }), 'KITCHEN').map((a) => a.to)).toEqual(['IN_PROGRESS']);
+    expect(ticketActions(ticket({ status: 'READY' }), 'WAITER').map((a) => a.to)).toEqual(['IN_PROGRESS', 'SERVED']);
+  });
+
+  it('offers nothing once served or cancelled', () => {
+    expect(ticketActions(ticket({ status: 'SERVED' }), 'WAITER')).toEqual([]);
+    expect(ticketActions(ticket({ status: 'CANCELLED' }), 'WAITER')).toEqual([]);
   });
 });
 

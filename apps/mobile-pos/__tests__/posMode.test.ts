@@ -4,6 +4,7 @@ import {
   MOBILE_UNSUPPORTED_MODES,
   normalizePosMode,
   hasCapability,
+  parseEnabledModules,
   isVisibleForMode,
   posModeLabel,
   hasTables,
@@ -106,5 +107,31 @@ describe('MOBILE_UNSUPPORTED_MODES', () => {
     for (const m of MOBILE_UNSUPPORTED_MODES) {
       expect(POS_MODES).toContain(m);
     }
+  });
+});
+
+describe('optional modules', () => {
+  it('parses the stored list and drops anything unknown', () => {
+    expect(parseEnabledModules('["RESTAURANT","NOPE"]')).toEqual(['RESTAURANT']);
+    expect(parseEnabledModules('garbage')).toEqual([]);
+    expect(parseEnabledModules(null)).toEqual([]);
+    expect(parseEnabledModules(['RESTAURANT'])).toEqual(['RESTAURANT']);
+  });
+
+  it('gives a fuel station tables and a kitchen when it enables the Restaurant module', () => {
+    expect(hasCapability('FUEL_PUMP', 'tables')).toBe(false);
+    expect(hasCapability('FUEL_PUMP', 'tables', ['RESTAURANT'])).toBe(true);
+    expect(hasCapability('FUEL_PUMP', 'kitchen', ['RESTAURANT'])).toBe(true);
+  });
+
+  it('does not let the module turn on unrelated capabilities', () => {
+    expect(hasCapability('FUEL_PUMP', 'prescriptions', ['RESTAURANT'])).toBe(false);
+    expect(hasCapability('SUPERMARKET', 'pumps', ['RESTAURANT'])).toBe(false);
+  });
+
+  it('shows a module-gated tile only when the module is on', () => {
+    expect(isVisibleForMode(['HOSPITALITY'], 'SUPERMARKET')).toBe(false);
+    expect(isVisibleForMode(['HOSPITALITY'], 'SUPERMARKET', { enabled: [], modules: ['RESTAURANT'] })).toBe(false);
+    expect(isVisibleForMode(['HOSPITALITY'], 'SUPERMARKET', { enabled: ['RESTAURANT'], modules: ['RESTAURANT'] })).toBe(true);
   });
 });

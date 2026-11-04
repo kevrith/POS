@@ -103,6 +103,10 @@ involving money, staff or settings.
 
 **PIN** — for the shop floor. Four to six digits, and the session lasts **12 hours**,
 so a cashier is not retyping a password all shift. Tap your name, enter your PIN.
+Every person needs their **own** PIN: KASTRA refuses to save a PIN that a colleague
+already uses, because a PIN is how it knows who rang up a sale or approved a void. If
+two staff already share one from before, they can still sign in by tapping their name
+first; a manager override will ask the owner to give each manager a different PIN.
 
 Owners may also enable:
 
@@ -341,13 +345,63 @@ continue its order. Tables can be **merged**, **transferred** to another table, 
 keeps *orders* (what the kitchen is making) separate from *sales* (money that
 changed hands). The order becomes a sale when the bill is settled.
 
-**Kitchen tickets (KOT).** When you send an order, each line goes to the right
-printer automatically — food to the kitchen, drinks to the bar. You set that routing
-once, per category.
+**The bill is the order.** When you take payment for a table, the sale is built from
+what is on the order, at the prices it was taken at, with any priced extras included. It
+does not depend on what the till screen sends. The payments must cover the total, and
+the order is closed in the same step, so two tills cannot both take payment for one
+table. A sale on a normal (paid-up) sale needs payments that cover the total; credit and
+layaway sales are the exceptions.
+
+**Selling out of stock.** An item marked sold out can still be ordered and sold, so a
+forgotten stock receipt never stops service. Stock simply goes negative (sell 5 with
+none in hand and it shows -5), and when you later receive stock it is added on top, so
+the 5 you already sold come off automatically. To make an item *refuse* to sell at zero,
+set its stock policy to Block.
+
+**Kitchen tickets (KOT).** When you send an order, it is split into one ticket per
+station — **Kitchen**, **Bar** or **Dessert** — so the bartender sees only the drinks
+and the cook only the food. Each ticket has a number that restarts at #1 every day.
+Set where an item is made on the item itself (**Inventory, Edit item, Made at**).
+Leave it on *Automatic* and KASTRA guesses from the name and category, with the
+kitchen as the fallback. Each station's tickets print on the printer set up for it in
+Settings, Printers.
+
+Send an order twice by mistake and nothing is cooked twice: lines already sent are
+refused, and the waiter's screen says so.
 
 **Kitchen display (KDS).** Instead of paper, the kitchen can run a screen showing
-live orders. Kitchen staff tap to mark items *in progress* and *ready*. Waiters see
-the status without walking to the pass.
+live tickets, on a wall screen, a tablet or a phone. Tickets arrive the moment they
+are sent (with an optional chime), and turn amber then red as they wait. Pick
+**Kitchen**, **Bar** or **Dessert** along the top to dedicate a screen to one station;
+the choice is remembered on that device. Each ticket shows the table or room, the
+waiter, modifiers, special instructions in a highlighted box, allergens, and a
+**+ Add-on** tag when it adds to an order already being made. Kitchen staff tap
+**Start**, then **Ready**; a drink goes straight to **Ready**. A ticket marked ready by
+mistake can be **recalled**. Waiters (and managers) mark it **Served** from the order
+panel or the display.
+
+On a shared kitchen screen, switch on **Shared**. To start a ticket the cook taps
+**their name**, then types their PIN. The ticket is then recorded against that cook, not
+the screen's login.
+
+**Voids and cancellations reach the kitchen.** Cancelling an order cancels its open
+tickets. Removing a line the kitchen already has needs a **manager** and a reason; the
+line comes off its ticket and every kitchen screen shows a red warning ("Stop making
+it") with a chime, instead of the cooks finding out when the guest asks.
+
+**Kitchen on a phone.** The mobile app has the same kitchen screen: the same live
+tickets, station tabs, and Start / Ready / Recall buttons. A kitchen account opens
+straight onto it and signs out from its header. Waiters mark tickets served from the
+table's order screen.
+
+**A restaurant or hotel inside another business.** Your POS mode is your main till. A
+fuel station, shop or supermarket that also runs a kitchen can switch on **Restaurant &
+kitchen** under Settings, *Also run*, which adds Tables, bar tabs, happy hours, the
+waitlist and the Kitchen Display without changing the main till. **Hotel & rooms** does
+the same for rooms, bookings, guest folios and housekeeping. Both are off by default,
+and these features are refused by the server (not just hidden) for a business that has
+not enabled them. A Hospitality till already includes both; Fast Food and Bar include
+the restaurant.
 
 **Modifiers.** "No onions", "extra shot", "well done" — and they can carry a price.
 

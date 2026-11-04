@@ -310,3 +310,150 @@ export function formatReceiptNumber(
 export function formatPONumber(year: number, sequence: number): string {
   return `PO-${year}-${String(sequence).padStart(5, '0')}`;
 }
+
+// ─── KITCHEN TICKETS (KOT) ────────────────────────────────────
+// One ticket per preparation station, so the bar can mark drinks ready without
+// touching the kitchen's food. Shared so the API (which splits tickets), the web
+// printer (which routes them) and the displays agree on one vocabulary.
+
+export const KOT_STATIONS = ['KITCHEN', 'BAR', 'DESSERT'] as const;
+export type KotStation = (typeof KOT_STATIONS)[number];
+
+export const KOT_STATION_LABELS: Record<KotStation, string> = {
+  KITCHEN: 'Kitchen',
+  BAR: 'Bar',
+  DESSERT: 'Dessert',
+};
+
+/** The printer handle (Settings -> Printers) that serves each station. */
+export const KOT_STATION_PRINTER_HANDLE: Record<KotStation, string> = {
+  KITCHEN: 'KOT_FOOD',
+  BAR: 'KOT_DRINKS',
+  DESSERT: 'KOT_DESSERTS',
+};
+
+export function normalizeStation(raw?: string | null): KotStation | null {
+  const upper = (raw ?? '').trim().toUpperCase();
+  return (KOT_STATIONS as readonly string[]).includes(upper) ? (upper as KotStation) : null;
+}
+
+const DESSERT_WORDS = ['dessert', 'cake', 'ice cream', 'icecream', 'sweet', 'pastry', 'pudding', 'brownie', 'cheesecake', 'gelato', 'sundae'];
+const DRINK_WORDS = [
+  'drink', 'beverage', 'juice', 'soda', 'water', 'beer', 'lager', 'cider', 'wine', 'spirit', 'whisky', 'whiskey',
+  'vodka', 'gin', 'rum', 'brandy', 'tequila', 'liqueur', 'cognac', 'champagne', 'cocktail', 'mocktail', 'shot',
+  'coffee', 'espresso', 'latte', 'cappuccino', 'tea', 'chai', 'dawa', 'milk', 'smoothie', 'shake',
+  'coke', 'coca', 'fanta', 'sprite', 'pepsi', 'mirinda', 'stoney', 'krest', 'schweppes', 'minute maid', 'predator',
+  'red bull', 'redbull', 'monster', 'tusker', 'pilsner', 'guinness', 'white cap', 'whitecap', 'balozi', 'castle',
+  'heineken', 'smirnoff', 'savanna', 'hunters', 'kenya cane', 'chrome', 'johnnie', 'jameson', 'jack daniel',
+  'captain morgan', 'bacardi', 'gilbey', 'amarula', 'baileys',
+];
+
+function matchesAny(target: string, words: string[]): boolean {
+  // Match at the start of a word so "tea" finds "tea" and "teas" but not "steak",
+  // and "gin" finds "gin and tonic" but not "ginger".
+  return words.some((w) => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:s|es)?\\b`, 'i').test(target));
+}
+
+/**
+ * Work out which station makes an item when nobody has set one.
+ *
+ * The category is the stronger signal (a "Beverages" shelf holds drinks whatever
+ * they are called), so it is tried first and the name is the fallback. Anything
+ * unrecognised goes to the kitchen: a food ticket in the wrong place is noticed
+ * at once, a missing one is not.
+ */
+export function inferStation(name: string, category?: string | null): KotStation {
+  for (const target of [category ?? '', name]) {
+    if (!target) continue;
+    if (matchesAny(target, DESSERT_WORDS)) return 'DESSERT';
+    if (matchesAny(target, DRINK_WORDS)) return 'BAR';
+  }
+  return 'KITCHEN';
+}
+
+/** The station an item belongs to: the one set on it, else the best guess. */
+export function stationForItem(item: { name: string; category?: string | null; station?: string | null }): KotStation {
+  return normalizeStation(item.station) ?? inferStation(item.name, item.category);
+}
+
+export type KotStatus = 'PENDING' | 'IN_PROGRESS' | 'READY' | 'SERVED' | 'CANCELLED';
+
+/** Tickets that still need someone's attention (anything else is finished). */
+export const OPEN_KOT_STATUSES: readonly KotStatus[] = ['PENDING', 'IN_PROGRESS', 'READY'];
+
+/**
+ * Where a ticket may go from each status. READY -> IN_PROGRESS is a recall (the
+ * dish was bumped by mistake or sent back); PENDING -> READY lets a bar tap once
+ * for a drink that needs no cooking. SERVED and CANCELLED are final.
+ */
+export const KOT_TRANSITIONS: Record<KotStatus, readonly KotStatus[]> = {
+  PENDING: ['IN_PROGRESS', 'READY', 'CANCELLED'],
+  IN_PROGRESS: ['READY', 'CANCELLED'],
+  READY: ['SERVED', 'IN_PROGRESS', 'CANCELLED'],
+  SERVED: [],
+  CANCELLED: [],
+};
+
+export function isKotStatus(value: unknown): value is KotStatus {
+  return typeof value === 'string' && value in KOT_TRANSITIONS;
+}
+
+export function canTransitionKot(from: KotStatus, to: KotStatus): boolean {
+  return KOT_TRANSITIONS[from].includes(to);
+}
+
+// ─── OPTIONAL MODULES ─────────────────────────────────────────
+// A business has one posMode (its main till), but real businesses are mixed: a
+// fuel station with a restaurant, a hotel with a shop. A module switches a
+// capability on for a business whatever its posMode, instead of forcing the
+// owner to pick one vertical.
+
+export const OPTIONAL_MODULES = ['RESTAURANT', 'HOTEL'] as const;
+export type OptionalModule = (typeof OPTIONAL_MODULES)[number];
+
+export const OPTIONAL_MODULE_LABELS: Record<OptionalModule, { label: string; description: string }> = {
+  RESTAURANT: {
+    label: 'Restaurant & kitchen',
+    description: 'Tables, bar tabs, kitchen tickets and the kitchen display, alongside your main till.',
+  },
+  HOTEL: {
+    label: 'Hotel & rooms',
+    description: 'Rooms, bookings, guest folios and housekeeping, alongside your main till.',
+  },
+};
+
+/** posModes whose main till already is the restaurant. */
+export const RESTAURANT_POS_MODES: readonly string[] = ['HOSPITALITY', 'FAST_FOOD', 'BAR_TAB'];
+
+/** posModes whose main till already includes the hotel. */
+export const HOTEL_POS_MODES: readonly string[] = ['HOSPITALITY'];
+
+/** True when the main till already provides the module, so it needs no switch of its own. */
+export function moduleIncludedByMode(module: OptionalModule, posMode?: string | null): boolean {
+  const mode = (posMode ?? '').toUpperCase();
+  return module === 'RESTAURANT' ? RESTAURANT_POS_MODES.includes(mode) : HOTEL_POS_MODES.includes(mode);
+}
+
+/** Parse the stored JSON list, ignoring anything that is not a known module. */
+export function parseEnabledModules(raw?: string | string[] | null): OptionalModule[] {
+  let list: unknown = raw;
+  if (typeof raw === 'string') {
+    try { list = JSON.parse(raw); } catch { list = []; }
+  }
+  if (!Array.isArray(list)) return [];
+  return list.filter((m): m is OptionalModule => (OPTIONAL_MODULES as readonly string[]).includes(m as string));
+}
+
+function hasModule(module: OptionalModule, posMode?: string | null, enabledModules?: string | string[] | null): boolean {
+  return moduleIncludedByMode(module, posMode) || parseEnabledModules(enabledModules).includes(module);
+}
+
+/** True when tables, bar tabs and kitchen tickets are available to this business. */
+export function hasRestaurantAccess(posMode?: string | null, enabledModules?: string | string[] | null): boolean {
+  return hasModule('RESTAURANT', posMode, enabledModules);
+}
+
+/** True when rooms, bookings, folios and housekeeping are available to this business. */
+export function hasHotelAccess(posMode?: string | null, enabledModules?: string | string[] | null): boolean {
+  return hasModule('HOTEL', posMode, enabledModules);
+}

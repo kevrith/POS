@@ -10,7 +10,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { mobileApi, formatKES } from '../lib/api';
 import { useActiveStore } from '../lib/useActiveStore';
 import {
-  orderTotalCents, unfiredLines, buildAddItemsPayload, type OrderLine,
+  orderTotalCents, unsentLines, buildAddItemsPayload, STATION_LABELS, type KotStation, type OrderLine,
 } from '../lib/hospitality';
 import { Colors } from '../constants/theme';
 
@@ -27,7 +27,7 @@ interface OrderDetail {
   tableId?: string | null;
   table?: { number: string } | null;
   items: OrderLine[];
-  kots?: Array<{ id: string; kotNumber: number; status: string }>;
+  kots?: Array<{ id: string; kotNumber: number; station?: KotStation; status: string }>;
 }
 
 /**
@@ -92,7 +92,21 @@ export default function TableOrderScreen() {
       qc.invalidateQueries({ queryKey: ['kitchen'] });
       Alert.alert('Sent to kitchen', 'The kitchen has the ticket.');
     },
-    onError: (e: any) => Alert.alert('Could not send', e?.message ?? 'Please try again.'),
+    onError: (e: any) => {
+      Alert.alert('Could not send', e?.message ?? 'Please try again.');
+      // "Already sent" means another phone got there first; show the bill as it is now.
+      qc.invalidateQueries({ queryKey: ['order', orderId] });
+    },
+  });
+
+  const serveMut = useMutation({
+    mutationFn: (kotId: string) => mobileApi.patch(`/hospitality/kot/${kotId}/status`, { status: 'SERVED' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['order', orderId] });
+      qc.invalidateQueries({ queryKey: ['tables'] });
+      qc.invalidateQueries({ queryKey: ['kitchen'] });
+    },
+    onError: (e: any) => Alert.alert('Could not update the ticket', e?.message ?? 'Please try again.'),
   });
 
   const billMut = useMutation({
@@ -117,7 +131,7 @@ export default function TableOrderScreen() {
   const order = orderQ.data;
   const lines = order?.items ?? [];
   const total = orderTotalCents(lines);
-  const pending = unfiredLines(lines);
+  const pending = unsentLines(lines);
 
   const filteredMenu = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -184,7 +198,7 @@ export default function TableOrderScreen() {
                       {l.specialInstructions ? (
                         <Text style={s.lineNote}>{l.specialInstructions}</Text>
                       ) : null}
-                      {!l.firedAt && <Text style={s.notFired}>not sent to kitchen</Text>}
+                      {!l.sentToKitchenAt && <Text style={s.notFired}>not sent to kitchen</Text>}
                     </View>
                     <Text style={s.linePrice}>{formatKES(l.totalCents)}</Text>
                   </View>
@@ -202,10 +216,22 @@ export default function TableOrderScreen() {
                 <Text style={s.cardTitle}>Kitchen tickets</Text>
                 {order.kots.map((k) => (
                   <View key={k.id} style={s.kotRow}>
-                    <Text style={s.kotNumber}>KOT #{k.kotNumber}</Text>
-                    <Text style={[s.kotStatus, k.status === 'READY' && { color: Colors.success }]}>
-                      {k.status}
+                    <Text style={s.kotNumber}>
+                      #{k.kotNumber}{k.station ? ` ${STATION_LABELS[k.station] ?? k.station}` : ''}
                     </Text>
+                    <Text style={[s.kotStatus, k.status === 'READY' && { color: Colors.success }]}>
+                      {k.status === 'IN_PROGRESS' ? 'COOKING' : k.status}
+                    </Text>
+                    {k.status === 'READY' && (
+                      <TouchableOpacity
+                        style={s.servedBtn}
+                        onPress={() => serveMut.mutate(k.id)}
+                        disabled={serveMut.isPending}
+                        accessibilityLabel={`Mark ticket ${k.kotNumber} served`}
+                      >
+                        <Text style={s.servedText}>Served</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 ))}
               </View>
@@ -337,8 +363,10 @@ const s = StyleSheet.create({
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   totalLabel: { fontSize: 14, fontWeight: '700', color: Colors.textSecondary },
   totalValue: { fontSize: 19, fontWeight: '800', color: Colors.text },
-  kotRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5 },
+  kotRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 5 },
   kotNumber: { fontSize: 13, color: Colors.text, fontWeight: '600' },
+  servedBtn: { backgroundColor: Colors.success, paddingHorizontal: 12, minHeight: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
+  servedText: { color: '#FFF', fontSize: 13, fontWeight: '800' },
   kotStatus: { fontSize: 12, fontWeight: '700', color: Colors.textSecondary },
   footer: { flexDirection: 'row', gap: 10, padding: 14, backgroundColor: Colors.card, borderTopWidth: 1, borderTopColor: Colors.border },
   footBtn: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 7, paddingVertical: 14, borderRadius: 12 },

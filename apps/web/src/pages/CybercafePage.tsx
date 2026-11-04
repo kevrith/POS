@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { formatKES } from '@pos/shared';
+import { printHtml } from '../lib/printHtml';
 import {
   Monitor, Plus, Play, Pause, Square, Clock, BarChart3,
   Package, List, Wifi, WifiOff, Printer, Coffee,
@@ -130,8 +131,6 @@ function PackageCountdown({ startedAt, pausedMinutes, timeLimitMinutes, extended
 
 /** Print a session receipt in a new window */
 function printSessionReceipt(session: any) {
-  const win = window.open('', '_blank', 'width=400,height=600');
-  if (!win) return;
   const startTime = new Date(session.startedAt).toLocaleString();
   const endTime = session.endedAt ? new Date(session.endedAt).toLocaleString() : new Date().toLocaleString();
   const duration = session.durationMinutes != null ? formatDuration(session.durationMinutes) : '—';
@@ -139,7 +138,7 @@ function printSessionReceipt(session: any) {
     ? session.package.priceCents
     : Math.round(((session.durationMinutes ?? 0) / 60) * session.ratePerHourCents);
 
-  win.document.write(`<!DOCTYPE html><html><head><title>Session Receipt</title>
+  printHtml(`<!DOCTYPE html><html><head><title>Session Receipt</title>
 <style>
 body{font-family:monospace;padding:16px;max-width:320px;margin:auto;font-size:13px}
 h2{text-align:center;margin-bottom:4px;font-size:16px}
@@ -168,11 +167,8 @@ ${session.extrasCents > 0 ? `<div class="row"><span>Extras:</span><span>KES ${(s
 ${session.paymentRef ? `<div class="row"><span>Ref:</span><span>${session.paymentRef}</span></div>` : ''}
 <div class="divider"></div>
 <p style="text-align:center;font-size:11px;color:#555">Thank you for visiting!</p>
-<br/><button onclick="window.print()">Print</button>
+
 </body></html>`);
-  win.document.close();
-  win.onafterprint = () => win.close();
-  win.print();
 }
 
 export default function CybercafePage() {
@@ -839,9 +835,7 @@ export default function CybercafePage() {
               )}
               <button
                 onClick={() => {
-                  const w = window.open('', '_blank');
-                  if (!w) return;
-                  w.document.write(`<!DOCTYPE html><html><head><title>Rate Card</title>
+                  printHtml(`<!DOCTYPE html><html><head><title>Rate Card</title>
 <style>body{font-family:Arial,sans-serif;padding:20px;max-width:500px;margin:auto}
 h1{text-align:center;font-size:22px;border-bottom:2px solid #333;padding-bottom:8px}
 h3{color:#1e3a5f;margin-top:16px;font-size:14px}
@@ -860,8 +854,7 @@ ${catRates.map((r: any) => `<tr><td>${r.service}</td><td style="font-size:11px;c
 </tbody></table>`;
 }).join('')}
 <br/><p style="text-align:center;font-size:11px;color:#666">Prices subject to change without notice.</p>
-<br/><button onclick="window.print()">Print</button></body></html>`);
-                  w.document.close();
+</body></html>`);
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded text-sm hover:bg-indigo-700"
               >

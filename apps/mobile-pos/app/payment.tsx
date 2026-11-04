@@ -450,11 +450,16 @@ export default function PaymentScreen() {
 
   useEffect(() => { void loadPrinterSettings().then(setPrintSettings); }, []);
 
+  /** How many times each receipt has been sent to a printer; every print after the first is a marked copy. */
+  const printsRef = useRef<Record<string, number>>({});
+
   /** Print with the saved settings. The OS print dialog can be cancelled, so only silent transports report failures. */
   async function printNow(snap: PrintableReceipt) {
     setPrintError('');
+    const copies = printsRef.current[snap.receiptNumber] ?? 0;
     try {
-      await printReceipt(snap, printSettings ?? undefined);
+      await printReceipt(copies > 0 ? { ...snap, copyNumber: copies } : snap, printSettings ?? undefined);
+      printsRef.current[snap.receiptNumber] = copies + 1;
     } catch (e) {
       if (printSettings?.method === 'system') return;
       setPrintError(e instanceof Error ? e.message : 'The printer did not respond.');
@@ -516,6 +521,23 @@ export default function PaymentScreen() {
     return [p];
   }
 
+  /** KRA eTIMS registration for a finished sale. Never throws: a failure means "pending", not "no receipt". */
+  async function submitToEtims(saleId: string): Promise<Pick<PrintableReceipt, 'etimsSubmitted' | 'etimsControlNumber' | 'kraQRCode'>> {
+    try {
+      const res = await Promise.race([
+        mobileApi.post<{ success: boolean; controlNumber?: string; intrlData?: string; qrUrl?: string }>(`/etims/submit/${saleId}`, {}),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
+      ]);
+      return {
+        etimsSubmitted: res.success,
+        etimsControlNumber: res.controlNumber,
+        kraQRCode: res.qrUrl ?? res.intrlData ?? res.controlNumber,
+      };
+    } catch {
+      return { etimsSubmitted: false };
+    }
+  }
+
   // ── completeSale mutation ───────────────────────────────────────────────────
   const { mutate: completeSale, isPending } = useMutation({
     mutationFn: async (payload: SalePayload) => {
@@ -547,10 +569,20 @@ export default function PaymentScreen() {
         totalCents: totalAfterDiscount,
         paymentMethod: payMethod,
         changeCents: payMethod === 'CASH' ? change : 0,
+        cashierName: user?.name,
+        etimsSubmitted: false,
       };
       setReceiptSnap(snap);
       setPrintError('');
-      if (printSettings?.enabled && printSettings.autoPrint && printSettings.method !== 'system') void printNow(snap);
+      // Register the sale with KRA first, as the web till does, so the receipt carries the control
+      // number and QR code. If KRA cannot be reached it prints a PENDING banner instead and the
+      // batch submit picks the sale up later; the cashier is never held up for more than a few seconds.
+      const autoPrint = printSettings?.enabled && printSettings.autoPrint && printSettings.method !== 'system';
+      void submitToEtims(result.id).then((etims) => {
+        const withEtims: PrintableReceipt = { ...snap, ...etims };
+        setReceiptSnap(withEtims);
+        if (autoPrint) void printNow(withEtims);
+      });
       clearCart();
       setCompletedSale(result);
       setShowSuccess(true);

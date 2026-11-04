@@ -7,6 +7,7 @@ import { Colors } from '../constants/theme';
 
 export default function Index() {
   const token = useAuthStore((s) => s.token);
+  const role = useAuthStore((s) => s.user?.role);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -20,6 +21,9 @@ export default function Index() {
       </View>
     );
   }
+
+  // A kitchen account has one job, so it opens straight onto the tickets.
+  if (token && (role ?? '').toUpperCase() === 'KITCHEN') return <Redirect href={'/manage-kitchen' as any} />;
 
   return <Redirect href={token ? '/(tabs)/pos' : '/(auth)/login'} />;
 }

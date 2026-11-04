@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
-import { ItemType, InventoryMovementType } from '@pos/shared';
+import { ItemType, InventoryMovementType, normalizeStation } from '@pos/shared';
 import { v4 as uuidv4 } from 'uuid';
 
 interface CreateItemDto {
@@ -27,6 +27,15 @@ interface CreateItemDto {
   imageUrl?: string;
   allergens?: string[];
   reorderQty?: number;
+  /** KITCHEN / BAR / DESSERT, or empty to let the system guess from the name. */
+  station?: string | null;
+  prepTimeMinutes?: number;
+}
+
+/** Clamp a client-supplied prep time to something a kitchen could mean. */
+function cleanPrepTime(v: unknown): number | undefined {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? Math.min(Math.round(n), 240) : undefined;
 }
 
 interface UpdateItemDto extends Partial<Omit<CreateItemDto, 'businessId' | 'storeId'>> {
@@ -445,6 +454,8 @@ export class ItemsService {
         vatApplicable: dto.vatApplicable ?? true,
         totApplicable: dto.totApplicable ?? false,
         negativeStockPolicy: (dto as any).negativeStockPolicy ?? 'ALLOW',
+        station: normalizeStation(dto.station),
+        ...(cleanPrepTime(dto.prepTimeMinutes) !== undefined && { prepTimeMinutes: cleanPrepTime(dto.prepTimeMinutes) }),
         storeId,
         businessId: dto.businessId,
       },
@@ -514,6 +525,8 @@ export class ItemsService {
         ...(dto.imageUrl !== undefined && { imageUrl: dto.imageUrl }),
         ...(dto.allergens !== undefined && { allergens: JSON.stringify(dto.allergens) }),
         ...(dto.reorderQty !== undefined && { reorderQty: dto.reorderQty }),
+        ...(dto.station !== undefined && { station: normalizeStation(dto.station) }),
+        ...(cleanPrepTime(dto.prepTimeMinutes) !== undefined && { prepTimeMinutes: cleanPrepTime(dto.prepTimeMinutes) }),
         ...(dto.soldOut !== undefined && { soldOut: dto.soldOut }),
         ...(dto.isFractional !== undefined && { isFractional: dto.isFractional }),
         ...(dto.unitLabel !== undefined && { unitLabel: dto.unitLabel }),

@@ -17,7 +17,8 @@
     "noFallthroughCasesInSwitch": true,
     "paths": {
       "@/*": ["./src/*"],
-      "@pos/shared": ["../../packages/shared/index.ts"]
+      "@pos/shared": ["../../packages/shared/index.ts"],
+      "@pos/print-core": ["../../packages/print-core/src/index.ts"]
     }
   },
   "include": ["src"],

@@ -1,125 +1,155 @@
-import { Controller, Post, Get, Patch, Delete, Body, Param, Query, Req, BadRequestException, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Body, Param, Query, Req, UnauthorizedException, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import type { AuthUser } from '../auth/auth.service';
 import { HospitalityService } from './hospitality.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { SubscriptionGuard, RequiresFeature } from '../auth/subscription.guard';
+import { HospitalityAccessGuard } from './hospitality-access.guard';
 import { Feature } from '@pos/shared';
 
-@UseGuards(JwtAuthGuard, SubscriptionGuard)
+type AuthedRequest = Request & { user?: AuthUser };
+
+/**
+ * The caller's business. Every route scopes its data to this, never to a
+ * businessId sent in the query or body, which any signed-in user could change.
+ */
+function businessOf(req: AuthedRequest): string {
+  const id = req.user?.businessId;
+  if (!id) throw new UnauthorizedException();
+  return id;
+}
+
+function userOf(req: AuthedRequest): AuthUser {
+  if (!req.user) throw new UnauthorizedException();
+  return req.user;
+}
+
+@UseGuards(JwtAuthGuard, SubscriptionGuard, HospitalityAccessGuard)
 @RequiresFeature(Feature.HOSPITALITY)
 @Controller('hospitality')
 export class HospitalityController {
   constructor(private hospitalityService: HospitalityService) {}
 
+  // ── Tables ─────────────────────────────────────────────────────────────────
+
   @RequiresFeature(Feature.HOSPITALITY)
   @Get('tables')
-  async getTables(@Query('storeId') storeId: string, @Query('status') status?: string) {
-    return this.hospitalityService.getTables(storeId, status);
+  async getTables(@Req() req: AuthedRequest, @Query('storeId') storeId: string, @Query('status') status?: string) {
+    return this.hospitalityService.getTables(storeId, businessOf(req), status);
   }
 
   @RequiresFeature(Feature.HOSPITALITY)
   @Post('tables')
-  async createTable(@Body() data: { storeId: string; number: string; capacity: number; floor?: string }) {
-    return this.hospitalityService.createTable(data);
+  async createTable(@Req() req: AuthedRequest, @Body() data: { storeId?: string; number: string; capacity: number; floor?: string }) {
+    return this.hospitalityService.createTable(data, businessOf(req));
   }
 
   @Patch('tables/:id/status')
-  async updateTableStatus(@Param('id') id: string, @Body('status') status: string) {
-    return this.hospitalityService.updateTableStatus(id, status);
+  async updateTableStatus(@Req() req: AuthedRequest, @Param('id') id: string, @Body('status') status: string) {
+    return this.hospitalityService.setTableStatus(id, status, businessOf(req));
   }
 
   @Patch('tables/:id')
   async updateTable(
+    @Req() req: AuthedRequest,
     @Param('id') id: string,
     @Body() dto: { number?: string; capacity?: number; floor?: string | null },
   ) {
-    return this.hospitalityService.updateTable(id, dto);
+    return this.hospitalityService.updateTable(id, dto, businessOf(req));
   }
 
   @Delete('tables/:id')
-  async deleteTable(@Param('id') id: string) {
-    return this.hospitalityService.deleteTable(id);
+  async deleteTable(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.hospitalityService.deleteTable(id, businessOf(req));
   }
 
+  @Post('tables/merge')
+  async mergeTables(@Req() req: AuthedRequest, @Body() data: { tableIds: string[]; targetTableId: string }) {
+    return this.hospitalityService.mergeTables(data.tableIds, data.targetTableId, businessOf(req));
+  }
+
+  // ── Orders ─────────────────────────────────────────────────────────────────
+
   @Post('orders')
-  async createOrder(@Body() data: {
+  async createOrder(@Req() req: AuthedRequest, @Body() data: {
     offlineId: string;
-    businessId: string;
+    businessId?: string;
     storeId: string;
     tableId?: string;
     roomNumber?: string;
-    waiterId: string;
+    waiterId?: string;
     roomBookingId?: string;
   }) {
-    return this.hospitalityService.createOrder(data);
+    // The business comes from the token, never from the body; an order with no
+    // waiter named belongs to whoever opened it.
+    return this.hospitalityService.createOrder({
+      ...data,
+      businessId: businessOf(req),
+      waiterId: data.waiterId || userOf(req).id,
+    });
   }
 
   @Post('orders/:id/items')
-  async addOrderItems(@Param('id') id: string, @Body('items') items: Array<{
+  async addOrderItems(@Req() req: AuthedRequest, @Param('id') id: string, @Body('items') items: Array<{
     itemId: string;
-    name: string;
+    name?: string;
     quantity: number;
-    unitPriceCents: number;
+    unitPriceCents?: number;
     specialInstructions?: string;
-    modifiers?: string[];
+    modifiers?: Array<{ name: string; priceCents?: number } | string>;
     course?: string;
+    seatNumber?: number;
   }>) {
-    return this.hospitalityService.addOrderItems(id, items);
+    return this.hospitalityService.addOrderItems(id, items, businessOf(req));
   }
 
   @Post('orders/:id/items/remove')
-  async removeOrderItems(@Param('id') id: string, @Body('itemIds') itemIds: string[]) {
-    return this.hospitalityService.removeOrderItems(id, itemIds);
+  async removeOrderItems(@Req() req: AuthedRequest, @Param('id') id: string, @Body('itemIds') itemIds: string[]) {
+    return this.hospitalityService.removeOrderItems(id, itemIds, businessOf(req));
   }
 
   @Post('orders/:id/request-bill')
-  async requestBill(@Param('id') id: string) {
-    return this.hospitalityService.requestBill(id);
+  async requestBill(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.hospitalityService.requestBill(id, businessOf(req));
   }
 
   /** Cancel an order and reset the table to AVAILABLE (guests left without ordering) */
   @Post('orders/:id/cancel')
-  async cancelOrder(@Param('id') id: string) {
-    return this.hospitalityService.cancelOrder(id);
+  async cancelOrder(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.hospitalityService.cancelOrder(id, businessOf(req));
   }
 
   @Get('orders/:id')
-  async getOrderDetails(@Param('id') id: string) {
-    return this.hospitalityService.getOrderDetails(id);
+  async getOrderDetails(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.hospitalityService.getOrderDetails(id, businessOf(req));
   }
 
   @Get('kitchen/orders')
-  async getKitchenOrders(@Query('storeId') storeId: string) {
-    return this.hospitalityService.getKitchenOrders(storeId);
-  }
-
-  @Post('tables/merge')
-  async mergeTables(@Body() data: { tableIds: string[]; targetTableId: string }) {
-    return this.hospitalityService.mergeTables(data.tableIds, data.targetTableId);
+  async getKitchenOrders(@Req() req: AuthedRequest, @Query('storeId') storeId: string) {
+    return this.hospitalityService.getKitchenOrders(storeId, businessOf(req));
   }
 
   @Post('orders/:id/split')
-  async splitBill(@Param('id') id: string, @Body('splits') splits: Array<{ itemIds: string[] }>) {
-    return this.hospitalityService.splitBill(id, splits);
+  async splitBill(@Req() req: AuthedRequest, @Param('id') id: string, @Body('splits') splits: Array<{ itemIds: string[] }>) {
+    return this.hospitalityService.splitBill(id, splits, businessOf(req));
   }
 
   @Post('orders/:id/transfer')
-  async transferTable(@Param('id') id: string, @Body('newTableId') newTableId: string) {
-    return this.hospitalityService.transferTable(id, newTableId);
+  async transferTable(@Req() req: AuthedRequest, @Param('id') id: string, @Body('newTableId') newTableId: string) {
+    return this.hospitalityService.transferTable(id, newTableId, businessOf(req));
   }
 
   // ── Course / Fire Management ───────────────────────────────────────────────
 
   @Post('orders/:id/fire-course')
-  async fireCourse(@Param('id') id: string, @Body() body: { course: string }) {
-    return this.hospitalityService.fireCourse(id, body.course);
+  async fireCourse(@Req() req: AuthedRequest, @Param('id') id: string, @Body() body: { course: string }) {
+    return this.hospitalityService.fireCourse(id, body.course, businessOf(req));
   }
 
   // ── Reservations ──────────────────────────────────────────────────────────
 
   @Post('reservations')
-  async createReservation(@Body() data: {
+  async createReservation(@Req() req: AuthedRequest, @Body() data: {
     tableId: string;
     customerName: string;
     customerPhone?: string;
@@ -132,88 +162,89 @@ export class HospitalityController {
     return this.hospitalityService.createReservation({
       ...data,
       reservationTime: new Date(data.reservationTime),
-    });
+    }, businessOf(req));
   }
 
   @Get('reservations')
-  async getReservations(@Query('storeId') storeId: string, @Query('date') date?: string) {
-    return this.hospitalityService.getReservations(storeId, date ? new Date(date) : undefined);
+  async getReservations(@Req() req: AuthedRequest, @Query('storeId') storeId: string, @Query('date') date?: string) {
+    return this.hospitalityService.getReservations(storeId, businessOf(req), date ? new Date(date) : undefined);
   }
 
   @Get('reservations/:id/deposit-status')
-  async getReservationDepositStatus(@Param('id') id: string) {
-    return this.hospitalityService.getReservationDepositStatus(id);
+  async getReservationDepositStatus(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.hospitalityService.getReservationDepositStatus(id, businessOf(req));
   }
 
+  // ── Kitchen tickets ────────────────────────────────────────────────────────
+
   @Post('orders/:id/kot')
-  async createKOT(@Param('id') id: string, @Body('type') type: string, @Body('itemIds') itemIds?: string[]) {
-    return this.hospitalityService.createKOT(id, type, itemIds);
+  async createKOT(@Req() req: AuthedRequest, @Param('id') id: string, @Body('type') type: string, @Body('itemIds') itemIds?: string[]) {
+    return this.hospitalityService.createKOT(id, type, itemIds, businessOf(req));
   }
 
   @Patch('kot/:id/status')
   async updateKOTStatus(
     @Param('id') id: string,
     @Body('status') status: string,
-    @Req() req: Request & { user?: AuthUser },
+    @Req() req: AuthedRequest,
   ) {
-    const chefId = req.user?.id;
-    return this.hospitalityService.updateKOTStatus(id, status, chefId);
+    return this.hospitalityService.updateKOTStatus(id, status, req.user?.id, businessOf(req));
   }
 
   @Patch('orders/:id/priority')
   async setOrderPriority(
+    @Req() req: AuthedRequest,
     @Param('id') id: string,
     @Body() body: { priority: number; isVIP: boolean },
   ) {
-    return this.hospitalityService.setOrderPriority(id, body.priority, body.isVIP);
+    return this.hospitalityService.setOrderPriority(id, body.priority, body.isVIP, businessOf(req));
   }
 
   @Get('kds/orders')
-  async getKDSOrders(@Query('storeId') storeId: string) {
-    return this.hospitalityService.getKDSOrders(storeId);
+  async getKDSOrders(@Req() req: AuthedRequest, @Query('storeId') storeId: string, @Query('station') station?: string) {
+    return this.hospitalityService.getKDSOrders(storeId, businessOf(req), station);
   }
 
   // ── Bar Tab Endpoints ──────────────────────────────────────────────────────
 
   @Get('bar-tabs')
-  getBarTabs(@Query('businessId') businessId: string, @Query('storeId') storeId: string) {
-    return this.hospitalityService.getBarTabs(businessId, storeId);
+  getBarTabs(@Req() req: AuthedRequest, @Query('storeId') storeId: string) {
+    return this.hospitalityService.getBarTabs(businessOf(req), storeId);
   }
 
   @Post('bar-tabs')
-  createBarTab(@Body() body: { businessId: string; storeId: string; tabName: string; waiterId: string }) {
-    return this.hospitalityService.createBarTab(body.businessId, body.storeId, body.tabName, body.waiterId);
+  createBarTab(@Req() req: AuthedRequest, @Body() body: { storeId: string; tabName: string; waiterId?: string }) {
+    return this.hospitalityService.createBarTab(businessOf(req), body.storeId, body.tabName, body.waiterId || userOf(req).id);
   }
 
   @Post('bar-tabs/:id/items')
-  addToBarTab(@Param('id') id: string, @Body() body: { items: any[] }) {
-    return this.hospitalityService.addToBarTab(id, body.items);
+  addToBarTab(@Req() req: AuthedRequest, @Param('id') id: string, @Body() body: { items: any[] }) {
+    return this.hospitalityService.addToBarTab(id, body.items, businessOf(req));
   }
 
   @Post('bar-tabs/:id/settle')
-  settleBarTab(@Param('id') id: string, @Body() body: { payments: any[] }) {
-    return this.hospitalityService.settleBarTab(id, body.payments);
+  settleBarTab(@Req() req: AuthedRequest, @Param('id') id: string, @Body() body: { payments: any[] }) {
+    return this.hospitalityService.settleBarTab(id, body.payments, businessOf(req));
   }
 
   @Post('bar-tabs/:id/close')
-  closeBarTab(@Param('id') id: string) {
-    return this.hospitalityService.closeBarTab(id);
+  closeBarTab(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.hospitalityService.closeBarTab(id, businessOf(req), String(userOf(req).role));
   }
 
   // ── Hotel Room Endpoints ───────────────────────────────────────────────────
 
   @Get('hotel-rooms')
   getHotelRooms(
-    @Query('businessId') businessId: string,
+    @Req() req: AuthedRequest,
     @Query('storeId') storeId: string,
     @Query('status') status?: string,
   ) {
-    return this.hospitalityService.getHotelRooms(businessId, storeId, status);
+    return this.hospitalityService.getHotelRooms(businessOf(req), storeId, status);
   }
 
   @Post('hotel-rooms')
-  createHotelRoom(@Body() body: {
-    businessId: string;
+  createHotelRoom(@Req() req: AuthedRequest, @Body() body: {
     storeId: string;
     number: string;
     type?: string;
@@ -223,11 +254,12 @@ export class HospitalityController {
     amenities?: string[];
     notes?: string;
   }) {
-    return this.hospitalityService.createHotelRoom(body);
+    return this.hospitalityService.createHotelRoom(body, businessOf(req));
   }
 
   @Patch('hotel-rooms/:id')
   updateHotelRoom(
+    @Req() req: AuthedRequest,
     @Param('id') id: string,
     @Body() body: {
       type?: string;
@@ -239,26 +271,25 @@ export class HospitalityController {
       notes?: string;
     },
   ) {
-    return this.hospitalityService.updateHotelRoom(id, body);
+    return this.hospitalityService.updateHotelRoom(id, body, businessOf(req));
   }
 
   @Delete('hotel-rooms/:id')
-  deleteHotelRoom(@Param('id') id: string) {
-    return this.hospitalityService.deleteHotelRoom(id);
+  deleteHotelRoom(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.hospitalityService.deleteHotelRoom(id, businessOf(req));
   }
 
   @Get('room-bookings')
   getRoomBookings(
-    @Query('businessId') businessId: string,
+    @Req() req: AuthedRequest,
     @Query('storeId') storeId: string,
     @Query('status') status?: string,
   ) {
-    return this.hospitalityService.getRoomBookings(businessId, storeId, status);
+    return this.hospitalityService.getRoomBookings(businessOf(req), storeId, status);
   }
 
   @Post('room-bookings')
-  createRoomBooking(@Body() body: {
-    businessId: string;
+  createRoomBooking(@Req() req: AuthedRequest, @Body() body: {
     storeId: string;
     roomId: string;
     guestName: string;
@@ -274,110 +305,108 @@ export class HospitalityController {
       ...body,
       checkInDate: new Date(body.checkInDate),
       checkOutDate: body.checkOutDate ? new Date(body.checkOutDate) : undefined,
-    });
+    }, businessOf(req));
   }
 
   @Post('room-bookings/:id/check-in')
-  checkInGuest(@Param('id') id: string) {
-    return this.hospitalityService.checkInGuest(id);
+  checkInGuest(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.hospitalityService.checkInGuest(id, businessOf(req));
   }
 
   @Post('room-bookings/:id/check-out')
-  checkOutGuest(@Param('id') id: string, @Body('payments') payments: Array<{ method: string; amountCents: number }>) {
-    return this.hospitalityService.checkOutGuest(id, payments ?? []);
+  checkOutGuest(@Req() req: AuthedRequest, @Param('id') id: string, @Body('payments') payments: Array<{ method: string; amountCents: number }>) {
+    return this.hospitalityService.checkOutGuest(id, payments ?? [], businessOf(req));
   }
 
   @Post('room-bookings/:id/cancel')
-  cancelRoomBooking(@Param('id') id: string) {
-    return this.hospitalityService.cancelRoomBooking(id);
+  cancelRoomBooking(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.hospitalityService.cancelRoomBooking(id, businessOf(req));
   }
 
   // ── Guest Folio ───────────────────────────────────────────────────────────
 
   @Get('room-bookings/:id/folio')
-  getFolio(@Param('id') id: string) {
-    return this.hospitalityService.getFolio(id);
+  getFolio(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.hospitalityService.getFolio(id, businessOf(req));
   }
 
   @Post('room-bookings/:id/folio')
   addFolioCharge(
+    @Req() req: AuthedRequest,
     @Param('id') id: string,
-    @Body() body: { type: string; description: string; amountCents: number; quantity?: number; postedBy?: string; saleId?: string },
+    @Body() body: { type: string; description: string; amountCents: number; quantity?: number },
   ) {
-    return this.hospitalityService.addFolioCharge(id, body);
+    return this.hospitalityService.addFolioCharge(id, body, businessOf(req), userOf(req).name);
   }
 
   @Delete('folio-charges/:id')
-  removeFolioCharge(@Param('id') id: string) {
-    return this.hospitalityService.removeFolioCharge(id);
+  removeFolioCharge(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.hospitalityService.removeFolioCharge(id, businessOf(req));
   }
 
   // ── Housekeeping ──────────────────────────────────────────────────────────
 
   @Patch('hotel-rooms/:id/housekeeping')
-  updateHousekeepingStatus(@Param('id') id: string, @Body('status') status: string) {
-    return this.hospitalityService.updateHousekeepingStatus(id, status);
+  updateHousekeepingStatus(@Req() req: AuthedRequest, @Param('id') id: string, @Body('status') status: string) {
+    return this.hospitalityService.updateHousekeepingStatus(id, status, businessOf(req));
   }
 
   @Get('housekeeping')
-  getHousekeepingQueue(
-    @Query('businessId') businessId: string,
-    @Query('storeId') storeId: string,
-  ) {
-    return this.hospitalityService.getHousekeepingQueue(businessId, storeId);
+  getHousekeepingQueue(@Req() req: AuthedRequest, @Query('storeId') storeId: string) {
+    return this.hospitalityService.getHousekeepingQueue(businessOf(req), storeId);
   }
 
   // ── Hotel Dashboard ────────────────────────────────────────────────────────
 
   @Get('hotel-dashboard')
-  getHotelDashboard(
-    @Query('businessId') businessId: string,
-    @Query('storeId') storeId: string,
-  ) {
-    return this.hospitalityService.getHotelDashboard(businessId, storeId);
+  getHotelDashboard(@Req() req: AuthedRequest, @Query('storeId') storeId: string) {
+    return this.hospitalityService.getHotelDashboard(businessOf(req), storeId);
   }
 
   // ── Void Single KOT Item ──────────────────────────────────────────────────
 
   @Patch('orders/:orderId/items/:itemId/void')
   async voidOrderItem(
+    @Req() req: AuthedRequest,
     @Param('orderId') orderId: string,
     @Param('itemId') itemId: string,
-    @Body() body: { reason: string; managerId: string },
+    @Body() body: { reason: string },
   ) {
-    return this.hospitalityService.voidOrderItem(orderId, itemId, body.reason, body.managerId);
+    return this.hospitalityService.voidOrderItem(
+      orderId, itemId, body.reason, String(req.user?.role ?? ''), req.user?.name ?? 'staff', businessOf(req),
+    );
   }
 
   // ── Happy Hours ───────────────────────────────────────────────────────────
 
   @Get('happy-hours/active-discount')
-  async getActiveDiscount(@Query('businessId') businessId: string) {
-    return { discountPct: await this.hospitalityService.getActiveHappyHourDiscount(businessId) };
+  async getActiveDiscount(@Req() req: AuthedRequest) {
+    return { discountPct: await this.hospitalityService.getActiveHappyHourDiscount(businessOf(req)) };
   }
 
   @Get('happy-hours')
-  async getHappyHours(@Query('businessId') businessId: string) {
-    return this.hospitalityService.getHappyHours(businessId);
+  async getHappyHours(@Req() req: AuthedRequest) {
+    return this.hospitalityService.getHappyHours(businessOf(req));
   }
 
   @Post('happy-hours')
-  async createHappyHour(@Body() body: any) {
-    return this.hospitalityService.createHappyHour(body);
+  async createHappyHour(@Req() req: AuthedRequest, @Body() body: any) {
+    return this.hospitalityService.createHappyHour(body, businessOf(req));
   }
 
   @Delete('happy-hours/:id')
-  async deleteHappyHour(@Param('id') id: string) {
-    return this.hospitalityService.deleteHappyHour(id);
+  async deleteHappyHour(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.hospitalityService.deleteHappyHour(id, businessOf(req));
   }
 
   // ── RevPASH ───────────────────────────────────────────────────────────────
 
   @Get('revpash')
   async getRevPASH(
-    @Query('businessId') businessId: string,
+    @Req() req: AuthedRequest,
     @Query('storeId') storeId: string,
     @Query('date') date: string,
   ) {
-    return this.hospitalityService.getRevPASH(businessId, storeId, date);
+    return this.hospitalityService.getRevPASH(businessOf(req), storeId, date);
   }
 }

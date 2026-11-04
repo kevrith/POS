@@ -26,6 +26,8 @@ interface NavItem {
   label: string;
   roles?: string[];
   businessTypes?: string[];
+  modules?: string[];
+  notForTypes?: string[];
 }
 
 interface NavGroup {
@@ -41,7 +43,8 @@ const MENU_GROUPS: NavGroup[] = [
     label: 'Sales',
     items: [
       { to: '/pos',           icon: ShoppingCart,   label: 'Point of Sale',   roles: ['OWNER','MANAGER','CASHIER','WAITER'] },
-      { to: '/kds',           icon: Monitor,        label: 'Kitchen Display', roles: ['OWNER','MANAGER','WAITER','KITCHEN'], businessTypes: ['HOSPITALITY','FAST_FOOD','BAR_TAB'] },
+      { to: '/kds',           icon: Monitor,        label: 'Kitchen Display', roles: ['OWNER','MANAGER','WAITER','KITCHEN'], businessTypes: ['HOSPITALITY','FAST_FOOD','BAR_TAB'], modules: ['RESTAURANT'] },
+      { to: '/hospitality',   icon: ClipboardList,  label: 'Restaurant Tables', roles: ['OWNER','MANAGER','WAITER','CASHIER'], businessTypes: [], modules: ['RESTAURANT'], notForTypes: ['HOSPITALITY','FAST_FOOD','BAR_TAB'] },
       { to: '/layaway',       icon: Layers,         label: 'Layaway',         roles: ['OWNER','MANAGER','CASHIER'], businessTypes: ['RETAIL','SUPERMARKET'] },
       { to: '/proforma',      icon: CreditCard,     label: 'Proformas',       roles: ['OWNER','MANAGER','CASHIER'] },
       { to: '/prescriptions', icon: Pill,           label: 'Prescriptions',   roles: ['OWNER','MANAGER','CASHIER'], businessTypes: ['CLINIC'] },
@@ -56,8 +59,8 @@ const MENU_GROUPS: NavGroup[] = [
       { to: '/delivery-management', icon: Truck,         label: 'Delivery Dispatch', businessTypes: ['HOSPITALITY','FAST_FOOD','RETAIL','SUPERMARKET'] },
       { to: '/field-orders',        icon: ClipboardList, label: 'Field Orders' },
       { to: '/delivery-routes',     icon: MapPin,        label: 'Delivery Routes' },
-      { to: '/hotel',               icon: BedDouble,     label: 'Hotel',            businessTypes: ['HOSPITALITY'] },
-      { to: '/channel-manager',     icon: Radio,         label: 'Channel Manager',  businessTypes: ['HOSPITALITY'] },
+      { to: '/hotel',               icon: BedDouble,     label: 'Hotel',            businessTypes: ['HOSPITALITY'], modules: ['HOTEL'] },
+      { to: '/channel-manager',     icon: Radio,         label: 'Channel Manager',  businessTypes: ['HOSPITALITY'], modules: ['HOTEL'] },
       { to: '/fuel-pump',           icon: Fuel,          label: 'Fuel Pumps',       roles: ['OWNER','MANAGER','CASHIER'], businessTypes: ['FUEL_PUMP'] },
       { to: '/cybercafe',           icon: Monitor,       label: 'Cybercafe',        roles: ['OWNER','MANAGER','CASHIER'], businessTypes: ['CYBERCAFE'] },
     ],
@@ -132,12 +135,14 @@ interface Props {
   onOpen: () => void;
   onClose: () => void;
   businessType?: string;
+  /** Optional modules the business switched on, e.g. ["RESTAURANT"]. */
+  enabledModules?: string[];
   userPlan?: string;
   subscriptionStatus?: string;
   subscriptionTier?: string;
 }
 
-export default function MobileNav({ isOpen, onOpen, onClose, businessType = 'RETAIL', userPlan = 'STARTER', subscriptionStatus, subscriptionTier }: Props) {
+export default function MobileNav({ isOpen, onOpen, onClose, businessType = 'RETAIL', enabledModules = [], userPlan = 'STARTER', subscriptionStatus, subscriptionTier }: Props) {
   const location    = useLocation();
   const logout      = useAuthStore((s) => s.logout);
   const user        = useAuthStore((s) => s.user);
@@ -154,14 +159,19 @@ export default function MobileNav({ isOpen, onOpen, onClose, businessType = 'RET
     to === '/' ? location.pathname === '/' : location.pathname === to || location.pathname.startsWith(to + '/');
 
   const canSee = (roles?: string[]) => !roles || roles.includes(userRole);
-  const canSeeType = (types?: string[]) => !types || types.includes(businessType);
+  const canSeeType = (types?: string[], modules?: string[], notForTypes?: string[]) => {
+    if (notForTypes?.includes(businessType)) return false;
+    if (!types && !modules) return true;
+    if (types?.includes(businessType)) return true;
+    return !!modules?.some((m) => enabledModules.includes(m));
+  };
   const canSeePlan = (to: string) => hasFeature(userPlan, to.replace(/^\//, ''), subscriptionStatus, subscriptionTier);
 
   const visibleGroups = MENU_GROUPS
     .filter((g) => canSee(g.roles) && canSeeType(g.businessTypes))
     .map((g) => ({
       ...g,
-      items: g.items.filter((i) => canSee(i.roles) && canSeeType(i.businessTypes) && canSeePlan(i.to)),
+      items: g.items.filter((i) => canSee(i.roles) && canSeeType(i.businessTypes, i.modules, i.notForTypes) && canSeePlan(i.to)),
     }))
     .filter((g) => g.items.length > 0);
 

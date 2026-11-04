@@ -28,7 +28,11 @@ import {
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
-import { downloadZPL, printZPLviaUSB } from '../lib/printer';
+import { barcodeSvg, downloadZPL, printZPLviaUSB } from '../lib/printer';
+import { printHtml } from '../lib/printHtml';
+import { escapeHtml } from '@pos/print-core';
+import { KOT_STATIONS, KOT_STATION_LABELS } from '@pos/shared';
+import { useRestaurantAccess } from '../lib/useRestaurantAccess';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -125,6 +129,8 @@ interface CreateItemPayload {
   unit: string;
   vatApplicable: boolean;
   prepTimeMinutes?: number;
+  /** KITCHEN / BAR / DESSERT, or empty to guess from the name. */
+  station?: string;
   businessId: string;
   storeId?: string;
   imageUrl?: string;
@@ -246,8 +252,19 @@ interface AddItemModalProps {
   onClose: () => void;
 }
 
+/** Which preparation area makes an item. Empty lets the system guess from the name. */
+function StationSelect({ value, onChange, className }: { value: string; onChange: (v: string) => void; className: string }) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)} className={className}>
+      <option value="">Automatic (guess from name)</option>
+      {KOT_STATIONS.map((st) => <option key={st} value={st}>{KOT_STATION_LABELS[st]}</option>)}
+    </select>
+  );
+}
+
 function AddItemModal({ businessId, storeId, categories, posMode, existingItems = [], onClose }: AddItemModalProps) {
   const qc = useQueryClient();
+  const isRestaurant = useRestaurantAccess();
   const [form, setForm] = useState({
     name: '',
     barcode: '',
@@ -263,6 +280,7 @@ function AddItemModal({ businessId, storeId, categories, posMode, existingItems 
     unit: 'pcs',
     vatApplicable: false,
     prepTimeMinutes: 5,
+    station: '',
     blockOversell: false, // false = allow selling when OOS (ALLOW policy); true = hard block (BLOCK policy)
   });
   const [error, setError] = useState('');
@@ -371,6 +389,7 @@ function AddItemModal({ businessId, storeId, categories, posMode, existingItems 
       unit: form.unit,
       vatApplicable: form.vatApplicable,
       prepTimeMinutes: form.prepTimeMinutes,
+      station: form.station,
       negativeStockPolicy: form.blockOversell ? 'BLOCK' : 'ALLOW',
       businessId,
       storeId,
@@ -504,7 +523,8 @@ function AddItemModal({ businessId, storeId, categories, posMode, existingItems 
           )}
 
           <div className="grid grid-cols-2 gap-4">
-            {field('Prep Time (minutes)', <input type="number" min="1" value={form.prepTimeMinutes} onChange={(e) => setForm(f => ({ ...f, prepTimeMinutes: parseInt(e.target.value) || 5 }))} className={inputCls} placeholder="5" />)}
+            {isRestaurant && field('Prep Time (minutes)', <input type="number" min="1" value={form.prepTimeMinutes} onChange={(e) => setForm(f => ({ ...f, prepTimeMinutes: parseInt(e.target.value) || 5 }))} className={inputCls} placeholder="5" />)}
+            {isRestaurant && field('Made at', <StationSelect value={form.station} onChange={(station) => setForm(f => ({ ...f, station }))} className={inputCls} />)}
           </div>
 
           <div className="flex flex-wrap gap-x-6 gap-y-3">
@@ -561,6 +581,7 @@ interface EditItemModalProps {
 
 function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
   const qc = useQueryClient();
+  const isRestaurant = useRestaurantAccess();
   const businessId = useAuthStore((s) => s.user?.businessId ?? '');
   const [form, setForm] = useState({
     name: item.name,
@@ -575,6 +596,7 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
     vatApplicable: item.vatApplicable,
     trackStock: item.trackStock,
     prepTimeMinutes: (item as any).prepTimeMinutes ?? 5,
+    station: (item as any).station ?? '',
     imageUrl: item.imageUrl ?? '',
     allergens: (() => { try { return JSON.parse(item.allergens ?? '[]') as string[]; } catch { return [] as string[]; } })(),
     reorderQty: item.reorderQty ?? 1,
@@ -621,6 +643,7 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
       vatApplicable: form.vatApplicable,
       trackStock: form.trackStock,
       prepTimeMinutes: form.prepTimeMinutes,
+      station: form.station,
       imageUrl: form.imageUrl.trim() || undefined,
       allergens: form.allergens,
       reorderQty: form.reorderQty,
@@ -693,9 +716,16 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
                 {['pcs', 'kg', 'g', 'litre', 'ml', 'box', 'pack', 'pair', 'set', 'dozen'].map(u => <option key={u} value={u}>{u}</option>)}
               </select>
             </div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Prep Time (minutes)</label>
-              <input type="number" min="1" value={form.prepTimeMinutes} onChange={(e) => setForm(f => ({ ...f, prepTimeMinutes: parseInt(e.target.value) || 5 }))} className={inputCls} />
-            </div>
+            {isRestaurant && (
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">Prep Time (minutes)</label>
+                <input type="number" min="1" value={form.prepTimeMinutes} onChange={(e) => setForm(f => ({ ...f, prepTimeMinutes: parseInt(e.target.value) || 5 }))} className={inputCls} />
+              </div>
+            )}
+            {isRestaurant && (
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">Made at</label>
+                <StationSelect value={form.station} onChange={(station) => setForm(f => ({ ...f, station }))} className={inputCls} />
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -1368,32 +1398,26 @@ function BarcodeLabelModal({ items, onClose }: { items: Array<{ id: string; name
   const [cols, setCols] = useState(3);
   const [showPrice, setShowPrice] = useState(true);
 
-  function printLabels() {
-    const win = window.open('', '_blank');
-    if (!win) return;
+  async function printLabels() {
     const selectedItems = items.filter(i => selected.has(i.id));
+    const barcodes = new Map<string, string>();
+    for (const item of selectedItems) {
+      if (item.barcode) {
+        try { barcodes.set(item.id, await barcodeSvg(item.barcode)); } catch { /* unreadable barcode value: print the label without bars */ }
+      }
+    }
     const labelHtml = selectedItems.map(item => `
-      <div style="width:${100/cols}%; display:inline-block; padding:4px; box-sizing:border-box; text-align:center; border:1px solid #ddd; font-family:monospace;">
-        <svg id="bc-${item.id}" style="width:100%;height:50px;"></svg>
-        <div style="font-size:10px;font-weight:bold;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.name}</div>
+      <div style="width:${100/cols}%; display:inline-block; padding:4px; box-sizing:border-box; text-align:center; border:1px solid #ddd; font-family:Arial,sans-serif">
+        <div style="width:100%;height:50px">${barcodes.get(item.id) ?? ''}</div>
+        <div style="font-size:10px;font-weight:bold;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(item.name)}</div>
         ${showPrice ? `<div style="font-size:12px;font-weight:bold">KES ${(item.retailPriceCents/100).toFixed(2)}</div>` : ''}
-        <div style="font-size:9px;color:#666">${item.barcode ?? ''}</div>
+        <div style="font-size:9px;color:#666">${escapeHtml(item.barcode ?? '')}</div>
       </div>
     `).join('');
-    win.document.write(`
-      <html><head><title>Barcode Labels</title>
-      <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
-      </head><body>
+    printHtml(`<html><head><title>Barcode Labels</title>
+      <style>svg{width:100%;height:50px}</style></head><body>
       <div style="padding:10mm;">${labelHtml}</div>
-      <script>
-        window.onload = function() {
-          ${selectedItems.filter(i=>i.barcode).map(i => `try { JsBarcode("#bc-${i.id}", "${i.barcode}", {width:1.5,height:40,displayValue:false,margin:2}); } catch(e){}`).join('\n')}
-          setTimeout(()=>{ window.onafterprint = () => window.close(); window.print(); }, 500);
-        };
-      <\/script>
-      </body></html>
-    `);
-    win.document.close();
+      </body></html>`, 300);
   }
 
   return (

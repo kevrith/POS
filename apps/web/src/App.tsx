@@ -5,6 +5,7 @@ import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useAuthStore } from './stores/auth';
 import LoginPage from './pages/LoginPage';
 import Layout from './components/Layout';
+import PrintBridge from './components/PrintBridge';
 import { DialogProvider } from './components/Dialog';
 
 // Lazy load all pages for code-splitting
@@ -284,6 +285,7 @@ export default function App() {
     <DialogProvider>
       <>
         <Toaster position="top-right" richColors closeButton duration={4000} />
+        <PrintBridge />
         <Layout>
           <Suspense fallback={<PageLoader />}>
             <Routes>

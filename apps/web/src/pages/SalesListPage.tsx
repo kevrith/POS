@@ -321,6 +321,11 @@ export default function SalesListPage() {
         ? await api.get<{ balance: number; transactions: Array<{ points: number; type: string; saleId?: string }> }>(`/loyalty/customer/${customerId}`).catch(() => null)
         : null;
       const isVoided = sale.status === 'VOIDED';
+      // Submitting is idempotent: a sale KRA already accepted returns its control number and QR code, and one
+      // that is still pending gets another attempt, so a reprint carries the same fiscal proof as the original.
+      const etims = isVoided
+        ? null
+        : await api.post<{ success: boolean; controlNumber?: string; intrlData?: string; qrUrl?: string }>(`/etims/submit/${sale.id}`).catch(() => null);
       const earnedTx = loyaltyData?.transactions.find(t => t.type === 'EARN' && t.saleId === sale.id);
       const receipt: ReceiptData = {
         receiptNumber: detail.receiptNumber,
@@ -347,11 +352,15 @@ export default function SalesListPage() {
         totalCents: detail.totalCents,
         payments: detail.payments,
         kraControlNumber: detail.etimsControlNumber,
-        etimsSubmitted: isVoided ? undefined : detail.etimsSubmitted,
+        etimsControlNumber: etims?.controlNumber ?? detail.etimsControlNumber,
+        kraQRCode: etims?.success ? (etims.qrUrl ?? etims.intrlData ?? etims.controlNumber) : undefined,
+        etimsSubmitted: isVoided ? undefined : (etims ? etims.success : detail.etimsSubmitted),
         voided: isVoided,
         saleId: detail.id,
         pointsEarned: earnedTx?.points ?? 0,
         loyaltyBalance: loyaltyData?.balance ?? 0,
+        // A receipt printed from the sales list is never the original.
+        copyNumber: 1,
       };
       // Reprint to the printer configured in Settings; fall back to the picker when none is set or it fails.
       try {

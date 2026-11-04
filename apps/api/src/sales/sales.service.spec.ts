@@ -333,3 +333,175 @@ describe('SalesService.createSale', () => {
     expect(capturedSaleData.subtotalCents).toBe(80000);
   });
 });
+
+describe('SalesService.createSale input guards', () => {
+  function ready(storeOverrides: Record<string, any> = {}) {
+    const deps = makeDeps();
+    deps.prisma.store.findUnique.mockResolvedValue(
+      makeStore({ business: { taxType: 'VAT', serviceChargeRate: 0, negativePolicyDefault: 'ALLOW' }, ...storeOverrides }),
+    );
+    deps.prisma.item.findMany.mockResolvedValue([makeItem()]);
+    return { deps, svc: makeService(deps as any) as any };
+  }
+
+  it('looks items up within the caller\'s business only', async () => {
+    const { deps, svc } = ready();
+    deps.prisma.$transaction.mockRejectedValue(new Error('stop here'));
+    await svc.createSale('biz-001', { ...BASE_DTO, serviceChargeCents: 0 }).catch(() => undefined);
+    expect(deps.prisma.item.findMany.mock.calls[0][0].where).toEqual(expect.objectContaining({ businessId: 'biz-001' }));
+  });
+
+  it.each([[0], [-1], [Number.NaN]])('refuses a quantity of %p, which could only lower the total', async (quantity) => {
+    const { svc } = ready();
+    await expect(svc.createSale('biz-001', { ...BASE_DTO, items: [{ itemId: 'item-001', quantity }], serviceChargeCents: 0 }))
+      .rejects.toThrow('greater than zero');
+  });
+
+  it('still sells a fractional quantity, as weighed goods need', async () => {
+    const { deps, svc } = ready();
+    deps.prisma.$transaction.mockRejectedValue(new Error('reached the transaction'));
+    await expect(svc.createSale('biz-001', { ...BASE_DTO, items: [{ itemId: 'item-001', quantity: 0.35 }], serviceChargeCents: 0 }))
+      .rejects.toThrow('reached the transaction');
+  });
+
+  it('refuses a negative discount, a discount larger than the sale, and a negative tip', async () => {
+    const { svc } = ready();
+    await expect(svc.createSale('biz-001', { ...BASE_DTO, serviceChargeCents: 0, discountCents: -500 })).rejects.toThrow('Discount');
+    await expect(svc.createSale('biz-001', { ...BASE_DTO, serviceChargeCents: 0, discountCents: 100_001 })).rejects.toThrow('larger than the sale');
+    await expect(svc.createSale('biz-001', { ...BASE_DTO, serviceChargeCents: 0, tipCents: -1 })).rejects.toThrow('Tip');
+  });
+});
+
+describe('SalesService.createSale paying an order', () => {
+  const orderRow = (over: Record<string, any> = {}) => ({
+    id: 'order-1', businessId: 'biz-001', storeId: 'store-001', tableId: 'table-1', status: 'BILL_REQUESTED',
+    items: [
+      // Pilau at KES 350 with a KES 50 extra, two plates: (350 + 50) x 2 = KES 800
+      { itemId: 'item-001', name: 'Pilau', quantity: 2, unitPriceCents: 35_000, totalCents: 80_000, modifiers: JSON.stringify([{ name: 'Extra cheese', priceCents: 5_000 }, 'No onion']) },
+    ],
+    ...over,
+  });
+
+  function ready(order: any, payments = [{ method: 'CASH', amountCents: 80_000 }]) {
+    const deps = makeDeps();
+    const store = makeStore({ business: { taxType: 'VAT', serviceChargeRate: 0, negativePolicyDefault: 'ALLOW' } });
+    deps.prisma.store.findUnique.mockResolvedValue(store);
+    deps.prisma.item.findMany.mockResolvedValue([makeItem({ trackStock: true })]);
+    const prisma: any = deps.prisma;
+    prisma.order.findFirst = jest.fn().mockResolvedValue(order);
+    prisma.order.updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    prisma.table.update = jest.fn().mockResolvedValue({});
+    const captured: { sale?: any; movements: any[] } = { movements: [] };
+    prisma.$transaction.mockImplementation(async (fn: any) => {
+      prisma.store.update.mockResolvedValue({ ...store, receiptSequence: 1 });
+      prisma.sale.create.mockImplementation(async ({ data }: any) => {
+        captured.sale = data;
+        return { id: 'sale-1', receiptNumber: 'R1', totalCents: data.totalCents, items: [], payments: [] };
+      });
+      prisma.inventoryMovement.create.mockImplementation(async ({ data }: any) => { captured.movements.push(data); return {}; });
+      return fn(prisma);
+    });
+    const svc = makeService(deps as any) as any;
+    const dto = { ...BASE_DTO, orderId: 'order-1', items: [{ itemId: 'item-001', quantity: 1 }], payments, serviceChargeCents: 0 };
+    return { deps, prisma, svc, dto, captured };
+  }
+
+  it('bills what is on the order, modifiers included, not what the cart says', async () => {
+    const { svc, dto, captured } = ready(orderRow());
+    await svc.createSale('biz-001', dto); // cart said 1 plate at retail (KES 500); the order has 2 at KES 400
+    expect(captured.sale.subtotalCents).toBe(80_000);
+    expect(captured.sale.totalCents).toBe(80_000);
+    const line = captured.sale.items.create[0];
+    expect(line).toEqual(expect.objectContaining({ quantity: 2, totalCents: 80_000, unitPriceCents: 40_000 }));
+    expect(line.name).toBe('Pilau (Extra cheese, No onion)');
+  });
+
+  it('works with an empty cart, since the order is the bill', async () => {
+    const { svc, dto, captured } = ready(orderRow());
+    await svc.createSale('biz-001', { ...dto, items: [] });
+    expect(captured.sale.totalCents).toBe(80_000);
+  });
+
+  it('links the sale to the order and deducts stock for the order\'s quantities', async () => {
+    const { svc, dto, captured } = ready(orderRow());
+    await svc.createSale('biz-001', dto);
+    expect(captured.sale.orderId).toBe('order-1');
+    expect(captured.movements[0]).toEqual(expect.objectContaining({ itemId: 'item-001', quantity: -2 }));
+  });
+
+  it('closes the order inside the transaction, then frees the table', async () => {
+    const { svc, dto, prisma } = ready(orderRow());
+    await svc.createSale('biz-001', dto);
+    expect(prisma.order.updateMany).toHaveBeenCalledWith({
+      where: { id: 'order-1', businessId: 'biz-001', status: { in: ['OPEN', 'BILL_REQUESTED'] } },
+      data: { status: 'PAID' },
+    });
+    expect(prisma.table.update).toHaveBeenCalledWith({ where: { id: 'table-1' }, data: { status: 'AVAILABLE' } });
+  });
+
+  it('loses cleanly when another till paid the order first, writing no sale', async () => {
+    const { svc, dto, prisma } = ready(orderRow());
+    prisma.order.updateMany.mockResolvedValue({ count: 0 });
+    await expect(svc.createSale('biz-001', dto)).rejects.toThrow('just paid');
+    expect(prisma.sale.create).not.toHaveBeenCalled();
+    expect(prisma.table.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses another business\'s order, a paid order, another store\'s order and an empty one', async () => {
+    let t = ready(null);
+    await expect(t.svc.createSale('biz-001', t.dto)).rejects.toThrow('Order not found');
+    expect(t.prisma.order.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'order-1', businessId: 'biz-001' } }));
+
+    t = ready(orderRow({ status: 'PAID' }));
+    await expect(t.svc.createSale('biz-001', t.dto)).rejects.toThrow('already been paid');
+
+    t = ready(orderRow({ storeId: 'store-002' }));
+    await expect(t.svc.createSale('biz-001', t.dto)).rejects.toThrow('different store');
+
+    t = ready(orderRow({ items: [] }));
+    await expect(t.svc.createSale('biz-001', t.dto)).rejects.toThrow('nothing on it');
+    expect(t.prisma.sale.create).not.toHaveBeenCalled();
+  });
+
+  it('will not accept a payment that does not cover the order', async () => {
+    const { svc, dto, prisma } = ready(orderRow(), [{ method: 'CASH', amountCents: 100 }]);
+    await expect(svc.createSale('biz-001', dto)).rejects.toThrow('do not cover the total');
+    expect(prisma.sale.create).not.toHaveBeenCalled();
+    expect(prisma.order.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('accepts a bigger tender (change is given back)', async () => {
+    const { svc, dto, captured } = ready(orderRow(), [{ method: 'CASH', amountCents: 100_000 }]);
+    await svc.createSale('biz-001', dto);
+    expect(captured.sale.totalCents).toBe(80_000);
+  });
+});
+
+describe('SalesService.createSale payments on ordinary sales', () => {
+  function ready(type: SaleType, payments: any[]) {
+    const deps = makeDeps();
+    const store = makeStore({ business: { taxType: 'VAT', serviceChargeRate: 0, negativePolicyDefault: 'ALLOW' } });
+    deps.prisma.store.findUnique.mockResolvedValue(store);
+    deps.prisma.item.findMany.mockResolvedValue([makeItem()]);
+    deps.prisma.$transaction.mockImplementation(async (fn: any) => {
+      deps.prisma.store.update.mockResolvedValue({ ...store, receiptSequence: 1 });
+      deps.prisma.sale.create.mockResolvedValue({ id: 's', receiptNumber: 'R', totalCents: 100_000, items: [], payments: [] });
+      return fn(deps.prisma);
+    });
+    return { svc: makeService(deps as any) as any, deps, dto: { ...BASE_DTO, type, payments, serviceChargeCents: 0 } };
+  }
+
+  it('refuses a normal sale whose payments fall short, or are malformed', async () => {
+    await expect(ready(SaleType.NORMAL, [{ method: 'CASH', amountCents: 1 }]).svc.createSale('biz-001', ready(SaleType.NORMAL, [{ method: 'CASH', amountCents: 1 }]).dto))
+      .rejects.toThrow('do not cover');
+    const bad = ready(SaleType.NORMAL, [{ method: 'CASH', amountCents: -5 }]);
+    await expect(bad.svc.createSale('biz-001', bad.dto)).rejects.toThrow('non-negative');
+    const none = ready(SaleType.NORMAL, []);
+    await expect(none.svc.createSale('biz-001', none.dto)).rejects.toThrow('do not cover');
+  });
+
+  it('lets a credit sale go through without full payment', async () => {
+    const credit = ready(SaleType.CREDIT, []);
+    await expect(credit.svc.createSale('biz-001', credit.dto)).resolves.toBeDefined();
+  });
+});

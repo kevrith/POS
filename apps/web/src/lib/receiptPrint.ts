@@ -75,7 +75,7 @@ export async function printReceiptVia(
 ): Promise<void> {
   switch (method) {
     case 'browser':
-      printToBrowser(receipt);
+      await printToBrowser(receipt);
       return;
     case 'system':
       if (!pref.systemPrinterName) throw new Error('No installed printer selected in Settings -> Printers');
@@ -100,7 +100,7 @@ export async function printReceiptVia(
     case 'epson': {
       const cfg = getSavedEpsonPrinter();
       if (!cfg) throw new Error('No Epson printer configured');
-      await printToEpsonEPOS(cfg, receipt);
+      await printToEpsonEPOS(cfg, receipt, enableCashDrawer);
       return;
     }
   }

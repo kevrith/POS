@@ -4,6 +4,7 @@ import { api, openPdfReport } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { useDialog } from '../components/Dialog';
 import { toast } from 'sonner';
+import { printHtml } from '../lib/printHtml';
 import {
   ClipboardList, X, ChevronRight, Printer, CheckCircle,
   Package, Truck, AlertTriangle, Clock, User, MapPin,
@@ -145,12 +146,7 @@ const PAYMENT_BADGE: Record<PaymentStatus, string> = {
 // ── Picking List Print Helper ─────────────────────────────────────────────────
 
 function printPickingList(order: FieldOrder, businessName: string) {
-  const win = window.open('', '_blank', 'width=800,height=600');
-  if (!win) {
-    toast.error('Popup blocked — allow popups for this site to print');
-    return;
-  }
-  win.document.write(`
+  printHtml(`
     <html><head><title>Picking List - ${order.orderNumber}</title>
     <style>
       body { font-family: Arial, sans-serif; margin: 20px; font-size: 13px; }
@@ -185,11 +181,6 @@ function printPickingList(order: FieldOrder, businessName: string) {
     </div>
     </body></html>
   `);
-  win.document.close();
-  win.focus();
-  // Let the new document lay out before printing, and leave the window open so the
-  // user can retry from the browser dialog (closing immediately cancels the job).
-  setTimeout(() => win.print(), 250);
 }
 
 // ── New Order Modal ───────────────────────────────────────────────────────────

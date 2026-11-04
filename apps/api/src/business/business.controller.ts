@@ -41,6 +41,7 @@ export class BusinessController {
       serviceChargeDefault?: boolean;
       negativePolicyDefault?: 'BLOCK' | 'WARN' | 'ALLOW';
       posMode?: string;
+      enabledModules?: string[];
       expiredItemPolicy?: string;
       expenseApprovalThresholdCents?: number;
       expiryAlertDays?: number;

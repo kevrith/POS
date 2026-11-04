@@ -37,6 +37,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { BusinessModule } from './business/business.module';
 import { BudgetModule } from './budget/budget.module';
 import { PrintersModule } from './printers/printers.module';
+import { PrintJobsModule } from './print-jobs/print-jobs.module';
 import { ApiKeysModule } from './api-keys/api-keys.module';
 import { ReportSchedulesModule } from './report-schedules/report-schedules.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
@@ -120,6 +121,7 @@ import { DbBackupModule } from './backup/db-backup.module';
     BusinessModule,
     BudgetModule,
     PrintersModule,
+    PrintJobsModule,
     ApiKeysModule,
     ReportSchedulesModule,
     WebhooksModule,

@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import * as bcrypt from 'bcrypt';
+import { assertPinAvailable } from '../auth/pin.util';
 
 @Injectable()
 export class HrService {
@@ -141,6 +142,11 @@ export class HrService {
       where: { id: employeeId, businessId },
     });
     if (!employee) throw new BadRequestException('Employee not found');
+
+    // Check the PIN before anything is written, so a refused PIN leaves no half-saved edit.
+    if (dto.pin !== undefined && dto.pin.length >= 4) {
+      await assertPinAvailable(this.prisma, businessId, dto.pin, employee.userId);
+    }
 
     // Update Employee record
     await this.prisma.employee.update({

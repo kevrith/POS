@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
+import { printHtml } from '../lib/printHtml';
+import { escapeHtml } from '@pos/print-core';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -517,13 +519,7 @@ function PODetail({ po, storeId, onBack, onRefresh }: PODetailProps) {
   const printPOMutation = useMutation({
     mutationFn: () => api.get<{ text: string }>(`/suppliers/purchase-orders/${po.id}/print-text`),
     onSuccess: (data: any) => {
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(`<pre style="font-family:monospace;font-size:12px;padding:20px">${data.text}</pre>`);
-        printWindow.document.close();
-        printWindow.onafterprint = () => printWindow.close();
-        printWindow.print();
-      }
+      printHtml(`<pre style="font-family:monospace;font-size:12px;padding:20px">${escapeHtml(data.text)}</pre>`);
     },
   });
 

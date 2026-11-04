@@ -18,6 +18,7 @@ model Business {
   serviceChargeRate             Float                 @default(10)
   negativePolicyDefault         String                @default("WARN")
   posMode                       String                @default("RETAIL")
+  enabledModules                String                @default("[]")
   expiredItemPolicy             String                @default("BLOCK")
   expenseApprovalThresholdCents Int?                  @default(500000)
   expiryAlertDays               Int                   @default(30)
@@ -234,6 +235,7 @@ model Item {
   ageRestricted       Boolean              @default(false)
   minAgeYears         Int                  @default(18)
   prepTimeMinutes     Int                  @default(5)
+  station             String?
   unitWeightGrams     Int?
   isActive            Boolean              @default(true)
   imageUrl            String?
@@ -540,6 +542,7 @@ model OrderItem {
   modifiers           String?
   course              String?
   firedAt             DateTime?
+  sentToKitchenAt     DateTime?
   seatNumber          Int?      @default(0)
   createdAt           DateTime  @default(now())
   item                Item      @relation(fields: [itemId], references: [id])
@@ -1147,6 +1150,7 @@ model KOT {
   orderId              String
   kotNumber            Int
   type                 String
+  station              String    @default("KITCHEN")
   status               String    @default("PENDING")
   itemIds              String    @default("[]")
   printedAt            DateTime?
@@ -1162,6 +1166,18 @@ model KOT {
 
   @@index([orderId])
   @@index([status])
+  @@index([station])
+}
+
+/// Daily ticket counter per store, so tickets read #1, #2, #3 each service day
+/// instead of restarting at 1 for every order. One row per store per day; bumped
+/// with an atomic upsert so two waiters sending at once never share a number.
+model KotCounter {
+  storeId String
+  day     String
+  last    Int    @default(0)
+
+  @@id([storeId, day])
 }
 
 model ReportSchedule {
@@ -2950,4 +2966,39 @@ model AgentVisit {
   @@index([agentId])
   @@index([customerId])
   @@index([visitedAt])
+}
+
+/// One thing sent (or logged as sent) to a printer: the audit trail and the delivery queue.
+/// Receipts, kitchen tickets, bills, cash drawer pulses and test prints all land here.
+/// `payload` holds the ESC/POS bytes (base64) while a job waits for a print bridge; client-side
+/// prints (browser dialog, USB, Bluetooth) are logged without bytes.
+/// Deliberately has no foreign keys: the history must survive a printer or sale being deleted.
+model PrintJob {
+  id            String    @id @default(uuid())
+  businessId    String
+  storeId       String
+  printerId     String?
+  kind          String
+  status        String    @default("QUEUED")
+  method        String    @default("BRIDGE")
+  payload       String?
+  payloadBytes  Int       @default(0)
+  saleId        String?
+  refNumber     String?
+  copyNumber    Int       @default(0)
+  reason        String?
+  attempts      Int       @default(0)
+  lastError     String?
+  createdById   String?
+  claimedBy     String?
+  claimedAt     DateTime?
+  nextAttemptAt DateTime  @default(now())
+  sentAt        DateTime?
+  expiresAt     DateTime
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([businessId, storeId, status])
+  @@index([saleId, kind])
+  @@index([printerId])
 }

@@ -6,6 +6,7 @@ import {
   ChevronUp, Copy, Check, X, MapPin, Phone,
 } from 'lucide-react';
 import { useOtpTimers } from '../hooks/useOtpTimers';
+import { printHtml } from '../lib/printHtml';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -594,9 +595,7 @@ function StatementTab({ session }: { session: PortalSession }) {
   function handlePrint() {
     const s = statement;
     if (!s) return;
-    const win = window.open('', '_blank');
-    if (!win) return;
-    win.document.write(`
+    printHtml(`
       <html><head><title>Statement - ${session.customerName}</title>
       <style>
         body { font-family: Arial, sans-serif; padding: 32px; max-width: 700px; margin: 0 auto; }
@@ -632,11 +631,8 @@ function StatementTab({ session }: { session: PortalSession }) {
         </tbody>
       </table>
       <p style="margin-top:24px;font-size:11px;color:#9ca3af">Payment terms: Net ${s.paymentTermsDays} days</p>
-      <button onclick="window.print()" style="margin-top:20px;padding:10px 20px;background:#4f46e5;color:white;border:none;border-radius:8px;cursor:pointer;font-size:13px">Print Statement</button>
       </body></html>
     `);
-    win.document.close();
-    win.focus();
   }
 
   if (isLoading) return (

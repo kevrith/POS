@@ -44,7 +44,7 @@ import {
   Fingerprint,
   Wallet, Puzzle, Headphones, MessageCircle,
 } from 'lucide-react';
-import { UserRole } from '@pos/shared';
+import { UserRole, OPTIONAL_MODULES, OPTIONAL_MODULE_LABELS, moduleIncludedByMode, parseEnabledModules, type OptionalModule } from '@pos/shared';
 import { hasFeature } from '../lib/featureGates';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -61,6 +61,8 @@ interface BusinessSettings {
   enablePoleDisplay: boolean;
   negativePolicyDefault: 'BLOCK' | 'WARN' | 'ALLOW';
   posMode: string;
+  /** JSON list of optional modules, e.g. ["RESTAURANT"]. */
+  enabledModules?: string;
   expiredItemPolicy: string;
   expenseApprovalThresholdCents: number;
   expiryAlertDays: number;
@@ -534,6 +536,7 @@ export default function SettingsPage() {
     negativePolicyDefault: 'BLOCK' as 'BLOCK' | 'WARN' | 'ALLOW',
     expenseApprovalThresholdCents: 500000,
     posMode: 'RETAIL',
+    enabledModules: [] as OptionalModule[],
     expiredItemPolicy: 'BLOCK',
     expiryAlertDays: 30,
     bankName: '',
@@ -868,6 +871,7 @@ export default function SettingsPage() {
         negativePolicyDefault: settings.negativePolicyDefault,
         expenseApprovalThresholdCents: settings.expenseApprovalThresholdCents,
         posMode: settings.posMode,
+        enabledModules: parseEnabledModules(settings.enabledModules),
         expiredItemPolicy: settings.expiredItemPolicy,
         expiryAlertDays: settings.expiryAlertDays ?? 30,
         bankName: settings.bankName ?? '',
@@ -1441,6 +1445,37 @@ export default function SettingsPage() {
               <option value="CYBERCAFE">Cybercafe — PC sessions, time billing & service rates</option>
             </select>
           </div>
+
+          {/* Optional modules: switch a capability on next to the main till */}
+          {/* Only offer what the main till does not already include */}
+          {OPTIONAL_MODULES.some((m) => !moduleIncludedByMode(m, form.posMode)) && (
+            <div className="border rounded-xl p-4 space-y-3 bg-gray-50">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-800">Also run</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Your POS mode is the main till. Switch these on if the business also does something else, such as a
+                  fuel station with a restaurant or a shop with a kitchen.
+                </p>
+              </div>
+              {OPTIONAL_MODULES.filter((m) => !moduleIncludedByMode(m, form.posMode)).map((m) => (
+                <label key={m} className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="mt-1 w-4 h-4 rounded text-blue-600"
+                    checked={form.enabledModules.includes(m)}
+                    onChange={(e) => setForm((f) => ({
+                      ...f,
+                      enabledModules: e.target.checked ? [...f.enabledModules, m] : f.enabledModules.filter((x) => x !== m),
+                    }))}
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-gray-800">{OPTIONAL_MODULE_LABELS[m].label}</span>
+                    <span className="block text-xs text-gray-500">{OPTIONAL_MODULE_LABELS[m].description}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
 
           {/* ── Tax Configuration ── */}
           <div className="border rounded-xl p-4 space-y-4 bg-gray-50">

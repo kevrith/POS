@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { api, openPdfReport } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
+import { printHtml as printInFrame } from '../lib/printHtml';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -480,9 +481,7 @@ function downloadCsv(filename: string, rows: string[][]): void {
 // ─── Print Utility ────────────────────────────────────────────
 
 function printHtml(title: string, bodyHtml: string): void {
-  const w = window.open('', '_blank', 'width=900,height=700');
-  if (!w) return;
-  w.document.write(`<!DOCTYPE html><html><head>
+  printInFrame(`<!DOCTYPE html><html><head>
 <meta charset="utf-8"/><title>${title}</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
@@ -500,9 +499,7 @@ function printHtml(title: string, bodyHtml: string): void {
 </style>
 </head><body>
 ${bodyHtml}
-<script>window.onload=function(){window.print();window.onafterprint=function(){window.close()}}<\/script>
 </body></html>`);
-  w.document.close();
 }
 
 // ─── Main Component ───────────────────────────────────────────

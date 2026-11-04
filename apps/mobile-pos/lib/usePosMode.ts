@@ -4,13 +4,16 @@ import { mobileApi } from './api';
 import {
   normalizePosMode,
   hasCapability,
+  parseEnabledModules,
   posModeLabel,
   type Capability,
+  type OptionalModule,
   type PosMode,
 } from './posMode';
 
 interface BusinessSettings {
   posMode?: string;
+  enabledModules?: string | string[];
 }
 
 /**
@@ -36,12 +39,15 @@ export function usePosMode() {
   });
 
   const mode: PosMode = normalizePosMode(data?.posMode);
+  const modules: OptionalModule[] = parseEnabledModules(data?.enabledModules);
 
   return {
     mode,
+    /** Optional modules switched on next to the main till, e.g. RESTAURANT. */
+    modules,
     label: posModeLabel(mode),
     isLoading,
     /** `can('tables')` — reads better than threading `mode` into every helper. */
-    can: (cap: Capability) => hasCapability(mode, cap),
+    can: (cap: Capability) => hasCapability(mode, cap, modules),
   };
 }

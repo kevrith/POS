@@ -8,8 +8,9 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { SubscriptionLimitsService } from '../subscription/subscription-limits.service';
 import * as bcrypt from 'bcrypt';
+import { assertPinAvailable } from '../auth/pin.util';
 import { createCipheriv, randomBytes } from 'crypto';
-import { UserRole } from '@pos/shared';
+import { UserRole, parseEnabledModules } from '@pos/shared';
 
 import { requireString } from '../common/validate';
 
@@ -21,6 +22,8 @@ interface UpdateBusinessDto {
   serviceChargeDefault?: boolean;
   negativePolicyDefault?: 'BLOCK' | 'WARN' | 'ALLOW';
   posMode?: string;
+  /** Optional modules switched on next to the main till, e.g. ["RESTAURANT"]. */
+  enabledModules?: string[] | string;
   expiredItemPolicy?: string;
   expenseApprovalThresholdCents?: number;
   expiryAlertDays?: number;
@@ -149,6 +152,11 @@ export class BusinessService {
       }
     }
 
+    // Stored as a JSON list; anything that is not a known module is dropped.
+    if (dto.enabledModules !== undefined) {
+      data.enabledModules = JSON.stringify(parseEnabledModules(dto.enabledModules));
+    }
+
     if (Object.keys(data).length === 0) return business;
 
     return this.prisma.business.update({ where: { id: businessId }, data });
@@ -238,6 +246,7 @@ export class BusinessService {
       if (existing) throw new ConflictException('Email already in use');
     }
 
+    if (dto.pin) await assertPinAvailable(this.prisma, businessId, dto.pin);
     const passwordHash = dto.password ? await bcrypt.hash(dto.password, 12) : null;
     const pinHash = dto.pin ? await bcrypt.hash(dto.pin, 10) : null;
 
@@ -265,6 +274,7 @@ export class BusinessService {
     });
     if (!user) throw new NotFoundException('User not found');
 
+    if (dto.pin) await assertPinAvailable(this.prisma, businessId, dto.pin, userId);
     const passwordHash =
       dto.password !== undefined
         ? dto.password

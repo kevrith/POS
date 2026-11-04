@@ -202,3 +202,55 @@ describe('receiptHtml', () => {
     }
   });
 });
+
+describe('KRA eTIMS and fiscal status on mobile receipts', () => {
+  const sale: PrintableReceipt = {
+    businessName: 'Premier Cafe',
+    receiptNumber: 'NRB01-000200',
+    dateISO: '2026-10-27T10:15:00',
+    lines: [{ name: 'Espresso', quantity: 1, unitPriceCents: 25000 }],
+    subtotalCents: 21552,
+    taxLabel: 'VAT (16%)',
+    taxCents: 3448,
+    totalCents: 25000,
+    paymentMethod: 'CASH',
+    cashierName: 'Amina',
+  };
+  const text = (r: PrintableReceipt) => printedLines(buildReceiptBytes(r, 58)).join('\n');
+
+  it('prints the control number and the printer-native QR once KRA has accepted the sale', () => {
+    const bytes = buildReceiptBytes({ ...sale, etimsSubmitted: true, etimsControlNumber: 'CU-77', kraQRCode: 'https://etims.kra.go.ke/v?x=1' }, 58);
+    const out = printedLines(bytes).join('\n');
+    expect(out).toContain('KRA eTIMS VERIFIED');
+    expect(out).toContain('CU-77');
+    expect(Buffer.from(bytes).includes(Buffer.from([0x1d, 0x28, 0x6b]))).toBe(true);
+  });
+
+  it('flags a sale KRA has not accepted yet as PENDING, never as verified', () => {
+    const out = text({ ...sale, etimsSubmitted: false });
+    expect(out).toContain('PENDING KRA SUBMISSION');
+    expect(out).not.toContain('VERIFIED');
+  });
+
+  it('marks a reprint as a copy and a void as void', () => {
+    expect(text({ ...sale, copyNumber: 1 })).toContain('COPY 1');
+    expect(text({ ...sale, voided: true })).toContain('VOID');
+    expect(text(sale)).not.toMatch(/COPY|VOID/);
+  });
+
+  it('shows the cashier and keeps subtotal + VAT = total', () => {
+    const out = text(sale);
+    expect(out).toContain('Cashier:');
+    expect(out).toContain('215.52');
+    expect(out).toContain('34.48');
+    expect(out).toContain('KES 250.00');
+  });
+
+  it('the OS print sheet carries the same banners and an offline QR', () => {
+    const html = receiptHtml({ ...sale, etimsSubmitted: true, etimsControlNumber: 'CU-77', kraQRCode: 'https://etims.kra.go.ke/v?x=1', copyNumber: 2 }, 80);
+    expect(html).toContain('COPY 2');
+    expect(html).toContain('CU-77');
+    expect(html).toContain('<svg');
+    expect(html).not.toMatch(/<script/i);
+  });
+});

@@ -91,11 +91,40 @@ jobs:
         working-directory: apps/web
         run: npm ci
 
+      - name: Unit tests
+        working-directory: apps/web
+        run: npm test
+
       - name: Build web
         working-directory: apps/web
         env:
           VITE_API_URL: /api/v1
         run: npm run build
+
+  # ─── Print core (receipt/KOT layout shared by web and mobile) ─────────────
+  print-core:
+    name: Print core — Test & Type-check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Type-check
+        working-directory: packages/print-core
+        run: npm run typecheck
+
+      - name: Unit tests
+        working-directory: packages/print-core
+        run: npm test -- --ci
 
   # ─── Mobile Apps — Type-check (matrix across all 3 apps) ──────────────────
   mobile:

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { Plus, Pill, CheckCircle, XCircle, Clock, Search, Printer, History, AlertTriangle, ExternalLink } from 'lucide-react';
+import { printHtml } from '../lib/printHtml';
 
 interface RxItem {
   itemId?: string;
@@ -171,9 +172,7 @@ export default function PrescriptionsPage() {
 
   const handlePrintDispense = (rx: Prescription) => {
     const items: RxItem[] = (() => { try { return JSON.parse(rx.items || '[]'); } catch { return []; } })();
-    const win = window.open('', '_blank', 'width=420,height=640');
-    if (!win) return;
-    win.document.write(`<html><head><title>Prescription ${rx.prescriptionNumber}</title>
+    printHtml(`<html><head><title>Prescription ${rx.prescriptionNumber}</title>
     <style>
       body{font-family:monospace;font-size:13px;padding:16px;max-width:380px;margin:0 auto}
       h2{text-align:center;margin-bottom:4px;font-size:15px}
@@ -210,9 +209,6 @@ export default function PrescriptionsPage() {
     <hr/>
     <p class="sub">Status: <b>${rx.status}</b>${rx.dispensedBy ? ` &mdash; Dispensed by ${rx.dispensedBy}` : ''}</p>
     </body></html>`);
-    win.document.close();
-    win.onafterprint = () => win.close();
-    win.print();
   };
 
   const [checkingInteractions, setCheckingInteractions] = useState(false);

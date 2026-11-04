@@ -7,7 +7,7 @@ import {
   type PrinterSettings, type PrintMethod,
 } from '../lib/printerConfig';
 import type { PaperWidth } from '../lib/receiptModel';
-import { listBondedPrinters, loadPrinterSettings, printTestReceipt, savePrinterSettings } from '../lib/receiptPrint';
+import { listBondedPrinters, loadPrinterSettings, printDiagnosticPage, printTestReceipt, savePrinterSettings } from '../lib/receiptPrint';
 
 const METHODS: Array<{ value: PrintMethod; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
   { value: 'system', label: 'Print dialog', icon: 'document-text-outline' },
@@ -85,6 +85,19 @@ export default function PrinterSettingsCard({ businessName }: { businessName?: s
     try {
       await printTestReceipt(s, businessName);
       setStatus({ ok: true, text: s.method === 'system' ? 'Print dialog opened.' : 'Test receipt sent to the printer.' });
+    } catch (e) {
+      setStatus({ ok: false, text: e instanceof Error ? e.message : 'The printer did not respond.' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function testPage() {
+    setBusy(true);
+    setStatus(null);
+    try {
+      await printDiagnosticPage(s);
+      setStatus({ ok: true, text: s.method === 'system' ? 'Print dialog opened.' : 'Test page sent. Check each numbered section on the paper.' });
     } catch (e) {
       setStatus({ ok: false, text: e instanceof Error ? e.message : 'The printer did not respond.' });
     } finally {
@@ -240,6 +253,10 @@ export default function PrinterSettingsCard({ businessName }: { businessName?: s
           <TouchableOpacity style={[styles.secondaryBtn, { marginTop: 14 }]} onPress={testPrint} disabled={busy}>
             {busy ? <ActivityIndicator color={Colors.primary} /> : <Ionicons name="print-outline" size={18} color={Colors.primary} />}
             <Text style={styles.secondaryText}>Print test receipt</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.secondaryBtn, { marginTop: 8 }]} onPress={testPage} disabled={busy}>
+            <Ionicons name="list-outline" size={18} color={Colors.primary} />
+            <Text style={styles.secondaryText}>Print full test page</Text>
           </TouchableOpacity>
           {status && (
             <Text style={[styles.status, { color: status.ok ? Colors.success : Colors.error }]} accessibilityRole="alert">

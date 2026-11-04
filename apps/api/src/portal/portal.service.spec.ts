@@ -78,3 +78,57 @@ describe('PortalService.confirmPayment', () => {
     expect(prisma.deliveryOrder.update).not.toHaveBeenCalled();
   });
 });
+
+describe('PortalService.placeOrder', () => {
+  function buildOrder(catalog: Array<Record<string, unknown>>, customer: Record<string, unknown> | null = { id: 'c1' }) {
+    const prisma = {
+      store: { findFirst: jest.fn().mockResolvedValue({ id: 'store-1' }) },
+      customer: { findFirst: jest.fn().mockResolvedValue(customer) },
+      item: { findMany: jest.fn().mockResolvedValue(catalog) },
+      deliveryOrder: {
+        count: jest.fn().mockResolvedValue(0),
+        create: jest.fn().mockImplementation(async ({ data }) => ({ id: 'o1', orderNumber: data.orderNumber })),
+      },
+    };
+    const notifications = { sendSMS: jest.fn().mockResolvedValue({ success: true }) };
+    const svc = new PortalService(prisma as never, notifications as never, {} as never, {} as never);
+    return { svc, prisma };
+  }
+  const base = { businessId: 'b1', customerName: 'A', phone: '0712345678', address: 'x', orderType: 'DELIVERY' as const };
+
+  it('prices the order from the catalog, not from the client', async () => {
+    const { svc, prisma } = buildOrder([{ id: 'i1', name: 'Americano', retailPriceCents: 25000 }]);
+    const res = await svc.placeOrder({ ...base, items: [{ itemId: 'i1', name: 'Americano', quantity: 2, priceCents: 1 }] });
+    expect(res.totalCents).toBe(50000);
+    const data = prisma.deliveryOrder.create.mock.calls[0][0].data;
+    expect(data.items.create[0]).toMatchObject({ unitPriceCents: 25000, totalCents: 50000 });
+  });
+
+  it('refuses a line for an item that is not in this business catalog', async () => {
+    const { svc, prisma } = buildOrder([]);
+    await expect(svc.placeOrder({ ...base, items: [{ itemId: 'other-biz-item', name: 'x', quantity: 1, priceCents: 1 }] }))
+      .rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.deliveryOrder.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses a line with no item id', async () => {
+    const { svc } = buildOrder([]);
+    await expect(svc.placeOrder({ ...base, items: [{ name: 'x', quantity: 1, priceCents: 1 }] }))
+      .rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('refuses zero and negative quantities, which would lower the total', async () => {
+    const { svc } = buildOrder([{ id: 'i1', name: 'Americano', retailPriceCents: 25000 }]);
+    for (const quantity of [0, -3, Number.NaN]) {
+      await expect(svc.placeOrder({ ...base, items: [{ itemId: 'i1', name: 'Americano', quantity, priceCents: 25000 }] }))
+        .rejects.toBeInstanceOf(BadRequestException);
+    }
+  });
+
+  it('finds the account whichever shape of the phone number the customer typed', async () => {
+    const { svc, prisma } = buildOrder([{ id: 'i1', name: 'Americano', retailPriceCents: 25000 }]);
+    await svc.placeOrder({ ...base, phone: '0712345678', items: [{ itemId: 'i1', name: 'Americano', quantity: 1, priceCents: 25000 }] });
+    const where = prisma.customer.findFirst.mock.calls[0][0].where;
+    expect(where.phone.in).toEqual(expect.arrayContaining(['254712345678', '0712345678', '+254712345678']));
+  });
+});

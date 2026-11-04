@@ -23,7 +23,8 @@ ReceiptDocument / KotDocument / BillDocument      (model.ts)
 ## Rules the layout enforces
 
 - Status banners come first and cannot be skipped by a printer type: VOID, CREDIT SALE, PENDING KRA
-  SUBMISSION and `COPY n - NOT THE ORIGINAL` (set `copyNumber` on a reprint).
+  SUBMISSION, `COPY n - NOT THE ORIGINAL` (set `copyNumber` on a reprint), `TEST MODE - NOT A TAX INVOICE` (`etimsTestMode`) and
+  `OFFLINE SALE - PROVISIONAL RECEIPT` (`offlineSale`).
 - A voided receipt never reads "KRA eTIMS VERIFIED" and prints no QR; it shows the original control number.
 - The cash drawer pulse is only added for an original cash sale (`receiptOpensDrawer` is the one rule the bytes and the audit log both use). A reprint (`copyNumber > 0`) or a void never
   opens it, so repeated "Print" presses cannot be used to pop the drawer.
@@ -55,8 +56,14 @@ npm test          # jest (ts-jest, plain Node)
 npm run typecheck
 ```
 
+## Testing on a real printer
+
+`layoutDiagnostic` builds a numbered test page (columns, alignment, styles, wrapping, characters, banners, QR, cut) and
+is reachable from Settings -> Printers on web and mobile ("Print full test page"), plus a "Test cash drawer" button on web.
+[HARDWARE_TEST.md](HARDWARE_TEST.md) is the checklist and the table to fill in for each printer model.
+
 ## Known gaps
 
 - Star WebPRNT XML keeps the wire format of the old generator and has not been checked against a Star printer.
 - Only one VAT rate (16%) / TOT (3%) / service charge (10%) is labelled; per-item tax bands are not modelled.
-- No real thermal printer has printed this output yet. The tests assert bytes and text, not paper.
+- No real thermal printer has printed this output yet. The tests assert bytes and text, not paper: run HARDWARE_TEST.md.

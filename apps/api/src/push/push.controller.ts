@@ -1,4 +1,6 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
+import { Public } from '../auth/jwt-auth.guard';
+import { PortalAuthGuard } from '../customer-portal/portal-auth.guard';
 import { PushService } from './push.service';
 
 @Controller('push')
@@ -18,11 +20,15 @@ export class PushController {
   }
 
   /**
-   * Self-service customer app: it has no login, only a phone number entered at
-   * checkout/loyalty, so the token is keyed to the Customer matched by phone.
+   * Customer app. It signs in with a phone-OTP portal session (not a staff JWT), so the
+   * token belongs to the customer that session proves, not to whichever phone number the
+   * caller types. The old route required a staff JWT, so every call from the app came
+   * back 401, and the app signs a customer out on any 401.
    */
+  @Public()
+  @UseGuards(PortalAuthGuard)
   @Post('register-customer')
-  registerCustomer(@Body() dto: { businessId: string; phone: string; token: string }) {
-    return this.push.registerCustomerToken(dto.businessId, dto.phone, dto.token);
+  registerCustomer(@Req() req: { portalCustomerId: string }, @Body() dto: { token: string }) {
+    return this.push.registerCustomerTokenById(req.portalCustomerId, dto.token);
   }
 }

@@ -72,7 +72,12 @@ Login paths:
 - **TOTP** second factor, **WebAuthn** (`webauthn.controller.ts`)
 - **Phone OTP** for customers (customer portal, rate-limited). Numbers are
   canonicalized to `254XXXXXXXXX` by `common/phone.ts` before any lookup, and
-  a failed SMS fails the request rather than silently reporting `sent: true`
+  a failed SMS fails the request rather than silently reporting `sent: true`.
+  Login codes go out on the shared platform account (`AT_*`), so a shop needs no
+  SMS setup of its own; other messages use the shop's own account when it has one
+  and fall back to the platform one. Platform sends are capped per hour (per phone
+  for codes, per business overall, see `.env.example`) and every send is recorded
+  in `SmsLog` for usage and billing
 - **Affiliate JWT** (`src/affiliate/affiliate-jwt.guard.ts`) — separate audience
 - **Super admin** — `POST /api/v1/super-admin/login`, own guard
 
@@ -284,12 +289,19 @@ push (`.github/workflows/ci.yml`).
 - **Checkout is idempotent on `offlineId`.** `POST /sales/checkout` accepts an optional client key (8-64 chars of
   `A-Za-z0-9_-`). A repeat for the same business returns the already-recorded sale (`replayed: true`) with no second
   sale, stock movement or receipt number; two copies racing resolve through the unique key (P2002). A malformed key is
-  ignored. Mobile and offline clients rely on this to retry safely.
+  ignored, and a replay returns the points the sale earned plus the current balance.
+  `onBehalfOfCashierId` credits the sale to another user of the same business, but ONLY when the caller is an owner or manager
+  (`SalesService.resolveCashierId`): an offline sale uploaded later by someone else keeps its real cashier. Both web tills
+  (`lib/checkoutKey.ts`) and the mobile till send one key per checkout attempt, so pressing Pay again after a lost
+  response cannot double-post.
 - **eTIMS test mode.** `POST /etims/submit/:saleId` returns `testMode: true` (and no `intrlData`/`qrUrl`) when the sale was
   not sent to KRA: the business is not in PRODUCTION with credentials, or the control number is a generated `ETM<timestamp>`
   placeholder. Receipts then print `TEST MODE - NOT A TAX INVOICE` instead of "KRA eTIMS VERIFIED" and a QR.
 - **`JWT_SECRET` is required** (`common/jwt-secret.ts`): the API refuses to start without it, and in production rejects
   secrets under 32 characters or that look like the placeholders in this repo. There are no hardcoded fallbacks.
+- **App URLs** (`common/app-urls.ts`): links in emails, payment callbacks and redirects come from `frontendUrl()`, `adminUrl()` and
+  `appUrl()`. Development defaults to the real local ports (3005 / 3012); production REFUSES to build a link without
+  `FRONTEND_URL` / `ADMIN_URL` (delivery tracking links are the one fail-soft case) and logs an error at boot.
 - **Print jobs are queued, audited and retried (`print-jobs/`).** `POST /print-jobs` queues ESC/POS bytes for a
   LAN printer: with `PRINT_DELIVERY_MODE=direct` (default) the server sends at once and only queues a failure;
   with `queue` (cloud) a print bridge delivers. The bridge is a desktop till on the shop network: `POST

@@ -230,13 +230,39 @@ describe('CustomerPortalService — OTP limits', () => {
         prisma.customer.findFirst.mockResolvedValue(CUSTOMER);
         notifications.sendSMS.mockResolvedValue({ success: false, error: 'Messaging not configured' });
 
-        await expect(svc.requestOtp('254712345678', 'biz-1')).rejects.toThrow(/has not set up SMS/);
+        await expect(svc.requestOtp('254712345678', 'biz-1')).rejects.toThrow(/cannot send login codes right now/);
 
         // The code is burned and the cooldown cleared — the customer never got a
         // code, so they should not be made to wait 60s to try again.
         const data = prisma.customerPortalSession.update.mock.calls[0][0].data;
         expect(data.otpSentAt).toBeNull();
         expect(data.otpExpiresAt.getTime()).toBeLessThanOrEqual(Date.now());
+      } finally {
+        process.env.NODE_ENV = previous;
+      }
+    });
+
+    it('sends the login code as an OTP so it goes out on the platform account', async () => {
+      const { svc, prisma, notifications } = makeService();
+      prisma.customer.findFirst.mockResolvedValue(CUSTOMER);
+
+      await svc.requestOtp('254712345678', 'biz-1');
+
+      expect(notifications.sendSMS).toHaveBeenCalledWith(
+        'biz-1', '254712345678', expect.stringContaining('verification code'), { purpose: 'OTP' },
+      );
+    });
+
+    it('answers 429, not 503, when a send cap is hit, and burns the unsent code', async () => {
+      const previous = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
+      try {
+        const { svc, prisma, notifications } = makeService();
+        prisma.customer.findFirst.mockResolvedValue(CUSTOMER);
+        notifications.sendSMS.mockResolvedValue({ success: false, error: 'SMS limit reached for this business', limited: true });
+
+        await expect(svc.requestOtp('254712345678', 'biz-1')).rejects.toMatchObject({ status: 429 });
+        expect(prisma.customerPortalSession.update.mock.calls[0][0].data.otpSentAt).toBeNull();
       } finally {
         process.env.NODE_ENV = previous;
       }

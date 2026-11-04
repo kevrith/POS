@@ -6,6 +6,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import helmet from 'helmet';
 import { Prisma } from '@prisma/client';
+import { configuredOrigins } from './common/app-urls';
 
 @Catch()
 class AllExceptionsFilter implements ExceptionFilter {
@@ -95,10 +96,12 @@ async function bootstrap() {
 
     logger.log('Enabling CORS...');
     const allowedOrigins = [
-      process.env.FRONTEND_URL ?? 'http://localhost:3001',
-      process.env.ADMIN_URL ?? 'http://localhost:3002',
+      ...configuredOrigins(),
       ...(process.env.EXTRA_ORIGINS ? process.env.EXTRA_ORIGINS.split(',').map(o => o.trim()).filter(Boolean) : []),
     ];
+    if (process.env.NODE_ENV === 'production' && (!process.env.FRONTEND_URL || !process.env.ADMIN_URL)) {
+      logger.error('FRONTEND_URL and ADMIN_URL must be set in production: links in emails and payment callbacks are refused without them.');
+    }
     logger.log(`CORS allowed origins: ${allowedOrigins.join(', ')}`);
     app.enableCors({
       origin: (origin, callback) => {

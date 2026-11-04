@@ -1,6 +1,8 @@
 import {
   Injectable,
   Logger,
+  HttpException,
+  HttpStatus,
   BadRequestException,
   NotFoundException,
   UnauthorizedException,
@@ -117,6 +119,7 @@ export class CustomerPortalService {
       businessId,
       canonical,
       `${otp} is your ${brand} verification code. It expires in 10 minutes.`,
+      { purpose: 'OTP' },
     );
 
     if (!sms.success) {
@@ -132,9 +135,16 @@ export class CustomerPortalService {
           where: { sessionToken: `otp-placeholder-${customer.id}` },
           data: { otpSentAt: null, otpExpiresAt: new Date() },
         });
+        // A cap is the caller asking too often (or someone abusing the endpoint), not an outage.
+        if (sms.limited) {
+          throw new HttpException(
+            'Too many login codes have been requested. Please wait a while and try again.',
+            HttpStatus.TOO_MANY_REQUESTS,
+          );
+        }
         throw new ServiceUnavailableException(
           sms.error === 'Messaging not configured'
-            ? 'This business has not set up SMS yet, so we cannot send a login code. Please contact them directly.'
+            ? 'We cannot send login codes right now. Please try again later or contact the shop.'
             : 'We could not send your code just now. Please try again in a moment.',
         );
       }

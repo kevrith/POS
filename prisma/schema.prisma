@@ -1074,6 +1074,23 @@ model Notification {
   @@index([businessId, isRead, createdAt])
 }
 
+/// One row per SMS handed to the provider. Powers per-business usage/billing and the hourly caps
+/// that stop a shared platform account being drained by someone spamming login codes.
+model SmsLog {
+  id         String   @id @default(uuid())
+  businessId String
+  phone      String
+  /// OTP (customer login code) or GENERAL (receipts, delivery updates, everything else)
+  purpose    String
+  /// PLATFORM = the shared KASTRA account (costs us), BUSINESS = the business's own account
+  channel    String
+  success    Boolean
+  createdAt  DateTime @default(now())
+
+  @@index([businessId, channel, createdAt])
+  @@index([phone, purpose, createdAt])
+}
+
 model Budget {
   id          String   @id @default(uuid())
   businessId  String

@@ -126,4 +126,8 @@ async function printSystem(receipt: Parameters<PrintTransports['printSystem']>[0
   await Print.printAsync({ html: receiptHtml(receipt, paperWidth) });
 }
 
-export const nativeTransports: PrintTransports = { sendBluetooth, sendNetwork, printSystem };
+async function printSystemHtml(html: string): Promise<void> {
+  await Print.printAsync({ html });
+}
+
+export const nativeTransports: PrintTransports = { sendBluetooth, sendNetwork, printSystem, printSystemHtml };

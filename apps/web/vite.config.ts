@@ -56,7 +56,9 @@ export default defineConfig({
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-data-cache',
-              expiration: { maxEntries: 50, maxAgeSeconds: 3600 },
+              // NetworkFirst only serves this when the network fails, so keeping it for a week costs nothing while
+              // online and lets a till reloaded during a long outage still show its items and customers.
+              expiration: { maxEntries: 100, maxAgeSeconds: 7 * 24 * 3600 },
               networkTimeoutSeconds: 5,
             },
           },

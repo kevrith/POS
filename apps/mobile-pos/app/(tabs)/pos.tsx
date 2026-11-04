@@ -20,6 +20,7 @@ import { useAuthStore } from '../../stores/auth';
 import { useActiveStore } from '../../lib/useActiveStore';
 import { usePosMode } from '../../lib/usePosMode';
 import { useCartStore } from '../../stores/cart';
+import { overrideAllowed } from '../../lib/checkoutLines';
 import { useHeldSalesStore } from '../../stores/heldSales';
 import { Colors } from '../../constants/theme';
 import CustomerPickerModal from '../../components/CustomerPickerModal';
@@ -92,6 +93,7 @@ export default function POSScreen() {
   const {
     items: cartItems,
     addItem,
+    restoreItems,
     updateQty,
     updateItemDiscount,
     overrideItemPrice,
@@ -144,21 +146,19 @@ export default function POSScreen() {
   // Save-as-invoice mutation
   const { mutate: saveAsInvoice, isPending: savingInvoice } = useMutation({
     mutationFn: () =>
-      mobileApi.post('/field-orders', {
+      mobileApi.post<{ id: string; receiptNumber?: string }>('/sales/proformas', {
         businessId,
-        storeId,
-        customerId: customerId ?? undefined,
-        priceLevel,
-        type: 'PROFORMA',
+        customerName: customerName ?? 'Walk-in',
         items: cartItems.map((i) => ({
-          itemId: i.id,
+          name: i.name,
           quantity: i.quantity,
           unitPriceCents: i.unitPriceCents,
+          discountPercent: 0, // unitPriceCents already carries any per-item discount
         })),
       }),
-    onSuccess: (res: any) => {
-      qc.invalidateQueries({ queryKey: ['field-orders'] });
-      Alert.alert('Saved', `Proforma invoice #${res.invoiceNumber ?? res.id} created.`);
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['proformas'] });
+      Alert.alert('Saved', `Proforma invoice #${res.receiptNumber ?? res.id} created.`);
       clearCart();
       setShowCart(false);
     },
@@ -239,9 +239,7 @@ export default function POSScreen() {
     const sale = resume(id);
     if (!sale) return;
     clearCart();
-    sale.items.forEach((i) => addItem({ id: i.id, name: i.name, unitPriceCents: i.unitPriceCents, barcode: i.barcode }));
-    // Restore quantities > 1
-    sale.items.forEach((i) => { if (i.quantity > 1) updateQty(i.id, i.quantity); });
+    restoreItems(sale.items);
     setCustomer(sale.customerId, sale.customerName);
     if (sale.appliedPromotion) setPromotion(sale.appliedPromotion);
     setShowHeld(false);
@@ -256,6 +254,12 @@ export default function POSScreen() {
 
   function commitPriceOverride(itemId: string) {
     const cents = Math.round((parseFloat(priceOverrideInput) || 0) * 100);
+    const listPrice = cartItems.find((i) => i.id === itemId)?.catalogPriceCents ?? 0;
+    if (cents > 0 && !overrideAllowed(cents, listPrice)) {
+      // The server charges the catalog price, so a higher price on screen would be a lie at the till.
+      Alert.alert('Price too high', `A price cannot be raised above the list price (${formatKES(listPrice)}).`);
+      return;
+    }
     if (cents > 0) overrideItemPrice(itemId, cents);
     setShowPriceOverride(null);
     setPriceOverrideInput('');

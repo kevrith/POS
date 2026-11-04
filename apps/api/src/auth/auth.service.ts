@@ -12,6 +12,7 @@ import * as bcrypt from 'bcrypt';
 import { usersWithPin } from './pin.util';
 import * as speakeasy from 'speakeasy';
 import { UserRole } from '@pos/shared';
+import { appUrl } from '../common/app-urls';
 
 export interface JwtPayload {
   sub: string;       // userId
@@ -687,8 +688,7 @@ export class AuthService {
       { expiresIn: '15m' },
     );
 
-    const appUrl = process.env.APP_URL ?? 'http://localhost:3001';
-    const resetUrl = `${appUrl}/reset-password?token=${token}`;
+    const resetUrl = `${appUrl()}/reset-password?token=${token}`;
 
     // Send reset email (fire-and-forget — never reveal if email exists)
     void this.email.sendPasswordReset({ to: user.email, name: user.name, resetUrl });

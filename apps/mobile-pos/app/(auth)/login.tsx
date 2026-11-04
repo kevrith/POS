@@ -120,7 +120,7 @@ export default function LoginScreen() {
     setUrlTesting(true);
     setUrlError('');
     try {
-      const res = await fetch(`${url}/auth/health`, { method: 'GET' }).catch(() => null);
+      const res = await fetch(`${url}/health`, { method: 'GET' }).catch(() => null);
       // Accept 200, 404, 401 — all mean the server is reachable
       if (!res || (res.status >= 500 && res.status !== 503)) {
         throw new Error('Cannot reach server. Check URL and internet connection.');

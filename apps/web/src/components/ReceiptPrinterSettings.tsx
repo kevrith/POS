@@ -11,6 +11,7 @@ import {
 } from '../lib/printer';
 import { isDesktopApp, listSystemPrinters, type SystemPrinter } from '../lib/desktopPrinter';
 import PrintQueuePanel from './PrintQueuePanel';
+import { printDiagnostic, testCashDrawer, type TestMethod } from '../lib/printer';
 
 interface NetworkPrinterRow {
   id: string;
@@ -99,6 +100,11 @@ export default function ReceiptPrinterSettings({ businessName, printers }: Props
     const dedicated = method !== 'ask' && method !== 'browser';
     const wasWindowMode = pref.method === 'ask' || pref.method === 'browser';
     update({ method, autoPrint: method === 'ask' ? false : dedicated && wasWindowMode ? true : pref.autoPrint });
+  }
+
+  /** Where the saved choices point, for the self-test buttons. */
+  function testTarget() {
+    return { networkPrinterId: pref.networkPrinterId, systemPrinterName: pref.systemPrinterName, star: getSavedStarPrinter(), epson: getSavedEpsonPrinter() };
   }
 
   async function run(action: () => Promise<void>, success: string) {
@@ -331,6 +337,28 @@ export default function ReceiptPrinterSettings({ businessName, printers }: Props
         >
           <Printer className="w-4 h-4" />
           {busy ? 'Working...' : 'Print test receipt'}
+        </button>
+        <button
+          type="button"
+          disabled={!canTest || busy}
+          onClick={() =>
+            run(
+              () => printDiagnostic(pref.method as TestMethod, testTarget()),
+              'Test page sent. Check each numbered section on the paper.',
+            )
+          }
+          className="inline-flex items-center gap-2 min-h-[44px] px-4 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+        >
+          <Printer className="w-4 h-4" />
+          Print full test page
+        </button>
+        <button
+          type="button"
+          disabled={!canTest || busy || pref.method === 'browser' || pref.method === 'star' || pref.method === 'epson'}
+          onClick={() => run(() => testCashDrawer(pref.method as TestMethod, testTarget()), 'Drawer pulse sent. The drawer should have opened.')}
+          className="inline-flex items-center gap-2 min-h-[44px] px-4 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+        >
+          Test cash drawer
         </button>
         {status && (
           <p

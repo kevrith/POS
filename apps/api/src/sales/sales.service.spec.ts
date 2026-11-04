@@ -546,6 +546,27 @@ describe('SalesService.createSale idempotency (offlineId)', () => {
     expect(prisma.sale.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { offlineId: KEY, businessId: 'biz-001' } }));
   });
 
+  it('a replay shows the points the sale really earned and the current balance', async () => {
+    const { service, prisma } = make();
+    prisma.sale.findFirst.mockResolvedValue({ id: 'sale-old', customerId: 'cust-1', type: SaleType.NORMAL, items: [], payments: [] });
+    service.loyalty = { pointsAwardedForSale: jest.fn().mockResolvedValue({ points: 25, balance: 340 }) };
+    const res = await service.createSale('biz-001', { ...dto, offlineId: KEY });
+    expect(service.loyalty.pointsAwardedForSale).toHaveBeenCalledWith('cust-1', 'sale-old');
+    expect(res).toEqual(expect.objectContaining({ pointsEarned: 25, loyaltyBalance: 340, replayed: true }));
+  });
+
+  it('a replayed credit sale earns no points, and a loyalty failure never fails the replay', async () => {
+    const { service, prisma } = make();
+    service.loyalty = { pointsAwardedForSale: jest.fn().mockResolvedValue({ points: 9, balance: 9 }) };
+    prisma.sale.findFirst.mockResolvedValue({ id: 's', customerId: 'c', type: SaleType.CREDIT, items: [], payments: [] });
+    expect((await service.createSale('biz-001', { ...dto, offlineId: KEY })).pointsEarned).toBe(0);
+    expect(service.loyalty.pointsAwardedForSale).not.toHaveBeenCalled();
+
+    prisma.sale.findFirst.mockResolvedValue({ id: 's', customerId: 'c', type: SaleType.NORMAL, items: [], payments: [] });
+    service.loyalty.pointsAwardedForSale.mockRejectedValue(new Error('db down'));
+    expect((await service.createSale('biz-001', { ...dto, offlineId: KEY })).pointsEarned).toBe(0);
+  });
+
   it('records a first-time sale under the client key', async () => {
     const { service } = make();
     await service.createSale('biz-001', { ...dto, offlineId: KEY });
@@ -573,5 +594,33 @@ describe('SalesService.createSale idempotency (offlineId)', () => {
     await service.createSale('biz-001', { ...dto, offlineId: "x'; drop table" });
     expect(prisma.sale.findFirst).not.toHaveBeenCalled();
     expect(service.createSaleOnce.mock.calls[0][1].offlineId).toBeUndefined();
+  });
+});
+
+describe('SalesService.resolveCashierId (offline sales uploaded by someone else)', () => {
+  function make(found: any) {
+    const prisma: any = { user: { findFirst: jest.fn().mockResolvedValue(found) } };
+    const service: any = new (SalesService as any)(prisma, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});
+    return { prisma, service };
+  }
+
+  it('is the requester unless an owner or manager names a cashier of the same business', async () => {
+    const { service, prisma } = make({ id: 'amina' });
+    expect(await service.resolveCashierId('biz-1', { id: 'joy', role: 'MANAGER' }, 'amina')).toBe('amina');
+    expect(await service.resolveCashierId('biz-1', { id: 'owner', role: 'OWNER' }, 'amina')).toBe('amina');
+    expect(prisma.user.findFirst).toHaveBeenCalledWith({ where: { id: 'amina', businessId: 'biz-1' }, select: { id: true } });
+  });
+
+  it('a cashier cannot credit a sale to someone else', async () => {
+    const { service, prisma } = make({ id: 'amina' });
+    expect(await service.resolveCashierId('biz-1', { id: 'brian', role: 'CASHIER' }, 'amina')).toBe('brian');
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('ignores a person who is not in the business, and a missing or same id', async () => {
+    const { service } = make(null);
+    expect(await service.resolveCashierId('biz-1', { id: 'joy', role: 'MANAGER' }, 'stranger')).toBe('joy');
+    expect(await service.resolveCashierId('biz-1', { id: 'joy', role: 'MANAGER' })).toBe('joy');
+    expect(await service.resolveCashierId('biz-1', { id: 'joy', role: 'MANAGER' }, 'joy')).toBe('joy');
   });
 });

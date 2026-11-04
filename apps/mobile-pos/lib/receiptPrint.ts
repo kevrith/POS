@@ -9,7 +9,7 @@
  * automatically with no dialog.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { dispatchPrint } from './printDispatch';
+import { dispatchDiagnostic, dispatchPrint } from './printDispatch';
 import { DEFAULT_PRINTER_SETTINGS, normalizeSettings, type PrinterSettings } from './printerConfig';
 import { nativeTransports } from './printTransport';
 import { buildTestReceipt, type PrintableReceipt } from './receiptModel';
@@ -50,4 +50,9 @@ export async function printReceipt(r: PrintableReceipt, settings?: PrinterSettin
 /** Settings screen "Print test receipt": uses the settings currently on screen, saved or not. */
 export async function printTestReceipt(settings: PrinterSettings, businessName?: string): Promise<void> {
   await dispatchPrint(settings, buildTestReceipt(businessName), nativeTransports);
+}
+
+/** Settings "Print full test page": check columns, alignment, characters, QR and cut on a new printer. */
+export async function printDiagnosticPage(settings: PrinterSettings): Promise<void> {
+  await dispatchDiagnostic(settings, nativeTransports);
 }

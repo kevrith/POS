@@ -4,6 +4,7 @@ import { Controller, Get, Post, Query, Body, Param, Res, UseGuards } from '@nest
 import { Response } from 'express';
 import { AccountingService } from './accounting.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { frontendUrl } from '../common/app-urls';
 
 @RequiresFeature(Feature.INTEGRATIONS_ADVANCED)
 @Controller('integrations/accounting')
@@ -31,7 +32,7 @@ export class AccountingController {
     @Res() res: Response,
   ) {
     await this.accounting.handleQuickBooksCallback(code, realmId, state);
-    res.redirect(`${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/settings?tab=integrations&connected=quickbooks`);
+    res.redirect(`${frontendUrl()}/settings?tab=integrations&connected=quickbooks`);
   }
 
   @Post('quickbooks/export')

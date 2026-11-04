@@ -7,10 +7,13 @@ interface SyncState {
   isOnline: boolean;
   isProcessing: boolean;
   pendingCount: number;
+  /** Entries the server refused or that kept failing: they need a person. */
+  rejectedCount: number;
   syncedCount: number; // total synced this session
   setOnline: (v: boolean) => void;
   setProcessing: (v: boolean) => void;
   setPendingCount: (v: number) => void;
+  setRejectedCount: (v: number) => void;
   incrementSynced: () => void;
 }
 
@@ -18,9 +21,11 @@ export const useSyncStore = create<SyncState>()((set) => ({
   isOnline: navigator.onLine,
   isProcessing: false,
   pendingCount: 0,
+  rejectedCount: 0,
   syncedCount: 0,
   setOnline: (isOnline) => set({ isOnline }),
   setProcessing: (isProcessing) => set({ isProcessing }),
   setPendingCount: (pendingCount) => set({ pendingCount }),
+  setRejectedCount: (rejectedCount) => set({ rejectedCount }),
   incrementSynced: () => set((s) => ({ syncedCount: s.syncedCount + 1 })),
 }));

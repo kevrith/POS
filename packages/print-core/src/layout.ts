@@ -7,7 +7,7 @@ import { formatAmount, formatDateTime, formatKES, formatTime, groupThousands } f
 
 export type Size = 'small' | 'normal' | 'large' | 'xl';
 export type Align = 'left' | 'center' | 'right';
-export type BannerTone = 'void' | 'credit' | 'pending' | 'copy' | 'test' | 'info';
+export type BannerTone = 'void' | 'credit' | 'pending' | 'copy' | 'test' | 'offline' | 'info';
 
 export type Block =
   /** Boxed, centered notice: VOID, CREDIT SALE, PENDING KRA, COPY. */
@@ -82,6 +82,9 @@ export function layoutReceipt(doc: ReceiptDocument): Block[] {
 
   // Status banners come first so a voided, credit, pending or copy receipt can never be mistaken for the original.
   if (voided) b.push({ kind: 'banner', text: '*** VOID ***', tone: 'void' });
+  if (doc.offlineSale && !voided) {
+    b.push({ kind: 'banner', text: '*** OFFLINE SALE - PROVISIONAL RECEIPT ***', tone: 'offline' });
+  }
   if ((doc.copyNumber ?? 0) > 0) {
     b.push({ kind: 'banner', text: `*** COPY ${doc.copyNumber} - NOT THE ORIGINAL ***`, tone: 'copy' });
   }

@@ -4,6 +4,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { MpesaService } from '../payments/mpesa.service';
 import { SalesService } from '../sales/sales.service';
 import { SaleType } from '@pos/shared';
+import { normalizeKePhone, kePhoneVariants } from '../common/phone';
 
 @Injectable()
 export class PortalService {
@@ -254,16 +255,40 @@ export class PortalService {
     if (!store) throw new BadRequestException('No store found');
 
     // Link to the registered customer (created at OTP login) so the order shows
-    // up in their authenticated history and earns loyalty when paid.
+    // up in their authenticated history and earns loyalty when paid. The account holds
+    // the canonical 254... number, so a customer who typed 0712... at checkout must
+    // still match it.
+    const canonicalPhone = normalizeKePhone(dto.phone);
     const customer = dto.phone
       ? await this.prisma.customer.findFirst({
-          where: { businessId: dto.businessId, phone: dto.phone },
+          where: {
+            businessId: dto.businessId,
+            phone: { in: canonicalPhone ? kePhoneVariants(canonicalPhone) : [dto.phone] },
+          },
           select: { id: true },
         })
       : null;
 
+    // Price every line from this business's own catalog. This endpoint is public, so a
+    // client-supplied price is just a number someone typed: an order for KES 0.02 was
+    // accepted and then charged to M-Pesa at that total.
+    const wanted = dto.items.map((i) => i.itemId);
+    if (wanted.some((id) => !id)) throw new BadRequestException('Every order line needs an item');
+    const catalog = await this.prisma.item.findMany({
+      where: { id: { in: wanted as string[] }, businessId: dto.businessId, isActive: true, deletedAt: null },
+      select: { id: true, name: true, retailPriceCents: true },
+    });
+    const lines = dto.items.map((i) => {
+      const item = catalog.find((c) => c.id === i.itemId);
+      if (!item) throw new BadRequestException('An item on your order is no longer available');
+      if (!Number.isFinite(i.quantity) || i.quantity <= 0) {
+        throw new BadRequestException(`Quantity of ${item.name} must be greater than zero`);
+      }
+      return { itemId: item.id, name: item.name, quantity: i.quantity, priceCents: item.retailPriceCents };
+    });
+
     // Totals — prices are VAT-inclusive, so extract the embedded 16% VAT.
-    const subtotalCents = dto.items.reduce((s, i) => s + i.priceCents * i.quantity, 0);
+    const subtotalCents = lines.reduce((s, i) => s + i.priceCents * i.quantity, 0);
     const taxCents = Math.round(subtotalCents * 16 / 116);
 
     // Generate order number
@@ -292,8 +317,8 @@ export class PortalService {
         paymentStatus: 'UNPAID',
         notes: dto.notes ?? null,
         items: {
-          create: dto.items.map((i) => ({
-            itemId: i.itemId ?? null,
+          create: lines.map((i) => ({
+            itemId: i.itemId,
             name: i.name,
             quantity: i.quantity,
             unitPriceCents: i.priceCents,

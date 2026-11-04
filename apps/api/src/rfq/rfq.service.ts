@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, NotFoundException, Logger } from '@nes
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
+import { frontendUrl } from '../common/app-urls';
 
 /** A quote row that has no price yet — the supplier has been invited but not replied. */
 const INVITED = 'INVITED';
@@ -21,7 +22,7 @@ export class RFQService {
   }
 
   private static webBase(): string {
-    return (process.env.FRONTEND_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+    return frontendUrl();
   }
 
   private static quoteUrl(token: string): string {

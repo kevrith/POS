@@ -1,7 +1,7 @@
 import {
   DRAWER_PULSE, PAPER_COLUMNS, asciiSafe, billEscPos, billHtml, bytesToBase64, formatAmount, formatKES, groupPayments,
   kotEpsonXml, kotEscPos, kotHtml, kotStarXml, qrMatrix, qrSvg, receiptEpsonXml, receiptEscPos, receiptHtml,
-  receiptOpensDrawer, receiptStarXml, resolveStation, routeKotItems, row, wrapText,
+  columnRuler, diagnosticEpsonXml, diagnosticEscPos, diagnosticHtml, diagnosticStarXml, receiptOpensDrawer, receiptStarXml, resolveStation, routeKotItems, row, wrapText,
   type BillDocument, type KotDocument, type ReceiptDocument,
 } from '../src';
 
@@ -90,6 +90,7 @@ describe('fiscal status appears on EVERY printer format', () => {
     ['pending eTIMS', { etimsSubmitted: false, etimsControlNumber: undefined }, 'PENDING KRA SUBMISSION'],
     ['reprint', { copyNumber: 2 }, 'COPY 2'],
     ['eTIMS test mode', { etimsTestMode: true }, 'TEST MODE'],
+    ['offline sale', { offlineSale: true }, 'OFFLINE SALE'],
   ];
 
   it.each(cases)('%s', (_name, patch, marker) => {
@@ -122,7 +123,7 @@ describe('fiscal status appears on EVERY printer format', () => {
 
   it('an original, paid receipt carries none of the warning banners', () => {
     const f = allFormats(base);
-    for (const marker of ['VOID', 'CREDIT SALE', 'PENDING KRA', 'COPY', 'TEST MODE']) {
+    for (const marker of ['VOID', 'CREDIT SALE', 'PENDING KRA', 'COPY', 'TEST MODE', 'OFFLINE SALE']) {
       expect(f.escpos).not.toContain(marker);
       expect(f.html).not.toContain(marker);
     }
@@ -314,5 +315,37 @@ describe('kitchen routing', () => {
     expect(by.KOT_FOOD.printer?.id).toBe('k');
     expect(by.KOT_DRINKS.printer?.id).toBe('b');
     expect(by.KOT_DESSERTS.printer).toBeNull();
+  });
+});
+
+describe('printer diagnostic page', () => {
+  it('the column ruler is exactly one line wide with both edge marks', () => {
+    for (const cols of [32, 48]) {
+      const r = columnRuler(cols);
+      expect(r).toHaveLength(cols);
+      expect(r[0]).toBe('|');
+      expect(r[cols - 1]).toBe('|');
+    }
+  });
+
+  it('prints on both paper widths without wrapping the ruler, with the QR, the cut and plain-ASCII text', () => {
+    for (const w of [58, 80] as const) {
+      const bytes = diagnosticEscPos({ paperWidth: w });
+      const lines = printedLines(bytes);
+      const cols = PAPER_COLUMNS[w];
+      for (const l of lines) expect(l.length).toBeLessThanOrEqual(cols);
+      expect(lines).toContain(columnRuler(cols));
+      expect(lines.join('\n')).toContain('Cafe - Naive "quotes" x 3 EUR5');
+      expect(Buffer.from(bytes).includes(Buffer.from([0x1d, 0x28, 0x6b]))).toBe(true); // native QR
+      expect(Array.from(bytes.slice(-4))).toEqual([0x1d, 0x56, 0x41, 0x00]);            // cut
+    }
+  });
+
+  it('is available as HTML, Epson and Star output too', () => {
+    const o = { paperWidth: 80 as const };
+    expect(diagnosticHtml(o)).toContain('PRINTER TEST');
+    expect(diagnosticHtml(o)).toContain('<svg');
+    expect(diagnosticEpsonXml(o)).toContain('PRINTER TEST');
+    expect(diagnosticStarXml(o)).toContain('PRINTER TEST');
   });
 });

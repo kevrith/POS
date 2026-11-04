@@ -104,6 +104,18 @@ export class SalesService {
     private ledger: LedgerService,
   ) {}
 
+  /**
+   * Who a checkout is credited to. Normally the person making the request. A sale rung up offline by one cashier is
+   * uploaded later by whoever signs in next; an owner or manager may upload it ON BEHALF of that cashier, so shift
+   * and cash-drawer reports stay right. Anyone else cannot choose, and the target must belong to the same business.
+   */
+  async resolveCashierId(businessId: string, requester: { id: string; role?: string }, onBehalfOf?: string): Promise<string> {
+    if (!onBehalfOf || onBehalfOf === requester.id) return requester.id;
+    if (requester.role !== 'OWNER' && requester.role !== 'MANAGER') return requester.id;
+    const cashier = await this.prisma.user.findFirst({ where: { id: onBehalfOf, businessId }, select: { id: true } });
+    return cashier?.id ?? requester.id;
+  }
+
   /** Keys from clients are stored as the sale's unique offlineId, so keep them to a safe shape and size. */
   private cleanOfflineId(value: unknown): string | undefined {
     return typeof value === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(value) ? value : undefined;
@@ -113,7 +125,20 @@ export class SalesService {
   private async replayExistingSale(businessId: string, offlineId: string) {
     const existing = await this.prisma.sale.findFirst({ where: { offlineId, businessId }, include: { items: true, payments: true } });
     if (!existing) return null;
-    return { ...existing, pointsEarned: 0, loyaltyBalance: 0, monthlyTxCount: null, freeTxLimit: null, replayed: true };
+
+    // The receipt of a replayed sale must show the points it really earned, as the original response did.
+    let pointsEarned = 0;
+    let loyaltyBalance = 0;
+    if (existing.customerId && existing.type !== SaleType.CREDIT) {
+      try {
+        const loyalty = await this.loyalty.pointsAwardedForSale(existing.customerId, existing.id);
+        pointsEarned = loyalty.points;
+        loyaltyBalance = loyalty.balance;
+      } catch {
+        /* loyalty is decoration on the receipt; never fail a replay over it */
+      }
+    }
+    return { ...existing, pointsEarned, loyaltyBalance, monthlyTxCount: null, freeTxLimit: null, replayed: true };
   }
 
   /**

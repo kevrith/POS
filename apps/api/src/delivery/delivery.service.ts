@@ -6,6 +6,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { PushService, deliveryStatusMessage } from '../push/push.service';
 import { v4 as uuidv4 } from 'uuid';
 import { newDeliveryOrderNumber } from './order-number';
+import { DEV_FRONTEND_URL, frontendUrl } from '../common/app-urls';
 
 interface CreateDeliveryOrderDto {
   businessId: string;
@@ -200,15 +201,14 @@ export class DeliveryService {
    * link cannot silently point at a developer's laptop.
    */
   private static webBase(): string {
-    const base = process.env.FRONTEND_URL ?? process.env.WEB_URL;
-    if (!base) {
-      if (process.env.NODE_ENV === 'production') {
-        // Loud, because the symptom is a link that looks fine to us and is dead to them.
-        console.error('[delivery] FRONTEND_URL is not set — customer tracking links will point at localhost');
-      }
-      return 'http://localhost:3001';
+    try {
+      return frontendUrl();
+    } catch (err) {
+      // A delivery must still be created when the setting is missing; only its tracking link is wrong.
+      // Loud, because the symptom is a link that looks fine to us and is dead to the customer.
+      console.error(`[delivery] ${(err as Error).message} Customer tracking links will point at localhost.`);
+      return DEV_FRONTEND_URL;
     }
-    return base.replace(/\/$/, '');
   }
 
   private static trackingUrlFor(orderNumber: string): string {

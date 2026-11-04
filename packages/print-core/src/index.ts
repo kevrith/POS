@@ -4,6 +4,7 @@ import { renderHtml } from './html';
 import { hasCashPayment, layoutBill, layoutKot, layoutReceipt } from './layout';
 import type { BillDocument, KotDocument, PaperWidth, ReceiptDocument } from './model';
 import { renderStarXml } from './star';
+import { layoutDiagnostic } from './diagnostic';
 
 export * from './model';
 export * from './text';
@@ -15,6 +16,7 @@ export { renderHtml } from './html';
 export { renderEpsonXml } from './epson';
 export { renderStarXml } from './star';
 export { qrMatrix, qrSvg } from './qr';
+export { columnRuler, layoutDiagnostic } from './diagnostic';
 
 export interface PrintOptions {
   paperWidth: PaperWidth;
@@ -65,3 +67,17 @@ export const billHtml = (bill: BillDocument, o: PrintOptions): string =>
 
 /** The cash drawer pulse on its own, for the "open drawer" button. */
 export const drawerPulseBytes = (): Uint8Array => DRAWER_PULSE.slice();
+
+// ─── Printer diagnostic page ──────────────────────────────────────────────────
+
+export const diagnosticEscPos = (o: PrintOptions): Uint8Array =>
+  renderEscPos(layoutDiagnostic(o.paperWidth), { paperWidth: o.paperWidth });
+
+export const diagnosticHtml = (o: PrintOptions): string =>
+  renderHtml(layoutDiagnostic(o.paperWidth), { paperWidth: o.paperWidth, title: 'Printer test' });
+
+export const diagnosticEpsonXml = (o: PrintOptions): string =>
+  renderEpsonXml(layoutDiagnostic(o.paperWidth), { paperWidth: o.paperWidth });
+
+export const diagnosticStarXml = (o: PrintOptions): string =>
+  renderStarXml(layoutDiagnostic(o.paperWidth), { paperWidth: o.paperWidth });

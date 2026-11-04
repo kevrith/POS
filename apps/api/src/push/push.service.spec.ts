@@ -1,4 +1,4 @@
-import { isValidExpoToken, buildExpoMessages, deliveryStatusMessage } from './push.service';
+import { isValidExpoToken, buildExpoMessages, deliveryStatusMessage, PushService } from './push.service';
 
 describe('isValidExpoToken', () => {
   it('accepts ExponentPushToken and ExpoPushToken forms', () => {
@@ -64,5 +64,33 @@ describe('deliveryStatusMessage', () => {
   it('returns null for internal statuses customers should not be pinged about', () => {
     expect(deliveryStatusMessage('PENDING')).toBeNull();
     expect(deliveryStatusMessage('ASSIGNED_TO_ROUTE')).toBeNull();
+  });
+});
+
+describe('registerCustomerTokenById', () => {
+  function makeService(count = 1) {
+    const prisma = { customer: { updateMany: jest.fn().mockResolvedValue({ count }) } };
+    return { svc: new PushService(prisma as never), prisma };
+  }
+
+  it('stores a valid token on the customer the portal session identified', async () => {
+    const { svc, prisma } = makeService();
+    const res = await svc.registerCustomerTokenById('cust-1', 'ExponentPushToken[abc]');
+    expect(res).toEqual({ success: true });
+    expect(prisma.customer.updateMany).toHaveBeenCalledWith({
+      where: { id: 'cust-1' },
+      data: { deviceToken: 'ExponentPushToken[abc]' },
+    });
+  });
+
+  it('ignores a malformed token without touching the database', async () => {
+    const { svc, prisma } = makeService();
+    expect(await svc.registerCustomerTokenById('cust-1', 'not-a-token')).toEqual({ success: false });
+    expect(prisma.customer.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('reports failure when no customer row matched', async () => {
+    const { svc } = makeService(0);
+    expect(await svc.registerCustomerTokenById('gone', 'ExponentPushToken[abc]')).toEqual({ success: false });
   });
 });

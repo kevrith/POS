@@ -126,11 +126,11 @@ export class PushService {
 
   // ── Customer (self-service app) ───────────────────────────────────────────────
 
-  /** Attach an Expo token to the Customer matched by phone (the only id the app has). */
-  async registerCustomerToken(businessId: string, phone: string, token: string): Promise<{ success: boolean }> {
-    if (!isValidExpoToken(token) || !phone) return { success: false };
+  /** Attach an Expo token to a customer already identified by a verified portal session. */
+  async registerCustomerTokenById(customerId: string, token: string): Promise<{ success: boolean }> {
+    if (!isValidExpoToken(token) || !customerId) return { success: false };
     const result = await this.prisma.customer.updateMany({
-      where: { businessId, phone },
+      where: { id: customerId },
       data: { deviceToken: token },
     });
     return { success: result.count > 0 };

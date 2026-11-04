@@ -1,11 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 import { createDecipheriv } from 'crypto';
 import { toE164 } from '../common/phone';
 
+export type SmsPurpose = 'OTP' | 'GENERAL';
+
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     private prisma: PrismaService,
     private events: EventsGateway,
@@ -28,7 +32,18 @@ export class NotificationsService {
     }
   }
 
-  private async getAtInstance(businessId: string) {
+  /**
+   * The shared KASTRA account, from the environment. It is the default for every business, so a
+   * shop can take customer logins without opening and funding its own Africa's Talking account.
+   */
+  private platformCreds(): { apiKey: string; username: string; senderId?: string } | null {
+    const username = process.env.AT_USERNAME?.trim();
+    const apiKey = process.env.AT_API_KEY?.trim();
+    if (!username || !apiKey) return null;
+    return { username, apiKey, senderId: process.env.AT_SENDER_ID?.trim() || undefined };
+  }
+
+  private async businessCreds(businessId: string) {
     if (!businessId) return null;
     const business = await this.prisma.business.findUnique({
       where: { id: businessId },
@@ -36,11 +51,69 @@ export class NotificationsService {
     });
     if (!business?.atCredentialsEncrypted) return null;
     const creds = this.decryptAtCredentials(business.atCredentialsEncrypted);
-    if (!creds?.apiKey || !creds?.username) return null;
+    return creds?.apiKey && creds?.username ? creds : null;
+  }
+
+  /**
+   * Which account sends this message. Login codes go out on the platform account first: they are
+   * authentication, so they must keep arriving whether or not a shop has set anything up or topped
+   * up its own balance. Everything else prefers the shop's own account (its own sender ID and
+   * bill) and falls back to the platform one.
+   */
+  private async getAtInstance(businessId: string, purpose: SmsPurpose = 'GENERAL') {
+    const business = await this.businessCreds(businessId);
+    const platform = this.platformCreds();
+    const order: Array<['BUSINESS' | 'PLATFORM', typeof platform]> =
+      purpose === 'OTP' ? [['PLATFORM', platform], ['BUSINESS', business]] : [['BUSINESS', business], ['PLATFORM', platform]];
+    const pick = order.find(([, creds]) => !!creds);
+    if (!pick) return null;
+    const [channel, creds] = pick;
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const AfricasTalking = require('africastalking');
-    const at = AfricasTalking({ apiKey: creds.apiKey, username: creds.username });
-    return { at, creds };
+    const at = AfricasTalking({ apiKey: creds!.apiKey, username: creds!.username });
+    return { at, creds: creds!, channel };
+  }
+
+  private static intFromEnv(name: string, fallback: number): number {
+    const n = Number.parseInt(process.env[name] ?? '', 10);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+  }
+
+  /**
+   * Hourly caps, checked before anything is sent. Only the platform account is capped: its bill is
+   * ours. Without this, anyone could ask for login codes for thousands of numbers (the endpoint is
+   * public) or a stolen staff token could text arbitrary numbers, all on our account.
+   *   - per phone: login codes to one number
+   *   - per business: everything sent for that business on the platform account
+   */
+  private async overCap(businessId: string, to: string, purpose: SmsPurpose): Promise<string | null> {
+    const since = new Date(Date.now() - 60 * 60 * 1000);
+    const perPhone = NotificationsService.intFromEnv('SMS_OTP_PER_PHONE_HOUR', 5);
+    const perBusiness = NotificationsService.intFromEnv('SMS_PLATFORM_PER_BUSINESS_HOUR', 300);
+
+    if (purpose === 'OTP') {
+      const toPhone = await this.prisma.smsLog.count({ where: { phone: to, purpose: 'OTP', createdAt: { gte: since } } });
+      if (toPhone >= perPhone) return 'Too many codes requested for this number';
+    }
+    const sent = await this.prisma.smsLog.count({ where: { businessId, channel: 'PLATFORM', createdAt: { gte: since } } });
+    if (sent >= perBusiness) {
+      this.logger.error(`Platform SMS cap of ${perBusiness}/hour reached for business ${businessId}; sends are refused until the hour rolls over`);
+      return 'SMS limit reached for this business';
+    }
+    // One warning on the way up so a runaway is seen before it hits the cap.
+    if (sent + 1 === Math.ceil(perBusiness * 0.8)) {
+      this.logger.warn(`Business ${businessId} has used 80% of its ${perBusiness}/hour platform SMS allowance`);
+    }
+    return null;
+  }
+
+  private async logSms(entry: { businessId: string; phone: string; purpose: SmsPurpose; channel: string; success: boolean }) {
+    try {
+      await this.prisma.smsLog.create({ data: entry });
+    } catch (err) {
+      // Bookkeeping must never turn a delivered message into a failed request.
+      this.logger.error(`Could not record SMS log: ${(err as Error)?.message}`);
+    }
   }
 
   // ─── In-App Notifications ─────────────────────────────────────────────────
@@ -210,10 +283,16 @@ export class NotificationsService {
 
   // ─── SMS / WhatsApp via Africa's Talking ──────────────────────────────────
 
-  async sendSMS(businessId: string, phone: string, message: string) {
-    const instance = await this.getAtInstance(businessId);
+  async sendSMS(
+    businessId: string,
+    phone: string,
+    message: string,
+    opts: { purpose?: SmsPurpose } = {},
+  ): Promise<{ success: boolean; messageId?: string; error?: string; limited?: boolean }> {
+    const purpose = opts.purpose ?? 'GENERAL';
+    const instance = await this.getAtInstance(businessId, purpose);
     if (!instance) {
-      console.warn('[AT] Africa\'s Talking not configured for business', businessId);
+      this.logger.warn(`No SMS account for business ${businessId}: neither its own nor the platform AT_* credentials are set`);
       return { success: false, error: 'Messaging not configured' };
     }
     // Callers hold phone numbers in whatever shape they were typed in; Africa's
@@ -221,46 +300,36 @@ export class NotificationsService {
     // benefits rather than each one remembering to.
     const to = toE164(phone);
     if (!to) {
-      console.warn('[AT] Unroutable phone number, not sending:', phone);
+      this.logger.warn(`Unroutable phone number, not sending: ${phone}`);
       return { success: false, error: 'Invalid phone number' };
     }
+    if (instance.channel === 'PLATFORM') {
+      const refused = await this.overCap(businessId, to, purpose);
+      if (refused) return { success: false, error: refused, limited: true };
+    }
+    let result: { success: boolean; messageId?: string; error?: string };
     try {
-      const result = await instance.at.SMS.send({
+      const sent = await instance.at.SMS.send({
         to: [to],
         message,
         // Without the account's registered sender ID, AT falls back to a shared
         // shortcode — or rejects the send outright on accounts that require one.
         ...(instance.creds.senderId ? { from: instance.creds.senderId } : {}),
       });
-      const recipient = result?.SMSMessageData?.Recipients?.[0];
-      return { success: recipient?.status === 'Success', messageId: recipient?.messageId };
+      const recipient = sent?.SMSMessageData?.Recipients?.[0];
+      result = { success: recipient?.status === 'Success', messageId: recipient?.messageId };
     } catch (err: any) {
-      console.error('[AT] SMS send failed:', err?.message);
-      return { success: false, error: err?.message };
+      this.logger.error(`SMS send failed: ${err?.message}`);
+      result = { success: false, error: err?.message };
     }
+    await this.logSms({ businessId, phone: to, purpose, channel: instance.channel, success: result.success });
+    return result;
   }
 
   async sendWhatsApp(businessId: string, phone: string, message: string) {
-    // Africa's Talking WhatsApp channel (if enabled on account)
-    const instance = await this.getAtInstance(businessId);
-    if (!instance) {
-      return { success: false, error: 'Messaging not configured' };
-    }
-    try {
-      // Use SMS as fallback since AT WhatsApp requires special business account approval
-      const to = toE164(phone);
-      if (!to) return { success: false, error: 'Invalid phone number' };
-      const result = await instance.at.SMS.send({
-        to: [to],
-        message,
-        ...(instance.creds.senderId ? { from: instance.creds.senderId } : {}),
-      });
-      const recipient = result?.SMSMessageData?.Recipients?.[0];
-      return { success: recipient?.status === 'Success', messageId: recipient?.messageId };
-    } catch (err: any) {
-      console.error('[AT] WhatsApp/SMS send failed:', err?.message);
-      return { success: false, error: err?.message };
-    }
+    // AT's WhatsApp channel needs a separately approved business account, so this goes out as SMS.
+    // Routing it through sendSMS keeps it inside the same caps and usage log as every other send.
+    return this.sendSMS(businessId, phone, message);
   }
 
   async sendReceiptSMS(businessId: string, phone: string, receiptNumber: string, totalCents: number) {

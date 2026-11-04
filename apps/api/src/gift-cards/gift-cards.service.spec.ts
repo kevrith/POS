@@ -48,6 +48,12 @@ describe('GiftCardsService', () => {
       const result = await svc.getGiftCard('GCABC123');
       expect(result?.code).toBe('GCABC123');
     });
+
+    it('throws NotFound for an unknown code instead of returning an empty body', async () => {
+      const { svc, prisma } = makeService();
+      prisma.giftCard.findUnique.mockResolvedValue(null);
+      await expect(svc.getGiftCard('NOPE')).rejects.toThrow('Gift card not found');
+    });
   });
 
   describe('redeemGiftCard', () => {

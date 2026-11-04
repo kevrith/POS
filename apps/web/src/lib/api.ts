@@ -112,6 +112,14 @@ async function maybeRefreshToken(): Promise<boolean> {
   return false;
 }
 
+/** An error response from the server. `status` tells a REFUSED request (4xx) from a server that is not there (502-504). */
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   if (response.status === 401) {
     clearToken();
@@ -127,7 +135,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
     } catch {
       // ignore parse error
     }
-    throw new Error(message);
+    throw new ApiError(message, response.status);
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;

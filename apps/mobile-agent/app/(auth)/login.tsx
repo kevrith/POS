@@ -131,7 +131,7 @@ export default function LoginScreen() {
     setUrlTesting(true);
     setUrlError('');
     try {
-      const res = await fetch(`${url}/auth/health`).catch(() => null);
+      const res = await fetch(`${url}/health`).catch(() => null);
       if (!res || res.status >= 500) throw new Error('Cannot reach server.');
     } catch (e) {
       setUrlError(friendlyError(e, 'Could not verify server — check URL.'));

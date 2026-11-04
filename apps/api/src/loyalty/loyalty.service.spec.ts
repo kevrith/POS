@@ -24,6 +24,25 @@ function makeService(overrides = {}) {
   return { svc, prisma };
 }
 
+describe('LoyaltyService.pointsAwardedForSale', () => {
+  it('reports what the sale earned and the current balance without awarding anything', async () => {
+    const { svc, prisma } = makeService();
+    prisma.loyaltyTransaction.findFirst.mockResolvedValue({ points: 25 });
+    prisma.customer.findUnique.mockResolvedValue({ loyaltyPoints: 340 });
+    expect(await svc.pointsAwardedForSale('cust-1', 'sale-1')).toEqual({ points: 25, balance: 340 });
+    expect(prisma.loyaltyTransaction.findFirst).toHaveBeenCalledWith({ where: { saleId: 'sale-1', customerId: 'cust-1', type: 'EARN' }, select: { points: true } });
+    expect(prisma.loyaltyTransaction.create).not.toHaveBeenCalled();
+    expect(prisma.customer.update).not.toHaveBeenCalled();
+  });
+
+  it('is zero points when the sale earned none', async () => {
+    const { svc, prisma } = makeService();
+    prisma.loyaltyTransaction.findFirst.mockResolvedValue(null);
+    prisma.customer.findUnique.mockResolvedValue({ loyaltyPoints: 10 });
+    expect(await svc.pointsAwardedForSale('cust-1', 'sale-1')).toEqual({ points: 0, balance: 10 });
+  });
+});
+
 describe('LoyaltyService', () => {
   describe('getProgram', () => {
     it('returns program for businessId', async () => {

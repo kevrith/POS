@@ -20,10 +20,14 @@ import CameraModal from '../components/pos/CameraModal';
 import type { ReceiptData } from '../lib/printer';
 import { autoPrintReceipt, printErrorMessage, printWithPreferredPrinter } from '../lib/receiptPrint';
 import { subscribeToEvent, SocketEvents } from '../lib/socket';
+import { createAttemptKeys } from '../lib/checkoutKey';
+import { canQueueOffline, submitSaleOrQueue } from '../lib/offlineSales';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface SalePayload {
+  /** Idempotency key: a retry of the same checkout never records a second sale. */
+  offlineId?: string;
   storeId: string;
   businessId: string;
   cashierId: string;
@@ -50,7 +54,10 @@ interface Promotion {
 }
 
 interface SaleResult {
+  /** Empty for a sale saved offline: the server has not recorded it yet. */
   id: string;
+  /** True when the sale was saved on this device and uploads when the connection is back. */
+  queued?: boolean;
   receiptNumber: string;
   totalCents: number;
   pointsEarned?: number;
@@ -451,8 +458,10 @@ export default function POSPage() {
 
   // ─── Checkout ─────────────────────────────────────────────────────────────
 
+  const attemptKeys = useRef(createAttemptKeys());
+
   const checkoutMutation = useMutation<SaleResult, Error, Array<{ method: string; amountCents: number; reference?: string }>>({
-    mutationFn: (payments) => {
+    mutationFn: async (payments) => {
       const isCredit = payments.some((p) => p.method === 'CREDIT');
       const payload: SalePayload = {
         storeId: effectiveStoreId,
@@ -467,9 +476,29 @@ export default function POSPage() {
         ...(tipCents > 0 && { tipCents }),
         ...(totalDiscountCents > 0 && { discountCents: totalDiscountCents, promotionId: appliedPromotion?.id }),
       };
-      return api.post<SaleResult>('/sales/checkout', payload);
+      payload.offlineId = attemptKeys.current.keyFor(
+        JSON.stringify([payload.items, payload.payments, payload.type, payload.customerId, payload.discountCents, payload.serviceChargeCents, payload.tipCents]),
+      );
+      const outcome = await submitSaleOrQueue<SaleResult, SalePayload & { offlineId: string }>(
+        { ...payload, offlineId: payload.offlineId },
+        {
+          canQueue: canQueueOffline({ payments, loyaltyRedeemed: loyaltyDiscountApplied }),
+          user: { id: user?.id ?? '', name: user?.name },
+          totalCents,
+          customerName: customerName ?? undefined,
+        },
+      );
+      // A sale saved offline has no server id or receipt number yet: the till shows a provisional one.
+      return outcome.queued
+        ? { id: '', receiptNumber: outcome.provisionalNumber, totalCents, queued: true }
+        : outcome.result;
     },
     onSuccess: (result) => {
+      attemptKeys.current.reset();
+      const offline = result.queued === true;
+      if (offline) {
+        toast.info(`Sale saved offline as ${result.receiptNumber}. It uploads by itself when the connection is back.`, { duration: 9000 });
+      }
 
       const gcPayment = (checkoutMutation.variables ?? []).find((p) => p.method === 'GIFT_CARD');
       if (gcPayment?.reference) {
@@ -509,7 +538,8 @@ export default function POSPage() {
         totalCents,
         payments: checkoutMutation.variables ?? [],
         etimsSubmitted: false,
-        saleId: result.id,
+        saleId: offline ? undefined : result.id,
+        ...(offline && { offlineSale: true }),
         receiptHeader: (businessSettings as any)?.receiptHeader ?? undefined,
         receiptFooter: (businessSettings as any)?.receiptFooter ?? undefined,
         // Include loyalty data directly from API response — never depends on store state
@@ -526,7 +556,9 @@ export default function POSPage() {
       // Keep a local copy so the auto-print includes the eTIMS QR once it resolves.
       let printReceipt: ReceiptData = receipt;
 
-      api.post<{ success: boolean; controlNumber?: string; intrlData?: string; qrUrl?: string; testMode?: boolean }>(`/etims/submit/${result.id}`)
+      (offline
+        ? Promise.reject<{ success: boolean; controlNumber?: string; intrlData?: string; qrUrl?: string; testMode?: boolean }>(new Error('offline'))
+        : api.post<{ success: boolean; controlNumber?: string; intrlData?: string; qrUrl?: string; testMode?: boolean }>(`/etims/submit/${result.id}`))
         .then((res) => {
           const etims = {
             etimsSubmitted: res.success,
@@ -1028,8 +1060,9 @@ export default function POSPage() {
         >
           <div className="flex items-start justify-between gap-3 mb-2">
             <div>
-              <div className="font-bold text-base inline-flex items-center gap-1.5"><CheckCircle2 className="w-5 h-5" aria-hidden="true" />Sale Complete!</div>
-              <div className="text-sm opacity-90 mt-0.5">Receipt #{lastReceipt.receiptNumber}</div>
+              <div className="font-bold text-base inline-flex items-center gap-1.5"><CheckCircle2 className="w-5 h-5" aria-hidden="true" />{lastReceipt.queued ? 'Sale saved offline' : 'Sale Complete!'}</div>
+              <div className="text-sm opacity-90 mt-0.5">{lastReceipt.queued ? 'Provisional receipt' : 'Receipt'} #{lastReceipt.receiptNumber}</div>
+              {lastReceipt.queued && <div className="text-xs opacity-90 mt-0.5">It uploads by itself when the connection is back.</div>}
               <div className="text-sm font-bold mt-0.5">{formatKES(lastReceipt.totalCents)}</div>
             </div>
             <button

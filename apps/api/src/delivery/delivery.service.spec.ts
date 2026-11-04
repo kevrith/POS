@@ -110,7 +110,7 @@ describe('DeliveryService — customer tracking links', () => {
 
     const res = await svc.sendCustomerTrackingLink('del-1');
 
-    expect(res.trackingUrl).toBe('http://localhost:3001/track/DEL-1755100000000');
+    expect(res.trackingUrl).toBe('http://localhost:3005/track/DEL-1755100000000');
   });
 });
 

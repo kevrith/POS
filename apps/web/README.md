@@ -62,7 +62,7 @@ src/
 | `printBridge.ts` | Desktop app only: polls for queued jobs and writes them to LAN printers with the Tauri `print_to_network` command, so a cloud API can reach printers it cannot see. Signs in with a long-lived **print station key** (`print-station-token`, no one needs to be logged in; a revoked key is dropped on the first 401) or, without one, the signed-in person's login. On by default in the desktop app; switch off in Settings -> Printers. `PrintBridge` is mounted on the login screen too |
 | `kotPrintFeedback.ts` | Toast with a "Print here" action when a kitchen printer cannot be reached |
 
-Settings -> Printers ends with **Print history** (`components/PrintQueuePanel.tsx`, owner/manager): a 7-day audit (reprints and hand-opened cash drawers per person), **Print stations** (`PrintStationsPanel.tsx`: create a key, use this computer as a station, see online/offline, remove) and every receipt, ticket and drawer open with Retry for failed ones.
+Settings -> Printers also has **Print full test page** (columns, alignment, characters, QR, cut) and **Test cash drawer** for checking a new printer; see [HARDWARE_TEST.md](../../packages/print-core/HARDWARE_TEST.md). It ends with **Print history** (`components/PrintQueuePanel.tsx`, owner/manager): a 7-day audit (reprints and hand-opened cash drawers per person), **Print stations** (`PrintStationsPanel.tsx`: create a key, use this computer as a station, see online/offline, remove) and every receipt, ticket and drawer open with Retry for failed ones.
 What a receipt/ticket/bill contains lives in [`packages/print-core`](../../packages/print-core/README.md), shared with the mobile app.
 Tests: `npm test` (vitest) covers the print preference, routing and failure reporting.
 | `scale.ts` | Weighing scales (Web Serial / Bluetooth) |
@@ -198,6 +198,31 @@ this app before building the desktop app** or Tauri ships a stale bundle.
 
 When you add a page, route, gated feature, hardware lib or public link, update this
 README in the same change.
+
+## Offline sales
+
+A checkout is sent straight to the server. If there is no answer (browser offline, dropped connection, 502/503/504, no
+reply in 20 s) a sale made with **cash, card, M-Pesa or bank transfer** is saved in IndexedDB (`lib/offlineSales.ts`,
+the Dexie `syncQueue` table in `lib/db.ts`) and uploads by itself (`lib/syncEngine.ts`). The till prints a
+**provisional receipt**: number `OFF-XXXXXXXX`, an `OFFLINE SALE - PROVISIONAL RECEIPT` banner and the PENDING KRA banner. The
+real receipt number and the eTIMS record are made when it uploads (the entry keeps the real number for 7 days).
+
+- **Safe to repeat.** Every sale carries its idempotency key (`lib/checkoutKey.ts`); the server records it once, so an
+  unknown outcome (the reply was lost) is simply queued and retried.
+- **Not queued:** gift card, credit sale, loyalty redemption, room charge. They need a live server answer to complete, so
+  they fail visibly and the cashier picks another payment method.
+- **Failure handling** (`classifyFailure`): a lost connection or 502/503/504/408/429 keeps the entry waiting and stops the
+  run without using up attempts; a 4xx means the server REFUSED the sale (for example out of stock), so it is parked as
+  FAILED with the reason, never dropped, and does not block the sales behind it; other 5xx back off and give up after 10
+  tries. One upload can never hang the queue (30 s timeout), and only one tab uploads at a time (Web Locks).
+- **Whose sale it is.** A sale uploads under its cashier's login, or under an owner/manager's, who uploads it on the cashier's
+  behalf (`onBehalfOfCashierId`, honoured by the API only for owners/managers of the same business). Another cashier leaves it alone.
+- **Seeing it.** The sidebar sync badge opens **Sales saved offline** (`components/OfflineSalesPanel.tsx`): waiting, uploaded (with the
+  real receipt number), refused (Retry; managers can Discard with a warning). A refused sale turns the badge and banner red.
+- **Limits.** Prices and stock come from what the till already loaded (kept in the service-worker cache for 7 days for a reload
+  while offline), so an offline sale can be refused later if stock ran out meanwhile. Printing to a LAN printer through the server
+  needs a connection; browser, USB, Bluetooth and installed printers work offline. Tests: `lib/__tests__/offlineSales.test.ts`
+  (fake IndexedDB).
 
 ## Printing notes
 

@@ -41,6 +41,23 @@ export interface CachedCustomer {
 export type SyncPriority = 'HIGH' | 'NORMAL';
 export type SyncStatus = 'PENDING' | 'SYNCING' | 'DONE' | 'FAILED';
 
+export type SyncKind = 'SALE' | 'OTHER';
+
+/** What the offline-sales list shows, kept on the entry so it needs no network to display. */
+export interface OfflineSaleSummary {
+  /** The number printed on the provisional receipt, e.g. OFF-3F9A12BC. The real one is assigned when it uploads. */
+  provisionalNumber: string;
+  totalCents: number;
+  itemCount: number;
+  customerName?: string;
+  paymentMethods: string[];
+}
+
+/**
+ * Status: PENDING = waiting to upload (offline, or the next retry is due); SYNCING = an upload is in progress;
+ * DONE = recorded on the server; FAILED = the SERVER REFUSED it (or it kept erroring), so it waits for a person.
+ * A lost connection never moves an entry to FAILED.
+ */
 export interface SyncQueueEntry {
   id?: number;             // auto-increment PK
   offlineId: string;       // UUID — idempotency key
@@ -54,6 +71,17 @@ export interface SyncQueueEntry {
   resultData?: string;     // JSON-encoded response when DONE
   createdAt: number;       // Date.now()
   processedAt?: number;
+  kind?: SyncKind;
+  /** Who made the sale, so it is credited to them even when someone else signs in and uploads it. */
+  userId?: string;
+  userName?: string;
+  businessId?: string;
+  storeId?: string;
+  summary?: OfflineSaleSummary;
+  /** When the current upload started; an upload silent for a minute is treated as abandoned (tab closed). */
+  claimedAt?: number;
+  /** Do not try again before this time (server errors back off). */
+  nextAttemptAt?: number;
 }
 
 // ─── Metadata ─────────────────────────────────────────────────────────────────
@@ -115,25 +143,35 @@ export async function enqueue(entry: Omit<SyncQueueEntry, 'id' | 'attempts' | 's
   });
 }
 
-/** Get all pending sync queue entries, HIGH priority first */
-export async function getPendingQueue(): Promise<SyncQueueEntry[]> {
-  const all = await db.syncQueue
-    .where('status')
-    .anyOf(['PENDING', 'FAILED'])
-    .and((e) => e.attempts < 5)
-    .toArray();
+/** An upload that has been silent this long is assumed dead (tab closed, laptop slept) and may be taken again. */
+export const STALE_SYNCING_MS = 60_000;
 
-  return all.sort((a, b) => {
+/** Entries ready to upload now: waiting ones whose retry time has come, plus abandoned uploads. HIGH priority first. */
+export async function getPendingQueue(now: number = Date.now()): Promise<SyncQueueEntry[]> {
+  const all = await db.syncQueue.where('status').anyOf(['PENDING', 'SYNCING']).toArray();
+  const ready = all.filter((e) => {
+    if (e.status === 'SYNCING') return now - (e.claimedAt ?? 0) > STALE_SYNCING_MS;
+    return (e.nextAttemptAt ?? 0) <= now;
+  });
+  return ready.sort((a, b) => {
     if (a.priority === 'HIGH' && b.priority !== 'HIGH') return -1;
     if (b.priority === 'HIGH' && a.priority !== 'HIGH') return 1;
     return a.createdAt - b.createdAt;
   });
 }
 
-/** Get count of pending items */
+/** Waiting or uploading. */
 export async function getPendingCount(): Promise<number> {
-  return db.syncQueue
-    .where('status')
-    .anyOf(['PENDING', 'SYNCING'])
-    .count();
+  return db.syncQueue.where('status').anyOf(['PENDING', 'SYNCING']).count();
+}
+
+/** Refused or exhausted: needs a person. */
+export async function getRejectedCount(): Promise<number> {
+  return db.syncQueue.where('status').equals('FAILED').count();
+}
+
+/** Forget uploads that finished long ago. Recent ones stay so a provisional receipt can be matched to its real number. */
+export async function purgeDone(olderThanMs: number, now: number = Date.now()): Promise<void> {
+  const cutoff = now - olderThanMs;
+  await db.syncQueue.where('status').equals('DONE').and((e) => (e.processedAt ?? e.createdAt) < cutoff).delete();
 }

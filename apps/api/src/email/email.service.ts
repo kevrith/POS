@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Resend } from 'resend';
+import { frontendUrl } from '../common/app-urls';
 
 export interface SendEmailOptions {
   to: string | string[];
@@ -69,7 +70,7 @@ export class EmailService {
           <p>Hi ${opts.businessName},</p>
           <p>Your free trial ends in <strong>${opts.daysLeft} day${opts.daysLeft !== 1 ? 's' : ''}</strong>.</p>
           <p>Upgrade now to keep access to all features.</p>
-          <a href="${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/settings?tab=subscription"
+          <a href="${frontendUrl()}/settings?tab=subscription"
              style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;border-radius:6px;text-decoration:none;font-weight:bold">
             Upgrade Plan
           </a>
@@ -113,7 +114,7 @@ export class EmailService {
           ${opts.reportHtml}
           <p style="color:#6b7280;font-size:12px;margin-top:24px">
             This is an automated report from KASTRA POS.
-            <a href="${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/settings?tab=automation">Manage schedules</a>
+            <a href="${frontendUrl()}/settings?tab=automation">Manage schedules</a>
           </p>
         </div>`,
     });

@@ -7,6 +7,7 @@ import { JwtAuthGuard, Public } from './jwt-auth.guard';
 import { SkipSubscriptionCheck } from './subscription.guard';
 import type { Request } from 'express';
 import type { AuthUser } from './auth.service';
+import { frontendUrl } from '../common/app-urls';
 
 interface LoginDto {
   email: string;
@@ -132,10 +133,10 @@ export class AuthController {
       } catch { /* ignore malformed state */ }
     }
 
-    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3001';
+    const frontendBase = frontendUrl();
     // Redirect to frontend with token in query string; frontend stores it in sessionStorage
     return {
-      url: `${frontendUrl}/?oauth_token=${accessToken}&oauth_businessId=${user.businessId}&oauth_role=${user.role}&oauth_name=${encodeURIComponent(user.name)}&oauth_id=${user.id}`,
+      url: `${frontendBase}/?oauth_token=${accessToken}&oauth_businessId=${user.businessId}&oauth_role=${user.role}&oauth_name=${encodeURIComponent(user.name)}&oauth_id=${user.id}`,
     };
   }
 

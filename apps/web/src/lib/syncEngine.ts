@@ -4,16 +4,20 @@
  * - Caches server data to IndexedDB
  * - Processes the sync queue when back online
  */
-import { getToken, getApiUrl } from './api';
+import api, { ApiError, getToken, getApiUrl } from './api';
 import {
   db,
   cacheItems,
   cacheCustomers,
+  getPendingCount,
   getPendingQueue,
+  getRejectedCount,
+  purgeDone,
   type CachedItem,
   type CachedCustomer,
   type SyncQueueEntry,
 } from './db';
+import { useAuthStore } from '../stores/auth';
 import { useSyncStore } from '../stores/sync';
 
 const API_BASE = getApiUrl();
@@ -22,19 +26,6 @@ const API_BASE = getApiUrl();
 
 export function isOnline(): boolean {
   return navigator.onLine;
-}
-
-/** Confirm online by pinging the API (navigator.onLine can be wrong) */
-async function pingOnline(): Promise<boolean> {
-  try {
-    // Use the public update-check endpoint — no auth required, lightweight
-    const res = await fetch(`${API_BASE}/super-admin/update-check`, {
-      signal: AbortSignal.timeout(3000),
-    });
-    return res.ok || res.status === 404; // any real HTTP response means we're online
-  } catch {
-    return false;
-  }
 }
 
 // ─── Cache refreshers ─────────────────────────────────────────────────────────
@@ -103,117 +94,241 @@ export async function refreshCustomersCache(businessId: string): Promise<void> {
 }
 
 // ─── Queue processor ──────────────────────────────────────────────────────────
+//
+// Uploads what was saved while offline (sales above all). Rules that matter for money:
+//  - A LOST CONNECTION never costs an entry its place: it stays PENDING and the run stops, instead of burning
+//    attempts. Only a server answer can change an entry's fate.
+//  - A 4xx means the SERVER REFUSED it (out of stock, invalid item). Retrying the same request cannot help, so
+//    the entry becomes FAILED and shows in the offline-sales list for a person. It is never dropped.
+//  - The sale carries its own idempotency key, so uploading twice (a second tab, a crash between upload and
+//    bookkeeping, a lost response) cannot record it twice.
+//  - A sale belongs to the cashier who rang it up. It uploads under that cashier's login, or under an
+//    owner/manager's, who uploads it on their behalf so reports stay right. A different cashier leaves it alone.
 
-let _processing = false;
+export type FailureVerdict = 'rejected' | 'retry' | 'server-error' | 'auth';
 
-export async function processSyncQueue(): Promise<void> {
-  if (_processing) return;
-  if (!(await pingOnline())) return;
+/** What a failed upload means. See the rules above. */
+export function classifyFailure(err: unknown): FailureVerdict {
+  const status = err instanceof ApiError ? err.status : undefined;
+  if (status === undefined) return 'retry'; // no HTTP answer at all: offline, DNS, timeout, server restarting
+  if (status === 401) return 'auth';
+  if (status === 408 || status === 429 || status === 502 || status === 503 || status === 504) return 'retry';
+  if (status >= 500) return 'server-error';
+  return 'rejected';
+}
 
-  _processing = true;
-  const { setProcessing, incrementSynced } = useSyncStore.getState();
-  setProcessing(true);
+/** Server errors on one entry back off and give up after this many attempts (then it waits for a person). */
+export const MAX_SERVER_ERROR_ATTEMPTS = 10;
+const SERVER_ERROR_BACKOFF_MS = 30_000;
+const PURGE_AFTER_MS = 7 * 24 * 3600 * 1000;
 
+export interface SyncUser {
+  id: string;
+  role?: string;
+}
+
+const isManager = (u: SyncUser) => u.role === 'OWNER' || u.role === 'MANAGER';
+
+/** May this person upload that entry? Their own, or anyone's if they are an owner or manager. */
+export function canUpload(entry: SyncQueueEntry, user: SyncUser): boolean {
+  return !entry.userId || entry.userId === user.id || isManager(user);
+}
+
+export interface SyncRunResult {
+  synced: number;
+  rejected: number;
+  /** Entries left waiting: offline, backing off, or belonging to a cashier who has not signed in. */
+  waiting: number;
+}
+
+let _running: Promise<SyncRunResult> | null = null;
+
+/**
+ * Upload everything that is ready, oldest first. Safe to call from anywhere at any time: callers while a run is
+ * going share it, and across browser tabs only one runs (Web Locks), so a sale is not uploaded twice at once.
+ */
+export function processSyncQueue(user?: SyncUser | null, options: { uploadTimeoutMs?: number } = {}): Promise<SyncRunResult> {
+  if (!_running) {
+    _running = runExclusive(user ?? currentUser(), options.uploadTimeoutMs ?? uploadTimeoutMs).finally(() => { _running = null; });
+  }
+  return _running;
+}
+
+/**
+ * One upload may not hold the whole queue hostage: a server that accepts the connection and never answers would
+ * otherwise block every later run until the page is reloaded. A timeout is a lost connection (the entry keeps its
+ * place); if the request did reach the server, the idempotency key makes the retry harmless.
+ */
+export const UPLOAD_TIMEOUT_MS = 30_000;
+let uploadTimeoutMs = UPLOAD_TIMEOUT_MS;
+
+/** Test seam: shorten the upload timeout so a deliberately hung request does not outlive its test. */
+export function setUploadTimeoutForTests(ms: number): void {
+  uploadTimeoutMs = ms;
+}
+
+/** Resolves when no upload run is in progress. */
+export function whenIdle(): Promise<unknown> {
+  return _running ?? Promise.resolve();
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('The server did not answer in time')), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
+
+function currentUser(): SyncUser | null {
+  const u = useAuthStore.getState().user;
+  return u ? { id: u.id, role: u.role } : null;
+}
+
+async function runExclusive(user: SyncUser | null, timeoutMs: number): Promise<SyncRunResult> {
+  const locks = (typeof navigator !== 'undefined' ? navigator.locks : undefined) as
+    | { request: <T>(name: string, opts: { ifAvailable: boolean }, cb: (lock: unknown) => Promise<T>) => Promise<T> }
+    | undefined;
+  const empty: SyncRunResult = { synced: 0, rejected: 0, waiting: 0 };
+  if (!locks) return run(user, timeoutMs);
+  return locks.request('kastra-sync', { ifAvailable: true }, async (lock) => (lock ? run(user, timeoutMs) : empty));
+}
+
+async function run(user: SyncUser | null, timeoutMs: number): Promise<SyncRunResult> {
+  const result: SyncRunResult = { synced: 0, rejected: 0, waiting: 0 };
+  const store = useSyncStore.getState();
+  if (!user) return result; // nobody signed in: no token to upload with
+
+  store.setProcessing(true);
   try {
     const pending = await getPendingQueue();
-    if (pending.length === 0) {
-      setProcessing(false);
-      _processing = false;
-      return;
-    }
-
     for (const entry of pending) {
-      await processEntry(entry);
-      incrementSynced();
+      if (!canUpload(entry, user)) { result.waiting++; continue; }
+      const verdict = await uploadEntry(entry, user, timeoutMs);
+      if (verdict === 'done') { result.synced++; useSyncStore.getState().incrementSynced(); }
+      else if (verdict === 'rejected') result.rejected++;
+      else if (verdict === 'stop') { result.waiting += pending.length - pending.indexOf(entry); break; }
+      else result.waiting++;
     }
+    await purgeDone(PURGE_AFTER_MS);
   } finally {
-    setProcessing(false);
-    _processing = false;
-    // Update pending count
-    const count = await db.syncQueue
-      .where('status')
-      .anyOf(['PENDING', 'SYNCING'])
-      .count();
-    useSyncStore.getState().setPendingCount(count);
+    const s = useSyncStore.getState();
+    s.setProcessing(false);
+    await refreshCounts();
   }
+  return result;
 }
 
-async function processEntry(entry: SyncQueueEntry): Promise<void> {
-  await db.syncQueue.update(entry.id!, { status: 'SYNCING', attempts: entry.attempts + 1 });
+export async function refreshCounts(): Promise<void> {
+  const s = useSyncStore.getState();
+  s.setPendingCount(await getPendingCount());
+  s.setRejectedCount(await getRejectedCount());
+}
+
+type UploadVerdict = 'done' | 'rejected' | 'waiting' | 'stop';
+
+async function uploadEntry(entry: SyncQueueEntry, user: SyncUser, timeoutMs: number): Promise<UploadVerdict> {
+  const id = entry.id as number;
+  await db.syncQueue.update(id, { status: 'SYNCING', attempts: entry.attempts + 1, claimedAt: Date.now() });
 
   try {
-    const token = getToken();
-    const res = await fetch(`${API_BASE}${entry.endpoint}`, {
-      method: entry.method,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: entry.body,
-    });
+    const body = JSON.parse(entry.body) as Record<string, unknown>;
+    // A manager uploading someone else's sale credits it to the cashier who made it.
+    if (entry.userId && entry.userId !== user.id) body.onBehalfOfCashierId = entry.userId;
+    if (entry.method !== 'POST') throw new Error(`Unsupported queued method ${entry.method}`);
+    const data = await withTimeout(api.post<unknown>(entry.endpoint, body), timeoutMs);
 
-    if (res.ok) {
-      const resultData = res.status !== 204 ? JSON.stringify(await res.json()) : undefined;
-      await db.syncQueue.update(entry.id!, {
-        status: 'DONE',
-        resultData,
-        processedAt: Date.now(),
-      });
-    } else {
-      const errBody = await res.text();
-      await db.syncQueue.update(entry.id!, {
-        status: entry.attempts >= 4 ? 'FAILED' : 'PENDING',
-        lastError: errBody,
-      });
-    }
-  } catch (err) {
-    await db.syncQueue.update(entry.id!, {
-      status: entry.attempts >= 4 ? 'FAILED' : 'PENDING',
-      lastError: String(err),
+    await db.syncQueue.update(id, {
+      status: 'DONE',
+      resultData: data === undefined ? undefined : JSON.stringify(data),
+      processedAt: Date.now(),
+      lastError: undefined,
+      claimedAt: undefined,
     });
+    if (entry.kind === 'SALE') void registerWithKra(data);
+    return 'done';
+  } catch (err) {
+    const message = err instanceof Error ? err.message.slice(0, 300) : 'Upload failed';
+    const verdict = classifyFailure(err);
+    const attempts = entry.attempts + 1;
+
+    if (verdict === 'rejected') {
+      await db.syncQueue.update(id, { status: 'FAILED', lastError: message, claimedAt: undefined });
+      return 'rejected';
+    }
+    if (verdict === 'server-error') {
+      const exhausted = attempts >= MAX_SERVER_ERROR_ATTEMPTS;
+      await db.syncQueue.update(id, {
+        status: exhausted ? 'FAILED' : 'PENDING',
+        lastError: message,
+        claimedAt: undefined,
+        nextAttemptAt: Date.now() + SERVER_ERROR_BACKOFF_MS * attempts,
+      });
+      return exhausted ? 'rejected' : 'waiting';
+    }
+    // Lost connection or an expired login: not this entry's fault. Give the attempt back and stop for now.
+    await db.syncQueue.update(id, { status: 'PENDING', attempts: entry.attempts, lastError: message, claimedAt: undefined });
+    return 'stop';
   }
 }
 
-// ─── Auto-sync on reconnect ───────────────────────────────────────────────────
+const KRA_REGISTER_TIMEOUT_MS = 15_000;
+
+/**
+ * A sale that was recorded late still has to be registered with KRA. Idempotent and best effort: it neither blocks
+ * the queue nor can it hang it, and if it fails the batch submit picks the sale up.
+ */
+async function registerWithKra(saleResult: unknown): Promise<void> {
+  const saleId = (saleResult as { id?: string } | undefined)?.id;
+  if (!saleId) return;
+  try { await withTimeout(api.post(`/etims/submit/${saleId}`), KRA_REGISTER_TIMEOUT_MS); } catch { /* batch submit */ }
+}
+
+/** Put a refused entry back in line, for example after the cause (stock, a price) was fixed. */
+export async function retryEntry(id: number): Promise<void> {
+  await db.syncQueue.update(id, { status: 'PENDING', attempts: 0, lastError: undefined, nextAttemptAt: 0, claimedAt: undefined });
+  await refreshCounts();
+  void processSyncQueue();
+}
+
+/** Remove an entry that can never upload. The sale it holds is NOT recorded anywhere else: callers must confirm. */
+export async function discardEntry(id: number): Promise<void> {
+  await db.syncQueue.delete(id);
+  await refreshCounts();
+}
+
+// ─── Auto-sync ────────────────────────────────────────────────────────────────
 
 let _syncInterval: ReturnType<typeof setInterval> | null = null;
 
 export function initSyncEngine(): void {
-  const { setOnline, setPendingCount } = useSyncStore.getState();
-
-  // Initial state
+  const { setOnline } = useSyncStore.getState();
   setOnline(isOnline());
 
-  // Listen for browser online/offline events
   window.addEventListener('online', () => {
-    setOnline(true);
+    useSyncStore.getState().setOnline(true);
     void processSyncQueue();
   });
-
-  window.addEventListener('offline', () => {
-    setOnline(false);
+  window.addEventListener('offline', () => setOnline(false));
+  // Coming back to the tab after a long time (the laptop slept) is a good moment to upload.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void processSyncQueue();
   });
 
-  // Periodic sync every 30 seconds when online
-  _syncInterval = setInterval(async () => {
-    if (isOnline()) {
-      await processSyncQueue();
-      const count = await db.syncQueue
-        .where('status')
-        .anyOf(['PENDING', 'SYNCING'])
-        .count();
-      setPendingCount(count);
-    } else {
-      setOnline(false);
-    }
+  // Signing in is when a manager's login becomes available to upload what others left behind.
+  useAuthStore.subscribe((state, prev) => {
+    if (state.user?.id && state.user.id !== prev.user?.id) void processSyncQueue();
+  });
+
+  _syncInterval = setInterval(() => {
+    if (isOnline()) void processSyncQueue();
+    else setOnline(false);
   }, 30_000);
 
-  // Initial pending count
-  void db.syncQueue
-    .where('status')
-    .anyOf(['PENDING', 'SYNCING'])
-    .count()
-    .then(setPendingCount);
+  void refreshCounts();
+  void processSyncQueue();
 }
 
 export function destroySyncEngine(): void {

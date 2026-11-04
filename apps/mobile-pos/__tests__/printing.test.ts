@@ -4,7 +4,7 @@
  */
 import { asciiSafe, buildReceiptBytes, bytesToBase64, PAPER_COLUMNS, row, wrapText } from '../lib/escpos';
 import { configProblem, DEFAULT_PRINTER_SETTINGS, isValidHost, normalizeSettings, type PrinterSettings } from '../lib/printerConfig';
-import { dispatchPrint, type PrintTransports } from '../lib/printDispatch';
+import { dispatchDiagnostic, dispatchPrint, type PrintTransports } from '../lib/printDispatch';
 import { receiptHtml } from '../lib/receiptHtml';
 import { buildTestReceipt, type PrintableReceipt } from '../lib/receiptModel';
 
@@ -145,6 +145,7 @@ describe('dispatchPrint', () => {
       sendBluetooth: jest.fn().mockResolvedValue(undefined),
       sendNetwork: jest.fn().mockResolvedValue(undefined),
       printSystem: jest.fn().mockResolvedValue(undefined),
+      printSystemHtml: jest.fn().mockResolvedValue(undefined),
     };
     return { t, transports: t as PrintTransports };
   };
@@ -262,5 +263,46 @@ describe('KRA eTIMS and fiscal status on mobile receipts', () => {
     expect(html).toContain('CU-77');
     expect(html).toContain('<svg');
     expect(html).not.toMatch(/<script/i);
+  });
+});
+
+describe('dispatchDiagnostic (full printer test page)', () => {
+  const fakes = () => {
+    const t = {
+      sendBluetooth: jest.fn().mockResolvedValue(undefined),
+      sendNetwork: jest.fn().mockResolvedValue(undefined),
+      printSystem: jest.fn().mockResolvedValue(undefined),
+      printSystemHtml: jest.fn().mockResolvedValue(undefined),
+    };
+    return { t, transports: t as PrintTransports };
+  };
+  const on = (patch: Partial<PrinterSettings>): PrinterSettings => ({ ...DEFAULT_PRINTER_SETTINGS, enabled: true, ...patch });
+
+  it('sends the page to a Bluetooth printer as raw bytes, ending with the cut', async () => {
+    const { t, transports } = fakes();
+    await dispatchDiagnostic(on({ method: 'bluetooth', paperWidth: 58, bluetooth: { address: 'AA:BB', name: 'P' } }), transports);
+    const bytes = t.sendBluetooth.mock.calls[0][1] as Uint8Array;
+    expect(printedLines(bytes).join('\n')).toContain('PRINTER TEST');
+    expect(Array.from(bytes.slice(-4))).toEqual([0x1d, 0x56, 0x41, 0x00]);
+  });
+
+  it('uses the chosen paper width for a LAN printer', async () => {
+    const { t, transports } = fakes();
+    await dispatchDiagnostic(on({ method: 'network', paperWidth: 80, network: { host: '192.168.1.50', port: 9100 } }), transports);
+    const lines = printedLines(t.sendNetwork.mock.calls[0][2] as Uint8Array);
+    // The column ruler is exactly one 80 mm line wide, with both edge marks. (This file's line splitter does not
+    // understand QR commands, so only the ruler is asserted here; print-core's tests check every line.)
+    expect(lines.filter((l) => l.length === 48 && l.startsWith('|') && l.endsWith('|'))).toHaveLength(1);
+  });
+
+  it('opens the OS print sheet with an HTML page for the print dialog method', async () => {
+    const { t, transports } = fakes();
+    await dispatchDiagnostic(on({ method: 'system' }), transports);
+    expect(t.printSystemHtml.mock.calls[0][0]).toContain('PRINTER TEST');
+  });
+
+  it('refuses an incomplete setup with the same message as a normal print', async () => {
+    const { transports } = fakes();
+    await expect(dispatchDiagnostic(on({ method: 'bluetooth' }), transports)).rejects.toThrow();
   });
 });

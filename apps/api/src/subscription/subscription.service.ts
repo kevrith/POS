@@ -4,6 +4,7 @@ import { EmailService } from '../email/email.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { createHmac, randomBytes } from 'node:crypto';
 import { normalizeTier, planDisplayName } from '@pos/shared';
+import { frontendUrl } from '../common/app-urls';
 
 // Labels come from @pos/shared so the API, the web app and the admin console all
 // spell a tier the same way. Only price and the Paystack plan code live here.
@@ -77,7 +78,7 @@ export class SubscriptionService {
         reference,
         plan: plan.paystackPlanCode || undefined,
         metadata: { businessId, tier, plan: plan.name },
-        callback_url: `${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/settings?tab=subscription&ref=${reference}`,
+        callback_url: `${frontendUrl()}/settings?tab=subscription&ref=${reference}`,
       }),
     });
 

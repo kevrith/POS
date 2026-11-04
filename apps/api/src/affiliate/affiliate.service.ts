@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
+import { frontendUrl } from '../common/app-urls';
 
 interface AffiliateTokenPayload { sub: string; role: 'AFFILIATE'; code: string }
 
@@ -64,7 +65,7 @@ export class AffiliateService {
   }
 
   private static webBase(): string {
-    return (process.env.FRONTEND_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+    return frontendUrl();
   }
 
   /**

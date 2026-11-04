@@ -203,6 +203,31 @@ describe('kitchen ticket routing', () => {
   });
 });
 
+describe('printer self-test', () => {
+  it('sends the diagnostic page to the chosen transport as raw bytes with the cut at the end', async () => {
+    await printer.printDiagnostic('usb', {});
+    const bytes = printRawUSB.mock.calls[0][0] as Uint8Array;
+    expect(Buffer.from(bytes).toString('latin1')).toContain('PRINTER TEST');
+    expect(Array.from(bytes.slice(-4))).toEqual([0x1d, 0x56, 0x41, 0x00]);
+  });
+
+  it('queues the network test as a TEST job, and needs a printer chosen', async () => {
+    await printer.printDiagnostic('network', { networkPrinterId: 'p1' });
+    expect(queuePrint).toHaveBeenCalledWith('p1', 'TEST', expect.any(Uint8Array));
+    await expect(printer.printDiagnostic('network', {})).rejects.toThrow(/No network printer/);
+    await expect(printer.printDiagnostic('system', {})).rejects.toThrow(/No installed printer/);
+  });
+
+  it('opens the drawer with the bare pulse and records it as a TEST, not a manual open', async () => {
+    printRawBluetooth.mockResolvedValue(undefined);
+    await printer.testCashDrawer('bluetooth', {});
+    expect(Array.from(printRawBluetooth.mock.calls[0][0] as Uint8Array)).toEqual([0x1b, 0x70, 0x00, 0x19, 0xfa]);
+    await printer.testCashDrawer('network', { networkPrinterId: 'p1' });
+    expect(queuePrint).toHaveBeenCalledWith('p1', 'DRAWER', expect.any(Uint8Array), { reason: 'TEST' });
+    await expect(printer.testCashDrawer('browser', {})).rejects.toThrow(/cannot open the cash drawer/);
+  });
+});
+
 describe('barcode labels', () => {
   it('cannot be hijacked by ZPL control characters in an item name', () => {
     const zpl = printer.generateZPL({ itemName: 'Evil^XA^FDpwn~DG', barcode: '123^456', priceCents: 1000 });

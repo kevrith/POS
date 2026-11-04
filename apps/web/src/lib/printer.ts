@@ -8,7 +8,7 @@ import { printHtml } from './printHtml';
 import { fetchReceiptCopy, logPrint, queuePrint, type ClientPrintMethod, type PrintJobKind } from './printQueue';
 import { printRawBluetooth, printRawUSB, printRawUSBPicked } from './printTransports';
 import {
-  DRAWER_PULSE, PAPER_COLUMNS, billHtml, drawerPulseBytes, encodeLatin1, escapeHtml,
+  DRAWER_PULSE, PAPER_COLUMNS, billHtml, diagnosticEpsonXml, diagnosticEscPos, diagnosticHtml, diagnosticStarXml, drawerPulseBytes, encodeLatin1, escapeHtml,
   kotEpsonXml, kotEscPos, kotHtml, kotStarXml, receiptEpsonXml, receiptEscPos, receiptHtml, receiptOpensDrawer, receiptStarXml,
   routeKotItems, asciiSafe,
   type BillDocument, type KotDocument, type PaperWidth, type ReceiptDocument, type RoutablePrinter,
@@ -193,6 +193,64 @@ export const printToStarWebPRNT = (config: StarPrinterConfig, receipt: ReceiptDa
 
 export const printToEpsonEPOS = (config: EpsonPrinterConfig, receipt: ReceiptData, enableCashDrawer = false) =>
   printLocally('EPSON', receipt, (r) => sendEpson(config, receiptEpsonXml(r, { paperWidth: rawWidth(), enableCashDrawer })), enableCashDrawer);
+
+// ─── Printer self-test (Settings -> Printers) ─────────────────────────────────
+
+export interface TestTarget {
+  networkPrinterId?: string;
+  systemPrinterName?: string;
+  star?: StarPrinterConfig | null;
+  epson?: EpsonPrinterConfig | null;
+}
+
+export type TestMethod = 'browser' | 'system' | 'usb' | 'bluetooth' | 'network' | 'star' | 'epson';
+
+/**
+ * Print the diagnostic page (columns, alignment, sizes, characters, QR, cut) on the chosen printer. Written to be
+ * run once on every new printer model: the page tells the person what each section should look like.
+ */
+export async function printDiagnostic(method: TestMethod, target: TestTarget): Promise<void> {
+  switch (method) {
+    case 'browser':
+      printHtml(diagnosticHtml({ paperWidth: pageWidth() }));
+      return;
+    case 'system':
+      if (!target.systemPrinterName) throw new Error('No installed printer selected in Settings -> Printers');
+      return printRawToSystemPrinter(target.systemPrinterName, diagnosticEscPos({ paperWidth: rawWidth() }));
+    case 'usb':
+      return printRawUSB(diagnosticEscPos({ paperWidth: rawWidth() }));
+    case 'bluetooth':
+      return printRawBluetooth(diagnosticEscPos({ paperWidth: rawWidth() }));
+    case 'network':
+      if (!target.networkPrinterId) throw new Error('No network printer selected in Settings -> Printers');
+      await queuePrint(target.networkPrinterId, 'TEST', diagnosticEscPos({ paperWidth: rawWidth() }));
+      return;
+    case 'star':
+      if (!target.star) throw new Error('No Star printer configured');
+      return sendStar(target.star, diagnosticStarXml({ paperWidth: rawWidth() }));
+    case 'epson':
+      if (!target.epson) throw new Error('No Epson printer configured');
+      return sendEpson(target.epson, diagnosticEpsonXml({ paperWidth: rawWidth() }));
+  }
+}
+
+/** Fire the cash drawer pulse on its own, to check the cable and the setting. Logged with the reason TEST. */
+export async function testCashDrawer(method: TestMethod, target: TestTarget): Promise<void> {
+  switch (method) {
+    case 'usb':
+      return openDrawerViaUSB('TEST');
+    case 'network':
+      if (!target.networkPrinterId) throw new Error('No network printer selected in Settings -> Printers');
+      return openDrawerOnNetwork(target.networkPrinterId, 'TEST');
+    case 'system':
+      if (!target.systemPrinterName) throw new Error('No installed printer selected in Settings -> Printers');
+      return printRawToSystemPrinter(target.systemPrinterName, drawerPulseBytes());
+    case 'bluetooth':
+      return printRawBluetooth(drawerPulseBytes());
+    default:
+      throw new Error('This printer type cannot open the cash drawer on its own. Use USB, Bluetooth, a LAN printer or an installed printer.');
+  }
+}
 
 // ─── Table bill ───────────────────────────────────────────────────────────────
 

@@ -26,7 +26,6 @@ interface ItemDetail {
   barcode?: string;
   retailPriceCents: number;
   costPriceCents?: number;
-  currentStock?: number;
   trackStock?: boolean;
   isActive?: boolean;
   soldOut?: boolean;
@@ -70,14 +69,23 @@ export default function ManageItemScreen() {
     enabled: !!id && !!storeId,
   });
 
+  // GET /items/:id carries no stock figure, so the level comes from the stock endpoint. Reading it
+  // off the item showed 0 for everything, and a "set stock to N" adjustment then added N on top.
+  const stockQ = useQuery<{ stock: number }>({
+    queryKey: ['manage-item-stock', id, storeId],
+    queryFn: () => mobileApi.get<{ stock: number }>(`/inventory/stock/${id}?storeId=${storeId}`),
+    enabled: !!id && !!storeId,
+  });
+
   const item = itemQ.data;
-  const currentStock = item?.currentStock ?? 0;
+  const currentStock = stockQ.data?.stock ?? 0;
 
   const adjustMutation = useMutation({
     mutationFn: (payload: ReturnType<typeof buildAdjustmentPayload>) =>
       mobileApi.post('/inventory/adjustment', payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['manage-item', id] });
+      qc.invalidateQueries({ queryKey: ['manage-item-stock', id] });
       qc.invalidateQueries({ queryKey: ['manage-item-moves', id] });
       qc.invalidateQueries({ queryKey: ['manage-stock'] });
       qc.invalidateQueries({ queryKey: ['manage-low-stock'] });
@@ -103,6 +111,10 @@ export default function ManageItemScreen() {
 
   function submitAdjustment() {
     if (!mode || !item) return;
+    if (stockQ.data === undefined) {
+      Alert.alert('Stock not loaded', 'The current stock level has not loaded yet. Try again in a moment.');
+      return;
+    }
     const payload = buildAdjustmentPayload({
       itemId: item.id,
       storeId,

@@ -14,6 +14,7 @@ import { useActiveStore } from '../lib/useActiveStore';
 import { useCartStore } from '../stores/cart';
 import { queueSale } from '../lib/db';
 import { saleTypeFor } from '../lib/saleType';
+import { toCheckoutLines } from '../lib/checkoutLines';
 import {
   orderPayable, billFromOrder, unitPriceOf, buildOrderCheckout, methodsForOrder, serviceChargeFor, AFTER_ORDER_PAYMENT_ROUTE,
   type PayableOrder,
@@ -193,7 +194,8 @@ function GiftCardPanel({ totalCents, onComplete }: {
     if (!c) return;
     setLoading(true); setError(''); setCard(null);
     try {
-      const res = await mobileApi.get<GiftCard>(`/gift-cards/${c}`);
+      const res = await mobileApi.get<GiftCard | null>(`/gift-cards/${c}`);
+      if (!res) { setError('Gift card not found.'); return; }
       if (res.status !== 'ACTIVE') { setError('This gift card is not active.'); return; }
       setCard(res);
     } catch (err: any) {
@@ -505,6 +507,9 @@ export default function PaymentScreen() {
   const effectiveDiscount = Math.min(rawDiscount + loyaltyDiscountCents, subtotalAfterPromo);
   const goodsAfterDiscount = subtotalAfterPromo - effectiveDiscount;
   const totalAfterDiscount = goodsAfterDiscount + serviceChargeCents;
+  // The server prices lines from the catalog, so per-item markdowns ride along in the sale discount.
+  const checkoutLines = toCheckoutLines(cartItems);
+  const saleDiscountCents = effectiveDiscount + checkoutLines.lineDiscountCents;
   const { taxCents: finalTax } = calculateTax(goodsAfterDiscount, taxType);
 
   const tendered = Math.round((parseFloat(amountTendered || '0') || 0) * 100);
@@ -678,13 +683,9 @@ export default function PaymentScreen() {
       businessId, storeId, cashierId,
       customerId: customerId ?? undefined,
       type: saleTypeFor(payments), priceLevel,
-      items: cartItems.map((i) => ({
-        itemId: i.id, quantity: i.quantity,
-        unitPriceCents: i.unitPriceCents,
-        discountPercent: i.discountPercent > 0 ? i.discountPercent : undefined,
-      })),
+      items: checkoutLines.lines,
       payments,
-      discountCents: effectiveDiscount > 0 ? effectiveDiscount : undefined,
+      discountCents: saleDiscountCents > 0 ? saleDiscountCents : undefined,
       serviceChargeCents,
       promotionId: appliedPromotion?.id,
     });

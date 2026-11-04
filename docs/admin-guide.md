@@ -199,7 +199,8 @@ and your customers get `localhost` links.
 |---|---|
 | `REDIS_HOST` | Background job queues with retries |
 | `MPESA_*` | M-Pesa STK push and QR |
-| `AT_USERNAME`, `AT_API_KEY` | Africa's Talking SMS and WhatsApp |
+| `AT_USERNAME`, `AT_API_KEY`, `AT_SENDER_ID` | Shared Africa's Talking account: customer login codes, and the fallback for businesses with no SMS account of their own |
+| `SMS_OTP_PER_PHONE_HOUR`, `SMS_PLATFORM_PER_BUSINESS_HOUR` | Hourly caps on the shared account (defaults 5 and 300) |
 | `RESEND_API_KEY`, `EMAIL_FROM` | Transactional email |
 | `PAYSTACK_SECRET_KEY`, `PAYSTACK_*_PLAN` | Card payments and subscriptions |
 | `SENTRY_DSN` | Error tracking |

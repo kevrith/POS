@@ -27,10 +27,14 @@ export class GiftCardsService {
   }
 
   async getGiftCard(code: string) {
-    return this.prisma.giftCard.findUnique({
+    const giftCard = await this.prisma.giftCard.findUnique({
       where: { code },
       include: { transactions: { orderBy: { createdAt: 'desc' } } },
     });
+    // An unknown code used to answer 200 with an empty body, which every client then
+    // choked on while reading `.status` from it. A missing card is a 404.
+    if (!giftCard) throw new NotFoundException('Gift card not found');
+    return giftCard;
   }
 
   async redeemGiftCard(code: string, amountCents: number, saleId: string) {

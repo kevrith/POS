@@ -72,6 +72,15 @@ export class LoyaltyService {
     return { points, balance: newBalance, reason: 'SUCCESS' };
   }
 
+  /** Points this sale already earned and the customer's current balance. Read-only: never awards anything. */
+  async pointsAwardedForSale(customerId: string, saleId: string): Promise<{ points: number; balance: number }> {
+    const [earned, customer] = await Promise.all([
+      this.prisma.loyaltyTransaction.findFirst({ where: { saleId, customerId, type: 'EARN' }, select: { points: true } }),
+      this.prisma.customer.findUnique({ where: { id: customerId }, select: { loyaltyPoints: true } }),
+    ]);
+    return { points: earned?.points ?? 0, balance: customer?.loyaltyPoints ?? 0 };
+  }
+
   async redeemPoints(customerId: string, points: number, saleId: string) {
     return this.prisma.$transaction(async (tx) => {
       const customer = await tx.customer.findUnique({ where: { id: customerId } });

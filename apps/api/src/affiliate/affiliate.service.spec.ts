@@ -36,6 +36,6 @@ describe('AffiliateService — referral links', () => {
   it('falls back to localhost only when nothing is configured', () => {
     delete process.env.FRONTEND_URL;
     expect(AffiliateService.referralUrl('AFF-K3M9QX'))
-      .toBe('http://localhost:3001/?mode=register&aff=AFF-K3M9QX');
+      .toBe('http://localhost:3005/?mode=register&aff=AFF-K3M9QX');
   });
 });

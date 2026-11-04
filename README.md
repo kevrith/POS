@@ -338,7 +338,8 @@ Optional — leave blank to disable the feature:
 |---|---|
 | `REDIS_HOST` | BullMQ queues (without it, jobs run synchronously) |
 | `MPESA_*` | M-Pesa Daraja STK / QR |
-| `AT_USERNAME` / `AT_API_KEY` | Africa's Talking SMS + WhatsApp |
+| `AT_USERNAME` / `AT_API_KEY` / `AT_SENDER_ID` | Shared Africa's Talking account: customer login codes, and the fallback for businesses without their own SMS account |
+| `SMS_OTP_PER_PHONE_HOUR` / `SMS_PLATFORM_PER_BUSINESS_HOUR` | Hourly caps on the shared account (defaults 5 and 300) |
 | `RESEND_API_KEY` / `EMAIL_FROM` | Transactional email |
 | `PAYSTACK_SECRET_KEY` + `PAYSTACK_*_PLAN` | Subscriptions and card payments |
 | `SENTRY_DSN` | Error tracking |

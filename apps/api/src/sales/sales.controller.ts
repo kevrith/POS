@@ -9,6 +9,11 @@ import type { AuthUser } from '../auth/auth.service';
 interface CheckoutDto {
   /** Idempotency key: the same key never creates a second sale. */
   offlineId?: string;
+  /**
+   * A sale rung up offline by this person and uploaded later by someone else. Honoured only when the uploader is
+   * an owner or manager of the same business, so a till cannot credit sales to an arbitrary colleague.
+   */
+  onBehalfOfCashierId?: string;
   storeId: string;
   businessId: string;
   cashierId: string;
@@ -46,7 +51,7 @@ export class SalesController {
     return this.salesService.createSale(dto.businessId, {
       offlineId: dto.offlineId,
       storeId: dto.storeId,
-      cashierId: req.user.id,
+      cashierId: await this.salesService.resolveCashierId(dto.businessId, req.user, dto.onBehalfOfCashierId),
       type: dto.type ?? SaleType.NORMAL,
       priceLevel: dto.priceLevel ?? PriceLevel.RETAIL,
       customerId: dto.customerId,

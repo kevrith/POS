@@ -5,6 +5,8 @@ export interface CartItem {
   name: string;
   unitPriceCents: number;
   originalPriceCents: number; // before any override
+  /** The catalog price the server will charge for this line; discounts and overrides never change it. */
+  catalogPriceCents: number;
   quantity: number;
   discountPercent: number; // per-item discount 0-100
   barcode?: string;
@@ -30,7 +32,9 @@ interface CartState {
   customerName: string | null;
   fefoAlerts: FEFOAlert[];
   appliedPromotion: AppliedPromotion | null;
-  addItem: (item: Omit<CartItem, 'quantity' | 'discountPercent' | 'originalPriceCents'>) => void;
+  addItem: (item: Omit<CartItem, 'quantity' | 'discountPercent' | 'originalPriceCents' | 'catalogPriceCents'>) => void;
+  /** Put back lines exactly as they were (a resumed held sale), discounts and overrides included. */
+  restoreItems: (items: CartItem[]) => void;
   removeItem: (id: string) => void;
   updateQty: (id: string, qty: number) => void;
   updateItemDiscount: (id: string, pct: number) => void;
@@ -65,10 +69,12 @@ export const useCartStore = create<CartState>((set, get) => ({
       return {
         items: [
           ...s.items,
-          { ...item, quantity: 1, discountPercent: 0, originalPriceCents: item.unitPriceCents },
+          { ...item, quantity: 1, discountPercent: 0, originalPriceCents: item.unitPriceCents, catalogPriceCents: item.unitPriceCents },
         ],
       };
     }),
+
+  restoreItems: (items) => set({ items: items.map((i) => ({ ...i, catalogPriceCents: i.catalogPriceCents ?? i.originalPriceCents })) }),
 
   removeItem: (id) => set((s) => ({ items: s.items.filter((i) => i.id !== id) })),
 

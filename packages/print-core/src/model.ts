@@ -66,6 +66,8 @@ export interface ReceiptDocument {
   receiptFooter?: string;
   pointsEarned?: number;
   loyaltyBalance?: number;
+  /** Rung up with no connection: the receipt number is provisional and the sale is not yet recorded or sent to KRA. */
+  offlineSale?: boolean;
   /** 0 or undefined: the original receipt. 1 or more: the Nth reprint, printed with a COPY banner. */
   copyNumber?: number;
 }

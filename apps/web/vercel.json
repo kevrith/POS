@@ -1,4 +1,5 @@
 {
+  "installCommand": "cd ../.. && npm install --no-audit --no-fund --workspace=@pos/web --workspace=@pos/print-core",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": "vite",

@@ -61,7 +61,8 @@ never values — so a deployment can be verified at a glance without leaking sec
 |---|---|
 | `JwtAuthGuard` | Validates the bearer token, populates `AuthUser` |
 | `TenantGuard` | Scopes the request to `businessId`. **Mandatory on every endpoint** |
-| `RolesGuard` | Role-based access (`@Roles(...)`) |
+| `RoleAccessGuard` | **Global.** Enforces the role policy in `src/auth/access-policy.ts`: an ordered rule table (first match wins) plus deny-by-default allowlists for DRIVER, SALES_AGENT and KITCHEN. Routes no rule matches stay open to other signed-in roles, so **a new management-only endpoint must be added to the table**. Also pins `agentId` for sales agents and blocks a driver reading another driver's earnings |
+| `RolesGuard` | Per-handler `@RequirePermission(...)` (layaway, batch, customers) |
 | `SubscriptionGuard` | Enforces the plan tier; ends trials that have expired |
 
 Login paths:

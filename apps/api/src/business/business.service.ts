@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SubscriptionLimitsService } from '../subscription/subscription-limits.service';
 import * as bcrypt from 'bcrypt';
 import { assertPinAvailable } from '../auth/pin.util';
+import { assertCanManageUser } from '../auth/access-policy';
 import { createCipheriv, randomBytes } from 'crypto';
 import { UserRole, parseEnabledModules } from '@pos/shared';
 
@@ -235,7 +236,8 @@ export class BusinessService {
     return { message: 'Store assignment removed' };
   }
 
-  async createUser(businessId: string, dto: CreateUserDto) {
+  async createUser(businessId: string, dto: CreateUserDto, actorRole: string) {
+    assertCanManageUser(actorRole, undefined, dto.role);
     const check = await this.subscriptionLimits.canCreateUser(businessId);
     if (!check.allowed) {
       throw new ForbiddenException(check.message);
@@ -268,11 +270,21 @@ export class BusinessService {
     return user;
   }
 
-  async updateUser(businessId: string, userId: string, dto: UpdateUserDto) {
+  async updateUser(
+    businessId: string,
+    userId: string,
+    dto: UpdateUserDto,
+    actor: { id: string; role: string },
+  ) {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, businessId },
     });
     if (!user) throw new NotFoundException('User not found');
+    assertCanManageUser(actor.role, user.role, dto.role);
+    // Nobody edits their own role: it is how a manager would promote themselves.
+    if (dto.role !== undefined && dto.role !== user.role && actor.id === userId) {
+      throw new ForbiddenException('You cannot change your own role');
+    }
 
     if (dto.pin) await assertPinAvailable(this.prisma, businessId, dto.pin, userId);
     const passwordHash =
@@ -310,11 +322,12 @@ export class BusinessService {
     });
   }
 
-  async deleteUser(businessId: string, userId: string) {
+  async deleteUser(businessId: string, userId: string, actorRole: string) {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, businessId },
     });
     if (!user) throw new NotFoundException('User not found');
+    assertCanManageUser(actorRole, user.role, undefined);
     if (user.role === UserRole.OWNER) throw new BadRequestException('Cannot delete the owner');
 
     await this.prisma.user.delete({ where: { id: userId } });

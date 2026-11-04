@@ -103,8 +103,9 @@ export class BusinessController {
       pin?: string;
       password?: string;
     },
+    @Req() req: Request & { user: AuthUser },
   ) {
-    return this.businessService.createUser(businessId, dto);
+    return this.businessService.createUser(businessId, dto, req.user.role);
   }
 
   @Patch(':businessId/users/:userId')
@@ -122,8 +123,9 @@ export class BusinessController {
       deliveryRateCents?: number;
       deliveryCommissionPercent?: number;
     },
+    @Req() req: Request & { user: AuthUser },
   ) {
-    return this.businessService.updateUser(businessId, userId, dto);
+    return this.businessService.updateUser(businessId, userId, dto, req.user);
   }
 
   @Delete(':businessId/users/:userId')
@@ -135,7 +137,7 @@ export class BusinessController {
     if (req.user.id === userId) {
       return { error: 'Cannot delete your own account' };
     }
-    return this.businessService.deleteUser(businessId, userId);
+    return this.businessService.deleteUser(businessId, userId, req.user.role);
   }
 
   @Post(':businessId/users/:userId/stores/:storeId')

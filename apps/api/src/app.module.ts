@@ -1,6 +1,7 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { TenantGuard } from './auth/tenant.guard';
+import { RoleAccessGuard } from './auth/role-access.guard';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { AppThrottlerGuard } from './throttler.guard';
@@ -165,6 +166,9 @@ import { DbBackupModule } from './backup/db-backup.module';
     // `where` key and the query stops being scoped to a business at all. Runs
     // after JwtAuthGuard so req.user exists; @Public routes are skipped.
     { provide: APP_GUARD, useClass: TenantGuard },
+    // Role checks are global for the same reason: only a handful of controllers
+    // ever opted in to RolesGuard. See auth/access-policy.ts.
+    { provide: APP_GUARD, useClass: RoleAccessGuard },
     { provide: APP_GUARD, useClass: SubscriptionGuard },
     TenantMiddleware,
   ],

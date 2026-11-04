@@ -49,7 +49,7 @@ Paying a table: the table's order screen opens `payment?orderId=...`. In that mo
 ignores the cart (and the cart's customer, promotion and loyalty), shows the order's own lines,
 and posts `/sales/checkout` with the `orderId` and the total it displayed (`expectedTotalCents`).
 The server bills the order and closes it in one step and refuses if the bill changed meanwhile.
-Credit is not offered (a table has no customer account) and the payment is never queued offline.
+No service charge is added to a table (the web till adds none either; counter sales still follow the setting), credit is not offered (a table has no customer account) and the payment is never queued offline.
 The logic lives in `lib/orderPayment.ts` so it is unit-tested; the screen only wires it in.
 
 Extra screens: `payment` · `barcode-scan` · `cash-drawer` · `table-order` ·

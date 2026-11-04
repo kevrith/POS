@@ -93,6 +93,18 @@ export function buildOrderCheckout(input: OrderCheckoutInput) {
   };
 }
 
+/**
+ * The service charge on a table payment: none, as on the web till.
+ *
+ * Dine-in prices are VAT-inclusive and the web till sends a service charge of 0
+ * for a table, so the same table must not total higher on a phone because the
+ * business has a default service-charge rate set. A counter sale still follows
+ * that setting; only an order payment is held to zero.
+ */
+export function serviceChargeFor(orderMode: boolean, computedCents: number): number {
+  return orderMode ? 0 : computedCents;
+}
+
 /** Where to go once a table is paid (or abandoned): back to the floor, not to a blank cart. */
 export const AFTER_ORDER_PAYMENT_ROUTE = '/manage-tables';
 

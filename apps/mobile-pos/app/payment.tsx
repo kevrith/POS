@@ -15,7 +15,7 @@ import { useCartStore } from '../stores/cart';
 import { queueSale } from '../lib/db';
 import { saleTypeFor } from '../lib/saleType';
 import {
-  orderPayable, billFromOrder, unitPriceOf, buildOrderCheckout, methodsForOrder, AFTER_ORDER_PAYMENT_ROUTE,
+  orderPayable, billFromOrder, unitPriceOf, buildOrderCheckout, methodsForOrder, serviceChargeFor, AFTER_ORDER_PAYMENT_ROUTE,
   type PayableOrder,
 } from '../lib/orderPayment';
 import { loadPrinterSettings, printReceipt, type PrintableReceipt } from '../lib/receiptPrint';
@@ -453,9 +453,13 @@ export default function PaymentScreen() {
   const redeemPoints = redeemLoyalty ? maxRedeemPoints : 0;
   const loyaltyDiscountCents = redeemPoints * pointValueCents;
   const { taxCents, exTaxCents, label: taxLabel } = calculateTax(subtotalAfterPromo, taxType);
-  const serviceChargeCents = bizSettings?.serviceChargeDefault
-    ? Math.round((subtotalAfterPromo * (bizSettings?.serviceChargeRate ?? 0)) / 100)
-    : 0;
+  // A table is paid with no service charge added, as on the web till; a counter sale follows the setting.
+  const serviceChargeCents = serviceChargeFor(
+    orderMode,
+    bizSettings?.serviceChargeDefault
+      ? Math.round((subtotalAfterPromo * (bizSettings?.serviceChargeRate ?? 0)) / 100)
+      : 0,
+  );
 
   // ── UI state ────────────────────────────────────────────────────────────────
   const [payMethod, setPayMethod] = useState<PaymentMethod>('CASH');

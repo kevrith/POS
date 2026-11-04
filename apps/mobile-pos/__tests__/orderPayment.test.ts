@@ -1,5 +1,5 @@
 import {
-  orderPayable, billFromOrder, unitPriceOf, buildOrderCheckout, methodsForOrder, AFTER_ORDER_PAYMENT_ROUTE,
+  orderPayable, billFromOrder, unitPriceOf, buildOrderCheckout, methodsForOrder, serviceChargeFor, AFTER_ORDER_PAYMENT_ROUTE,
   type PayableOrder,
 } from '../lib/orderPayment';
 
@@ -80,6 +80,12 @@ describe('table payment rules', () => {
   it('takes credit off the menu of methods, since a table has no customer account', () => {
     const methods = [{ key: 'CASH' }, { key: 'CREDIT' }, { key: 'CARD' }];
     expect(methodsForOrder(methods).map((m) => m.key)).toEqual(['CASH', 'CARD']);
+  });
+
+  it('adds no service charge to a table, matching the web till, but leaves counter sales on the setting', () => {
+    expect(serviceChargeFor(true, 9_000)).toBe(0);
+    expect(serviceChargeFor(false, 9_000)).toBe(9_000);
+    expect(serviceChargeFor(false, 0)).toBe(0);
   });
 
   it('returns to the floor afterwards, not to a blank cart', () => {

@@ -353,7 +353,8 @@ through. If someone adds or voids a line on another screen while you are at the
 checkout, the payment is refused with a message and you reopen the order to see the new
 total, so nobody is charged an amount they were not shown. A table cannot be paid
 while offline, because the order has to be closed on the server; the phone tells you the
-table is still open instead of queuing the payment.
+table is still open instead of queuing the payment. As on the web till, no service
+charge is added to a table bill, because dine-in prices already include it.
 
 **The bill is the order.** When you take payment for a table, the sale is built from
 what is on the order, at the prices it was taken at, with any priced extras included. It

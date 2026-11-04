@@ -47,6 +47,11 @@ interface ConvertProformaDto {
 }
 
 interface CreateSaleDto {
+  /**
+   * Idempotency key from a client that may retry (offline queues, flaky networks). A sale already recorded
+   * with this key is returned instead of being created a second time.
+   */
+  offlineId?: string;
   storeId: string;
   cashierId: string;
   customerId?: string;
@@ -99,7 +104,41 @@ export class SalesService {
     private ledger: LedgerService,
   ) {}
 
+  /** Keys from clients are stored as the sale's unique offlineId, so keep them to a safe shape and size. */
+  private cleanOfflineId(value: unknown): string | undefined {
+    return typeof value === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(value) ? value : undefined;
+  }
+
+  /** The response a client gets for a sale that was already recorded: same sale, no second side effects. */
+  private async replayExistingSale(businessId: string, offlineId: string) {
+    const existing = await this.prisma.sale.findFirst({ where: { offlineId, businessId }, include: { items: true, payments: true } });
+    if (!existing) return null;
+    return { ...existing, pointsEarned: 0, loyaltyBalance: 0, monthlyTxCount: null, freeTxLimit: null, replayed: true };
+  }
+
+  /**
+   * Records a sale ONCE per offlineId. A till that lost the response to a successful checkout queues the sale
+   * and sends it again; without this the retry created a second sale (double revenue, double stock deduction).
+   */
   async createSale(businessId: string, dto: CreateSaleDto) {
+    const offlineId = this.cleanOfflineId(dto?.offlineId);
+    if (!offlineId) return this.createSaleOnce(businessId, { ...dto, offlineId: undefined });
+
+    const already = await this.replayExistingSale(businessId, offlineId);
+    if (already) return already;
+    try {
+      return await this.createSaleOnce(businessId, { ...dto, offlineId });
+    } catch (e) {
+      // Two copies of the same request racing: the loser hits the unique offlineId and gets the winner's sale.
+      if ((e as { code?: string })?.code === 'P2002') {
+        const raced = await this.replayExistingSale(businessId, offlineId);
+        if (raced) return raced;
+      }
+      throw e;
+    }
+  }
+
+  private async createSaleOnce(businessId: string, dto: CreateSaleDto) {
     // An order's sale is built from the order itself, so the cart may be empty then.
     if (!dto?.orderId && (!Array.isArray(dto?.items) || dto.items.length === 0)) {
       throw new BadRequestException('A sale needs at least one item');
@@ -300,7 +339,7 @@ export class SalesService {
 
       const createdSale = await tx.sale.create({
         data: {
-          offlineId: uuidv4(),
+          offlineId: dto.offlineId ?? uuidv4(),
           businessId,
           storeId: dto.storeId,
           receiptNumber,

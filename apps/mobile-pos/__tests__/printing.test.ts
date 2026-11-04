@@ -226,6 +226,16 @@ describe('KRA eTIMS and fiscal status on mobile receipts', () => {
     expect(Buffer.from(bytes).includes(Buffer.from([0x1d, 0x28, 0x6b]))).toBe(true);
   });
 
+  it('a test-mode sale prints TEST MODE, with no VERIFIED, control number or QR', () => {
+    const r: PrintableReceipt = { ...sale, etimsSubmitted: true, etimsTestMode: true, etimsControlNumber: 'ETM1793816051123', kraQRCode: 'ETM1793816051123' };
+    const bytes = buildReceiptBytes(r, 58);
+    const out = printedLines(bytes).join('\n');
+    expect(out).toContain('TEST MODE');
+    expect(out).not.toContain('VERIFIED');
+    expect(out).not.toContain('ETM1793816051123');
+    expect(Buffer.from(bytes).includes(Buffer.from([0x1d, 0x28, 0x6b]))).toBe(false);
+  });
+
   it('flags a sale KRA has not accepted yet as PENDING, never as verified', () => {
     const out = text({ ...sale, etimsSubmitted: false });
     expect(out).toContain('PENDING KRA SUBMISSION');

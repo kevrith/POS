@@ -7,6 +7,7 @@ import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { createHash, randomBytes } from 'crypto';
 import { normalizeTier, planDisplayName } from '@pos/shared';
+import { jwtSecret } from '../common/jwt-secret';
 
 /**
  * Keep `planName` truthful whenever a tier is written.
@@ -193,7 +194,7 @@ export class SuperAdminService {
 
     const token = this.jwt.sign(
       { sub: owner.id, businessId, role: owner.role, storeId: business.stores[0]?.id, impersonated: true },
-      { secret: process.env.JWT_SECRET ?? 'jwt-secret', expiresIn: '1h' },
+      { secret: jwtSecret(), expiresIn: '1h' },
     );
 
     return { token, businessName: business.name, ownerEmail: owner.email };

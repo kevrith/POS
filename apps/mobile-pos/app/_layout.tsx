@@ -10,6 +10,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '../stores/auth';
 import { usePushNotifications } from '@pos/mobile-push';
 import { routeForTap } from '../lib/push';
+import { useOfflineSync } from '../lib/useOfflineSync';
 
 /** Watches the auth token. If it gets cleared while the app is open (e.g. the
  *  API wrapper detected an expired session on a 401), bounce to the login
@@ -25,6 +26,13 @@ function SessionGuard() {
     }
     prev.current = token;
   }, [token, router]);
+  return null;
+}
+
+/** Uploads sales made offline in the background, while someone is signed in. */
+function OfflineSync() {
+  const token = useAuthStore((s) => s.token);
+  useOfflineSync(!!token);
   return null;
 }
 
@@ -136,6 +144,7 @@ export default function RootLayout() {
         <DeepLinkHandler />
         <PushHandler />
         <SessionGuard />
+        <OfflineSync />
         <Stack screenOptions={{ headerShown: false }} />
       </QueryClientProvider>
     </SafeAreaProvider>

@@ -518,3 +518,60 @@ describe('SalesService.createSale payments on ordinary sales', () => {
     await expect(credit.svc.createSale('biz-001', credit.dto)).resolves.toBeDefined();
   });
 });
+
+describe('SalesService.createSale idempotency (offlineId)', () => {
+  const KEY = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+  const dto = { storeId: 'store-001', cashierId: 'u1', type: SaleType.NORMAL, priceLevel: 'RETAIL', items: [{ itemId: 'item-001', quantity: 1 }], payments: [{ method: 'CASH', amountCents: 50000 }] } as any;
+
+  function make() {
+    const prisma: any = { sale: { findFirst: jest.fn().mockResolvedValue(null) } };
+    const service: any = new (SalesService as any)(prisma, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});
+    service.createSaleOnce = jest.fn().mockResolvedValue({ id: 'sale-new', receiptNumber: 'R-1' });
+    return { prisma, service };
+  }
+
+  it('without a key it just creates the sale', async () => {
+    const { service, prisma } = make();
+    expect((await service.createSale('biz-001', dto)).id).toBe('sale-new');
+    expect(prisma.sale.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('a retry with the same key returns the sale already recorded and creates nothing', async () => {
+    const { service, prisma } = make();
+    prisma.sale.findFirst.mockResolvedValue({ id: 'sale-old', receiptNumber: 'R-0', items: [], payments: [] });
+    const res = await service.createSale('biz-001', { ...dto, offlineId: KEY });
+    expect(res.id).toBe('sale-old');
+    expect(res.replayed).toBe(true);
+    expect(service.createSaleOnce).not.toHaveBeenCalled();
+    expect(prisma.sale.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { offlineId: KEY, businessId: 'biz-001' } }));
+  });
+
+  it('records a first-time sale under the client key', async () => {
+    const { service } = make();
+    await service.createSale('biz-001', { ...dto, offlineId: KEY });
+    expect(service.createSaleOnce).toHaveBeenCalledWith('biz-001', expect.objectContaining({ offlineId: KEY }));
+  });
+
+  it('two copies racing: the one that loses the unique key gets the winner\'s sale', async () => {
+    const { service, prisma } = make();
+    prisma.sale.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'sale-winner', items: [], payments: [] });
+    service.createSaleOnce.mockRejectedValue(Object.assign(new Error('Unique constraint'), { code: 'P2002' }));
+    expect((await service.createSale('biz-001', { ...dto, offlineId: KEY })).id).toBe('sale-winner');
+  });
+
+  it('another business\'s key is never replayed, and an unrelated error still surfaces', async () => {
+    const { service, prisma } = make();
+    prisma.sale.findFirst.mockResolvedValue(null);
+    service.createSaleOnce.mockRejectedValue(Object.assign(new Error('Unique constraint'), { code: 'P2002' }));
+    await expect(service.createSale('biz-001', { ...dto, offlineId: KEY })).rejects.toThrow('Unique constraint');
+    service.createSaleOnce.mockRejectedValue(new Error('Insufficient stock'));
+    await expect(service.createSale('biz-001', { ...dto, offlineId: KEY })).rejects.toThrow('Insufficient stock');
+  });
+
+  it('ignores a malformed key instead of trusting it', async () => {
+    const { service, prisma } = make();
+    await service.createSale('biz-001', { ...dto, offlineId: "x'; drop table" });
+    expect(prisma.sale.findFirst).not.toHaveBeenCalled();
+    expect(service.createSaleOnce.mock.calls[0][1].offlineId).toBeUndefined();
+  });
+});

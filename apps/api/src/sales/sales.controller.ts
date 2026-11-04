@@ -7,6 +7,8 @@ import type { Request } from 'express';
 import type { AuthUser } from '../auth/auth.service';
 
 interface CheckoutDto {
+  /** Idempotency key: the same key never creates a second sale. */
+  offlineId?: string;
   storeId: string;
   businessId: string;
   cashierId: string;
@@ -42,6 +44,7 @@ export class SalesController {
   ) {
     // businessId comes from body and is validated by TenantGuard
     return this.salesService.createSale(dto.businessId, {
+      offlineId: dto.offlineId,
       storeId: dto.storeId,
       cashierId: req.user.id,
       type: dto.type ?? SaleType.NORMAL,

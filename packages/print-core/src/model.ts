@@ -52,6 +52,8 @@ export interface ReceiptDocument {
   /** Human-readable KRA control/receipt number. */
   etimsControlNumber?: string;
   etimsSubmitted?: boolean;
+  /** The sale was NOT registered with KRA (sandbox / no live credentials): the receipt must not read as a tax invoice. */
+  etimsTestMode?: boolean;
   voided?: boolean;
   isCreditSale?: boolean;
   /** Customer's debt BEFORE this sale. */

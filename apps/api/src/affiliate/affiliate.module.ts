@@ -6,6 +6,7 @@ import { AffiliateController } from './affiliate.controller';
 import { AffiliateJwtGuard } from './affiliate-jwt.guard';
 import { SuperAdminAuthGuard } from '../super-admin/super-admin-auth.guard';
 import { PrismaModule } from '../prisma/prisma.module';
+import { jwtSecretFrom } from '../common/jwt-secret';
 
 @Module({
   imports: [
@@ -15,7 +16,7 @@ import { PrismaModule } from '../prisma/prisma.module';
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET') ?? 'dev-secret-change-in-production',
+        secret: jwtSecretFrom(config),
         signOptions: { expiresIn: '30d' },
       }),
     }),

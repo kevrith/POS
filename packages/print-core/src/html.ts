@@ -12,6 +12,7 @@ const BANNER_STYLE: Record<BannerTone, string> = {
   void: 'background:#1a1a1a;color:#fff;border:3px solid #000;font-size:18px;letter-spacing:2px;font-weight:900',
   credit: 'background:#fef3c7;color:#92400e;border:2px solid #d97706;font-size:12px;font-weight:bold',
   pending: 'background:#fee2e2;color:#991b1b;border:2px solid #ef4444;font-size:11px;font-weight:bold',
+  test: 'background:#fef9c3;color:#713f12;border:2px dashed #a16207;font-size:11px;font-weight:bold',
   copy: 'background:#e5e7eb;color:#111;border:2px dashed #000;font-size:12px;font-weight:bold',
   info: 'background:#000;color:#fff;font-size:15px;font-weight:bold;letter-spacing:2px',
 };

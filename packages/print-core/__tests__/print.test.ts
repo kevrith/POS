@@ -89,6 +89,7 @@ describe('fiscal status appears on EVERY printer format', () => {
     ['credit sale', { isCreditSale: true, customerName: 'Mama Njeri', newBalanceCents: -95000 }, 'CREDIT SALE'],
     ['pending eTIMS', { etimsSubmitted: false, etimsControlNumber: undefined }, 'PENDING KRA SUBMISSION'],
     ['reprint', { copyNumber: 2 }, 'COPY 2'],
+    ['eTIMS test mode', { etimsTestMode: true }, 'TEST MODE'],
   ];
 
   it.each(cases)('%s', (_name, patch, marker) => {
@@ -97,6 +98,17 @@ describe('fiscal status appears on EVERY printer format', () => {
     expect(f.html).toContain(marker);
     expect(f.epson).toContain(marker);
     expect(f.star).toContain(marker);
+  });
+
+  it('a test-mode sale is never shown as verified and carries no QR or control number', () => {
+    const f = allFormats({ ...base, etimsTestMode: true, etimsControlNumber: 'ETM1793816051123' });
+    for (const text of [f.escpos, f.html, f.epson, f.star]) {
+      expect(text).not.toContain('VERIFIED');
+      expect(text).not.toContain('ETM1793816051123');
+      expect(text).toContain('KRA eTIMS: TEST MODE');
+    }
+    expect(f.html).not.toContain('<svg');
+    expect(Buffer.from(receiptEscPos({ ...base, etimsTestMode: true }, { paperWidth: 58 })).includes(Buffer.from([0x1d, 0x28, 0x6b]))).toBe(false);
   });
 
   it('a voided receipt never reads as KRA verified and has no QR', () => {
@@ -110,7 +122,7 @@ describe('fiscal status appears on EVERY printer format', () => {
 
   it('an original, paid receipt carries none of the warning banners', () => {
     const f = allFormats(base);
-    for (const marker of ['VOID', 'CREDIT SALE', 'PENDING KRA', 'COPY']) {
+    for (const marker of ['VOID', 'CREDIT SALE', 'PENDING KRA', 'COPY', 'TEST MODE']) {
       expect(f.escpos).not.toContain(marker);
       expect(f.html).not.toContain(marker);
     }

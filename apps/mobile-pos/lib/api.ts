@@ -2,6 +2,14 @@ import * as SecureStore from 'expo-secure-store';
 import { useAuthStore } from '../stores/auth';
 import { secondsUntilExpiry } from './jwt';
 
+/** An error from the server, with its HTTP status so callers can tell a rejected request from a lost connection. */
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 // Must match DEFAULT_URL in app/(auth)/login.tsx — the login screen stores the
 // chosen URL under SERVER_URL_KEY, which this module reads for every request.
 // Same deployed API the web app uses (see apps/web/vercel.json rewrite).
@@ -86,12 +94,12 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   // Expired/invalid session → log out cleanly instead of showing empty data.
   if (res.status === 401 && token) {
     forceLogout();
-    throw new Error('Your session has expired. Please sign in again.');
+    throw new ApiError('Your session has expired. Please sign in again.', 401);
   }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error((err as { message?: string }).message ?? `API error ${res.status}`);
+    throw new ApiError((err as { message?: string }).message ?? `API error ${res.status}`, res.status);
   }
   if (res.status === 204) return undefined as T;
   return res.json();

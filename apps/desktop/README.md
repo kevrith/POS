@@ -27,9 +27,7 @@ npm run dev          # tauri dev — also starts the web dev server for you
 `beforeDevCommand` runs `npm run dev:web` from the repo root, so you don't need a
 second terminal.
 
-> **Known mismatch:** `src-tauri/tauri.conf.json` sets `devUrl` to
-> `http://localhost:3001`, but `apps/web` now serves on **3005**. Until the config is
-> corrected, either point `devUrl` at 3005 or run the web app on 3001.
+`devUrl` in `src-tauri/tauri.conf.json` is `http://localhost:3005`, the port `apps/web` serves on.
 
 ## Building
 

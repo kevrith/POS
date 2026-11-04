@@ -9,7 +9,7 @@ echo ""
 # Check if dependencies are installed
 if [ ! -d "node_modules" ]; then
   echo "📦 Installing dependencies..."
-  pnpm install
+  npm install
 fi
 
 # Check if database exists
@@ -25,7 +25,7 @@ fi
 echo ""
 echo "✅ Starting services..."
 echo "   - API: http://localhost:3010"
-echo "   - Web: http://localhost:3001"
+echo "   - Web: http://localhost:3005"
 echo ""
 
 # Use concurrently to run both
@@ -33,4 +33,4 @@ npx concurrently \
   -n "API,WEB" \
   -c "blue,green" \
   "cd apps/api && npm run start:dev" \
-  "cd apps/web && pnpm dev"
+  "cd apps/web && npm run dev"

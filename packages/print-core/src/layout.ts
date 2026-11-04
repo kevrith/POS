@@ -7,7 +7,7 @@ import { formatAmount, formatDateTime, formatKES, formatTime, groupThousands } f
 
 export type Size = 'small' | 'normal' | 'large' | 'xl';
 export type Align = 'left' | 'center' | 'right';
-export type BannerTone = 'void' | 'credit' | 'pending' | 'copy' | 'info';
+export type BannerTone = 'void' | 'credit' | 'pending' | 'copy' | 'test' | 'info';
 
 export type Block =
   /** Boxed, centered notice: VOID, CREDIT SALE, PENDING KRA, COPY. */
@@ -91,6 +91,9 @@ export function layoutReceipt(doc: ReceiptDocument): Block[] {
   }
   if (doc.etimsSubmitted === false && !voided) {
     b.push({ kind: 'banner', text: '*** PENDING KRA SUBMISSION ***', tone: 'pending' });
+  }
+  if (doc.etimsTestMode && !voided) {
+    b.push({ kind: 'banner', text: '*** TEST MODE - NOT A TAX INVOICE ***', tone: 'test' });
   }
 
   // Header
@@ -184,6 +187,12 @@ export function layoutReceipt(doc: ReceiptDocument): Block[] {
       b.push({ kind: 'rule', style: 'dash' });
       b.push({ kind: 'line', text: `Original control No: ${kraRef}`, align: 'center', size: 'small' });
     }
+  } else if (doc.etimsTestMode && doc.etimsSubmitted !== false) {
+    // Nothing was sent to KRA, so there is no control number to verify and no QR to scan.
+    b.push({ kind: 'rule', style: 'double' });
+    b.push({ kind: 'line', text: 'KRA eTIMS: TEST MODE', align: 'center', bold: true });
+    b.push({ kind: 'line', text: 'Not registered with KRA', align: 'center', size: 'small' });
+    b.push({ kind: 'rule', style: 'dash' });
   } else if (doc.etimsSubmitted && kraRef) {
     b.push({ kind: 'rule', style: 'double' });
     b.push({ kind: 'line', text: 'KRA eTIMS VERIFIED', align: 'center', bold: true });

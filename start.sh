@@ -12,7 +12,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Install dependencies if missing
 if [ ! -d "$ROOT_DIR/node_modules" ]; then
   echo "📦 Installing dependencies (this may take a few minutes)..."
-  cd "$ROOT_DIR" && pnpm install
+  cd "$ROOT_DIR" && npm install
   echo ""
 fi
 
@@ -42,21 +42,21 @@ fi
 # Start Web (always exists)
 if [ -d "$ROOT_DIR/apps/web" ]; then
   echo "  • Web (Vite) on port 3005"
-  (cd "$ROOT_DIR/apps/web" && pnpm dev) > /tmp/pos-web.log 2>&1 &
+  (cd "$ROOT_DIR/apps/web" && npm run dev) > /tmp/pos-web.log 2>&1 &
   PIDS+=($!)
 fi
 
 # Start Admin (if exists)
 if [ -d "$ROOT_DIR/apps/admin" ]; then
   echo "  • Admin (Vite) on port 3012"
-  (cd "$ROOT_DIR/apps/admin" && pnpm dev) > /tmp/pos-admin.log 2>&1 &
+  (cd "$ROOT_DIR/apps/admin" && npm run dev) > /tmp/pos-admin.log 2>&1 &
   PIDS+=($!)
 fi
 
 # Start Desktop (if exists)
 if [ -d "$ROOT_DIR/apps/desktop" ]; then
   echo "  • Desktop (Tauri) on port 3013"
-  (cd "$ROOT_DIR/apps/desktop" && pnpm dev) > /tmp/pos-desktop.log 2>&1 &
+  (cd "$ROOT_DIR/apps/desktop" && npm run dev) > /tmp/pos-desktop.log 2>&1 &
   PIDS+=($!)
 fi
 

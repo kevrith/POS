@@ -4,7 +4,7 @@
   "identifier": "co.ke.kastra.pos",
   "build": {
     "beforeDevCommand": "cd ../../ && npm run dev:web",
-    "devUrl": "http://localhost:3001",
+    "devUrl": "http://localhost:3005",
     "beforeBuildCommand": "cd ../web && npm run build",
     "frontendDist": "../../web/dist"
   },

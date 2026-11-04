@@ -553,16 +553,17 @@ export default function PaymentScreen() {
   }
 
   /** KRA eTIMS registration for a finished sale. Never throws: a failure means "pending", not "no receipt". */
-  async function submitToEtims(saleId: string): Promise<Pick<PrintableReceipt, 'etimsSubmitted' | 'etimsControlNumber' | 'kraQRCode'>> {
+  async function submitToEtims(saleId: string): Promise<Pick<PrintableReceipt, 'etimsSubmitted' | 'etimsControlNumber' | 'kraQRCode' | 'etimsTestMode'>> {
     try {
       const res = await Promise.race([
-        mobileApi.post<{ success: boolean; controlNumber?: string; intrlData?: string; qrUrl?: string }>(`/etims/submit/${saleId}`, {}),
+        mobileApi.post<{ success: boolean; controlNumber?: string; intrlData?: string; qrUrl?: string; testMode?: boolean }>(`/etims/submit/${saleId}`, {}),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
       ]);
       return {
         etimsSubmitted: res.success,
         etimsControlNumber: res.controlNumber,
         kraQRCode: res.qrUrl ?? res.intrlData ?? res.controlNumber,
+        etimsTestMode: res.testMode === true,
       };
     } catch {
       return { etimsSubmitted: false };
@@ -587,6 +588,7 @@ export default function PaymentScreen() {
       }
     },
     onSuccess: (result: SaleResult) => {
+      attemptRef.current = null;
       qc.invalidateQueries({ queryKey: ['sales'] });
       if (orderMode) {
         qc.invalidateQueries({ queryKey: ['tables'] });
@@ -629,6 +631,7 @@ export default function PaymentScreen() {
     },
     onError: (err: any) => {
       if (err?.message === '__OFFLINE__') {
+        attemptRef.current = null; // the queued copy carries the key; the next sale starts fresh
         Alert.alert('Saved Offline', 'Sale saved to offline queue and will sync when back online.', [
           { text: 'OK', onPress: () => { clearCart(); router.replace('/(tabs)/pos' as any); } },
         ]);
@@ -637,6 +640,18 @@ export default function PaymentScreen() {
       }
     },
   });
+
+  /**
+   * One idempotency key per checkout ATTEMPT, reused while the cashier retries the same sale (the response may
+   * have been lost after the server recorded it) and replaced as soon as the sale changes or completes.
+   */
+  const attemptRef = useRef<{ key: string; signature: string } | null>(null);
+  function offlineIdFor(signature: string): string {
+    if (!attemptRef.current || attemptRef.current.signature !== signature) {
+      attemptRef.current = { key: generateOfflineId(), signature };
+    }
+    return attemptRef.current.key;
+  }
 
   function handleCompleteSale(
     overridePayments?: Array<{ method: string; amountCents: number; reference?: string }>
@@ -647,9 +662,10 @@ export default function PaymentScreen() {
     } else if (cartItems.length === 0) { Alert.alert('Empty Cart', 'No items in cart.'); return; }
     const payments = overridePayments ?? buildPayments();
     if (!payments) return;
+    const signature = JSON.stringify([orderMode ? orderId : cartItems.map((i) => [i.id, i.quantity, i.unitPriceCents]), payments, totalAfterDiscount]);
     if (orderMode && orderId) {
       completeSale(buildOrderCheckout({
-        offlineId: generateOfflineId(),
+        offlineId: offlineIdFor(signature),
         businessId, storeId, cashierId, orderId, payments,
         discountCents: effectiveDiscount,
         serviceChargeCents,
@@ -658,7 +674,7 @@ export default function PaymentScreen() {
       return;
     }
     completeSale({
-      offlineId: generateOfflineId(),
+      offlineId: offlineIdFor(signature),
       businessId, storeId, cashierId,
       customerId: customerId ?? undefined,
       type: saleTypeFor(payments), priceLevel,

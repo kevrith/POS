@@ -325,7 +325,7 @@ export default function SalesListPage() {
       // that is still pending gets another attempt, so a reprint carries the same fiscal proof as the original.
       const etims = isVoided
         ? null
-        : await api.post<{ success: boolean; controlNumber?: string; intrlData?: string; qrUrl?: string }>(`/etims/submit/${sale.id}`).catch(() => null);
+        : await api.post<{ success: boolean; controlNumber?: string; intrlData?: string; qrUrl?: string; testMode?: boolean }>(`/etims/submit/${sale.id}`).catch(() => null);
       const earnedTx = loyaltyData?.transactions.find(t => t.type === 'EARN' && t.saleId === sale.id);
       const receipt: ReceiptData = {
         receiptNumber: detail.receiptNumber,
@@ -353,6 +353,7 @@ export default function SalesListPage() {
         payments: detail.payments,
         kraControlNumber: detail.etimsControlNumber,
         etimsControlNumber: etims?.controlNumber ?? detail.etimsControlNumber,
+        etimsTestMode: etims?.testMode === true,
         kraQRCode: etims?.success ? (etims.qrUrl ?? etims.intrlData ?? etims.controlNumber) : undefined,
         etimsSubmitted: isVoided ? undefined : (etims ? etims.success : detail.etimsSubmitted),
         voided: isVoided,

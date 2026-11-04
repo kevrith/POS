@@ -526,12 +526,13 @@ export default function POSPage() {
       // Keep a local copy so the auto-print includes the eTIMS QR once it resolves.
       let printReceipt: ReceiptData = receipt;
 
-      api.post<{ success: boolean; controlNumber?: string; intrlData?: string; qrUrl?: string }>(`/etims/submit/${result.id}`)
+      api.post<{ success: boolean; controlNumber?: string; intrlData?: string; qrUrl?: string; testMode?: boolean }>(`/etims/submit/${result.id}`)
         .then((res) => {
           const etims = {
             etimsSubmitted: res.success,
             kraQRCode: res.qrUrl ?? res.intrlData ?? res.controlNumber,
             etimsControlNumber: res.controlNumber,
+            etimsTestMode: res.testMode === true,
           };
           printReceipt = { ...printReceipt, ...etims };
           setReceiptData((prev) => prev ? { ...prev, ...etims } : prev);

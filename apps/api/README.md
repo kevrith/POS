@@ -281,6 +281,15 @@ push (`.github/workflows/ci.yml`).
   a raw TCP connection from the API host, so it only accepts private IPv4 addresses
   (`printers/network-target.ts`); loopback, link-local and public hosts are refused. The
   API host must share a network with the printer.
+- **Checkout is idempotent on `offlineId`.** `POST /sales/checkout` accepts an optional client key (8-64 chars of
+  `A-Za-z0-9_-`). A repeat for the same business returns the already-recorded sale (`replayed: true`) with no second
+  sale, stock movement or receipt number; two copies racing resolve through the unique key (P2002). A malformed key is
+  ignored. Mobile and offline clients rely on this to retry safely.
+- **eTIMS test mode.** `POST /etims/submit/:saleId` returns `testMode: true` (and no `intrlData`/`qrUrl`) when the sale was
+  not sent to KRA: the business is not in PRODUCTION with credentials, or the control number is a generated `ETM<timestamp>`
+  placeholder. Receipts then print `TEST MODE - NOT A TAX INVOICE` instead of "KRA eTIMS VERIFIED" and a QR.
+- **`JWT_SECRET` is required** (`common/jwt-secret.ts`): the API refuses to start without it, and in production rejects
+  secrets under 32 characters or that look like the placeholders in this repo. There are no hardcoded fallbacks.
 - **Print jobs are queued, audited and retried (`print-jobs/`).** `POST /print-jobs` queues ESC/POS bytes for a
   LAN printer: with `PRINT_DELIVERY_MODE=direct` (default) the server sends at once and only queues a failure;
   with `queue` (cloud) a print bridge delivers. The bridge is a desktop till on the shop network: `POST

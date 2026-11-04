@@ -126,7 +126,7 @@ jobs:
         working-directory: packages/print-core
         run: npm test -- --ci
 
-  # ─── Mobile Apps — Type-check (matrix across all 3 apps) ──────────────────
+  # ─── Mobile Apps — Type-check (matrix across all 4 apps) ──────────────────
   mobile:
     name: Mobile — Type-check (${{ matrix.app }})
     runs-on: ubuntu-latest
@@ -140,6 +140,8 @@ jobs:
             name: KASTRA Order (Customer)
           - app: mobile-driver
             name: KASTRA Driver
+          - app: mobile-agent
+            name: KASTRA Agent
 
     steps:
       - uses: actions/checkout@v4
@@ -158,6 +160,11 @@ jobs:
       - name: Type-check
         working-directory: apps/${{ matrix.app }}
         run: npm run typecheck
+
+      - name: Unit tests
+        if: matrix.app == 'mobile-pos'
+        working-directory: apps/mobile-pos
+        run: npx jest --ci --watchman=false
 
   # ─── Prisma schema validation ──────────────────────────────────────────────
   schema:

@@ -14,13 +14,15 @@ import { useState, useEffect } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { mobileApi } from '../../lib/api';
+import { formatKES, mobileApi } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth';
 import { buildLabel } from '../../lib/buildInfo';
 import { useActiveStore } from '../../lib/useActiveStore';
 import { useCartStore } from '../../stores/cart';
 import { Colors } from '../../constants/theme';
 import { processSyncQueue } from '../../lib/sync';
+import { requeueRejectedSale } from '../../lib/db';
+import { useSalesQueueStatus } from '../../lib/useOfflineSync';
 import { clearPushToken } from '../../lib/push';
 import PrinterSettingsCard from '../../components/PrinterSettingsCard';
 
@@ -45,7 +47,8 @@ export default function SettingsScreen() {
   const [editingUrl, setEditingUrl] = useState(false);
   const [urlInput, setUrlInput] = useState('');
   const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<{ synced: number; failed: number } | null>(null);
+  const [syncResult, setSyncResult] = useState<{ synced: number; failed: number; rejected?: number } | null>(null);
+  const queueStatus = useSalesQueueStatus();
 
   // Load stored server URL
   useEffect(() => {
@@ -261,8 +264,27 @@ export default function SettingsScreen() {
         <Text style={styles.sectionTitle}>Offline Queue</Text>
         <View style={styles.card}>
           <Text style={styles.syncDesc}>
-            Sync failed offline sales to the server when connectivity is restored.
+            Sales made offline upload by themselves when the connection is back. Use Sync Now to try straight away.
+            {queueStatus.pending > 0 ? ` ${queueStatus.pending} waiting.` : ''}
           </Text>
+          {queueStatus.rejected.map((r) => (
+            <View key={r.offlineId} style={[styles.syncResult, { backgroundColor: Colors.error + '15', flexDirection: 'column', alignItems: 'flex-start' }]}>
+              <Text style={[styles.syncResultText, { color: Colors.error }]}>
+                Refused by the server{r.totalCents ? ` (${formatKES(r.totalCents)})` : ''}
+              </Text>
+              <Text style={{ fontSize: 12, color: Colors.textSecondary, marginTop: 2 }}>{r.error}</Text>
+              <Text style={{ fontSize: 11, color: Colors.textSecondary, marginTop: 2 }}>
+                Fix the cause (for example stock), then retry. Tell your manager if it keeps failing.
+              </Text>
+              <TouchableOpacity
+                style={[styles.syncBtn, { alignSelf: 'stretch', marginTop: 8 }]}
+                onPress={() => { void requeueRejectedSale(r.offlineId).then(() => processSyncQueue()); }}
+              >
+                <Ionicons name="refresh-outline" size={18} color={Colors.primary} />
+                <Text style={styles.syncBtnText}>Retry this sale</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
           {syncResult && (
             <View style={[styles.syncResult, { backgroundColor: syncResult.failed > 0 ? Colors.warning + '15' : Colors.success + '15' }]}>
               <Ionicons
@@ -271,7 +293,7 @@ export default function SettingsScreen() {
                 color={syncResult.failed > 0 ? Colors.warning : Colors.success}
               />
               <Text style={[styles.syncResultText, { color: syncResult.failed > 0 ? Colors.warning : Colors.success }]}>
-                {syncResult.synced} synced, {syncResult.failed} failed
+                {syncResult.synced} synced, {syncResult.failed} failed{syncResult.rejected ? `, ${syncResult.rejected} refused` : ''}
               </Text>
             </View>
           )}

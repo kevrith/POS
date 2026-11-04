@@ -37,7 +37,7 @@ echo ""
 
 # Kill existing processes
 lsof -ti:3010 | xargs kill -9 2>/dev/null || true
-lsof -ti:3001 | xargs kill -9 2>/dev/null || true
+lsof -ti:3005 | xargs kill -9 2>/dev/null || true
 
 # Start API
 cd apps/api
@@ -47,7 +47,7 @@ cd ../..
 
 # Start Web
 cd apps/web
-pnpm dev > /tmp/pos-web.log 2>&1 &
+npm run dev > /tmp/pos-web.log 2>&1 &
 WEB_PID=$!
 cd ../..
 
@@ -58,7 +58,7 @@ echo ""
 echo "✅ Servers started!"
 echo ""
 echo "📍 API:  http://localhost:3010"
-echo "📍 Web:  http://localhost:3001"
+echo "📍 Web:  http://localhost:3005"
 echo ""
 echo "📋 Login with:"
 echo "   Email: owner@demo.com"

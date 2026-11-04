@@ -7,13 +7,25 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const SALES_QUEUE_KEY = 'kastra:sales_queue';
 const ITEMS_CACHE_KEY = 'kastra:items_cache';
 
-interface QueuedSale {
+export interface QueuedSale {
   id: number;
   offlineId: string;
   payload: object;
   createdAt: string;
   synced: boolean;
+  attempts?: number;
+  lastError?: string;
+  /** The server refused this sale (a 4xx): retrying the same request cannot help, so it waits for a person. */
+  rejected?: boolean;
 }
+
+export interface QueueStatus {
+  pending: number;
+  rejected: Array<{ offlineId: string; createdAt: string; error: string; totalCents?: number }>;
+}
+
+type QueueListener = (status: QueueStatus) => void;
+const listeners = new Set<QueueListener>();
 
 // ─── Sales Queue ─────────────────────────────────────────────────────────────
 
@@ -26,8 +38,36 @@ async function getSalesQueue(): Promise<QueuedSale[]> {
   }
 }
 
+function statusOf(queue: QueuedSale[]): QueueStatus {
+  const open = queue.filter((q) => !q.synced);
+  return {
+    pending: open.filter((q) => !q.rejected).length,
+    rejected: open
+      .filter((q) => q.rejected)
+      .map((q) => ({
+        offlineId: q.offlineId,
+        createdAt: q.createdAt,
+        error: q.lastError ?? 'Rejected by the server',
+        totalCents: (q.payload as { payments?: Array<{ amountCents?: number }> }).payments?.reduce((s, p) => s + (p.amountCents ?? 0), 0),
+      })),
+  };
+}
+
 async function saveSalesQueue(queue: QueuedSale[]): Promise<void> {
   await AsyncStorage.setItem(SALES_QUEUE_KEY, JSON.stringify(queue));
+  const status = statusOf(queue);
+  listeners.forEach((l) => l(status));
+}
+
+export async function getQueueStatus(): Promise<QueueStatus> {
+  return statusOf(await getSalesQueue());
+}
+
+/** Calls back with the current status now and after every change. Returns the unsubscribe function. */
+export function subscribeSalesQueue(listener: QueueListener): () => void {
+  listeners.add(listener);
+  void getQueueStatus().then(listener);
+  return () => { listeners.delete(listener); };
 }
 
 export async function queueSale(offlineId: string, payload: object): Promise<void> {
@@ -45,9 +85,24 @@ export async function queueSale(offlineId: string, payload: object): Promise<voi
   await saveSalesQueue(queue);
 }
 
+/** Sales still waiting to reach the server and worth trying again (oldest first). */
 export async function getPendingSales(): Promise<QueuedSale[]> {
   const queue = await getSalesQueue();
-  return queue.filter((q) => !q.synced);
+  return queue.filter((q) => !q.synced && !q.rejected);
+}
+
+/** Remember why an attempt failed. `rejected` parks the sale for a person instead of retrying it forever. */
+export async function recordSaleFailure(offlineId: string, error: string, rejected: boolean): Promise<void> {
+  const queue = await getSalesQueue();
+  await saveSalesQueue(
+    queue.map((q) => (q.offlineId === offlineId ? { ...q, attempts: (q.attempts ?? 0) + 1, lastError: error.slice(0, 300), rejected } : q)),
+  );
+}
+
+/** Put a rejected sale back in line, e.g. after the cause (stock, a price) was fixed on the server. */
+export async function requeueRejectedSale(offlineId: string): Promise<void> {
+  const queue = await getSalesQueue();
+  await saveSalesQueue(queue.map((q) => (q.offlineId === offlineId ? { ...q, rejected: false, lastError: undefined } : q)));
 }
 
 export async function markSaleSynced(offlineId: string): Promise<void> {

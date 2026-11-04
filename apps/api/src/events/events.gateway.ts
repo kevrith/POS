@@ -10,6 +10,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { jwtSecret } from '../common/jwt-secret';
 
 @Injectable()
 @WebSocketGateway({
@@ -22,7 +23,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private readonly logger = new Logger(EventsGateway.name);
   private readonly jwt = new JwtService({
-    secret: process.env.JWT_SECRET ?? 'dev-secret-change-in-production',
+    secret: jwtSecret(),
   });
 
   /**

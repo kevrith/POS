@@ -94,11 +94,7 @@ npm run install-all                                        # api + web + admin
 npx prisma generate --schema prisma/schema.prisma          # from the repo ROOT
 ```
 
-> `npm run setup` is currently **broken**: it ends with `cd apps/api && npx prisma
-> generate`, but the schema lives at `prisma/schema.prisma` in the repo root and
-> `apps/api` has neither a local schema nor a `prisma.schema` entry in its
-> `package.json`, so Prisma exits with "Could not find a schema". Use the three
-> commands above, or fix the script to pass `--schema ../../prisma/schema.prisma`.
+> `npm run setup` passes `--schema ../../prisma/schema.prisma` to `prisma generate` (it used to fail with "Could not find a schema").
 
 Every Prisma command in this repo needs an explicit
 `--schema` pointing at `prisma/schema.prisma`.
@@ -369,9 +365,8 @@ npx prisma validate --schema prisma/schema.prisma
 `.github/workflows/ci.yml` runs on every push: API test+build (against a live
 PostgreSQL service), web build, mobile type-check, and Prisma schema validation.
 
-> The mobile matrix covers `mobile-pos`, `mobile-customer` and `mobile-driver` only —
-> **`mobile-agent` is not type-checked in CI**. Run `npm run typecheck` in
-> `apps/mobile-agent` by hand, or add it to the matrix.
+> The mobile matrix covers all four Expo apps (`mobile-pos`, `mobile-customer`, `mobile-driver`, `mobile-agent`);
+> `mobile-pos` also runs its Jest suite. The web job runs the vitest suite and the `print-core` package has its own job.
 
 ---
 

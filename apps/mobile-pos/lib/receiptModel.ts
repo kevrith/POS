@@ -32,6 +32,8 @@ export interface PrintableReceipt {
   /** false while the sale has not reached KRA: the receipt prints a PENDING banner. */
   etimsSubmitted?: boolean;
   etimsControlNumber?: string;
+  /** The sale was not registered with KRA (sandbox / no live credentials): prints TEST MODE, not VERIFIED. */
+  etimsTestMode?: boolean;
   /** Verification URL or internal data KRA returned; printed as a QR code. */
   kraQRCode?: string;
   voided?: boolean;
@@ -66,6 +68,7 @@ export function toReceiptDocument(r: PrintableReceipt): ReceiptDocument {
     changeCents: r.changeCents,
     etimsSubmitted: r.voided ? undefined : r.etimsSubmitted,
     etimsControlNumber: r.etimsControlNumber,
+    etimsTestMode: r.etimsTestMode,
     kraQRCode: r.kraQRCode,
     voided: r.voided,
     copyNumber: r.copyNumber,

@@ -107,15 +107,25 @@ that already runs the web app.
 ## Offline
 
 [lib/db.ts](lib/db.ts) is an **AsyncStorage** queue, not SQLite (`expo-sqlite` isn't
-installed). Sales that fail to reach the server are queued with an `offlineId` UUID
-and replayed by `lib/sync.ts` against `/sales/checkout`; the server deduplicates on
-`offlineId`, so a replay of a request that actually succeeded never double-posts.
+installed). A sale that cannot reach the server is queued with its `offlineId` and uploaded by
+`lib/sync.ts` against `/sales/checkout`. The API treats `offlineId` as an idempotency key
+(`SalesService.createSale`): a repeat returns the sale already recorded instead of creating a second one,
+so a request that succeeded but whose response was lost can never double-post revenue or stock. (Before
+2026-11-04 the server ignored the key and a replay did duplicate the sale.) `payment.tsx` keeps one key per
+checkout attempt and only issues a new one when the sale changes or completes.
 Items are cached locally for offline lookup.
 
-> **The flush is manual.** `processSyncQueue()` is only called from the Sync button
-> in Settings — unlike `mobile-agent` and `mobile-driver`, this app has no
-> `useOfflineSync` timer, no foreground trigger and no sync banner. A cashier who
-> sells offline and never opens Settings keeps an unsynced queue.
+**Syncing is automatic** (`lib/useOfflineSync.ts`, mounted in `app/_layout.tsx`): on launch, every 30 s,
+and when the app returns to the foreground, while someone is signed in. `processSyncQueue()` is single-flight,
+so the timer, the foreground trigger and the Settings "Sync Now" button never upload the same sale twice.
+Failures are classified (`classifyFailure`):
+
+- lost connection, 5xx, 408/429: kept and retried; the run stops at the first one rather than hammering.
+- 4xx (e.g. out of stock): the SERVER refused the sale. It is parked as `rejected`, does not block the sales behind it,
+  and shows in red on the sync banner and in Settings with the reason and a Retry button. It is never silently dropped.
+- 401: an expired login, not the sale's fault; nothing is recorded against the sale.
+
+`components/SyncBanner.tsx` (above the tabs) shows how many sales are waiting or refused. Tests: `__tests__/sync.test.ts`.
 
 ---
 

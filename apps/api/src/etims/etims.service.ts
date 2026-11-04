@@ -3,6 +3,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import * as crypto from 'crypto';
 
+/** What the sandbox generates in place of a KRA control number: ETM + a millisecond timestamp. */
+const MOCK_CONTROL_NUMBER = /^ETM\d{10,}$/;
+
 /**
  * KRA's public eTIMS receipt-verification endpoint. Scanning a compliant receipt QR
  * opens this page with the seller PIN + branch + receipt signature, exactly like the
@@ -286,11 +289,28 @@ export class EtimsService {
     return `${ETIMS_VERIFY_BASE}?Data=${encodeURIComponent(`${pin}${branch}${sign}`)}`;
   }
 
-  async submitSale(saleId: string): Promise<{ success: boolean; controlNumber?: string; intrlData?: string; qrUrl?: string; reason?: string }> {
+  /**
+   * True when a submission was NOT made to KRA: the business is not in PRODUCTION with credentials, or the
+   * control number is one of our generated placeholders (a sale made in sandbox stays a test sale even after
+   * the business goes live). Receipts for these must never read as a verified tax invoice.
+   */
+  private isTestSubmission(
+    business: { etimsMode?: string | null; etimsCredentialsEncrypted?: string | null } | null,
+    controlNumber?: string | null,
+  ): boolean {
+    const live = business?.etimsMode === 'PRODUCTION' && !!business.etimsCredentialsEncrypted;
+    return !live || (!!controlNumber && MOCK_CONTROL_NUMBER.test(controlNumber));
+  }
+
+  async submitSale(saleId: string): Promise<{ success: boolean; controlNumber?: string; intrlData?: string; qrUrl?: string; reason?: string; testMode?: boolean }> {
     const sale = await this.prisma.sale.findUnique({ where: { id: saleId } });
     if (!sale) throw new BadRequestException('Sale not found');
     if (sale.etimsSubmitted) {
       const biz = await this.prisma.business.findUnique({ where: { id: sale.businessId } });
+      if (this.isTestSubmission(biz, sale.etimsControlNumber)) {
+        // No proof to show: a QR for a made-up control number would only fail on KRA's verification page.
+        return { success: true, controlNumber: sale.etimsControlNumber ?? undefined, testMode: true };
+      }
       const sign = (sale as any).etimsIntrlData ?? sale.etimsControlNumber ?? undefined;
       const id = this.etimsIdentity(biz);
       return {
@@ -298,6 +318,7 @@ export class EtimsService {
         controlNumber: sale.etimsControlNumber ?? undefined,
         intrlData: sign,
         qrUrl: this.buildEtimsQrUrl(id.kraPin, id.branchId, sign),
+        testMode: false,
       };
     }
 
@@ -331,12 +352,14 @@ export class EtimsService {
       after: { controlNumber },
     });
 
+    if (this.isTestSubmission(business, controlNumber)) return { success: true, controlNumber, testMode: true };
     const identity = this.etimsIdentity(business);
     return {
       success: true,
       controlNumber,
       intrlData,
       qrUrl: this.buildEtimsQrUrl(identity.kraPin, identity.branchId, intrlData),
+      testMode: false,
     };
   }
 

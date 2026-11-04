@@ -1,8 +1,10 @@
+import { View } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import { useAuthStore } from '../../stores/auth';
 import { canManage, canSeeFinance } from '../../lib/roles';
+import { SyncBanner } from '../../components/SyncBanner';
 
 export default function TabsLayout() {
   const role = useAuthStore((s) => s.user?.role);
@@ -11,6 +13,8 @@ export default function TabsLayout() {
   const showManage = canManage(role) || canSeeFinance(role);
 
   return (
+    <View style={{ flex: 1 }}>
+    <SyncBanner />
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -85,5 +89,6 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
+    </View>
   );
 }

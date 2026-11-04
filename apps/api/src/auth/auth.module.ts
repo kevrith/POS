@@ -14,6 +14,7 @@ import { TenantGuard } from './tenant.guard';
 import { SubscriptionGuard } from './subscription.guard';
 import { EmailModule } from '../email/email.module';
 import { AffiliateModule } from '../affiliate/affiliate.module';
+import { jwtSecretFrom } from '../common/jwt-secret';
 
 @Module({
   imports: [
@@ -21,7 +22,7 @@ import { AffiliateModule } from '../affiliate/affiliate.module';
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET') ?? 'dev-secret-change-in-production',
+        secret: jwtSecretFrom(config),
         signOptions: { expiresIn: '15m' },
       }),
     }),

@@ -82,6 +82,40 @@ describe('EtimsService', () => {
       });
     });
 
+    it('marks a sandbox submission as TEST MODE and gives no QR proof', async () => {
+      prisma.sale.findUnique.mockResolvedValue({ id: 'sale-1', businessId: 'biz-1', etimsSubmitted: false, etimsControlNumber: null, receiptNumber: 'R-1' });
+      prisma.business.findUnique.mockResolvedValue({ id: 'biz-1', etimsMode: 'SANDBOX', etimsCredentialsEncrypted: null });
+      prisma.sale.update.mockResolvedValue({});
+
+      const result = await svc.submitSale('sale-1');
+
+      expect(result.testMode).toBe(true);
+      expect(result.qrUrl).toBeUndefined();
+      expect(result.intrlData).toBeUndefined();
+    });
+
+    it('a business that says PRODUCTION but has no credentials is still test mode', async () => {
+      prisma.sale.findUnique.mockResolvedValue({ id: 'sale-1', businessId: 'biz-1', etimsSubmitted: true, etimsControlNumber: 'CU-123' });
+      prisma.business.findUnique.mockResolvedValue({ id: 'biz-1', etimsMode: 'PRODUCTION', etimsCredentialsEncrypted: null });
+      expect((await svc.submitSale('sale-1')).testMode).toBe(true);
+    });
+
+    it('a sale made in sandbox stays a test sale after the business goes live', async () => {
+      prisma.sale.findUnique.mockResolvedValue({ id: 'sale-1', businessId: 'biz-1', etimsSubmitted: true, etimsControlNumber: 'ETM1793816051123' });
+      prisma.business.findUnique.mockResolvedValue({ id: 'biz-1', etimsMode: 'PRODUCTION', etimsCredentialsEncrypted: 'enc' });
+      const result = await svc.submitSale('sale-1');
+      expect(result.testMode).toBe(true);
+      expect(result.qrUrl).toBeUndefined();
+    });
+
+    it('a real production sale is not test mode and keeps its control number', async () => {
+      prisma.sale.findUnique.mockResolvedValue({ id: 'sale-1', businessId: 'biz-1', etimsSubmitted: true, etimsControlNumber: 'CU-0001234' });
+      prisma.business.findUnique.mockResolvedValue({ id: 'biz-1', etimsMode: 'PRODUCTION', etimsCredentialsEncrypted: 'enc' });
+      const result = await svc.submitSale('sale-1');
+      expect(result.testMode).toBe(false);
+      expect(result.controlNumber).toBe('CU-0001234');
+    });
+
     it('creates an audit entry after successful submission', async () => {
       prisma.sale.findUnique.mockResolvedValue({
         id: 'sale-2',

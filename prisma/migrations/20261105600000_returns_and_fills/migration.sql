@@ -6,13 +6,14 @@
 --   FuelSale.void*     who voided the pump sale, when and why.
 --
 -- No existing row changes.
+-- Safe to run again: every statement checks first, so a database where this was already applied by hand still deploys.
 
-ALTER TABLE "FuelSale" ADD COLUMN "tankId" TEXT;
-ALTER TABLE "FuelSale" ADD COLUMN "voidedAt" TIMESTAMP(3);
-ALTER TABLE "FuelSale" ADD COLUMN "voidedBy" TEXT;
-ALTER TABLE "FuelSale" ADD COLUMN "voidReason" TEXT;
+ALTER TABLE "FuelSale" ADD COLUMN IF NOT EXISTS "tankId" TEXT;
+ALTER TABLE "FuelSale" ADD COLUMN IF NOT EXISTS "voidedAt" TIMESTAMP(3);
+ALTER TABLE "FuelSale" ADD COLUMN IF NOT EXISTS "voidedBy" TEXT;
+ALTER TABLE "FuelSale" ADD COLUMN IF NOT EXISTS "voidReason" TEXT;
 
-CREATE TABLE "PrescriptionFill" (
+CREATE TABLE IF NOT EXISTS "PrescriptionFill" (
     "id" TEXT NOT NULL,
     "businessId" TEXT NOT NULL,
     "prescriptionId" TEXT NOT NULL,
@@ -26,5 +27,5 @@ CREATE TABLE "PrescriptionFill" (
     CONSTRAINT "PrescriptionFill_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "PrescriptionFill_saleId_key" ON "PrescriptionFill"("saleId");
-CREATE INDEX "PrescriptionFill_businessId_prescriptionId_idx" ON "PrescriptionFill"("businessId", "prescriptionId");
+CREATE UNIQUE INDEX IF NOT EXISTS "PrescriptionFill_saleId_key" ON "PrescriptionFill"("saleId");
+CREATE INDEX IF NOT EXISTS "PrescriptionFill_businessId_prescriptionId_idx" ON "PrescriptionFill"("businessId", "prescriptionId");

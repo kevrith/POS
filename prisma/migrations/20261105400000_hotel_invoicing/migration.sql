@@ -8,11 +8,12 @@
 --                             (Business.verticalSalesFrom), so nothing changes for a business still off.
 --
 -- No existing row changes.
+-- Safe to run again: every statement checks first, so a database where this was already applied by hand still deploys.
 
-ALTER TABLE "Business" ADD COLUMN "hotelLevies" TEXT NOT NULL DEFAULT '[]';
-ALTER TABLE "RoomBooking" ADD COLUMN "guestKraPin" TEXT;
+ALTER TABLE "Business" ADD COLUMN IF NOT EXISTS "hotelLevies" TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE "RoomBooking" ADD COLUMN IF NOT EXISTS "guestKraPin" TEXT;
 
-CREATE TABLE "CashMovement" (
+CREATE TABLE IF NOT EXISTS "CashMovement" (
     "id" TEXT NOT NULL,
     "businessId" TEXT NOT NULL,
     "storeId" TEXT NOT NULL,
@@ -28,5 +29,5 @@ CREATE TABLE "CashMovement" (
     CONSTRAINT "CashMovement_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "CashMovement_businessId_storeId_createdAt_idx" ON "CashMovement"("businessId", "storeId", "createdAt");
-CREATE INDEX "CashMovement_bookingId_idx" ON "CashMovement"("bookingId");
+CREATE INDEX IF NOT EXISTS "CashMovement_businessId_storeId_createdAt_idx" ON "CashMovement"("businessId", "storeId", "createdAt");
+CREATE INDEX IF NOT EXISTS "CashMovement_bookingId_idx" ON "CashMovement"("bookingId");

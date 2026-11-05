@@ -5,6 +5,7 @@
 --   InsuranceClaim.receivableBooked  a hand-raised claim whose amount an opening balance brought into receivables.
 --
 -- Existing accounts and claims start at 0 / false, so the next switch-on books everything they are owed once.
+-- Safe to run again: every statement checks first, so a database where this was already applied by hand still deploys.
 
-ALTER TABLE "FleetAccount" ADD COLUMN "ledgerOwedCents" INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE "InsuranceClaim" ADD COLUMN "receivableBooked" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "FleetAccount" ADD COLUMN IF NOT EXISTS "ledgerOwedCents" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "InsuranceClaim" ADD COLUMN IF NOT EXISTS "receivableBooked" BOOLEAN NOT NULL DEFAULT false;

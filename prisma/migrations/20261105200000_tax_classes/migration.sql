@@ -16,12 +16,13 @@
 -- unchecked, so most items hold `false` without anyone having chosen it, and reading that as "exempt" would
 -- under-declare VAT to KRA. An owner marks flour, exempt medicines and the like in the app (Inventory > Tax class),
 -- one by one or in bulk.
+-- Safe to run again: every statement checks first, so a database where this was already applied by hand still deploys.
 
-ALTER TABLE "Item" ADD COLUMN "taxClass" TEXT NOT NULL DEFAULT 'B';
+ALTER TABLE "Item" ADD COLUMN IF NOT EXISTS "taxClass" TEXT NOT NULL DEFAULT 'B';
 
 ALTER TABLE "SaleItem"
-  ADD COLUMN "taxClass" TEXT,
-  ADD COLUMN "vatCents" INTEGER NOT NULL DEFAULT 0,
-  ADD COLUMN "discountCents" INTEGER NOT NULL DEFAULT 0;
+  ADD COLUMN IF NOT EXISTS "taxClass" TEXT,
+  ADD COLUMN IF NOT EXISTS "vatCents" INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "discountCents" INTEGER NOT NULL DEFAULT 0;
 
-ALTER TABLE "Sale" ADD COLUMN "taxClassified" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Sale" ADD COLUMN IF NOT EXISTS "taxClassified" BOOLEAN NOT NULL DEFAULT false;

@@ -10,9 +10,14 @@
 --                                name per line). Made on the first sale after cutover; NULL until then.
 --
 -- No existing row changes.
+-- Safe to run again: every statement checks first, so a database where this was already applied by hand still deploys.
 
-ALTER TABLE "Business" ADD COLUMN "verticalSalesFrom" TIMESTAMP(3);
-ALTER TABLE "Sale" ADD COLUMN "buyerKraPin" TEXT;
-ALTER TABLE "FleetAccount" ADD COLUMN "kraPin" TEXT;
-ALTER TABLE "FuelGrade" ADD COLUMN "itemId" TEXT;
-ALTER TABLE "FuelGrade" ADD CONSTRAINT "FuelGrade_itemId_fkey" FOREIGN KEY ("itemId") REFERENCES "Item"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "Business" ADD COLUMN IF NOT EXISTS "verticalSalesFrom" TIMESTAMP(3);
+ALTER TABLE "Sale" ADD COLUMN IF NOT EXISTS "buyerKraPin" TEXT;
+ALTER TABLE "FleetAccount" ADD COLUMN IF NOT EXISTS "kraPin" TEXT;
+ALTER TABLE "FuelGrade" ADD COLUMN IF NOT EXISTS "itemId" TEXT;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FuelGrade_itemId_fkey') THEN
+    ALTER TABLE "FuelGrade" ADD CONSTRAINT "FuelGrade_itemId_fkey" FOREIGN KEY ("itemId") REFERENCES "Item"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  END IF;
+END $$;

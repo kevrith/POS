@@ -212,7 +212,7 @@ export default function PharmacyPage() {
                   {['ANTIBIOTIC', 'ANALGESIC', 'ANTIMALARIA', 'ANTIHISTAMINE', 'ANTIFUNGAL', 'OTHER'].map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
                 <select className="border rounded px-3 py-1.5 text-sm" value={drugForm.scheduleClass}
-                  onChange={(e) => setDrugForm({ ...drugForm, scheduleClass: e.target.value })}>
+                  onChange={(e) => setDrugForm({ ...drugForm, scheduleClass: e.target.value })} aria-label="OTC (Over the Counter)">
                   <option value="OTC">OTC (Over the Counter)</option>
                   {['II', 'III', 'IV', 'V'].map((s) => <option key={s} value={s}>Schedule {s}</option>)}
                 </select>
@@ -272,7 +272,7 @@ export default function PharmacyPage() {
                         </td>
                         <td className="px-4 py-2">
                           <select className="border rounded px-2 py-1 text-xs" value={editDrug.scheduleClass ?? 'OTC'}
-                            onChange={(e) => setEditDrug({ ...editDrug, scheduleClass: e.target.value })}>
+                            onChange={(e) => setEditDrug({ ...editDrug, scheduleClass: e.target.value })} aria-label="OTC">
                             <option value="OTC">OTC</option>
                             {['II', 'III', 'IV', 'V'].map((s) => <option key={s} value={s}>Sch {s}</option>)}
                           </select>
@@ -284,8 +284,8 @@ export default function PharmacyPage() {
                         <td className="px-4 py-2">
                           <div className="flex gap-1">
                             <button onClick={() => updateDrug.mutate(editDrug)} disabled={updateDrug.isPending}
-                              className="text-green-600 hover:text-green-800"><Check className="w-4 h-4" /></button>
-                            <button onClick={() => setEditDrug(null)} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+                              className="text-green-600 hover:text-green-800" aria-label="Confirm"><Check className="w-4 h-4" /></button>
+                            <button onClick={() => setEditDrug(null)} className="text-gray-400 hover:text-gray-600" aria-label="Close"><X className="w-4 h-4" /></button>
                           </div>
                         </td>
                       </>
@@ -306,10 +306,10 @@ export default function PharmacyPage() {
                         <td className="px-4 py-2 text-gray-500 text-xs max-w-xs truncate">{drug.defaultInstructions ?? '—'}</td>
                         <td className="px-4 py-2">
                           <div className="flex gap-1">
-                            <button onClick={() => setEditDrug({ ...drug })} className="text-blue-500 hover:text-blue-700">
+                            <button onClick={() => setEditDrug({ ...drug })} className="text-blue-500 hover:text-blue-700" aria-label="Edit">
                               <Pencil className="w-4 h-4" />
                             </button>
-                            <button onClick={() => deleteDrug.mutate(drug.id)} className="text-red-500 hover:text-red-700">
+                            <button onClick={() => deleteDrug.mutate(drug.id)} className="text-red-500 hover:text-red-700" aria-label="Delete">
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
@@ -338,7 +338,7 @@ export default function PharmacyPage() {
               <input className="border rounded px-3 py-1.5 text-sm" placeholder="Drug 2 name" value={intForm.drug2Name} onChange={(e) => setIntForm({ ...intForm, drug2Name: e.target.value })} />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <select className="border rounded px-3 py-1.5 text-sm" value={intForm.severity} onChange={(e) => setIntForm({ ...intForm, severity: e.target.value })}>
+              <select className="border rounded px-3 py-1.5 text-sm" value={intForm.severity} onChange={(e) => setIntForm({ ...intForm, severity: e.target.value })} aria-label="Mild">
                 <option value="MILD">Mild</option>
                 <option value="MODERATE">Moderate</option>
                 <option value="SEVERE">Severe</option>
@@ -377,7 +377,7 @@ export default function PharmacyPage() {
                     </td>
                     <td className="px-4 py-2 text-gray-600 max-w-xs truncate">{it.description}</td>
                     <td className="px-4 py-2">
-                      <button onClick={() => deleteInt.mutate(it.id)} className="text-red-500 hover:text-red-700">
+                      <button onClick={() => deleteInt.mutate(it.id)} className="text-red-500 hover:text-red-700" aria-label="Delete">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </td>
@@ -445,8 +445,8 @@ export default function PharmacyPage() {
       {tab === 'controlled-log' && (
         <div className="space-y-4">
           <div className="flex items-center gap-3 flex-wrap">
-            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={logStart} onChange={(e) => setLogStart(e.target.value)} placeholder="From" />
-            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={logEnd} onChange={(e) => setLogEnd(e.target.value)} placeholder="To" />
+            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={logStart} onChange={(e) => setLogStart(e.target.value)} placeholder="From" aria-label="Date" />
+            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={logEnd} onChange={(e) => setLogEnd(e.target.value)} placeholder="To" aria-label="Start date" />
             <button onClick={() => void refetchLog()} className="bg-gray-100 px-3 py-1.5 rounded text-sm">Filter</button>
             <button onClick={() => setShowLogForm(true)} className="ml-auto bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-medium">
               <Plus className="w-4 h-4 inline mr-1" />Log Dispensing
@@ -458,7 +458,7 @@ export default function PharmacyPage() {
               <h3 className="font-semibold text-sm">Log Controlled Substance Dispensing</h3>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <input className="border rounded px-3 py-1.5 text-sm" placeholder="Drug / item name" value={logForm.itemName} onChange={(e) => setLogForm({ ...logForm, itemName: e.target.value })} />
-                <select className="border rounded px-3 py-1.5 text-sm" value={logForm.scheduleClass} onChange={(e) => setLogForm({ ...logForm, scheduleClass: e.target.value })}>
+                <select className="border rounded px-3 py-1.5 text-sm" value={logForm.scheduleClass} onChange={(e) => setLogForm({ ...logForm, scheduleClass: e.target.value })} aria-label="Schedule {s}">
                   {['II', 'III', 'IV', 'V'].map((s) => <option key={s} value={s}>Schedule {s}</option>)}
                 </select>
                 <div className="flex gap-2">
@@ -588,7 +588,7 @@ export default function PharmacyPage() {
           )}
 
           <div className="flex gap-2 items-center">
-            <select className="border rounded px-3 py-1.5 text-sm" value={claimStatus} onChange={(e) => setClaimStatus(e.target.value)}>
+            <select className="border rounded px-3 py-1.5 text-sm" value={claimStatus} onChange={(e) => setClaimStatus(e.target.value)} aria-label="Filter by statuses">
               <option value="">All Statuses</option>
               {['SUBMITTED', 'APPROVED', 'PAID', 'REJECTED'].map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
@@ -819,7 +819,7 @@ function buildDispensingLabelHTML(opts: {
   .drug { font-weight:bold; font-size:11pt; margin-bottom:1mm; }
   .row { display:flex; justify-content:space-between; font-size:8pt; margin-bottom:0.5mm; }
   .schedule { display:inline-block; background:#fee2e2; color:#991b1b; font-size:7pt; font-weight:bold; padding:1px 4px; border-radius:3px; }
-  .dose { font-size:8pt; color:#1e40af; font-style:italic; margin-top:1mm; }
+  .dose { font-size:8pt; color:#531BB8; font-style:italic; margin-top:1mm; }
 </style></head><body>
 <div class="header"><span class="biz">${opts.businessName}</span><span class="date">${opts.dispensedDate}</span></div>
 <div class="drug">${opts.drugName}${opts.scheduleClass && opts.scheduleClass !== 'OTC' ? ` <span class="schedule">${opts.scheduleClass}</span>` : ''}</div>
@@ -991,8 +991,7 @@ function FormularyTab({ businessId }: { businessId: string }) {
                   <td className="px-4 py-3">
                     <button
                       onClick={async () => { const ok = await confirm({ title: 'Remove from Formulary', message: 'Remove this item from the formulary?', variant: 'warning', confirmLabel: 'Remove' }); if (ok) remove.mutate(e.id); }}
-                      className="text-red-400 hover:text-red-600"
-                    >
+                      className="text-red-400 hover:text-red-600" aria-label="Delete">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </td>

@@ -44,7 +44,7 @@ export default function PriceOverrideModal({ item, userRole, businessId, onApply
       <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-gray-900">Override Price</h2>
-          <button onClick={onCancel} className="p-1 rounded hover:bg-gray-100">
+          <button onClick={onCancel} className="p-1 rounded hover:bg-gray-100" aria-label="Close">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>

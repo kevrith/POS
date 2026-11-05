@@ -93,7 +93,7 @@ export default function ReturnModal({
             <RotateCcw className="w-5 h-5 text-orange-600 dark:text-orange-400" />
             <h2 className="text-lg font-bold text-orange-800 dark:text-orange-300">Return Sale</h2>
           </div>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-colors">
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-colors" aria-label="Close">
             <X className="w-5 h-5 text-orange-600 dark:text-orange-400" />
           </button>
         </div>

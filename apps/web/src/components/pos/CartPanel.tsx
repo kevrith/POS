@@ -102,8 +102,7 @@ export default function CartPanel({
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowCartMobile(false)}
-            className="md:hidden p-1.5 text-slate-500 hover:text-slate-300 rounded-lg"
-          >
+            className="md:hidden p-1.5 text-slate-400 hover:text-slate-300 rounded-lg" aria-label="Close">
             <X className="w-5 h-5" />
           </button>
           <ShoppingCart className="w-5 h-5 text-slate-400" />
@@ -121,7 +120,7 @@ export default function CartPanel({
             onClick={onHold}
             disabled={cart.length === 0}
             title="Hold sale (F5)"
-            className="p-1.5 text-slate-500 hover:text-orange-400 hover:bg-orange-900/30 rounded-lg disabled:opacity-30 transition-colors"
+            className="p-1.5 text-slate-400 hover:text-orange-400 hover:bg-orange-900/30 rounded-lg disabled:opacity-30 transition-colors"
           >
             <PauseCircle className="w-5 h-5" />
           </button>
@@ -129,7 +128,7 @@ export default function CartPanel({
             <button
               onClick={onShowHeld}
               title="Held sales (F6)"
-              className="relative p-1.5 text-slate-500 hover:text-green-400 hover:bg-green-900/30 rounded-lg transition-colors"
+              className="relative p-1.5 text-slate-400 hover:text-green-400 hover:bg-green-900/30 rounded-lg transition-colors"
             >
               <PlayCircle className="w-5 h-5" />
               <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
@@ -141,7 +140,7 @@ export default function CartPanel({
             onClick={onClear}
             disabled={cart.length === 0}
             title="Clear cart"
-            className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-900/30 rounded-lg disabled:opacity-30 transition-colors"
+            className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-900/30 rounded-lg disabled:opacity-30 transition-colors"
           >
             <Trash2 className="w-5 h-5" />
           </button>
@@ -171,10 +170,10 @@ export default function CartPanel({
       {/* Cart items */}
       <div className="flex-1 overflow-y-auto min-h-0">
         {cart.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-slate-600">
+          <div className="flex flex-col items-center justify-center py-16 text-slate-400">
             <ShoppingCart className="w-10 h-10 mb-3 opacity-30" />
             <p className="text-sm">Cart is empty</p>
-            <p className="text-xs mt-1 text-slate-700">Tap items to add</p>
+            <p className="text-xs mt-1 text-slate-400">Tap items to add</p>
           </div>
         ) : (
           <div className="divide-y divide-slate-800">
@@ -215,7 +214,7 @@ export default function CartPanel({
           {/* Manual sale discount — bidirectional % ↔ KES */}
           <div className="space-y-1">
             <div className="flex items-center gap-1.5">
-              <span className="text-slate-500 text-xs whitespace-nowrap w-14">Discount</span>
+              <span className="text-slate-400 text-xs whitespace-nowrap w-14">Discount</span>
               <div className="flex items-center gap-1 flex-1">
                 <input
                   type="number"
@@ -228,10 +227,10 @@ export default function CartPanel({
                     setManualDiscountCents(Math.round(subtotalCents * pct / 100));
                   }}
                   placeholder="0"
-                  className="w-14 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-600 focus:ring-1 focus:ring-orange-500 focus:border-orange-500 outline-none text-right"
+                  className="w-14 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-400 focus:ring-1 focus:ring-orange-500 focus:border-orange-500 outline-none text-right"
                 />
-                <span className="text-slate-600 text-xs">%</span>
-                <span className="text-slate-700 text-xs">/</span>
+                <span className="text-slate-400 text-xs">%</span>
+                <span className="text-slate-400 text-xs">/</span>
                 <input
                   type="number"
                   min="0"
@@ -242,11 +241,11 @@ export default function CartPanel({
                     setManualDiscountCents(Math.min(Math.round(amt * 100), subtotalCents));
                   }}
                   placeholder="0"
-                  className="w-16 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-600 focus:ring-1 focus:ring-orange-500 focus:border-orange-500 outline-none text-right"
+                  className="w-16 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-400 focus:ring-1 focus:ring-orange-500 focus:border-orange-500 outline-none text-right"
                 />
-                <span className="text-slate-600 text-xs">KES</span>
+                <span className="text-slate-400 text-xs">KES</span>
                 {manualDiscountCents > 0 && (
-                  <button onClick={() => setManualDiscountCents(0)} className="text-slate-600 hover:text-red-400 ml-auto">
+                  <button onClick={() => setManualDiscountCents(0)} className="text-slate-400 hover:text-red-400 ml-auto" aria-label="Close">
                     <X className="w-3 h-3" />
                   </button>
                 )}
@@ -288,7 +287,7 @@ export default function CartPanel({
             <div className="text-right">
               <span className="text-blue-400">{formatKES(totalCents)}</span>
               {activeCurrencies.filter((c) => fxRates[c]).map((c) => (
-                <div key={c} className="text-xs text-slate-500 font-normal">
+                <div key={c} className="text-xs text-slate-400 font-normal">
                   ≈ {c} {(totalCents / 100 / fxRates[c]).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
               ))}
@@ -323,7 +322,7 @@ export default function CartPanel({
           {/* Tip input */}
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 whitespace-nowrap">Tip (KES)</span>
+              <span className="text-xs text-slate-400 whitespace-nowrap">Tip (KES)</span>
               <input
                 type="number"
                 min="0"
@@ -331,10 +330,10 @@ export default function CartPanel({
                 value={tipInput}
                 onChange={(e) => setTipInput(e.target.value)}
                 placeholder="0.00"
-                className="flex-1 min-w-0 px-2 py-1.5 text-sm bg-slate-800 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-600 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                className="flex-1 min-w-0 px-2 py-1.5 text-sm bg-slate-800 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
               />
               {tipInput && (
-                <button onClick={() => setTipInput('')} className="text-slate-500 hover:text-slate-300 flex-shrink-0">
+                <button onClick={() => setTipInput('')} className="text-slate-400 hover:text-slate-300 flex-shrink-0" aria-label="Close">
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
@@ -344,7 +343,7 @@ export default function CartPanel({
                 <button
                   key={t}
                   onClick={() => setTipInput(String(t))}
-                  className="flex-1 py-1 text-xs border border-slate-700 rounded-lg hover:bg-slate-700 text-slate-400 transition-colors"
+                  className="flex-1 py-1 text-xs border border-slate-700 rounded-lg hover:bg-slate-700 text-slate-300 transition-colors"
                 >
                   +{t}
                 </button>
@@ -410,7 +409,7 @@ function CartItemRow({ item, onRemove, onQuantityChange, onDiscountChange, onPri
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0 mr-2">
           <p className="text-sm font-medium text-slate-200 truncate">{item.name}</p>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-400">
             {`KES ${(item.unitPriceCents / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`}
             {isFractional ? ` / ${(item as any).unitLabel ?? 'unit'}` : ' each'}
             {item.discountPercent && item.discountPercent > 0 && (
@@ -418,7 +417,7 @@ function CartItemRow({ item, onRemove, onQuantityChange, onDiscountChange, onPri
             )}
           </p>
         </div>
-        <button onClick={onRemove} className="text-slate-600 hover:text-red-400 transition-colors flex-shrink-0">
+        <button onClick={onRemove} className="text-slate-400 hover:text-red-400 transition-colors flex-shrink-0" aria-label="Delete">
           <Trash2 className="w-4 h-4" />
         </button>
       </div>
@@ -426,8 +425,7 @@ function CartItemRow({ item, onRemove, onQuantityChange, onDiscountChange, onPri
         <div className="flex items-center gap-2">
           <button
             onClick={() => onQuantityChange(Math.max(0, item.quantity - (isFractional ? 0.1 : 1)))}
-            className="w-7 h-7 flex items-center justify-center rounded-full border border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-slate-200 transition-colors"
-          >
+            className="w-7 h-7 flex items-center justify-center rounded-full border border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-slate-200 transition-colors" aria-label="Decrease">
             <Minus className="w-3 h-3" />
           </button>
           {editingQty ? (
@@ -453,8 +451,7 @@ function CartItemRow({ item, onRemove, onQuantityChange, onDiscountChange, onPri
           )}
           <button
             onClick={() => onQuantityChange(item.quantity + (isFractional ? 0.1 : 1))}
-            className="w-7 h-7 flex items-center justify-center rounded-full border border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-slate-200 transition-colors"
-          >
+            className="w-7 h-7 flex items-center justify-center rounded-full border border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-slate-200 transition-colors" aria-label="Add">
             <Plus className="w-3 h-3" />
           </button>
         </div>
@@ -472,10 +469,10 @@ function CartItemRow({ item, onRemove, onQuantityChange, onDiscountChange, onPri
           value={item.discountPercent ? parseFloat(item.discountPercent.toFixed(1)) : ''}
           onChange={(e) => onDiscountChange(Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))}
           placeholder="0"
-          className="w-14 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-600 focus:ring-1 focus:ring-orange-500 outline-none text-right"
+          className="w-14 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-400 focus:ring-1 focus:ring-orange-500 outline-none text-right"
         />
-        <span className="text-slate-600 text-xs">%</span>
-        <span className="text-slate-700 text-xs">/</span>
+        <span className="text-slate-400 text-xs">%</span>
+        <span className="text-slate-400 text-xs">/</span>
         <input
           type="number"
           min="0"
@@ -490,9 +487,9 @@ function CartItemRow({ item, onRemove, onQuantityChange, onDiscountChange, onPri
             onDiscountChange(Math.round(pct * 10) / 10);
           }}
           placeholder="0"
-          className="w-16 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-600 focus:ring-1 focus:ring-orange-500 outline-none text-right"
+          className="w-16 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-400 focus:ring-1 focus:ring-orange-500 outline-none text-right"
         />
-        <span className="text-slate-600 text-xs">KES</span>
+        <span className="text-slate-400 text-xs">KES</span>
         <button
           onClick={onPriceOverride}
           className="flex items-center gap-1 px-2 py-1 text-xs border border-amber-700/50 text-amber-400 rounded hover:bg-amber-900/30 transition-colors ml-auto"

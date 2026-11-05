@@ -199,7 +199,7 @@ function OtpLoginScreen({ onLogin }: { onLogin: (session: PortalSession) => void
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="e.g. 0712345678"
-                    className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                    className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                     onKeyDown={(e) => e.key === 'Enter' && requestOtp()}
                   />
                 </div>
@@ -210,7 +210,7 @@ function OtpLoginScreen({ onLogin }: { onLogin: (session: PortalSession) => void
                       value={businessId}
                       onChange={(e) => setBusinessId(e.target.value)}
                       placeholder="e.g. biz-001"
-                      className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                      className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                       onKeyDown={(e) => e.key === 'Enter' && requestOtp()}
                     />
                   </div>
@@ -243,7 +243,7 @@ function OtpLoginScreen({ onLogin }: { onLogin: (session: PortalSession) => void
                   onChange={(e) => setOtp(e.target.value)}
                   placeholder="6-digit code"
                   disabled={timers.expired}
-                  className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-indigo-500 text-lg tracking-widest text-center disabled:opacity-50"
+                  className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-indigo-500 text-lg tracking-widest text-center disabled:opacity-50"
                   onKeyDown={(e) => e.key === 'Enter' && verifyOtp()}
                 />
                 <button
@@ -256,7 +256,7 @@ function OtpLoginScreen({ onLogin }: { onLogin: (session: PortalSession) => void
                 <button
                   onClick={requestOtp}
                   disabled={loading || timers.resendIn > 0}
-                  className="w-full py-2 text-slate-400 hover:text-slate-200 disabled:text-slate-600 disabled:hover:text-slate-600 text-sm transition-colors"
+                  className="w-full py-2 text-slate-400 hover:text-slate-200 disabled:text-slate-400 disabled:hover:text-slate-400 text-sm transition-colors"
                 >
                   {timers.resendIn > 0 ? `Resend code in ${timers.resendIn}s` : 'Resend code'}
                 </button>
@@ -319,7 +319,7 @@ function PaymentModal({
             <h3 className="font-bold text-white">Pay Invoice</h3>
             <p className="text-xs text-slate-400 mt-0.5">{order.orderNumber} · {fmtKES(order.totalCents)}</p>
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700 transition-colors">
+          <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700 transition-colors" aria-label="Close">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -426,15 +426,15 @@ function OrdersTab({ session }: { session: PortalSession }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">{orders.length} order{orders.length !== 1 ? 's' : ''}</p>
-        <button onClick={() => refetch()} className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors">
+        <p className="text-xs text-slate-400 uppercase tracking-wide font-semibold">{orders.length} order{orders.length !== 1 ? 's' : ''}</p>
+        <button onClick={() => refetch()} className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors" aria-label="Refresh">
           <RefreshCw className="w-4 h-4" />
         </button>
       </div>
 
       {orders.length === 0 && (
         <div className="text-center py-16">
-          <ShoppingBag className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+          <ShoppingBag className="w-12 h-12 text-slate-400 mx-auto mb-3" />
           <p className="text-slate-400 text-sm">No orders yet</p>
         </div>
       )}
@@ -458,7 +458,7 @@ function OrdersTab({ session }: { session: PortalSession }) {
                       {order.paymentStatus}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500 mt-1">{fmtDate(order.createdAt)}</p>
+                  <p className="text-xs text-slate-400 mt-1">{fmtDate(order.createdAt)}</p>
                   {order.expectedDeliveryDate && (
                     <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
                       <MapPin className="w-3 h-3" /> Delivery: {fmtDate(order.expectedDeliveryDate)}
@@ -468,11 +468,11 @@ function OrdersTab({ session }: { session: PortalSession }) {
                 <div className="text-right flex-shrink-0">
                   <p className="text-lg font-bold text-white">{fmtKES(order.totalCents)}</p>
                   {order.itemCount !== undefined && (
-                    <p className="text-xs text-slate-500">{order.itemCount} item{order.itemCount !== 1 ? 's' : ''}</p>
+                    <p className="text-xs text-slate-400">{order.itemCount} item{order.itemCount !== 1 ? 's' : ''}</p>
                   )}
                   {isExpanded
-                    ? <ChevronUp className="w-4 h-4 text-slate-500 ml-auto mt-1" />
-                    : <ChevronDown className="w-4 h-4 text-slate-500 ml-auto mt-1" />}
+                    ? <ChevronUp className="w-4 h-4 text-slate-400 ml-auto mt-1" />
+                    : <ChevronDown className="w-4 h-4 text-slate-400 ml-auto mt-1" />}
                 </div>
               </div>
             </button>
@@ -485,13 +485,13 @@ function OrdersTab({ session }: { session: PortalSession }) {
                       <div className="flex-1 min-w-0">
                         <span className="text-slate-300">{item.itemName}</span>
                         {item.isSample && <span className="ml-1 text-xs text-amber-400">(sample)</span>}
-                        <span className="text-slate-500 ml-2">&times;{item.quantity}</span>
+                        <span className="text-slate-400 ml-2">&times;{item.quantity}</span>
                       </div>
                       <span className="text-slate-300 font-medium">{fmtKES(item.totalCents)}</span>
                     </div>
                   ))
                 ) : (
-                  <p className="text-xs text-slate-500">No item details available</p>
+                  <p className="text-xs text-slate-400">No item details available</p>
                 )}
 
                 {order.status === 'DELIVERED' && (
@@ -546,7 +546,7 @@ function PayTab({ session }: { session: PortalSession }) {
       {/* Unpaid orders */}
       {unpaid.length > 0 && (
         <div>
-          <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">Unpaid Invoices</p>
+          <p className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-3">Unpaid Invoices</p>
           <div className="space-y-3">
             {unpaid.map((order) => (
               <div key={order.id} className="bg-slate-800 border border-slate-700 rounded-2xl p-4 flex items-center justify-between gap-3">
@@ -558,7 +558,7 @@ function PayTab({ session }: { session: PortalSession }) {
                     </span>
                   </div>
                   <p className="text-sm font-bold text-white mt-1">{fmtKES(order.totalCents)}</p>
-                  <p className="text-xs text-slate-500">{fmtDate(order.createdAt)}</p>
+                  <p className="text-xs text-slate-400">{fmtDate(order.createdAt)}</p>
                 </div>
                 <button
                   onClick={() => setPayingOrder(order)}
@@ -671,16 +671,16 @@ function StatementTab({ session }: { session: PortalSession }) {
 
       {/* Recent payments */}
       <div>
-        <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">Recent Payments</p>
+        <p className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-3">Recent Payments</p>
         {!s?.recentPayments?.length ? (
-          <p className="text-slate-500 text-sm text-center py-6">No payments recorded yet</p>
+          <p className="text-slate-400 text-sm text-center py-6">No payments recorded yet</p>
         ) : (
           <div className="space-y-2">
             {s.recentPayments.map((p) => (
               <div key={p.id} className="bg-slate-800 border border-slate-700 rounded-xl p-3.5 flex items-center justify-between">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-white">{p.orderNumber}</p>
-                  <p className="text-xs text-slate-500">{fmtDate(p.paidAt)} &middot; {p.method}{p.reference && ` · ${p.reference}`}</p>
+                  <p className="text-xs text-slate-400">{fmtDate(p.paidAt)} &middot; {p.method}{p.reference && ` · ${p.reference}`}</p>
                 </div>
                 <span className="text-sm font-bold text-green-400">{fmtKES(p.amountCents)}</span>
               </div>
@@ -757,7 +757,7 @@ function PortalDashboard({ session, onLogout }: { session: PortalSession; onLogo
             className={`flex-1 flex flex-col items-center justify-center py-3 gap-1 min-h-[56px] transition-colors ${
               tab === id
                 ? 'text-indigo-400'
-                : 'text-slate-500 hover:text-slate-300'
+                : 'text-slate-400 hover:text-slate-300'
             }`}
           >
             {icon}

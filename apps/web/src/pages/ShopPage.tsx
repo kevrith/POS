@@ -238,7 +238,7 @@ function Shop({ session, onLogout }: { session: Session; onLogout: () => void })
             <h1 className="font-bold text-gray-900">{menu?.business?.name || 'Order Online'}</h1>
             <p className="text-xs text-gray-400">Hi {session.customerName}</p>
           </div>
-          <button onClick={onLogout} className="text-gray-400 hover:text-gray-700 flex items-center gap-1 text-sm"><LogOut className="w-4 h-4" /></button>
+          <button onClick={onLogout} aria-label="Sign out" className="text-gray-400 hover:text-gray-700 flex items-center gap-1 text-sm"><LogOut className="w-4 h-4" /></button>
         </div>
         <div className="max-w-2xl mx-auto px-4 flex gap-2 pb-2">
           {(['menu', 'orders'] as const).map((t) => (
@@ -280,9 +280,9 @@ function Shop({ session, onLogout }: { session: Session; onLogout: () => void })
                     <button onClick={() => add(it)} className="mt-2 bg-indigo-600 text-white rounded-lg py-1.5 text-sm font-medium flex items-center justify-center gap-1"><Plus className="w-4 h-4" />Add</button>
                   ) : (
                     <div className="mt-2 flex items-center justify-between">
-                      <button onClick={() => dec(it.id)} className="w-8 h-8 rounded-lg border flex items-center justify-center"><Minus className="w-4 h-4 text-indigo-600" /></button>
+                      <button onClick={() => dec(it.id)} className="w-8 h-8 rounded-lg border flex items-center justify-center" aria-label="Decrease"><Minus className="w-4 h-4 text-indigo-600" /></button>
                       <span className="font-bold">{q}</span>
-                      <button onClick={() => add(it)} className="w-8 h-8 rounded-lg border flex items-center justify-center"><Plus className="w-4 h-4 text-indigo-600" /></button>
+                      <button onClick={() => add(it)} className="w-8 h-8 rounded-lg border flex items-center justify-center" aria-label="Add"><Plus className="w-4 h-4 text-indigo-600" /></button>
                     </div>
                   )}
                 </div>
@@ -323,16 +323,16 @@ function CartDrawer({ cart, onClose, add, dec, total, onCheckout }: {
       <div className="bg-white w-full max-w-xl rounded-t-2xl p-4 max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-2">
           <h2 className="font-bold text-lg">Your order</h2>
-          <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
+          <button onClick={onClose} aria-label="Close"><X className="w-5 h-5 text-gray-400" /></button>
         </div>
         <div className="overflow-y-auto flex-1 divide-y">
           {cart.map((e) => (
             <div key={e.item.id} className="py-3 flex items-center justify-between gap-2">
               <div className="flex-1"><div className="text-sm font-medium">{e.item.name}</div><div className="text-xs text-gray-500">{fmt(e.item.retailPriceCents)}</div></div>
               <div className="flex items-center gap-2">
-                <button onClick={() => dec(e.item.id)} className="w-7 h-7 rounded border flex items-center justify-center"><Minus className="w-3 h-3" /></button>
+                <button onClick={() => dec(e.item.id)} className="w-7 h-7 rounded border flex items-center justify-center" aria-label="Decrease"><Minus className="w-3 h-3" /></button>
                 <span className="w-5 text-center text-sm font-bold">{e.qty}</span>
-                <button onClick={() => add(e.item)} className="w-7 h-7 rounded border flex items-center justify-center"><Plus className="w-3 h-3" /></button>
+                <button onClick={() => add(e.item)} className="w-7 h-7 rounded border flex items-center justify-center" aria-label="Add"><Plus className="w-3 h-3" /></button>
               </div>
               <div className="w-20 text-right text-sm font-semibold">{fmt(e.item.retailPriceCents * e.qty)}</div>
             </div>
@@ -437,7 +437,7 @@ function CheckoutModal({ session, cart, total, onClose, onDone }: {
           <>
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-bold text-lg">Checkout</h2>
-              <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
+              <button onClick={onClose} aria-label="Close"><X className="w-5 h-5 text-gray-400" /></button>
             </div>
             {error && <p className="text-sm text-red-600 mb-2">{error}</p>}
             <div className="flex gap-2 mb-3">

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { AlertTriangle, Briefcase, Gamepad2, Globe, Monitor, Package, Pause, Printer, type LucideIcon } from 'lucide-react';
 
 // Public fetch — no auth token needed
 async function fetchKiosk(stationId: string) {
@@ -128,7 +129,7 @@ export default function CyberKioskPage() {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
         <div className="text-center text-white">
-          <div className="text-6xl mb-4">🖥️</div>
+          <Monitor className="w-16 h-16 mb-4 mx-auto text-gray-500" aria-hidden />
           <p className="text-xl text-gray-400">No station configured.</p>
           <p className="text-sm text-gray-600 mt-2">Add <code>?stationId=...</code> to the URL.</p>
         </div>
@@ -141,7 +142,7 @@ export default function CyberKioskPage() {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
         <div className="text-center text-white">
-          <div className="text-6xl mb-4">⚠️</div>
+          <AlertTriangle className="w-16 h-16 mb-4 mx-auto text-amber-500" aria-hidden />
           <p className="text-xl text-gray-400">Station not found.</p>
         </div>
       </div>
@@ -158,8 +159,8 @@ export default function CyberKioskPage() {
   }
 
   const stationName = station?.label ?? `PC ${station?.number}`;
-  const typeIcon: Record<string, string> = { GAMING: '🎮', BROWSING: '🌐', WORKSTATION: '💼', PRINTING: '🖨️' };
-  const icon = typeIcon[station?.stationType ?? 'BROWSING'] ?? '🖥️';
+  const typeIcon: Record<string, LucideIcon> = { GAMING: Gamepad2, BROWSING: Globe, WORKSTATION: Briefcase, PRINTING: Printer };
+  const TypeIcon = typeIcon[station?.stationType ?? 'BROWSING'] ?? Monitor;
 
   // ── AVAILABLE screen ────────────────────────────────────────────────────────
   if (!session || station?.status === 'AVAILABLE') {
@@ -169,7 +170,7 @@ export default function CyberKioskPage() {
         <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
 
         <div className="relative z-10 text-center px-8">
-          <div className="text-8xl mb-6 animate-bounce">{icon}</div>
+          <TypeIcon className="w-24 h-24 mb-6 mx-auto animate-bounce text-brand-300" aria-hidden />
           <div className="text-3xl font-black text-white tracking-tight mb-2">{stationName}</div>
           <div className="inline-flex items-center gap-2 bg-green-500/20 border border-green-500/40 text-green-400 text-sm font-semibold px-4 py-2 rounded-full mb-8">
             <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
@@ -193,7 +194,7 @@ export default function CyberKioskPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-950 via-amber-950/20 to-gray-950 flex flex-col items-center justify-center select-none">
         <div className="text-center px-8">
-          <div className="text-6xl mb-4">⏸️</div>
+          <Pause className="w-16 h-16 mb-4 mx-auto text-amber-400" aria-hidden />
           <div className="text-4xl font-black text-white mb-2">{stationName}</div>
           <div className="inline-flex items-center gap-2 bg-amber-500/20 border border-amber-500/40 text-amber-400 text-sm font-bold px-4 py-2 rounded-full mb-8">
             SESSION PAUSED
@@ -204,7 +205,7 @@ export default function CyberKioskPage() {
           onClick={callAttendant}
           className={`mt-12 px-10 py-4 rounded-2xl text-lg font-bold transition-all ${attendantCalled ? 'bg-green-600 text-white scale-105 animate-pulse' : 'bg-amber-500 hover:bg-amber-400 text-gray-950'}`}
         >
-          {attendantCalled ? '✓ Attendant Notified!' : '🔔 Call Attendant'}
+          {attendantCalled ? 'Attendant notified' : 'Call attendant'}
         </button>
         <div className="absolute bottom-8 text-gray-700 text-xs">KASTRA POS · Cybercafé</div>
       </div>
@@ -226,7 +227,7 @@ export default function CyberKioskPage() {
       {/* Top bar */}
       <div className="relative z-10 w-full flex items-center justify-between px-8 pt-6">
         <div className="flex items-center gap-3">
-          <span className="text-2xl">{icon}</span>
+          <TypeIcon className="w-6 h-6 text-brand-300" aria-hidden />
           <span className="text-white font-bold text-lg">{stationName}</span>
           <span className="text-xs bg-blue-500/20 border border-blue-500/30 text-blue-400 px-2 py-0.5 rounded-full font-semibold">
             {station?.stationType ?? 'BROWSING'}
@@ -277,7 +278,7 @@ export default function CyberKioskPage() {
         {/* Package name or rate */}
         {isPackage ? (
           <div className="flex items-center gap-2 bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 px-4 py-2 rounded-full text-sm font-semibold mb-4">
-            📦 {session.package.name}
+            <Package className="w-4 h-4" aria-hidden /> {session.package.name}
           </div>
         ) : (
           <div className="text-gray-500 text-sm mb-4">
@@ -298,7 +299,7 @@ export default function CyberKioskPage() {
         {/* Urgent warning */}
         {urgent && (
           <div className="bg-red-500/20 border border-red-500/50 text-red-400 rounded-xl px-6 py-3 text-sm font-bold animate-pulse text-center mb-2">
-            ⚠️ Less than 5 minutes remaining! Ask the attendant to extend.
+            Less than 5 minutes remaining. Ask the attendant to extend.
           </div>
         )}
         {warning && !urgent && (
@@ -318,7 +319,7 @@ export default function CyberKioskPage() {
               : 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
           }`}
         >
-          {attendantCalled ? '✓ Attendant on the way!' : '🔔 Call Attendant'}
+          {attendantCalled ? 'Attendant on the way' : 'Call attendant'}
         </button>
         <p className="text-gray-700 text-xs">KASTRA POS · Cybercafé Management</p>
       </div>

@@ -109,7 +109,7 @@ function ComponentsModal({
             <Package size={20} className="inline mr-2 text-blue-600" />
             {bundle.name} — Components
           </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close">
             <X size={20} />
           </button>
         </div>
@@ -149,8 +149,7 @@ function ComponentsModal({
                   <td className="p-2">
                     <button
                       onClick={() => setRows(rows.filter((_, i) => i !== idx))}
-                      className="text-red-400 hover:text-red-600"
-                    >
+                      className="text-red-400 hover:text-red-600" aria-label="Delete">
                       <Trash2 size={15} />
                     </button>
                   </td>
@@ -230,8 +229,7 @@ function ComponentsModal({
               <button
                 onClick={addRow}
                 disabled={!newItemId || !newQty}
-                className="bg-blue-600 text-white px-3 py-2 rounded text-sm disabled:opacity-50"
-              >
+                className="bg-blue-600 text-white px-3 py-2 rounded text-sm disabled:opacity-50" aria-label="Add">
                 <Plus size={16} />
               </button>
             </div>
@@ -340,7 +338,7 @@ function CreateBundleModal({
       <div className="bg-white rounded shadow-lg w-full max-w-2xl max-h-[85vh] flex flex-col">
         <div className="p-4 border-b flex justify-between items-center">
           <h2 className="font-bold text-lg">Create New Bundle</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close">
             <X size={20} />
           </button>
         </div>
@@ -351,8 +349,7 @@ function CreateBundleModal({
             <select
               value={selectedItemId}
               onChange={(e) => setSelectedItemId(e.target.value)}
-              className="w-full border rounded p-2"
-            >
+              className="w-full border rounded p-2">
               <option value="">— Select bundle item —</option>
               {availableBundleItems.map((item) => (
                 <option key={item.id} value={item.id}>
@@ -383,7 +380,7 @@ function CreateBundleModal({
                     <td className="p-2">{row.itemName}</td>
                     <td className="p-2 text-right">{row.quantity}</td>
                     <td className="p-2">
-                      <button onClick={() => setRows(rows.filter((_, i) => i !== idx))} className="text-red-400">
+                      <button onClick={() => setRows(rows.filter((_, i) => i !== idx))} className="text-red-400" aria-label="Delete">
                         <Trash2 size={14} />
                       </button>
                     </td>
@@ -425,8 +422,7 @@ function CreateBundleModal({
               <button
                 onClick={addRow}
                 disabled={!newItemId || !newQty}
-                className="bg-blue-600 text-white px-3 py-2 rounded text-sm disabled:opacity-50"
-              >
+                className="bg-blue-600 text-white px-3 py-2 rounded text-sm disabled:opacity-50" aria-label="Add">
                 <Plus size={16} />
               </button>
             </div>

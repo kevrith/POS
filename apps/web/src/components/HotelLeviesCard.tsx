@@ -71,8 +71,7 @@ export default function HotelLeviesCard({ businessId, stored }: { businessId: st
           <select
             value={l.base}
             onChange={(e) => set(i, { base: e.target.value as Levy['base'] })}
-            className="col-span-4 border rounded-lg px-2 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-          >
+            className="col-span-4 border rounded-lg px-2 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" aria-label="On room nights">
             <option value="ROOM">On room nights</option>
             <option value="ALL">On everything</option>
           </select>

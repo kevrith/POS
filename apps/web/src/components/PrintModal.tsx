@@ -62,7 +62,7 @@ export default function PrintModal({ receipt, onClose, enableCashDrawer = false,
       <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl flex flex-col" style={{ maxHeight: 'calc(100vh - 120px)' }}>
         <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
           <h2 className="text-lg font-bold text-gray-800">Print Receipt</h2>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100" aria-label="Close">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>

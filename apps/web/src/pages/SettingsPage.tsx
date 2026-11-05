@@ -42,12 +42,13 @@ import {
   Activity,
   Filter,
   Fingerprint,
-  Wallet, Puzzle, Headphones, MessageCircle,
+  Wallet, Puzzle, Headphones, MessageCircle, Settings as SettingsIcon,
 } from 'lucide-react';
 import { UserRole, OPTIONAL_MODULES, OPTIONAL_MODULE_LABELS, moduleIncludedByMode, parseEnabledModules, type OptionalModule } from '@pos/shared';
 import { hasFeature } from '../lib/featureGates';
 import SalesPipelineCard from '../components/SalesPipelineCard';
 import HotelLeviesCard from '../components/HotelLeviesCard';
+import { PageHeader, SideNav, Switch, Tabs } from '../components/ui';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -168,14 +169,14 @@ function AddUserModal({
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
         <div className="flex items-center justify-between p-5 border-b">
           <h3 className="text-lg font-semibold">Add Staff Member</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close">
             <X className="w-5 h-5" />
           </button>
         </div>
         <div className="p-5 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
-            <input
+            <label htmlFor="f-full-name" className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
+            <input id="f-full-name"
               type="text"
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
@@ -185,12 +186,11 @@ function AddUserModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Role *</label>
-            <select
+            <label htmlFor="f-role" className="block text-sm font-medium text-gray-700 mb-1">Role *</label>
+            <select id="f-role"
               value={form.role}
               onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
               <option value="MANAGER">Manager — Full store access</option>
               <option value="ACCOUNTANT">Accountant — Reports only</option>
               <option value="CASHIER">Cashier — POS + PIN login</option>
@@ -277,8 +277,8 @@ function AddUserModal({
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Per delivery (KES)</label>
-                  <input
+                  <label htmlFor="f-per-delivery-kes-2" className="block text-xs font-medium text-gray-600 mb-1">Per delivery (KES)</label>
+                  <input id="f-per-delivery-kes-2"
                     type="number" min="0" step="10"
                     value={form.deliveryRate}
                     onChange={(e) => setForm((f) => ({ ...f, deliveryRate: e.target.value }))}
@@ -287,8 +287,8 @@ function AddUserModal({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">% of delivery fee</label>
-                  <input
+                  <label htmlFor="f-of-delivery-fee-2" className="block text-xs font-medium text-gray-600 mb-1">% of delivery fee</label>
+                  <input id="f-of-delivery-fee-2"
                     type="number" min="0" max="100"
                     value={form.deliveryCommission}
                     onChange={(e) => setForm((f) => ({ ...f, deliveryCommission: e.target.value }))}
@@ -409,7 +409,7 @@ function EditUserModal({
           <h3 className="text-lg font-semibold">
             {isDriver ? 'Edit' : 'Update PIN'} — {user.name}
           </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -448,8 +448,8 @@ function EditUserModal({
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Per delivery (KES)</label>
-                  <input
+                  <label htmlFor="f-per-delivery-kes" className="block text-xs font-medium text-gray-600 mb-1">Per delivery (KES)</label>
+                  <input id="f-per-delivery-kes"
                     type="number" min="0" step="10"
                     value={deliveryRate}
                     onChange={(e) => setDeliveryRate(e.target.value)}
@@ -458,8 +458,8 @@ function EditUserModal({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">% of delivery fee</label>
-                  <input
+                  <label htmlFor="f-of-delivery-fee" className="block text-xs font-medium text-gray-600 mb-1">% of delivery fee</label>
+                  <input id="f-of-delivery-fee"
                     type="number" min="0" max="100"
                     value={deliveryCommission}
                     onChange={(e) => setDeliveryCommission(e.target.value)}
@@ -1300,31 +1300,31 @@ export default function SettingsPage() {
     { id: 'security' as const, label: 'Security', icon: Lock },
   ];
 
+  const groups = [
+    { label: 'Business', items: ['general', 'users', 'stores', 'subscription'] },
+    { label: 'Compliance and security', items: ['etims', 'kdpa', 'security', 'audit'] },
+    { label: 'Payments and messaging', items: ['mpesa', 'messaging', 'loyalty', 'loyalty-tiers'] },
+    { label: 'Hardware and integrations', items: ['printers', 'scale', 'api-keys', 'webhooks'] },
+    { label: 'Data', items: ['backup', 'automation'] },
+  ].map((g) => ({
+    label: g.label,
+    items: g.items.map((id) => {
+      const t = tabs.find((x) => x.id === id)!;
+      return { id: t.id, label: t.label, icon: <t.icon className="w-4 h-4" /> };
+    }),
+  }));
+
   return (
     <div className="h-full overflow-y-auto">
-      <div className="p-4 md:p-6 max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4 md:mb-6">Settings</h1>
+      <div className="p-4 md:p-6 max-w-6xl mx-auto">
+      <PageHeader title="Settings" icon={<SettingsIcon className="w-5 h-5" />} />
 
-      {/* Tabs — scrollable horizontally on small screens, wrap on large */}
-      <div className="overflow-x-auto -mx-4 md:mx-0">
-        <div className="flex border-b border-gray-200 dark:border-gray-700 mb-6 px-4 md:px-0 min-w-max md:flex-wrap md:min-w-0">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-1.5 px-2.5 md:px-3 py-2.5 text-xs sm:text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
-              activeTab === tab.id
-                ? 'text-blue-600 border-blue-600'
-                : 'text-gray-500 border-transparent hover:text-gray-700 dark:hover:text-gray-300'
-            }`}
-          >
-            <tab.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
-            <span>{tab.label}</span>
-          </button>
-        ))}
-        </div>
-      </div>
+      <div className="mt-5 lg:flex lg:gap-8 lg:items-start">
+        {/* Desktop: grouped menu on the left. Phone and tablet: one scrolling row of tabs. */}
+        <SideNav groups={groups} value={activeTab} onChange={setActiveTab} className="hidden lg:block w-56 flex-shrink-0 sticky top-0" />
+        <Tabs tabs={tabs.map((t) => ({ id: t.id, label: t.label, icon: <t.icon className="w-4 h-4" /> }))} value={activeTab} onChange={setActiveTab} className="lg:hidden mb-5" />
 
+        <div className="min-w-0 flex-1 max-w-4xl">
       {/* ── General Settings ──────────────────────────────────────────────── */}
       {activeTab === 'general' && (
         <div className="space-y-6">
@@ -1421,8 +1421,8 @@ export default function SettingsPage() {
 
         <div className="bg-white rounded-xl shadow p-6 space-y-5">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Business Name</label>
-            <input
+            <label htmlFor="f-business-name" className="block text-sm font-medium text-gray-700 mb-1">Business Name</label>
+            <input id="f-business-name"
               type="text"
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
@@ -1431,12 +1431,11 @@ export default function SettingsPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">POS Mode</label>
-            <select
+            <label htmlFor="f-pos-mode" className="block text-sm font-medium text-gray-700 mb-1">POS Mode</label>
+            <select id="f-pos-mode"
               value={form.posMode}
               onChange={(e) => setForm((f) => ({ ...f, posMode: e.target.value }))}
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
+              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
               <option value="RETAIL">Retail — Standard product sales</option>
               <option value="HOSPITALITY">Hospitality / Restaurant — Tables, orders, KOT</option>
               <option value="FAST_FOOD">Fast Food — Counter service with KOT</option>
@@ -1550,22 +1549,12 @@ export default function SettingsPage() {
                   <p className="text-sm font-semibold text-gray-800">Service Charge</p>
                   <p className="text-xs text-gray-500">Auto-apply on every sale (cashier can still toggle per transaction)</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setForm((f) => ({ ...f, serviceChargeDefault: !f.serviceChargeDefault }))}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    form.serviceChargeDefault ? 'bg-blue-600' : 'bg-gray-300'
-                  }`}
-                >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                    form.serviceChargeDefault ? 'translate-x-6' : 'translate-x-1'
-                  }`} />
-                </button>
+                <Switch label="Service charge on every sale" checked={form.serviceChargeDefault} onChange={(on) => setForm((f) => ({ ...f, serviceChargeDefault: on }))} />
               </div>
               {form.serviceChargeDefault && (
                 <div className="flex items-center gap-3">
-                  <label className="text-sm text-gray-600 w-24 shrink-0">Rate (%)</label>
-                  <input
+                  <label htmlFor="f-rate" className="text-sm text-gray-600 w-24 shrink-0">Rate (%)</label>
+                  <input id="f-rate"
                     type="number"
                     min={0}
                     max={100}
@@ -1584,10 +1573,10 @@ export default function SettingsPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="f-negative-stock-policy" className="block text-sm font-medium text-gray-700 mb-1">
               Negative Stock Policy
             </label>
-            <select
+            <select id="f-negative-stock-policy"
               value={form.negativePolicyDefault}
               onChange={(e) =>
                 setForm((f) => ({
@@ -1595,8 +1584,7 @@ export default function SettingsPage() {
                   negativePolicyDefault: e.target.value as 'BLOCK' | 'WARN' | 'ALLOW',
                 }))
               }
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
+              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
               <option value="BLOCK">Block — Prevent selling out-of-stock items</option>
               <option value="WARN">Warn — Show warning but allow sale</option>
               <option value="ALLOW">Allow — Silent negative stock</option>
@@ -1604,14 +1592,13 @@ export default function SettingsPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="f-expired-item-policy" className="block text-sm font-medium text-gray-700 mb-1">
               Expired Item Policy
             </label>
-            <select
+            <select id="f-expired-item-policy"
               value={form.expiredItemPolicy}
               onChange={(e) => setForm((f) => ({ ...f, expiredItemPolicy: e.target.value }))}
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
+              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
               <option value="BLOCK">Block — Cannot sell expired items</option>
               <option value="WARN">Warn — Alert but allow sale</option>
               <option value="ALLOW">Allow — No restriction on expired items</option>
@@ -1619,10 +1606,10 @@ export default function SettingsPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="f-expiry-alert-threshold-days" className="block text-sm font-medium text-gray-700 mb-1">
               Expiry Alert Threshold (days)
             </label>
-            <input
+            <input id="f-expiry-alert-threshold-days"
               type="number"
               min={1}
               max={365}
@@ -1636,10 +1623,10 @@ export default function SettingsPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="f-expense-approval-threshold-kes" className="block text-sm font-medium text-gray-700 mb-1">
               Expense Approval Threshold (KES)
             </label>
-            <input
+            <input id="f-expense-approval-threshold-kes"
               type="number"
               min={0}
               step={100}
@@ -1663,26 +1650,26 @@ export default function SettingsPage() {
             <p className="text-xs text-gray-500 mb-3">Shown to customers in the Bank Transfer payment screen at checkout.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Bank Name</label>
-                <input type="text" value={form.bankName} onChange={(e) => setForm((f) => ({ ...f, bankName: e.target.value }))}
+                <label htmlFor="f-bank-name" className="block text-sm font-medium text-gray-700 mb-1">Bank Name</label>
+                <input id="f-bank-name" type="text" value={form.bankName} onChange={(e) => setForm((f) => ({ ...f, bankName: e.target.value }))}
                   placeholder="e.g. KCB, Equity, NCBA"
                   className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
-                <input type="text" value={form.bankAccountNumber} onChange={(e) => setForm((f) => ({ ...f, bankAccountNumber: e.target.value }))}
+                <label htmlFor="f-account-number" className="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
+                <input id="f-account-number" type="text" value={form.bankAccountNumber} onChange={(e) => setForm((f) => ({ ...f, bankAccountNumber: e.target.value }))}
                   placeholder="1234567890"
                   className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 font-mono" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Account Name</label>
-                <input type="text" value={form.bankAccountName} onChange={(e) => setForm((f) => ({ ...f, bankAccountName: e.target.value }))}
+                <label htmlFor="f-account-name" className="block text-sm font-medium text-gray-700 mb-1">Account Name</label>
+                <input id="f-account-name" type="text" value={form.bankAccountName} onChange={(e) => setForm((f) => ({ ...f, bankAccountName: e.target.value }))}
                   placeholder="Business name as on account"
                   className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Branch (optional)</label>
-                <input type="text" value={form.bankBranch} onChange={(e) => setForm((f) => ({ ...f, bankBranch: e.target.value }))}
+                <label htmlFor="f-branch-optional" className="block text-sm font-medium text-gray-700 mb-1">Branch (optional)</label>
+                <input id="f-branch-optional" type="text" value={form.bankBranch} onChange={(e) => setForm((f) => ({ ...f, bankBranch: e.target.value }))}
                   placeholder="e.g. Westlands"
                   className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" />
               </div>
@@ -1718,8 +1705,8 @@ export default function SettingsPage() {
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Pole Display</h3>
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Idle Message</label>
-                <input
+                <label htmlFor="f-idle-message" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Idle Message</label>
+                <input id="f-idle-message"
                   type="text"
                   value={form.idleMessage}
                   onChange={(e) => setForm((f) => ({ ...f, idleMessage: e.target.value }))}
@@ -1728,8 +1715,8 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Logo URL (optional)</label>
-                <input
+                <label htmlFor="f-logo-url-optional" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Logo URL (optional)</label>
+                <input id="f-logo-url-optional"
                   type="url"
                   value={form.idleLogoUrl}
                   onChange={(e) => setForm((f) => ({ ...f, idleLogoUrl: e.target.value }))}
@@ -1843,13 +1830,7 @@ export default function SettingsPage() {
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Auto-logout after sale</p>
                 <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Return to PIN screen automatically after each completed sale.</p>
               </div>
-              <button
-                type="button"
-                onClick={toggleAutoLogoutAfterSale}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${autoLogoutAfterSale ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}`}
-              >
-                <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform ${autoLogoutAfterSale ? 'translate-x-6' : 'translate-x-1'}`} />
-              </button>
+              <Switch label="Auto-logout after sale" checked={autoLogoutAfterSale} onChange={() => toggleAutoLogoutAfterSale()} />
             </div>
           </div>
 
@@ -1863,45 +1844,41 @@ export default function SettingsPage() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Counter Sale Receipts</label>
-                <select
+                <label htmlFor="f-counter-sale-receipts" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Counter Sale Receipts</label>
+                <select id="f-counter-sale-receipts"
                   value={(form as any).receiptFormatSale || 'THERMAL'}
                   onChange={(e) => setForm((f) => ({ ...f, receiptFormatSale: e.target.value } as any))}
-                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                >
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
                   <option value="THERMAL">Thermal (80mm) — Fast printing</option>
                   <option value="A4">A4 PDF — Professional format</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">B2B Invoices</label>
-                <select
+                <label htmlFor="f-b2b-invoices" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">B2B Invoices</label>
+                <select id="f-b2b-invoices"
                   value={(form as any).receiptFormatInvoice || 'A4'}
                   onChange={(e) => setForm((f) => ({ ...f, receiptFormatInvoice: e.target.value } as any))}
-                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                >
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
                   <option value="A4">A4 PDF — Professional letterhead</option>
                   <option value="THERMAL">Thermal (80mm)</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Delivery Receipts</label>
-                <select
+                <label htmlFor="f-delivery-receipts" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Delivery Receipts</label>
+                <select id="f-delivery-receipts"
                   value={(form as any).receiptFormatDelivery || 'A4'}
                   onChange={(e) => setForm((f) => ({ ...f, receiptFormatDelivery: e.target.value } as any))}
-                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                >
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
                   <option value="A4">A4 PDF — With signature blocks</option>
                   <option value="THERMAL">Thermal (80mm)</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email Attachments</label>
-                <select
+                <label htmlFor="f-email-attachments" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email Attachments</label>
+                <select id="f-email-attachments"
                   value={(form as any).receiptFormatEmail || 'A4'}
                   onChange={(e) => setForm((f) => ({ ...f, receiptFormatEmail: e.target.value } as any))}
-                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                >
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
                   <option value="A4">A4 PDF — Professional attachment</option>
                   <option value="THERMAL">Thermal (80mm)</option>
                 </select>
@@ -1927,13 +1904,7 @@ export default function SettingsPage() {
                   <p className="text-sm font-medium text-gray-800 dark:text-white">{label}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">{desc}</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setForm((f) => ({ ...f, [key]: !f[key] }))}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form[key] ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}`}
-                >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${form[key] ? 'translate-x-6' : 'translate-x-1'}`} />
-                </button>
+                <Switch label={label} checked={!!form[key]} onChange={(on) => setForm((f) => ({ ...f, [key]: on }))} />
               </div>
             ))}
           </div>
@@ -2242,8 +2213,8 @@ export default function SettingsPage() {
             <h3 className="font-semibold mb-4">Add New Store</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Store Name</label>
-                <input
+                <label htmlFor="f-store-name" className="block text-sm font-medium text-gray-700 mb-1">Store Name</label>
+                <input id="f-store-name"
                   type="text"
                   value={newStore.name}
                   onChange={(e) => setNewStore((s) => ({ ...s, name: e.target.value }))}
@@ -2252,8 +2223,8 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Store Code</label>
-                <input
+                <label htmlFor="f-store-code" className="block text-sm font-medium text-gray-700 mb-1">Store Code</label>
+                <input id="f-store-code"
                   type="text"
                   value={newStore.storeCode}
                   onChange={(e) =>
@@ -2318,10 +2289,10 @@ export default function SettingsPage() {
             </p>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="f-branch-id-bhfid" className="block text-sm font-medium text-gray-700 mb-1">
                 Branch ID (BhfId)
               </label>
-              <input
+              <input id="f-branch-id-bhfid"
                 type="text"
                 value={etimsForm.bhfId}
                 onChange={(e) => setEtimsForm((f) => ({ ...f, bhfId: e.target.value }))}
@@ -2331,10 +2302,10 @@ export default function SettingsPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="f-tax-identification-number-tin" className="block text-sm font-medium text-gray-700 mb-1">
                 Tax Identification Number (TIN)
               </label>
-              <input
+              <input id="f-tax-identification-number-tin"
                 type="text"
                 value={etimsForm.tin}
                 onChange={(e) => setEtimsForm((f) => ({ ...f, tin: e.target.value }))}
@@ -2477,10 +2448,10 @@ export default function SettingsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="f-consumer-key" className="block text-sm font-medium text-gray-700 mb-1">
                   Consumer Key
                 </label>
-                <input
+                <input id="f-consumer-key"
                   type="password"
                   value={mpesaForm.consumerKey}
                   onChange={(e) => setMpesaForm((f) => ({ ...f, consumerKey: e.target.value }))}
@@ -2489,10 +2460,10 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="f-consumer-secret" className="block text-sm font-medium text-gray-700 mb-1">
                   Consumer Secret
                 </label>
-                <input
+                <input id="f-consumer-secret"
                   type="password"
                   value={mpesaForm.consumerSecret}
                   onChange={(e) =>
@@ -2506,10 +2477,10 @@ export default function SettingsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="f-shortcode-till-paybill" className="block text-sm font-medium text-gray-700 mb-1">
                   Shortcode (Till/Paybill)
                 </label>
-                <input
+                <input id="f-shortcode-till-paybill"
                   type="text"
                   value={mpesaForm.shortcode}
                   onChange={(e) => setMpesaForm((f) => ({ ...f, shortcode: e.target.value }))}
@@ -2518,10 +2489,10 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="f-lipa-na-m-pesa-passkey" className="block text-sm font-medium text-gray-700 mb-1">
                   Lipa na M-Pesa Passkey
                 </label>
-                <input
+                <input id="f-lipa-na-m-pesa-passkey"
                   type="password"
                   value={mpesaForm.passkey}
                   onChange={(e) => setMpesaForm((f) => ({ ...f, passkey: e.target.value }))}
@@ -2532,10 +2503,10 @@ export default function SettingsPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="f-callback-url" className="block text-sm font-medium text-gray-700 mb-1">
                 Callback URL
               </label>
-              <input
+              <input id="f-callback-url"
                 type="url"
                 value={mpesaForm.callbackUrl}
                 onChange={(e) => setMpesaForm((f) => ({ ...f, callbackUrl: e.target.value }))}
@@ -2945,8 +2916,8 @@ export default function SettingsPage() {
           <div className="bg-white rounded-xl shadow p-6 space-y-4">
             <h3 className="font-semibold">Africa's Talking API Credentials</h3>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
-              <input
+              <label htmlFor="f-api-key" className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+              <input id="f-api-key"
                 type="password"
                 value={atForm.apiKey}
                 onChange={(e) => setAtForm((f) => ({ ...f, apiKey: e.target.value }))}
@@ -2955,8 +2926,8 @@ export default function SettingsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
-              <input
+              <label htmlFor="f-username" className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+              <input id="f-username"
                 type="text"
                 value={atForm.username}
                 onChange={(e) => setAtForm((f) => ({ ...f, username: e.target.value }))}
@@ -3016,8 +2987,8 @@ export default function SettingsPage() {
               Customers earn points on purchases and can redeem them for discounts at checkout.
             </p>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Program Name</label>
-              <input
+              <label htmlFor="f-program-name" className="block text-sm font-medium text-gray-700 mb-1">Program Name</label>
+              <input id="f-program-name"
                 type="text"
                 value={loyaltyForm.name}
                 onChange={(e) => setLoyaltyForm((f) => ({ ...f, name: e.target.value }))}
@@ -3027,8 +2998,8 @@ export default function SettingsPage() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">KES spent per 1 point</label>
-                <input
+                <label htmlFor="f-kes-spent-per-1-point" className="block text-sm font-medium text-gray-700 mb-1">KES spent per 1 point</label>
+                <input id="f-kes-spent-per-1-point"
                   type="number"
                   min={1}
                   step={1}
@@ -3041,8 +3012,8 @@ export default function SettingsPage() {
                 </p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">1 point value (KES cents)</label>
-                <input
+                <label htmlFor="f-1-point-value-kes-cents" className="block text-sm font-medium text-gray-700 mb-1">1 point value (KES cents)</label>
+                <input id="f-1-point-value-kes-cents"
                   type="number"
                   min={1}
                   step={1}
@@ -3055,8 +3026,8 @@ export default function SettingsPage() {
                 </p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Min points to redeem</label>
-                <input
+                <label htmlFor="f-min-points-to-redeem" className="block text-sm font-medium text-gray-700 mb-1">Min points to redeem</label>
+                <input id="f-min-points-to-redeem"
                   type="number"
                   min={1}
                   step={10}
@@ -3106,8 +3077,8 @@ export default function SettingsPage() {
               <h4 className="font-medium text-gray-800 mb-4">New Tier</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Name *</label>
-                  <input
+                  <label htmlFor="f-name-2" className="block text-xs font-medium text-gray-600 mb-1">Name *</label>
+                  <input id="f-name-2"
                     type="text"
                     value={tierForm.name}
                     onChange={(e) => setTierForm((f) => ({ ...f, name: e.target.value }))}
@@ -3116,8 +3087,8 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Min Points *</label>
-                  <input
+                  <label htmlFor="f-min-points" className="block text-xs font-medium text-gray-600 mb-1">Min Points *</label>
+                  <input id="f-min-points"
                     type="number"
                     min={0}
                     value={tierForm.minPoints}
@@ -3127,8 +3098,8 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Multiplier (earning rate)</label>
-                  <input
+                  <label htmlFor="f-multiplier-earning-rate" className="block text-xs font-medium text-gray-600 mb-1">Multiplier (earning rate)</label>
+                  <input id="f-multiplier-earning-rate"
                     type="number"
                     min={0.1}
                     step={0.1}
@@ -3138,8 +3109,8 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Color</label>
-                  <select
+                  <label htmlFor="f-color" className="block text-xs font-medium text-gray-600 mb-1">Color</label>
+                  <select id="f-color"
                     value={tierForm.color}
                     onChange={(e) => setTierForm((f) => ({ ...f, color: e.target.value }))}
                     className="w-full border rounded-lg px-3 py-2 text-sm"
@@ -3200,8 +3171,7 @@ export default function SettingsPage() {
                         .then(() => { void queryClient.invalidateQueries({ queryKey: ['loyalty-tiers', businessId] }); void refetchTiers(); })
                         .catch(() => {});
                     }}
-                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"
-                  >
+                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg" aria-label="Delete">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -3352,8 +3322,7 @@ export default function SettingsPage() {
                               () => deletePrinterMutation.mutate(p.id),
                             )
                           }
-                          className="text-gray-400 hover:text-red-600 p-1"
-                        >
+                          className="text-gray-400 hover:text-red-600 p-1" aria-label="Delete">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -3401,12 +3370,12 @@ export default function SettingsPage() {
             <div className="bg-white rounded-xl shadow p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold">Add Printer</h3>
-                <button onClick={() => setShowAddPrinter(false)}><X className="w-4 h-4 text-gray-400" /></button>
+                <button onClick={() => setShowAddPrinter(false)} aria-label="Close"><X className="w-4 h-4 text-gray-400" /></button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                  <input
+                  <label htmlFor="f-name" className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                  <input id="f-name"
                     type="text"
                     value={printerForm.name}
                     onChange={(e) => setPrinterForm((f) => ({ ...f, name: e.target.value }))}
@@ -3415,12 +3384,11 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Connection Type</label>
-                  <select
+                  <label htmlFor="f-connection-type" className="block text-sm font-medium text-gray-700 mb-1">Connection Type</label>
+                  <select id="f-connection-type"
                     value={printerForm.connectionType}
                     onChange={(e) => setPrinterForm((f) => ({ ...f, connectionType: e.target.value }))}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                  >
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
                     <option value="USB">USB (WebUSB — ESC/POS)</option>
                     <option value="BLUETOOTH">Bluetooth (ESC/POS)</option>
                     <option value="NETWORK">Network IP (ESC/POS proxy)</option>
@@ -3564,8 +3532,7 @@ export default function SettingsPage() {
                           () => deleteApiKeyMutation.mutate(k.id),
                         )
                       }
-                      className="text-gray-400 hover:text-red-600 p-1"
-                    >
+                      className="text-gray-400 hover:text-red-600 p-1" aria-label="Delete">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -3610,8 +3577,8 @@ export default function SettingsPage() {
           <div className="bg-white rounded-xl shadow p-6 space-y-4">
             <h3 className="font-semibold text-gray-800">Create New API Key</h3>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Key Name</label>
-              <input
+              <label htmlFor="f-key-name" className="block text-sm font-medium text-gray-700 mb-1">Key Name</label>
+              <input id="f-key-name"
                 type="text"
                 value={newKeyName}
                 onChange={(e) => setNewKeyName(e.target.value)}
@@ -3675,13 +3642,12 @@ export default function SettingsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Protocol</label>
-                <select
+                <label htmlFor="f-protocol" className="block text-sm font-medium text-gray-700 mb-1">Protocol</label>
+                <select id="f-protocol"
                   value={scaleForm.protocol}
                   onChange={(e) => setScaleForm((f) => ({ ...f, protocol: e.target.value }))}
                   disabled={!scaleForm.enabled}
-                  className="w-full px-3 py-2 border rounded-lg text-sm disabled:opacity-50"
-                >
+                  className="w-full px-3 py-2 border rounded-lg text-sm disabled:opacity-50">
                   <option value="METTLER_TOLEDO">Mettler-Toledo (MT-SICS)</option>
                   <option value="AND">A&D (AD command set)</option>
                   <option value="CAS">CAS (CL5000 series)</option>
@@ -3689,8 +3655,8 @@ export default function SettingsPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Port / Connection</label>
-                <input
+                <label htmlFor="f-port-connection" className="block text-sm font-medium text-gray-700 mb-1">Port / Connection</label>
+                <input id="f-port-connection"
                   type="text"
                   value={scaleForm.port}
                   onChange={(e) => setScaleForm((f) => ({ ...f, port: e.target.value }))}
@@ -3700,8 +3666,8 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Baud Rate</label>
-                <select
+                <label htmlFor="f-baud-rate" className="block text-sm font-medium text-gray-700 mb-1">Baud Rate</label>
+                <select id="f-baud-rate"
                   value={scaleForm.baudRate}
                   onChange={(e) => setScaleForm((f) => ({ ...f, baudRate: e.target.value }))}
                   disabled={!scaleForm.enabled}
@@ -3784,8 +3750,8 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Signing Secret (optional)</label>
-                  <input
+                  <label htmlFor="f-signing-secret-optional" className="block text-xs font-medium text-gray-600 mb-1">Signing Secret (optional)</label>
+                  <input id="f-signing-secret-optional"
                     type="text"
                     value={webhookForm.secret}
                     onChange={(e) => setWebhookForm((f) => ({ ...f, secret: e.target.value }))}
@@ -3795,8 +3761,8 @@ export default function SettingsPage() {
                   <p className="text-xs text-gray-400 mt-1">Sent as X-Webhook-Signature: sha256=... header</p>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
-                  <input
+                  <label htmlFor="f-description" className="block text-xs font-medium text-gray-600 mb-1">Description</label>
+                  <input id="f-description"
                     type="text"
                     value={webhookForm.description}
                     onChange={(e) => setWebhookForm((f) => ({ ...f, description: e.target.value }))}
@@ -3910,8 +3876,7 @@ export default function SettingsPage() {
                               `Remove the webhook endpoint at ${wh.url}? It will no longer receive events.`,
                               () => deleteWebhookMutation.mutate(wh.id),
                             )}
-                            className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                          >
+                            className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg" aria-label="Delete">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
@@ -3994,8 +3959,7 @@ export default function SettingsPage() {
                   type="date"
                   value={auditFilters.startDate}
                   onChange={(e) => setAuditFilters((f) => ({ ...f, startDate: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                />
+                  className="w-full border rounded-lg px-3 py-2 text-sm" aria-label="Start date" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">To Date</label>
@@ -4003,16 +3967,14 @@ export default function SettingsPage() {
                   type="date"
                   value={auditFilters.endDate}
                   onChange={(e) => setAuditFilters((f) => ({ ...f, endDate: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                />
+                  className="w-full border rounded-lg px-3 py-2 text-sm" aria-label="End date" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Entity Type</label>
-                <select
+                <label htmlFor="f-entity-type" className="block text-xs font-medium text-gray-600 mb-1">Entity Type</label>
+                <select id="f-entity-type"
                   value={auditFilters.entity}
                   onChange={(e) => setAuditFilters((f) => ({ ...f, entity: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                >
+                  className="w-full border rounded-lg px-3 py-2 text-sm">
                   <option value="">All entities</option>
                   {['Sale', 'User', 'Item', 'InventoryMovement', 'Expense', 'GoodsReceivedNote'].map((e) => (
                     <option key={e} value={e}>{e}</option>
@@ -4020,8 +3982,8 @@ export default function SettingsPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Actor ID / Search</label>
-                <input
+                <label htmlFor="f-actor-id-search" className="block text-xs font-medium text-gray-600 mb-1">Actor ID / Search</label>
+                <input id="f-actor-id-search"
                   type="text"
                   value={auditFilters.actor}
                   onChange={(e) => setAuditFilters((f) => ({ ...f, actor: e.target.value }))}
@@ -4333,8 +4295,8 @@ export default function SettingsPage() {
                 <h3 className="font-medium text-gray-800 text-sm">New Report Schedule</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Report Type</label>
-                    <select
+                    <label htmlFor="f-report-type" className="block text-xs font-medium text-gray-600 mb-1">Report Type</label>
+                    <select id="f-report-type"
                       value={scheduleForm.reportType}
                       onChange={(e) => setScheduleForm((f) => ({ ...f, reportType: e.target.value }))}
                       className="w-full border rounded-lg px-3 py-2 text-sm"
@@ -4353,20 +4315,19 @@ export default function SettingsPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Frequency</label>
-                    <select
+                    <label htmlFor="f-frequency" className="block text-xs font-medium text-gray-600 mb-1">Frequency</label>
+                    <select id="f-frequency"
                       value={scheduleForm.frequency}
                       onChange={(e) => setScheduleForm((f) => ({ ...f, frequency: e.target.value, dayOfWeek: undefined, dayOfMonth: undefined }))}
-                      className="w-full border rounded-lg px-3 py-2 text-sm"
-                    >
+                      className="w-full border rounded-lg px-3 py-2 text-sm">
                       <option value="DAILY">Daily</option>
                       <option value="WEEKLY">Weekly</option>
                       <option value="MONTHLY">Monthly</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Send At Hour</label>
-                    <select
+                    <label htmlFor="f-send-at-hour" className="block text-xs font-medium text-gray-600 mb-1">Send At Hour</label>
+                    <select id="f-send-at-hour"
                       value={scheduleForm.hour}
                       onChange={(e) => setScheduleForm((f) => ({ ...f, hour: Number(e.target.value) }))}
                       className="w-full border rounded-lg px-3 py-2 text-sm"
@@ -4380,8 +4341,8 @@ export default function SettingsPage() {
                   </div>
                   {scheduleForm.frequency === 'WEEKLY' && (
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Day of Week</label>
-                      <select
+                      <label htmlFor="f-day-of-week" className="block text-xs font-medium text-gray-600 mb-1">Day of Week</label>
+                      <select id="f-day-of-week"
                         value={scheduleForm.dayOfWeek ?? 1}
                         onChange={(e) => setScheduleForm((f) => ({ ...f, dayOfWeek: Number(e.target.value) }))}
                         className="w-full border rounded-lg px-3 py-2 text-sm"
@@ -4394,8 +4355,8 @@ export default function SettingsPage() {
                   )}
                   {scheduleForm.frequency === 'MONTHLY' && (
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Day of Month</label>
-                      <select
+                      <label htmlFor="f-day-of-month" className="block text-xs font-medium text-gray-600 mb-1">Day of Month</label>
+                      <select id="f-day-of-month"
                         value={scheduleForm.dayOfMonth ?? 1}
                         onChange={(e) => setScheduleForm((f) => ({ ...f, dayOfMonth: Number(e.target.value) }))}
                         className="w-full border rounded-lg px-3 py-2 text-sm"
@@ -4408,10 +4369,10 @@ export default function SettingsPage() {
                   )}
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                  <label htmlFor="f-recipients-comma-separated-emails" className="block text-xs font-medium text-gray-600 mb-1">
                     Recipients (comma-separated emails)
                   </label>
-                  <input
+                  <input id="f-recipients-comma-separated-emails"
                     type="text"
                     value={scheduleForm.recipients}
                     onChange={(e) => setScheduleForm((f) => ({ ...f, recipients: e.target.value }))}
@@ -4494,8 +4455,7 @@ export default function SettingsPage() {
                               () => deleteScheduleMutation.mutate(sched.id),
                             )
                           }
-                          className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg"
-                        >
+                          className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg" aria-label="Delete">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -4536,8 +4496,8 @@ export default function SettingsPage() {
             )}
             <div className="grid gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
-                <input
+                <label htmlFor="f-current-password" className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
+                <input id="f-current-password"
                   type="password"
                   value={cpCurrent}
                   onChange={(e) => { setCpCurrent(e.target.value); setCpMsg(null); }}
@@ -4546,8 +4506,8 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
-                <input
+                <label htmlFor="f-new-password" className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                <input id="f-new-password"
                   type="password"
                   value={cpNew}
                   onChange={(e) => { setCpNew(e.target.value); setCpMsg(null); }}
@@ -4556,8 +4516,8 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
-                <input
+                <label htmlFor="f-confirm-new-password" className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
+                <input id="f-confirm-new-password"
                   type="password"
                   value={cpConfirm}
                   onChange={(e) => { setCpConfirm(e.target.value); setCpMsg(null); }}
@@ -4751,11 +4711,13 @@ export default function SettingsPage() {
             <AlertCircle className="w-5 h-5 flex-shrink-0" />
           )}
           <p className="text-sm font-medium flex-1 leading-snug">{notification.message}</p>
-          <button onClick={() => setNotification(null)} className="opacity-70 hover:opacity-100 ml-1 flex-shrink-0">
+          <button onClick={() => setNotification(null)} className="opacity-70 hover:opacity-100 ml-1 flex-shrink-0" aria-label="Close">
             <X className="w-4 h-4" />
           </button>
         </div>
       )}
+      </div>
+        </div>
       </div>
     </div>
   );

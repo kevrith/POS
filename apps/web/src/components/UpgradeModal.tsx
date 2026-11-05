@@ -98,8 +98,7 @@ export default function UpgradeModal({
         <div className="relative bg-gradient-to-br from-blue-600 to-indigo-700 px-6 py-8 text-white">
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 p-1 hover:bg-white/20 rounded-lg transition-colors"
-          >
+            className="absolute top-4 right-4 p-1 hover:bg-white/20 rounded-lg transition-colors" aria-label="Close">
             <X className="w-5 h-5" />
           </button>
           

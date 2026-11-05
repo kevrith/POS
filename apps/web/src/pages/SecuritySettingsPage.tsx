@@ -210,7 +210,7 @@ export default function SecuritySettingsPage() {
                     </div>
                     <p className="text-sm text-gray-500 mt-0.5">{role.description}</p>
                   </div>
-                  <button className="p-1.5 text-red-400 hover:text-red-600 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20">
+                  <button className="p-1.5 text-red-400 hover:text-red-600 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20" aria-label="Delete">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -314,7 +314,7 @@ export default function SecuritySettingsPage() {
             <div className="flex items-center justify-between">
               <h2 className="font-semibold text-gray-900 dark:text-white">Audit Trail — {auditData?.total ?? 0} entries</h2>
               <div className="flex gap-2">
-                <button onClick={() => refetchAudit()} className="p-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
+                <button onClick={() => refetchAudit()} className="p-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" aria-label="Refresh">
                   <RefreshCw className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                 </button>
                 <button onClick={exportAuditCSV} className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300">
@@ -331,14 +331,14 @@ export default function SecuritySettingsPage() {
                   className="pl-8 pr-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
               </div>
               <select value={auditEntity} onChange={e => setAuditEntity(e.target.value)}
-                className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
+                className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white" aria-label="Filter by entities">
                 <option value="">All Entities</option>
                 {['Sale', 'Item', 'User', 'Employee', 'Expense', 'PurchaseOrder', 'CashSession'].map(e => <option key={e}>{e}</option>)}
               </select>
               <input type="date" value={auditStart} onChange={e => setAuditStart(e.target.value)}
-                className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
+                className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white" aria-label="Date" />
               <input type="date" value={auditEnd} onChange={e => setAuditEnd(e.target.value)}
-                className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
+                className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white" aria-label="Date" />
             </div>
 
             {auditLoading ? (
@@ -475,7 +475,7 @@ export default function SecuritySettingsPage() {
                           : 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
                         : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400'
                     }`}>
-                    {mode === 'SANDBOX' ? '🧪 Sandbox (Testing)' : '🟢 Production (Live KRA)'}
+                    {mode === 'SANDBOX' ? 'Sandbox (Testing)' : 'Production (Live KRA)'}
                   </button>
                 ))}
               </div>
@@ -579,7 +579,7 @@ export default function SecuritySettingsPage() {
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
               <h2 className="font-bold text-gray-900 dark:text-white">Create Custom Role</h2>
-              <button onClick={() => { setShowCreateRole(false); setSelectedPermissions([]); }}>
+              <button onClick={() => { setShowCreateRole(false); setSelectedPermissions([]); }} aria-label="Close">
                 <X className="w-5 h-5 text-gray-400" />
               </button>
             </div>

@@ -134,8 +134,7 @@ export default function ChannelManagerPage() {
         {tab === 'bookings' && (
           <button
             onClick={() => refetch()}
-            className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-          >
+            className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" aria-label="Refresh">
             <RefreshCw className="w-4 h-4" />
           </button>
         )}
@@ -166,8 +165,7 @@ export default function ChannelManagerPage() {
             <select
               value={channelFilter}
               onChange={(e) => setChannelFilter(e.target.value as Channel | 'ALL')}
-              className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
+              className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" aria-label="Filter by channels">
               <option value="ALL">All Channels</option>
               {CHANNELS.map((c) => (
                 <option key={c.value} value={c.value}>{c.label}</option>
@@ -177,8 +175,7 @@ export default function ChannelManagerPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as BookingStatus | 'ALL')}
-              className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
+              className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" aria-label="Filter by statuses">
               <option value="ALL">All Statuses</option>
               <option value="PENDING">Pending</option>
               <option value="CONFIRMED">Confirmed</option>
@@ -315,7 +312,7 @@ export default function ChannelManagerPage() {
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-sm">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
               <h2 className="text-lg font-bold text-gray-900 dark:text-white">Assign Room</h2>
-              <button onClick={() => setAssignModal(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+              <button onClick={() => setAssignModal(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" aria-label="Close">
                 <X className="w-5 h-5" />
               </button>
             </div>

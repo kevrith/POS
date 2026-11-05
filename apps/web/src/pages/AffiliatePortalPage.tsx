@@ -206,7 +206,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
           <div className="flex items-center gap-2 mb-3"><BadgeCheck className="w-4 h-4 text-indigo-600" /><h2 className="font-semibold">Payout details</h2>
             {savedMsg && <span className="ml-auto text-xs text-green-600">{savedMsg}</span>}</div>
           <div className="flex flex-col sm:flex-row gap-2">
-            <select value={payoutMethod} onChange={(e) => setPayoutMethod(e.target.value)} className="border rounded-lg px-3 py-2 text-sm">
+            <select value={payoutMethod} onChange={(e) => setPayoutMethod(e.target.value)} className="border rounded-lg px-3 py-2 text-sm" aria-label="M-Pesa">
               <option value="MPESA">M-Pesa</option>
               <option value="BANK">Bank</option>
             </select>

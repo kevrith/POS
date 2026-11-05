@@ -29,7 +29,7 @@ export default function HeldSalesModal({
             <h2 className="text-lg font-bold text-gray-800">Held Sales</h2>
             <p className="text-xs text-gray-500">{heldSales.length}/10 slots used</p>
           </div>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100" aria-label="Close">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
@@ -79,8 +79,7 @@ export default function HeldSalesModal({
                       </button>
                       <button
                         onClick={() => onDiscard(held.id)}
-                        className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-sm font-medium transition-colors"
-                      >
+                        className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-sm font-medium transition-colors" aria-label="Delete">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>

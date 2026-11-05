@@ -4,10 +4,11 @@ import { toast } from 'sonner';
 import {
   Home, Users, ClipboardList, TrendingUp, Plus, Search, ChevronLeft,
   ChevronRight, MapPin, RefreshCw, AlertTriangle, CheckCircle,
-  Package, Phone, X, Navigation, Edit2, MessageCircle, FileText,
+  Package, Phone, X, Navigation, Edit2, MessageCircle, FileText, Medal,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
+import { ActionCard, AnimatedValue, Card } from '../components/ui';
 
 type Screen = 'home' | 'customers' | 'customer-detail' | 'order-history' | 'my-stats' | 'call-plan' | 'credit-collection' | 'leaderboard';
 type CustomerTab = 'history' | 'new-order';
@@ -153,9 +154,9 @@ function ProgressBar({ value, max, label }: { value: number; max: number; label?
   return (
     <div>
       {label && <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</div>}
-      <div className="w-full h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+      <div className="w-full h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden" role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
         <div
-          className="h-3 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-500"
+          className="bar-fill h-3 rounded-full bg-gradient-to-r from-brand-500 to-brand-700 transition-[width] duration-500"
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -176,7 +177,7 @@ function OrderCard({ order, onClick }: { order: FieldOrderSummary; onClick: () =
   return (
     <button
       onClick={onClick}
-      className="w-full text-left bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3 hover:shadow-md transition-shadow"
+      className="surface-interactive w-full rounded-xl p-3"
     >
       <div className="flex items-start justify-between gap-2">
         <div>
@@ -210,8 +211,8 @@ function buildOrderDetailMessage(
   const itemLines = order.items
     .map(i => `  • ${i.itemName} x${i.quantity}  ${fmtKES(i.totalCents)}`)
     .join('\n');
-  let msg = `🏢 *${biz.name}*\n`;
-  msg += `📋 *ORDER CONFIRMATION*\n`;
+  let msg = `*${biz.name}*\n`;
+  msg += `*ORDER CONFIRMATION*\n`;
   msg += `${'─'.repeat(30)}\n`;
   msg += `Order No: *${order.orderNumber}*\n`;
   msg += `Date: ${date}\n`;
@@ -223,10 +224,10 @@ function buildOrderDetailMessage(
   msg += `${'─'.repeat(30)}\n`;
   msg += `*Total: ${fmtKES(order.totalCents)}*\n`;
   if (paymentNote.trim()) {
-    msg += `\n💳 *Payment Details:*\n${paymentNote.trim()}\n`;
+    msg += `\n*Payment Details:*\n${paymentNote.trim()}\n`;
   }
   msg += `\nThank you for your business!\n`;
-  if (biz.phone) msg += `📞 ${biz.phone}`;
+  if (biz.phone) msg += `Phone: ${biz.phone}`;
   return msg;
 }
 
@@ -276,7 +277,7 @@ function OrderDetailModal({
             <div className="font-bold text-gray-900 dark:text-white">{order.orderNumber}</div>
             <div className="text-xs text-gray-500 mt-0.5">{order.customerName} · {order.shopCode}</div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800">
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800" aria-label="Close">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -491,20 +492,20 @@ function NewCustomerModal({
       <div className="w-full sm:max-w-md bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl">
         <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
           <h2 className="font-bold text-gray-900 dark:text-white">New Customer</h2>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800" aria-label="Close"><X className="w-5 h-5" /></button>
         </div>
         <div className="p-4 space-y-3">
           <input className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm" placeholder="Shop / Customer Name *" value={name} onChange={e => setName(e.target.value)} />
           <input className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm" placeholder="Phone *" value={phone} onChange={e => setPhone(e.target.value)} />
           <input className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-mono" placeholder="KRA PIN (optional, e.g. A012345678Z)" value={kraPin} onChange={e => setKraPin(e.target.value.toUpperCase())} />
-          <select className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm" value={shopType} onChange={e => setShopType(e.target.value)}>
+          <select className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm" value={shopType} onChange={e => setShopType(e.target.value)} aria-label="Retail Shop">
             <option value="RETAIL">Retail Shop</option>
             <option value="WHOLESALE">Wholesale</option>
             <option value="KIOSK">Kiosk</option>
             <option value="SUPERMARKET">Supermarket</option>
           </select>
           {routes.length > 0 && (
-            <select className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm" value={routeId} onChange={e => setRouteId(e.target.value)}>
+            <select className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm" value={routeId} onChange={e => setRouteId(e.target.value)} aria-label="-- Select Route (optional) --">
               <option value="">-- Select Route (optional) --</option>
               {routes.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
@@ -702,7 +703,7 @@ function NewOrderPanel({
                   <button onClick={() => updateQty(item.itemId, item.quantity + 1)} className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center justify-center font-bold text-sm hover:bg-gray-200 dark:hover:bg-gray-600">+</button>
                 </div>
                 <div className="text-sm font-semibold text-gray-900 dark:text-white w-20 text-right">{fmtKES(item.unitPriceCents * item.quantity)}</div>
-                <button onClick={() => removeItem(item.itemId)} className="p-1 text-red-400 hover:text-red-600"><X className="w-4 h-4" /></button>
+                <button onClick={() => removeItem(item.itemId)} className="p-1 text-red-400 hover:text-red-600" aria-label="Remove"><X className="w-4 h-4" /></button>
               </div>
             ))}
           </div>
@@ -755,7 +756,7 @@ function HomeScreen({ user, businessId, onNavigate }: { user: { id: string; name
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">{greeting(user.name)}</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">Your sales dashboard</p>
         </div>
-        <button onClick={() => refetch()} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"><RefreshCw className="w-5 h-5 text-gray-500" /></button>
+        <button onClick={() => refetch()} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800" aria-label="Refresh"><RefreshCw className="w-5 h-5 text-gray-500" /></button>
       </div>
 
       {/* Pending credit banner */}
@@ -774,11 +775,11 @@ function HomeScreen({ user, businessId, onNavigate }: { user: { id: string; name
           <div className="text-xs font-medium opacity-80 uppercase tracking-wide mb-3">Today</div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <div className="text-3xl font-bold">{stats?.ordersToday ?? 0}</div>
+              <div className="text-3xl font-bold"><AnimatedValue value={stats?.ordersToday ?? 0} /></div>
               <div className="text-xs opacity-80 mt-0.5">Orders Submitted</div>
             </div>
             <div>
-              <div className="text-3xl font-bold">{fmtKES(stats?.valueTodayCents ?? 0)}</div>
+              <div className="text-3xl font-bold"><AnimatedValue value={stats?.valueTodayCents ?? 0} format={fmtKES} /></div>
               <div className="text-xs opacity-80 mt-0.5">Total Value</div>
             </div>
           </div>
@@ -787,7 +788,7 @@ function HomeScreen({ user, businessId, onNavigate }: { user: { id: string; name
 
       {/* Commission progress */}
       {stats && (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+        <Card className="p-4 space-y-3">
           <div className="flex items-center justify-between">
             <span className="font-semibold text-sm text-gray-900 dark:text-white">Monthly Commission</span>
             <span className="text-xs text-gray-500">{stats.daysLeftInMonth}d left</span>
@@ -803,23 +804,28 @@ function HomeScreen({ user, businessId, onNavigate }: { user: { id: string; name
               <span>Daily target: {fmtKES(Math.ceil((stats.commissionTargetCents - stats.valueThisMonthCents) / stats.daysLeftInMonth))}</span>
             )}
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Quick actions */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="stagger grid grid-cols-2 lg:grid-cols-3 gap-3">
         {[
-          { label: 'Find Customer', icon: Search, screen: 'customers' as Screen, color: 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' },
-          { label: 'New Customer', icon: Plus, screen: 'customers' as Screen, color: 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300' },
-          { label: 'View Orders', icon: ClipboardList, screen: 'order-history' as Screen, color: 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' },
-          { label: 'Call Plan', icon: MapPin, screen: 'call-plan' as Screen, color: 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300' },
-          { label: 'Credit Collection', icon: AlertTriangle, screen: 'credit-collection' as Screen, color: 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300' },
-          { label: 'Leaderboard', icon: TrendingUp, screen: 'leaderboard' as Screen, color: 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' },
+          { label: 'Find Customer', icon: Search, screen: 'customers' as Screen },
+          { label: 'New Customer', icon: Plus, screen: 'customers' as Screen },
+          { label: 'View Orders', icon: ClipboardList, screen: 'order-history' as Screen },
+          { label: 'Call Plan', icon: MapPin, screen: 'call-plan' as Screen },
+          // Money owed to the business needs attention, so this is the one action that is not brand coloured.
+          { label: 'Credit Collection', icon: AlertTriangle, screen: 'credit-collection' as Screen, tone: 'danger' as const },
+          { label: 'Leaderboard', icon: TrendingUp, screen: 'leaderboard' as Screen },
         ].map(action => (
-          <button key={action.label} onClick={() => onNavigate(action.screen)} className={`${action.color} rounded-2xl p-4 text-left hover:opacity-80 transition-opacity min-h-[80px]`}>
-            <action.icon className="w-6 h-6 mb-2" />
-            <div className="font-semibold text-sm">{action.label}</div>
-          </button>
+          <ActionCard
+            key={action.label}
+            layout="stack"
+            tone={action.tone}
+            icon={<action.icon className="w-5 h-5" />}
+            title={action.label}
+            onClick={() => onNavigate(action.screen)}
+          />
         ))}
       </div>
 
@@ -886,7 +892,7 @@ function CustomersScreen({
 
       <div className="space-y-2">
         {customers.map(c => (
-          <button key={c.id} onClick={() => onSelectCustomer(c)} className="w-full text-left bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3 hover:shadow-md transition-shadow">
+          <button key={c.id} onClick={() => onSelectCustomer(c)} className="surface-interactive w-full rounded-xl p-3">
             <div className="flex items-start justify-between">
               <div>
                 <div className="font-semibold text-sm text-gray-900 dark:text-white">{c.name}</div>
@@ -904,7 +910,7 @@ function CustomersScreen({
       </div>
 
       {/* FAB */}
-      <button onClick={() => setShowNewModal(true)} className="fixed bottom-20 right-4 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-blue-700 transition-colors z-40">
+      <button onClick={() => setShowNewModal(true)} className="fixed bottom-20 right-4 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-blue-700 transition-colors z-40" aria-label="Add">
         <Plus className="w-6 h-6" />
       </button>
 
@@ -928,8 +934,8 @@ function buildOrderMessage(
     .map(i => `  • ${i.itemName} x${i.quantity}  ${fmtKES(i.unitPriceCents * i.quantity)}`)
     .join('\n');
   const total = fmtKES(order.totalCents);
-  let msg = `🏢 *${biz.name}*\n`;
-  msg += `📋 *ORDER CONFIRMATION*\n`;
+  let msg = `*${biz.name}*\n`;
+  msg += `*ORDER CONFIRMATION*\n`;
   msg += `${'─'.repeat(30)}\n`;
   msg += `Order No: *${order.orderNumber}*\n`;
   msg += `Date: ${date}\n`;
@@ -940,10 +946,10 @@ function buildOrderMessage(
   msg += `${'─'.repeat(30)}\n`;
   msg += `*Total: ${total}*\n`;
   if (paymentNote.trim()) {
-    msg += `\n💳 *Payment Details:*\n${paymentNote.trim()}\n`;
+    msg += `\n*Payment Details:*\n${paymentNote.trim()}\n`;
   }
   msg += `\nThank you for your order! Our team will process and deliver it shortly.\n`;
-  if (biz.phone) msg += `\n📞 ${biz.phone}`;
+  if (biz.phone) msg += `\nPhone: ${biz.phone}`;
   return msg;
 }
 
@@ -1194,7 +1200,7 @@ function OrderHistoryScreen({ agentId, businessId }: { agentId: string; business
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="font-bold text-gray-900 dark:text-white">My Orders</h2>
-        <button onClick={() => refetch()} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"><RefreshCw className="w-4 h-4 text-gray-500" /></button>
+        <button onClick={() => refetch()} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800" aria-label="Refresh"><RefreshCw className="w-4 h-4 text-gray-500" /></button>
       </div>
       <div className="flex gap-2 overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap pb-1">
         {filters.map(f => (
@@ -1248,9 +1254,9 @@ function MyStatsScreen({ agentId, businessId }: { agentId: string; businessId: s
     <div className="p-4 space-y-4">
       {/* Month selector */}
       <div className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3">
-        <button onClick={prevMonth} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 min-h-[44px] min-w-[44px] flex items-center justify-center"><ChevronLeft className="w-5 h-5" /></button>
+        <button onClick={prevMonth} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 min-h-[44px] min-w-[44px] flex items-center justify-center" aria-label="Previous"><ChevronLeft className="w-5 h-5" /></button>
         <span className="font-semibold text-gray-900 dark:text-white">{monthName}</span>
-        <button onClick={nextMonth} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 min-h-[44px] min-w-[44px] flex items-center justify-center"><ChevronRight className="w-5 h-5" /></button>
+        <button onClick={nextMonth} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 min-h-[44px] min-w-[44px] flex items-center justify-center" aria-label="Next"><ChevronRight className="w-5 h-5" /></button>
       </div>
 
       {isLoading && <div className="space-y-3">{[1, 2, 3, 4].map(i => <div key={i} className="h-20 bg-gray-100 dark:bg-gray-800 rounded-2xl animate-pulse" />)}</div>}
@@ -1350,7 +1356,7 @@ function CallPlanScreen({ agentId, businessId }: { agentId: string; businessId: 
           <h2 className="font-bold text-gray-900 dark:text-white">Today's Call Plan</h2>
           <p className="text-xs text-gray-500 dark:text-gray-400">{plan.length} customers to visit</p>
         </div>
-        <button onClick={() => refetch()} className="p-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"><RefreshCw className="w-4 h-4" /></button>
+        <button onClick={() => refetch()} className="p-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300" aria-label="Refresh"><RefreshCw className="w-4 h-4" /></button>
       </div>
 
       {isLoading ? <div className="text-center text-gray-400 py-8">Loading...</div> : plan.length === 0 ? (
@@ -1423,9 +1429,9 @@ function LogVisitModal({ customer, agentId, businessId, onClose, onSaved }: {
       <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-t-2xl p-4 space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="font-bold text-gray-900 dark:text-white">Log Visit — {customer.name}</h3>
-          <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
+          <button onClick={onClose} aria-label="Close"><X className="w-5 h-5 text-gray-400" /></button>
         </div>
-        <select value={outcome} onChange={e => setOutcome(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm">
+        <select value={outcome} onChange={e => setOutcome(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm" aria-label="Visited">
           <option value="VISITED">Visited</option>
           <option value="ORDERED">Ordered</option>
           <option value="NO_ANSWER">No Answer</option>
@@ -1470,7 +1476,7 @@ function CreditCollectionScreen({ agentId, businessId }: { agentId: string; busi
           <h2 className="font-bold text-gray-900 dark:text-white">Credit Collection</h2>
           <p className="text-xs text-gray-500">{credits.length} customers · {fmtKES(totalOutstanding)} total outstanding</p>
         </div>
-        <button onClick={() => refetch()} className="p-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"><RefreshCw className="w-4 h-4" /></button>
+        <button onClick={() => refetch()} className="p-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300" aria-label="Refresh"><RefreshCw className="w-4 h-4" /></button>
       </div>
 
       {isLoading ? <div className="text-center text-gray-400 py-8">Loading...</div> : credits.length === 0 ? (
@@ -1551,14 +1557,14 @@ function CollectPaymentModal({ orderId, customerName, balanceCents, agentId, bus
       <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-t-2xl p-4 space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="font-bold text-gray-900 dark:text-white">Collect Payment</h3>
-          <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
+          <button onClick={onClose} aria-label="Close"><X className="w-5 h-5 text-gray-400" /></button>
         </div>
         <p className="text-sm text-gray-600 dark:text-gray-400">{customerName} · Balance: <span className="font-bold text-red-600">{fmtKES(balanceCents)}</span></p>
         <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-xl overflow-hidden">
           <span className="px-3 bg-gray-50 dark:bg-gray-700 text-gray-500 border-r border-gray-300 dark:border-gray-600 py-2.5 text-sm">KES</span>
           <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className="flex-1 px-3 py-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none" placeholder="Amount" />
         </div>
-        <select value={method} onChange={e => setMethod(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm">
+        <select value={method} onChange={e => setMethod(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm" aria-label="Cash">
           <option value="CASH">Cash</option>
           <option value="MPESA">M-Pesa</option>
           <option value="BANK_TRANSFER">Bank Transfer</option>
@@ -1618,7 +1624,7 @@ function LeaderboardScreen({ agentId, businessId }: { agentId: string; businessI
           {board.map(entry => (
             <div key={entry.agentId} className={`bg-white dark:bg-gray-800 rounded-xl border p-3 ${isMe(entry.agentId) ? 'border-blue-400 dark:border-blue-500 ring-1 ring-blue-400' : 'border-gray-200 dark:border-gray-700'}`}>
               <div className="flex items-center gap-3">
-                <span className={`text-2xl font-black w-8 text-center ${medalColor(entry.rank)}`}>{entry.rank <= 3 ? ['🥇','🥈','🥉'][entry.rank-1] : `#${entry.rank}`}</span>
+                <span className={`text-2xl font-black w-8 text-center ${medalColor(entry.rank)}`}>{entry.rank <= 3 ? <Medal className="w-6 h-6 inline" aria-label={`Rank ${entry.rank}`} /> : `#${entry.rank}`}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-sm text-gray-900 dark:text-white truncate">{entry.agentName}</span>
@@ -1697,7 +1703,7 @@ export default function AgentPage() {
       {/* Top nav for customer detail */}
       {screen === 'customer-detail' && selectedCustomer && (
         <div className="sticky top-0 z-30 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center gap-3">
-          <button onClick={handleBack} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 min-h-[44px] min-w-[44px] flex items-center justify-center">
+          <button onClick={handleBack} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 min-h-[44px] min-w-[44px] flex items-center justify-center" aria-label="Previous">
             <ChevronLeft className="w-5 h-5 text-gray-700 dark:text-gray-300" />
           </button>
           <span className="font-semibold text-gray-900 dark:text-white truncate">{selectedCustomer.name}</span>

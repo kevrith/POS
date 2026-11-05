@@ -45,7 +45,10 @@ const queryClient = new QueryClient({
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      {/* No v7_startTransition: with it, React keeps showing the OLD page while the new page's code loads, so the sidebar does
+          not move and a click looks dead for as long as the load takes. Without it the page area switches at once to the
+          loading skeleton (see PageLoader in App.tsx). React Router logs a one-line notice about the flag in development. */}
+      <BrowserRouter future={{ v7_relativeSplatPath: true }}>
         <App />
       </BrowserRouter>
     </QueryClientProvider>

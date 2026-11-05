@@ -282,7 +282,10 @@ export default function LoginPage() {
     try {
       // Resolve short code → real UUID
       const res = await fetch(`${API_URL}/business/resolve/${encodeURIComponent(code)}`);
-      if (!res.ok) throw new Error('Not found');
+      // Only a 404 means the code is wrong. Anything else (502 while the API restarts, 500, no network) is a server
+      // problem, and telling the user their code is wrong sends them to their owner for nothing.
+      if (res.status === 404) throw new Error('NOT_FOUND');
+      if (!res.ok) throw new Error('SERVER');
       const biz = (await res.json()) as { id: string; name: string; shortCode: string | null };
       localStorage.setItem('pos-business-id', biz.id);
       localStorage.setItem('pos-business-name', biz.name);
@@ -290,8 +293,12 @@ export default function LoginPage() {
       setResolvedBusinessName(biz.name);
       setPinStep('staff');
       void loadStaff(biz.id);
-    } catch {
-      setError('Business code not found. Check with your owner.');
+    } catch (err) {
+      setError(
+        err instanceof Error && err.message === 'NOT_FOUND'
+          ? 'Business code not found. Check with your owner.'
+          : 'Cannot reach the server right now. Check your connection, or that the API is running, and try again.',
+      );
       setStaffLoading(false);
     }
   }
@@ -422,7 +429,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex bg-slate-50 dark:bg-gray-950">
 
       {/* ── Left branding panel (lg+) ─────────────────────────────────── */}
-      <div className="hidden lg:flex lg:w-[440px] xl:w-[500px] flex-col relative overflow-hidden flex-shrink-0 bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900">
+      <div className="hidden lg:flex lg:w-[440px] xl:w-[500px] flex-col relative overflow-hidden flex-shrink-0 bg-gradient-to-br from-brand-600 via-brand-700 to-brand-900">
         {/* Decorative circles */}
         <div className="absolute -top-28 -right-28 w-80 h-80 rounded-full bg-white/[0.06]" />
         <div className="absolute top-1/2 -left-20 w-56 h-56 rounded-full bg-white/[0.04]" />
@@ -438,7 +445,7 @@ export default function LoginPage() {
             </div>
             <div>
               <div className="text-white font-extrabold text-[15px] tracking-tight leading-tight">KASTRA POS</div>
-              <div className="text-blue-200/60 text-[10px] font-bold tracking-[0.2em] uppercase mt-[1px]">Enterprise</div>
+              <div className="text-brand-200 text-[10px] font-bold tracking-[0.2em] uppercase mt-[1px]">Enterprise</div>
             </div>
           </div>
 
@@ -447,7 +454,7 @@ export default function LoginPage() {
             <h1 className="text-4xl xl:text-[42px] font-extrabold text-white leading-[1.12] mb-4 tracking-tight">
               Run your business<br />with confidence
             </h1>
-            <p className="text-blue-100/65 text-[15px] leading-relaxed max-w-[340px]">
+            <p className="text-brand-100 text-[15px] leading-relaxed max-w-[340px]">
               Enterprise POS built for Kenya — KRA eTIMS compliant, offline‑first, and ready to scale.
             </p>
           </div>
@@ -460,7 +467,7 @@ export default function LoginPage() {
               'M-Pesa, card & split payments',
               'Multi-store & franchise management',
             ].map((f) => (
-              <div key={f} className="flex items-center gap-3 text-white/72 text-sm">
+              <div key={f} className="flex items-center gap-3 text-white text-sm">
                 <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
                   <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -487,14 +494,14 @@ export default function LoginPage() {
                 localStorage.removeItem('kastra-server-url');
                 window.location.reload();
               }}
-              className="mt-8 flex items-center gap-2 text-blue-200/50 hover:text-white/80 text-xs transition-colors group cursor-pointer"
+              className="mt-8 flex items-center gap-2 text-brand-200 hover:text-white text-xs transition-colors group cursor-pointer"
             >
               <Settings className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform duration-300" />
               Reconfigure this terminal
             </button>
           )}
 
-          <p className="text-blue-200/30 text-xs mt-4">Trusted by businesses across Kenya</p>
+          <p className="text-brand-200 text-xs mt-4">Trusted by businesses across Kenya</p>
         </div>
       </div>
 
@@ -982,8 +989,7 @@ export default function LoginPage() {
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() => { setPinStep('staff'); setPin(''); setPinError(''); }}
-                      className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"
-                    >
+                      className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500" aria-label="Previous">
                       <ChevronLeft className="w-5 h-5" />
                     </button>
                     <div className="flex items-center gap-3 flex-1">

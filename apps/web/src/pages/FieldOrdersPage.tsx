@@ -306,7 +306,7 @@ function NewOrderModal({
               <p className="text-xs text-gray-400 dark:text-gray-500">Select a customer, add items, then submit</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-colors">
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-colors" aria-label="Close">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -369,8 +369,7 @@ function NewOrderModal({
               <select
                 value={routeId}
                 onChange={(e) => setRouteId(e.target.value)}
-                className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:border-indigo-400 dark:focus:border-indigo-500"
-              >
+                className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:border-indigo-400 dark:focus:border-indigo-500">
                 <option value="">No route</option>
                 {routes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
@@ -474,7 +473,7 @@ function NewOrderModal({
                           />
                         </td>
                         <td className="pr-2 py-2">
-                          <button onClick={() => removeLine(line.itemId)} className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-300 hover:text-red-500 transition-colors">
+                          <button onClick={() => removeLine(line.itemId)} className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-300 hover:text-red-500 transition-colors" aria-label="Delete">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </td>
@@ -536,7 +535,7 @@ function OrderCard({ order, onClick }: { order: FieldOrder; onClick: () => void 
   return (
     <div
       onClick={onClick}
-      className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 cursor-pointer hover:shadow-md transition-all hover:border-indigo-300 dark:hover:border-indigo-600 mb-2"
+      className="surface-interactive rounded-xl p-3 mb-2" role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -760,7 +759,7 @@ function OrderDetailPanel({
                 <FileText className="w-4 h-4" />
               </button>
             )}
-            <button onClick={onClose} className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 transition-colors">
+            <button onClick={onClose} className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 transition-colors" aria-label="Close">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -797,8 +796,7 @@ function OrderDetailPanel({
                 type="date"
                 value={expectedDate}
                 onChange={(e) => setExpectedDate(e.target.value)}
-                className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-              />
+                className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" aria-label="Date" />
             </div>
           )}
 
@@ -958,7 +956,7 @@ function OrderDetailPanel({
           <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-sm mx-4 shadow-2xl">
             <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
               <h3 className="font-bold text-gray-900 dark:text-white">Record Payment</h3>
-              <button onClick={() => setShowPaymentModal(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+              <button onClick={() => setShowPaymentModal(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" aria-label="Close">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -1012,7 +1010,7 @@ function OrderDetailPanel({
           <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-sm mx-4 shadow-2xl">
             <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
               <h3 className="font-bold text-gray-900 dark:text-white">Assign to Delivery Run</h3>
-              <button onClick={() => setShowRunModal(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+              <button onClick={() => setShowRunModal(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" aria-label="Close">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -1039,8 +1037,7 @@ function OrderDetailPanel({
                 <select
                   value={newRunRouteId}
                   onChange={(e) => setNewRunRouteId(e.target.value)}
-                  className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                >
+                  className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" aria-label="Select route…">
                   <option value="">Select route…</option>
                   {allRoutes.filter((r) => r.isActive).map((r) => (
                     <option key={r.id} value={r.id}>{r.name}</option>
@@ -1050,8 +1047,7 @@ function OrderDetailPanel({
                   type="date"
                   value={newRunDate}
                   onChange={(e) => setNewRunDate(e.target.value)}
-                  className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                />
+                  className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" aria-label="Date" />
                 <button
                   onClick={() => createRunMutation.mutate()}
                   disabled={!newRunRouteId || !newRunDate || createRunMutation.isPending}
@@ -1129,7 +1125,7 @@ export default function FieldOrdersPage() {
       if (dateFrom) params.set('startDate', dateFrom);
       if (dateTo) params.set('endDate', dateTo);
       
-      console.log('🔍 Field Orders Query:', {
+      console.log('Field Orders Query:', {
         businessId,
         statusFilter,
         routeFilter,
@@ -1139,7 +1135,7 @@ export default function FieldOrdersPage() {
       });
       
       const result = await api.get<FieldOrder[]>(`/field-sales/orders?${params}`);
-      console.log('✅ Field Orders Response:', result.length, 'orders');
+      console.log('Field Orders Response:', result.length, 'orders');
       return result;
     },
     enabled: !!businessId,
@@ -1231,8 +1227,7 @@ export default function FieldOrdersPage() {
           <select
             value={routeFilter}
             onChange={(e) => setRouteFilter(e.target.value)}
-            className="border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none"
-          >
+            className="border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none" aria-label="Filter by routes">
             <option value="">All Routes</option>
             {routes.map((r) => (
               <option key={r.id} value={r.id}>{r.name}</option>
@@ -1241,9 +1236,9 @@ export default function FieldOrdersPage() {
 
           {/* Date range */}
           <div className="flex items-center gap-1.5 text-sm">
-            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none" />
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none" aria-label="Date" />
             <span className="text-gray-400">–</span>
-            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none" />
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none" aria-label="Date" />
           </div>
         </div>
       </div>

@@ -484,3 +484,8 @@ These READMEs are part of the deliverable, not an afterthought. When you add or
 change a feature, update the README that covers it in the same change — the root
 README for anything cross-cutting (a new app, plan tier, port, or env var), and the
 per-app README for anything local to one app.
+
+## Design tokens
+
+`design/tokens.json` is the single source for colour, radius, spacing and type across the web app, the desktop shell
+and the four mobile apps (`npm run tokens` regenerates the platform files). See `design/README.md`.

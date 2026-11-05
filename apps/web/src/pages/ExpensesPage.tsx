@@ -179,7 +179,7 @@ function AddExpenseModal({ businessId, storeId, userId, onClose, onSuccess }: Ad
       <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md shadow-2xl border border-gray-200 dark:border-gray-700">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700">
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">Add Expense</h2>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" aria-label="Close">
             <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           </button>
         </div>
@@ -347,7 +347,7 @@ function RequestApprovalModal({ expense, businessId, onClose, onSuccess }: Reque
             <ShieldCheck className="w-5 h-5 text-blue-500" />
             Request Approval
           </h2>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700">
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Close">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
@@ -425,7 +425,7 @@ function SetBudgetModal({ businessId, month, year, existing, initialCategory, on
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">
             {existing ? 'Edit' : 'Set'} Budget
           </h2>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" aria-label="Close">
             <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           </button>
         </div>
@@ -612,7 +612,7 @@ export default function ExpensesPage() {
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => void refetch()}
-              className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+              className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors" aria-label="Refresh">
               <RefreshCw className="w-5 h-5" />
             </button>
             {mainTab === 'expenses' && (
@@ -747,12 +747,12 @@ export default function ExpensesPage() {
                         <p className="text-xs text-gray-500 dark:text-gray-400">{expense.description} &bull; Level {level} approval</p>
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={() => approveStep.mutate({ stepId: id })} disabled={approveStep.isPending}
+                        <button onClick={() => approveStep.mutate({ stepId: id })} disabled={approveStep.isPending} aria-label="Approve"
                           className="p-1.5 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg">
                           <CheckCircle className="w-5 h-5" />
                         </button>
                         <button onClick={() => rejectStep.mutate({ stepId: id, comment: 'Rejected' })} disabled={rejectStep.isPending}
-                          className="p-1.5 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg">
+                          className="p-1.5 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg" aria-label="Reject">
                           <XCircle className="w-5 h-5" />
                         </button>
                       </div>
@@ -793,13 +793,13 @@ export default function ExpensesPage() {
               <div className="flex items-center gap-2">
                 <Filter className="w-4 h-4 text-gray-400 dark:text-gray-500" />
                 <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}
-                  className="border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none">
+                  className="border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none" aria-label="Filter by categories">
                   <option value="ALL">All Categories</option>
                   {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-                className="border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none">
+                className="border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none" aria-label="Filter by status">
                 <option value="ALL">All Status</option>
                 <option value="PENDING">Pending</option>
                 <option value="APPROVED">Approved</option>

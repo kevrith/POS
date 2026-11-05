@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { setToken, clearToken, getApiUrl, getToken } from '../lib/api';
+import { clearLastKnown } from '../lib/lastKnown';
 
 const API_V1 = getApiUrl();
 
@@ -157,6 +158,7 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () => {
         clearToken();
+        clearLastKnown(); // the next person to sign in on this browser must not see this business's menu
         set({ user: null, isAuthenticated: false });
       },
     }),

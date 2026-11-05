@@ -27,29 +27,42 @@ let _accessToken = '';
 let _tokenExpiry = 0; // timestamp when token expires
 let _refreshPromise: Promise<void> | null = null; // prevent concurrent refresh calls
 
+/**
+ * Read the expiry out of a JWT (milliseconds since the epoch). A token whose expiry cannot be read is assumed to last
+ * 15 minutes, which is what the API issues for an email login.
+ */
+export function tokenExpiryMs(token: string): number {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))) as { exp?: number };
+    if (typeof payload.exp === 'number') return payload.exp * 1000;
+  } catch {
+    /* fall through */
+  }
+  return Date.now() + 15 * 60 * 1000;
+}
+
 export function setToken(token: string): void {
   _accessToken = token;
   sessionStorage.setItem('pos-access-token', token);
-  
-  // Decode JWT to get expiry time (JWT format: header.payload.signature)
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    _tokenExpiry = payload.exp * 1000; // convert to milliseconds
-  } catch {
-    // If decode fails, assume 15 min expiry
-    _tokenExpiry = Date.now() + 15 * 60 * 1000;
-  }
+  _tokenExpiry = tokenExpiryMs(token);
 }
 
 export function getToken(): string {
   if (_accessToken) return _accessToken;
   // Restore from sessionStorage on page refresh
   const stored = sessionStorage.getItem('pos-access-token');
-  if (stored) { _accessToken = stored; return _accessToken; }
+  if (stored) {
+    _accessToken = stored;
+    // Work out when it expires. Without this the expiry stayed 0 after every reload, so the first request of every page
+    // load did a needless /auth/refresh and every other request waited behind it.
+    _tokenExpiry = tokenExpiryMs(stored);
+    return _accessToken;
+  }
   // Pick up token passed from a parent tab (kiosk new-tab handoff)
   const kioskToken = localStorage.getItem('kiosk-tab-token');
   if (kioskToken) {
     _accessToken = kioskToken;
+    _tokenExpiry = tokenExpiryMs(kioskToken);
     sessionStorage.setItem('pos-access-token', kioskToken);
     localStorage.removeItem('kiosk-tab-token'); // consume so it's not reused
   }

@@ -103,7 +103,7 @@ export default function VoidModal({
             <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
             <h2 className="text-lg font-bold text-red-800 dark:text-red-300">Void Transaction</h2>
           </div>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors">
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors" aria-label="Close">
             <X className="w-5 h-5 text-red-600 dark:text-red-400" />
           </button>
         </div>
@@ -194,8 +194,7 @@ export default function VoidModal({
                             <button
                               onClick={() => setQty(item.id, voidQty - 1, item.quantity)}
                               disabled={voidQty === 0}
-                              className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                            >
+                              className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors" aria-label="Decrease">
                               <Minus className="w-3 h-3" />
                             </button>
                             <span className={`w-7 text-center text-sm font-bold ${isSelected ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'}`}>
@@ -204,8 +203,7 @@ export default function VoidModal({
                             <button
                               onClick={() => setQty(item.id, voidQty + 1, item.quantity)}
                               disabled={voidQty >= item.quantity}
-                              className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                            >
+                              className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors" aria-label="Add">
                               <Plus className="w-3 h-3" />
                             </button>
                           </div>

@@ -4,9 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import {
   ShoppingCart, DollarSign, TrendingUp, TrendingDown, Package,
   AlertTriangle, CreditCard, Users, BarChart3, ChevronRight,
-  RefreshCw, Coffee, Wallet, Zap, Clock, CheckCircle2, MessageSquare, Check, Lock,
+  RefreshCw, Coffee, Wallet, Zap, Clock, CheckCircle2, MessageSquare, Check,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { ActionCard, AnimatedValue, StatTile } from '../components/ui';
 import { useAuthStore } from '../stores/auth';
 import { formatKES, Feature, SubscriptionTier } from '@pos/shared';
 import { useFeatureAccess } from '../hooks/useFeatureAccess';
@@ -90,77 +91,14 @@ function relTime(iso: string) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-// ─── Mini Trend Arrow ─────────────────────────────────────────────────────────
-
-function Trend({ value }: { value: number }) {
-  const up = value >= 0;
-  return (
-    <span className={`flex items-center gap-0.5 text-xs font-semibold ${up ? 'text-emerald-600' : 'text-red-500'}`}>
-      {up ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-      {Math.abs(value).toFixed(1)}%
-    </span>
-  );
-}
-
-// ─── KPI Card ─────────────────────────────────────────────────────────────────
-
-function KpiCard({
-  label, value, sub, icon: Icon, trend, accent, valueColor,
-}: {
-  label: string; value: string; sub?: string;
-  icon: React.ElementType; trend?: number; accent: string; valueColor?: string;
-}) {
-  return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700/60 shadow-card hover:shadow-card-hover transition-all duration-200 p-5 flex flex-col gap-3 group">
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-[0.1em]">{label}</span>
-        <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${accent} group-hover:scale-110 transition-transform duration-200`}>
-          <Icon className="w-[18px] h-[18px]" />
-        </div>
-      </div>
-      <div>
-        <p className={`text-2xl font-extrabold tracking-tight tabular-nums ${valueColor ?? 'text-gray-900 dark:text-white'}`}>{value}</p>
-        {sub && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{sub}</p>}
-      </div>
-      {trend !== undefined && <Trend value={trend} />}
-    </div>
-  );
-}
-
 // ─── Quick Action ─────────────────────────────────────────────────────────────
 
-function QuickAction({ icon: Icon, label, desc, onClick, color, locked, badge }: {
-  icon: React.ElementType; label: string; desc: string; onClick: () => void; color: string;
+/** One quick action. `color` is accepted so the call sites do not change, but every action uses the brand icon tile. */
+function QuickAction({ icon: Icon, label, desc, onClick, locked, badge }: {
+  icon: React.ElementType; label: string; desc: string; onClick: () => void; color?: string;
   locked?: boolean; badge?: string;
 }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={locked}
-      className={`flex items-center gap-3 p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700/60 rounded-xl hover:shadow-card-hover hover:border-blue-100 dark:hover:border-gray-600 transition-all duration-200 text-left group active:scale-[0.98] relative ${
-        locked ? 'opacity-60 cursor-not-allowed' : ''
-      }`}
-    >
-      {badge && (
-        <span className="absolute -top-2 -right-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg">
-          {badge}
-        </span>
-      )}
-      <div className={`w-10 h-10 rounded-xl ${color} flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-200 relative`}>
-        <Icon className="w-5 h-5" />
-        {locked && (
-          <div className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center">
-            <Lock className="w-4 h-4 text-white" />
-          </div>
-        )}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-gray-900 dark:text-white">{label}</p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{desc}</p>
-      </div>
-      <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500 flex-shrink-0 transition-colors" />
-    </button>
-  );
+  return <ActionCard icon={<Icon className="w-5 h-5" />} title={label} description={desc} onClick={onClick} locked={locked} badge={badge} />;
 }
 
 // ─── Payment Method Icon ──────────────────────────────────────────────────────
@@ -349,23 +287,23 @@ export default function DashboardPage() {
           </div>
 
           {/* KPI strip */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
+          <div className="stagger grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
             {[
-              { label: 'Month Revenue', value: formatKES(todayRev), trend: pct(todayRev, prevRev), icon: DollarSign, color: 'text-emerald-300' },
-              { label: 'Transactions', value: todayTx.toString(), trend: pct(todayTx, prevTx), icon: ShoppingCart, color: 'text-blue-200' },
-              { label: 'Avg Ticket', value: formatKES(avgTicket), trend: pct(avgTicket, prevAvg), icon: CreditCard, color: 'text-purple-300' },
+              { label: 'Month Revenue', value: <AnimatedValue value={todayRev} format={formatKES} />, trend: pct(todayRev, prevRev), icon: DollarSign, color: 'text-brand-200' },
+              { label: 'Transactions', value: <AnimatedValue value={todayTx} />, trend: pct(todayTx, prevTx), icon: ShoppingCart, color: 'text-brand-200' },
+              { label: 'Avg Ticket', value: <AnimatedValue value={Math.round(avgTicket)} format={formatKES} />, trend: pct(avgTicket, prevAvg), icon: CreditCard, color: 'text-brand-200' },
               ...(businessSettings?.taxType !== 'NONE' ? [
-                { label: businessSettings?.taxType === 'VAT' ? 'VAT Collected' : 'TOT Collected', value: formatKES(todayVat), trend: undefined as number | undefined, icon: BarChart3, color: 'text-amber-300' },
+                { label: businessSettings?.taxType === 'VAT' ? 'VAT Collected' : 'TOT Collected', value: <AnimatedValue value={todayVat} format={formatKES} />, trend: undefined as number | undefined, icon: BarChart3, color: 'text-brand-200' },
               ] : []),
             ].map(({ label, value, trend, icon: Icon, color }) => (
               <div key={label} className="bg-white/5 backdrop-blur border border-white/10 rounded-xl px-4 py-3">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-blue-200/70 font-medium">{label}</span>
+                  <span className="text-xs text-brand-100 font-medium">{label}</span>
                   <Icon className={`w-3.5 h-3.5 ${color}`} />
                 </div>
-                <p className={`text-xl font-black ${color} tabular-nums`}>{value}</p>
+                <p className="text-xl font-black text-white tabular-nums">{value}</p>
                 {trend !== undefined && (
-                  <span className={`text-xs flex items-center gap-0.5 mt-0.5 ${trend >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  <span className={`text-xs flex items-center gap-0.5 mt-0.5 ${trend >= 0 ? 'text-green-300' : 'text-red-300'}`}>
                     {trend >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                     {Math.abs(trend).toFixed(1)}% vs last month
                   </span>
@@ -378,34 +316,23 @@ export default function DashboardPage() {
 
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
 
-        {/* ── P&L row (managers/owners) ── */}
+        {/* ── P&L row (managers/owners): revenue is already in the banner above ── */}
         {plData && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <KpiCard
-              label="Month Revenue"
-              value={formatKES(plData.revenueCents)}
-              sub="Confirmed sales"
-              icon={TrendingUp}
-              accent="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
-              valueColor="text-emerald-600 dark:text-emerald-400"
-            />
-            <KpiCard
-              label="Month Expenses"
-              value={formatKES(plData.expensesCents)}
-              sub="Approved expenses"
-              icon={DollarSign}
-              accent="bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
-              valueColor="text-red-600 dark:text-red-400"
-            />
-            <KpiCard
+          <div className="stagger grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <StatTile label="Month Expenses" value={<AnimatedValue value={plData.expensesCents} format={formatKES} />} note="Approved expenses" icon={<DollarSign className="w-4 h-4" />} />
+            <StatTile
               label="Net Profit"
-              value={formatKES(plData.netProfitCents)}
-              sub={plData.revenueCents > 0
-                ? `${((plData.netProfitCents / plData.revenueCents) * 100).toFixed(1)}% margin`
-                : 'No revenue yet'}
-              icon={plData.netProfitCents >= 0 ? TrendingUp : TrendingDown}
-              accent={plData.netProfitCents >= 0 ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'}
-              valueColor={plData.netProfitCents >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}
+              value={<AnimatedValue value={plData.netProfitCents} format={formatKES} />}
+              note={plData.revenueCents > 0 ? 'Revenue less approved expenses' : 'No revenue yet'}
+              tone={plData.netProfitCents < 0 ? 'danger' : 'neutral'}
+              icon={plData.netProfitCents >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+            />
+            <StatTile
+              label="Profit Margin"
+              value={plData.revenueCents > 0 ? `${((plData.netProfitCents / plData.revenueCents) * 100).toFixed(1)}%` : '0.0%'}
+              note="Net profit as a share of revenue"
+              tone={plData.revenueCents > 0 && plData.netProfitCents < 0 ? 'danger' : 'neutral'}
+              icon={<BarChart3 className="w-4 h-4" />}
             />
           </div>
         )}
@@ -637,7 +564,7 @@ export default function DashboardPage() {
             <Zap className="w-4 h-4 text-blue-500" />
             Quick Actions
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="stagger grid grid-cols-2 md:grid-cols-4 gap-3">
             <QuickAction
               icon={ShoppingCart}
               label="Point of Sale"

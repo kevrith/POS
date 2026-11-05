@@ -14,8 +14,8 @@ export default defineConfig({
         name: 'KASTRA POS',
         short_name: 'KASTRA POS',
         description: 'Modern Point of Sale system for Kenyan businesses',
-        theme_color: '#2563eb',
-        background_color: '#ffffff',
+        theme_color: '#7A35FF',
+        background_color: '#F0F2F5',
         display: 'standalone',
         orientation: 'any',
         start_url: '/',
@@ -91,7 +91,8 @@ export default defineConfig({
     port: 3005,
     proxy: {
       '/api': {
-        target: 'http://localhost:3010',
+        // The API's dev port; override with VITE_API_PROXY when it runs elsewhere (a second API, a remote one).
+        target: process.env.VITE_API_PROXY ?? 'http://localhost:3010',
         changeOrigin: true,
       },
     },

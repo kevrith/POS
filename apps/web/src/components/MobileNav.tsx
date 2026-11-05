@@ -11,6 +11,7 @@ import {
 import { useAuthStore } from '../stores/auth';
 import { useThemeStore } from '../stores/theme';
 import { hasFeature } from '../lib/featureGates';
+import { prefetchRoute } from '../lib/routeLoaders';
 
 /* ── Bottom tab bar items (always visible) ────────────────────────────────── */
 const BOTTOM_TABS = [
@@ -247,7 +248,7 @@ export default function MobileNav({ isOpen, onOpen, onClose, businessType = 'RET
               <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 capitalize">{user?.role?.toLowerCase() ?? ''} · {businessType}</div>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-white/[0.07] transition-colors">
+          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-white/[0.07] transition-colors" aria-label="Close">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -266,9 +267,10 @@ export default function MobileNav({ isOpen, onOpen, onClose, businessType = 'RET
                     key={item.to}
                     to={item.to}
                     onClick={onClose}
+                    onTouchStart={() => prefetchRoute(item.to)}
                     className={`flex items-center gap-3 mx-2 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-150 ${
                       active
-                        ? 'bg-blue-600/10 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 shadow-[inset_2px_0_0_#3b82f6]'
+                        ? 'bg-blue-600/10 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 shadow-[inset_2px_0_0_#8B4EFF]'
                         : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/[0.05] hover:text-gray-900 dark:hover:text-white'
                     }`}
                   >
@@ -302,7 +304,8 @@ export default function MobileNav({ isOpen, onOpen, onClose, businessType = 'RET
               <Link
                 key={tab.to}
                 to={tab.to}
-                className="flex-1 flex flex-col items-center justify-end pt-2 pb-2.5 gap-1 relative transition-colors duration-150"
+                onTouchStart={() => prefetchRoute(tab.to)}
+                className="flex-1 flex flex-col items-center justify-end pt-2 pb-2.5 gap-1 relative transition-colors duration-150 active:scale-95"
               >
                 <span className={`absolute top-0 left-1/2 -translate-x-1/2 h-[2px] rounded-b-full transition-all duration-200 ${
                   active ? 'w-6 bg-blue-500' : 'w-0 bg-transparent'

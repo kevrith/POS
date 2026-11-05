@@ -193,7 +193,7 @@ export default function PrescriptionsPage() {
           <td style="padding:4px 4px 0;font-weight:600">${item.name}</td>
           <td style="padding:4px 4px 0;text-align:right;white-space:nowrap">${item.qty} ${item.doseUnit ?? 'unit'}${item.qty !== 1 ? 's' : ''}</td>
         </tr>
-        ${(item.dose || item.frequency) ? `<tr><td colspan="2" style="padding:0 4px 3px;font-size:11px;color:#2563eb">${formatDosage(item)}</td></tr>` : ''}
+        ${(item.dose || item.frequency) ? `<tr><td colspan="2" style="padding:0 4px 3px;font-size:11px;color:#7A35FF">${formatDosage(item)}</td></tr>` : ''}
         ${item.instructions ? `<tr><td colspan="2" style="padding:0 4px 6px;font-size:11px;color:#666;font-style:italic">${item.instructions}</td></tr>` : ''}
       `).join('')}
     </table>
@@ -224,7 +224,7 @@ export default function PrescriptionsPage() {
   const canManage = user?.role === 'OWNER' || user?.role === 'MANAGER' || user?.role === 'CASHIER';
 
   return (
-    <div className="space-y-4">
+    <div className="p-4 md:p-6 space-y-4">
       {/* Header */}
       <div className="flex flex-wrap gap-3 items-center justify-between">
         <div>
@@ -252,7 +252,7 @@ export default function PrescriptionsPage() {
           {(['ALL', 'PENDING', 'DISPENSED', 'REFERRED_EXTERNAL', 'CANCELLED'] as string[]).map((s) => (
             <button key={s} onClick={() => setStatusFilter(s)}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${statusFilter === s ? 'bg-white dark:bg-gray-700 shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>
-              {s} <span className="ml-1 opacity-60">({counts[s] ?? 0})</span>
+              {s} <span className="ml-1">({counts[s] ?? 0})</span>
             </button>
           ))}
         </div>
@@ -270,7 +270,7 @@ export default function PrescriptionsPage() {
           const items: RxItem[] = (() => { try { return JSON.parse(rx.items); } catch { return []; } })();
           return (
             <div key={rx.id} onClick={() => setSelected(rx)}
-              className="bg-white dark:bg-gray-800 rounded-xl shadow p-4 cursor-pointer hover:shadow-md transition-shadow flex items-center justify-between gap-4">
+              className="surface-interactive rounded-xl p-4 flex items-center justify-between gap-4" role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}>
               <div className="flex items-start gap-4 flex-1 min-w-0">
                 <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center flex-shrink-0">
                   <Pill className="w-5 h-5 text-blue-600" />
@@ -561,7 +561,7 @@ export default function PrescriptionsPage() {
                   <div>
                     <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Date of Birth</label>
                     <input type="date" value={form.patientDOB} onChange={(e) => setForm((f) => ({ ...f, patientDOB: e.target.value }))}
-                      className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                      className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" aria-label="Date" />
                   </div>
                 </div>
               </div>

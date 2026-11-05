@@ -170,8 +170,7 @@ export default function SerialTrackingPage() {
                 {selectedItemId && (
                   <button
                     className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
-                    onClick={() => { setSelectedItemId(''); setSelectedItemName(''); setItemSearch(''); }}
-                  >
+                    onClick={() => { setSelectedItemId(''); setSelectedItemName(''); setItemSearch(''); }} aria-label="Close">
                     <X size={16} />
                   </button>
                 )}
@@ -248,8 +247,7 @@ export default function SerialTrackingPage() {
           <select
             value={filterItemId}
             onChange={(e) => setFilterItemId(e.target.value)}
-            className="border rounded p-2 text-sm"
-          >
+            className="border rounded p-2 text-sm" aria-label="Filter by items">
             <option value="">All Items</option>
             {itemsInList.map((item) => (
               <option key={item.id} value={item.id}>
@@ -262,8 +260,7 @@ export default function SerialTrackingPage() {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="border rounded p-2 text-sm"
-          >
+            className="border rounded p-2 text-sm" aria-label="Filter by statuses">
             <option value="">All Statuses</option>
             <option value="AVAILABLE">Available</option>
             <option value="SOLD">Sold</option>

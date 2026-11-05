@@ -15,6 +15,7 @@ import {
 import { api, openPdfReport } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { printHtml as printInFrame } from '../lib/printHtml';
+import { Button, Input, PageHeader, Segmented, Select, StatTile, Tabs } from '../components/ui';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -412,7 +413,7 @@ function getComparisonDateRange(_range: Range, comparison: ComparisonPeriod, sta
   return null;
 }
 
-const CHART_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4'];
+const CHART_COLORS = ['#8B4EFF', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4'];
 
 const RANGE_LABELS: Record<Range, string> = {
   today: 'Today',
@@ -432,28 +433,22 @@ const COMPARISON_LABELS: Record<ComparisonPeriod, string> = {
 
 // ─── Stat Card ────────────────────────────────────────────────
 
+/**
+ * A report figure. It renders the shared StatTile, so every report has the same tile. `color` is accepted so the many
+ * call sites need not change, but it is ignored: the icon is always the brand colour, and the figure is red only when
+ * the caller marks it as a bad number (a red `valueColor`).
+ */
 function StatCard({
-  label, value, icon: Icon, color, sub, valueColor,
+  label, value, icon: Icon, sub, valueColor,
 }: {
   label: string;
   value: string | number;
   icon: React.ComponentType<{ className?: string }>;
-  color: string;
+  color?: string;
   sub?: string;
   valueColor?: string;
 }) {
-  return (
-    <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-      <div className="flex items-center justify-between mb-3">
-        <div className={`${color} p-2.5 rounded-lg`}>
-          <Icon className="w-5 h-5 text-white" />
-        </div>
-      </div>
-      <p className={`text-2xl font-bold ${valueColor ?? 'text-gray-900'}`}>{value}</p>
-      <p className="text-sm text-gray-500 mt-0.5">{label}</p>
-      {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
-    </div>
-  );
+  return <StatTile label={label} value={value} note={sub} icon={<Icon className="w-4 h-4" />} tone={valueColor?.includes('red') ? 'danger' : 'neutral'} />;
 }
 
 // ─── CSV Export Utility ───────────────────────────────────────
@@ -488,13 +483,13 @@ function printHtml(title: string, bodyHtml: string): void {
   body{font-family:Arial,sans-serif;font-size:11pt;color:#111;padding:20px 30px}
   h1{font-size:16pt;margin-bottom:2px}
   .sub{font-size:9pt;color:#666;margin-bottom:12px}
-  h2{font-size:12pt;background:#f0f0f0;padding:5px 8px;margin:14px 0 4px;border-left:4px solid #2563eb}
+  h2{font-size:12pt;background:#f0f0f0;padding:5px 8px;margin:14px 0 4px;border-left:4px solid #7A35FF}
   table{width:100%;border-collapse:collapse;margin-bottom:8px}
   th{text-align:left;padding:5px 8px;border-bottom:2px solid #ccc;font-size:9pt;white-space:nowrap}
   th.r,td.r{text-align:right}
   td{padding:4px 8px;border-bottom:1px solid #eee;font-size:10pt}
   tfoot td{font-weight:bold;border-top:2px solid #ccc;border-bottom:none}
-  .grand{font-size:12pt;font-weight:bold;padding:10px 8px;border-top:3px solid #2563eb;margin-top:8px}
+  .grand{font-size:12pt;font-weight:bold;padding:10px 8px;border-top:3px solid #7A35FF;margin-top:8px}
   @media print{@page{margin:15mm}}
 </style>
 </head><body>
@@ -1153,7 +1148,6 @@ export default function ReportsPage() {
     },
   ];
 
-  const activeGroup = TAB_GROUPS.find((g) => g.tabs.some((t) => t.id === tab)) ?? TAB_GROUPS[0];
   const allTabs = TAB_GROUPS.flatMap((g) => g.tabs.map((t) => ({ ...t, group: g.label })));
   const searchResults = reportSearch.trim()
     ? allTabs.filter((t) => t.label.toLowerCase().includes(reportSearch.toLowerCase()) || t.group.toLowerCase().includes(reportSearch.toLowerCase()))
@@ -1182,76 +1176,38 @@ export default function ReportsPage() {
     <div className="h-full flex flex-col bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b px-4 sm:px-6 py-4">
-        <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Reports & Analytics</h1>
+        <div className="space-y-4 mb-4">
+          <PageHeader title="Reports & Analytics" icon={<BarChart3 className="w-5 h-5" />} />
 
-          {/* Mobile-responsive controls */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
-            {/* Branch / Store selector — Owner only */}
+          <div className="flex flex-col lg:flex-row lg:items-end gap-3 lg:flex-wrap">
+            {/* Branch / Store selector: Owner only */}
             {isOwner && stores.length > 0 && (
-              <select
-                value={selectedStoreId}
-                onChange={(e) => setSelectedStoreId(e.target.value)}
-                className="text-xs sm:text-sm border border-blue-300 rounded-lg px-3 py-1.5 bg-blue-50 text-blue-800 font-medium focus:ring-2 focus:ring-blue-400 focus:outline-none"
-                title="Filter reports by branch"
-              >
+              <Select label="Branch" hideLabel className="w-full sm:w-52" value={selectedStoreId} onChange={(e) => setSelectedStoreId(e.target.value)} title="Filter reports by branch">
                 <option value="">All Branches</option>
                 {stores.map((s) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
-              </select>
+              </Select>
             )}
-            {/* Date range selectors */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <Calendar className="w-4 h-4 text-gray-400" />
-              {(['today', 'week', 'month', 'quarter', 'year', 'custom'] as Range[]).map((r) => (
-                <button
-                  key={r}
-                  onClick={() => setRange(r)}
-                  className={`px-2 sm:px-3 py-1.5 text-xs sm:text-sm rounded-lg font-medium transition-colors ${
-                    range === r
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  {RANGE_LABELS[r]}
-                </button>
-              ))}
-            </div>
-            
-            {/* Comparison period selector */}
+
+            {/* Date range */}
             <div className="flex items-center gap-2">
-              <select
-                value={comparisonPeriod}
-                onChange={(e) => setComparisonPeriod(e.target.value as ComparisonPeriod)}
-                className="text-xs sm:text-sm border rounded-lg px-2 py-1.5 bg-white"
-              >
-                {Object.entries(COMPARISON_LABELS).map(([key, label]) => (
-                  <option key={key} value={key}>{label}</option>
-                ))}
-              </select>
+              <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" aria-hidden />
+              <Segmented size="sm" value={range} onChange={(r) => setRange(r as Range)} items={(['today', 'week', 'month', 'quarter', 'year', 'custom'] as Range[]).map((r) => ({ id: r, label: RANGE_LABELS[r] }))} />
             </div>
+
+            {/* Comparison period */}
+            <Select label="Compare with" hideLabel className="w-full sm:w-48" value={comparisonPeriod} onChange={(e) => setComparisonPeriod(e.target.value as ComparisonPeriod)}>
+              {Object.entries(COMPARISON_LABELS).map(([key, label]) => (
+                <option key={key} value={key}>{label}</option>
+              ))}
+            </Select>
 
             {/* Chart controls */}
             {(tab === 'overview' || tab === 'sales') && (
               <div className="flex items-center gap-2">
-                <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
-                  {(['bar', 'line', 'area'] as const).map((type) => (
-                    <button
-                      key={type}
-                      onClick={() => setChartType(type)}
-                      className={`px-2 py-1 capitalize ${chartType === type ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
-                    >
-                      {type}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  onClick={() => setShowTrendlines(!showTrendlines)}
-                  className={`px-2 py-1 text-xs rounded border ${showTrendlines ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}
-                >
-                  Trends
-                </button>
+                <Segmented size="sm" value={chartType} onChange={(t) => setChartType(t as typeof chartType)} items={(['bar', 'line', 'area'] as const).map((t) => ({ id: t, label: t[0].toUpperCase() + t.slice(1) }))} />
+                <Button size="sm" variant={showTrendlines ? 'primary' : 'secondary'} aria-pressed={showTrendlines} onClick={() => setShowTrendlines(!showTrendlines)}>Trends</Button>
               </div>
             )}
           </div>
@@ -1259,20 +1215,9 @@ export default function ReportsPage() {
 
         {/* Custom date inputs */}
         {range === 'custom' && (
-          <div className="flex items-center gap-2 mb-4">
-            <input
-              type="date"
-              value={customFrom}
-              onChange={(e) => setCustomFrom(e.target.value)}
-              className="border px-2 py-1.5 rounded-lg text-sm"
-            />
-            <span className="text-gray-400 text-sm">to</span>
-            <input
-              type="date"
-              value={customTo}
-              onChange={(e) => setCustomTo(e.target.value)}
-              className="border px-2 py-1.5 rounded-lg text-sm"
-            />
+          <div className="flex items-end gap-2 mb-4">
+            <Input label="From" type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+            <Input label="To" type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
           </div>
         )}
 
@@ -1289,7 +1234,7 @@ export default function ReportsPage() {
             />
             <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx={11} cy={11} r={8}/><path d="m21 21-4.35-4.35"/></svg>
             {reportSearch && (
-              <button onClick={() => setReportSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              <button onClick={() => setReportSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600" aria-label="Close">
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
@@ -1321,49 +1266,21 @@ export default function ReportsPage() {
             )}
           </div>
 
-          {/* Group pills */}
-          <div className="flex items-center gap-1 overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap pb-1 border-b border-gray-100">
-            {TAB_GROUPS.map((g) => {
-              const GIcon = g.icon;
-              const isActive = !reportSearch && (activeGroup.id === g.id || tabGroup === g.id);
-              return (
-                <button
-                  key={g.id}
-                  onClick={() => handleGroupClick(g.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
-                    isActive
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                  }`}
-                >
-                  <GIcon className="w-3.5 h-3.5" />
-                  {g.label}
-                </button>
-              );
-            })}
-          </div>
+          {/* Report groups, then the reports inside the chosen group */}
+          <Segmented
+            size="sm"
+            value={reportSearch ? '' : tabGroup}
+            onChange={(g) => handleGroupClick(g as TabGroup)}
+            items={TAB_GROUPS.map((g) => { const GIcon = g.icon; return { id: g.id, label: g.label, icon: <GIcon className="w-3.5 h-3.5" /> }; })}
+            className="pb-1"
+          />
 
-          {/* Sub-tabs for active group */}
           {!reportSearch && (
-            <div className="flex gap-0.5 -mb-4 overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap">
-              {visibleTabs.map((t) => {
-                const Icon = t.icon;
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => handleTabClick(t.id)}
-                    className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors whitespace-nowrap rounded-t-md ${
-                      tab === t.id
-                        ? 'border-blue-600 text-blue-700 bg-blue-50/60'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    <Icon className="w-3.5 h-3.5" />
-                    {t.label}
-                  </button>
-                );
-              })}
-            </div>
+            <Tabs
+              value={tab}
+              onChange={(t) => handleTabClick(t as Tab)}
+              tabs={visibleTabs.map((t) => { const Icon = t.icon; return { id: t.id as string, label: t.label, icon: <Icon className="w-3.5 h-3.5" /> }; })}
+            />
           )}
         </div>
       </div>
@@ -1494,7 +1411,7 @@ export default function ReportsPage() {
                           <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                           <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}K`} />
                           <Tooltip formatter={(v: number) => [`KES ${v.toLocaleString('en-KE')}`, 'Revenue']} />
-                          <Bar dataKey="totalKES" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="totalKES" fill="#8B4EFF" radius={[4, 4, 0, 0]} />
                           {showTrendlines && (
                             <ReferenceLine
                               stroke="#EF4444"
@@ -1512,7 +1429,7 @@ export default function ReportsPage() {
                           <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                           <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}K`} />
                           <Tooltip formatter={(v: number) => [`KES ${v.toLocaleString('en-KE')}`, 'Revenue']} />
-                          <Line type="monotone" dataKey="totalKES" stroke="#3B82F6" strokeWidth={2} dot={{ r: 4 }} />
+                          <Line type="monotone" dataKey="totalKES" stroke="#8B4EFF" strokeWidth={2} dot={{ r: 4 }} />
                         </LineChart>
                       ) : (
                         <AreaChart data={dailyData} margin={{ left: 0, right: 0 }}>
@@ -1520,7 +1437,7 @@ export default function ReportsPage() {
                           <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                           <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}K`} />
                           <Tooltip formatter={(v: number) => [`KES ${v.toLocaleString('en-KE')}`, 'Revenue']} />
-                          <Area type="monotone" dataKey="totalKES" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.3} />
+                          <Area type="monotone" dataKey="totalKES" stroke="#8B4EFF" fill="#8B4EFF" fillOpacity={0.3} />
                         </AreaChart>
                       )}
                     </ResponsiveContainer>
@@ -2439,7 +2356,7 @@ export default function ReportsPage() {
                           onClick={() => {
                             if (!plData) return;
                             const margin = plData.revenueCents > 0 ? ((plData.netProfitCents / plData.revenueCents) * 100).toFixed(1) : '0.0';
-                            printHtml('Profit & Loss Statement', `<h1>Profit &amp; Loss Statement</h1><p class="sub">${startDate.substring(0,10)} to ${endDate.substring(0,10)}</p><table><tbody><tr><td>Revenue</td><td class="r" style="color:#16a34a">${formatKES(plData.revenueCents)}</td></tr><tr><td style="padding-left:20px">Cost of Goods Sold</td><td class="r" style="color:#dc2626">(${formatKES(plData.cogsCents)})</td></tr><tr style="font-weight:bold;border-top:2px solid #ccc"><td>Gross Profit</td><td class="r" style="color:${plData.grossProfitCents>=0?'#16a34a':'#dc2626'}">${formatKES(plData.grossProfitCents)}</td></tr><tr><td style="padding-left:20px">Operating Expenses</td><td class="r" style="color:#dc2626">(${formatKES(plData.expensesCents)})</td></tr><tr style="font-weight:bold;border-top:2px solid #2563eb"><td>Net Profit</td><td class="r" style="color:${plData.netProfitCents>=0?'#16a34a':'#dc2626'}">${formatKES(plData.netProfitCents)}</td></tr></tbody></table><p style="text-align:right;color:#888;font-size:9pt;margin-top:8px">Net Margin: ${margin}%</p>`);
+                            printHtml('Profit & Loss Statement', `<h1>Profit &amp; Loss Statement</h1><p class="sub">${startDate.substring(0,10)} to ${endDate.substring(0,10)}</p><table><tbody><tr><td>Revenue</td><td class="r" style="color:#16a34a">${formatKES(plData.revenueCents)}</td></tr><tr><td style="padding-left:20px">Cost of Goods Sold</td><td class="r" style="color:#dc2626">(${formatKES(plData.cogsCents)})</td></tr><tr style="font-weight:bold;border-top:2px solid #ccc"><td>Gross Profit</td><td class="r" style="color:${plData.grossProfitCents>=0?'#16a34a':'#dc2626'}">${formatKES(plData.grossProfitCents)}</td></tr><tr><td style="padding-left:20px">Operating Expenses</td><td class="r" style="color:#dc2626">(${formatKES(plData.expensesCents)})</td></tr><tr style="font-weight:bold;border-top:2px solid #7A35FF"><td>Net Profit</td><td class="r" style="color:${plData.netProfitCents>=0?'#16a34a':'#dc2626'}">${formatKES(plData.netProfitCents)}</td></tr></tbody></table><p style="text-align:right;color:#888;font-size:9pt;margin-top:8px">Net Margin: ${margin}%</p>`);
                           }}
                           className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-800"
                         >
@@ -2560,8 +2477,7 @@ export default function ReportsPage() {
                         value={historyAsOf}
                         max={new Date().toISOString().substring(0, 10)}
                         onChange={(e) => setHistoryAsOf(e.target.value)}
-                        className="border rounded-lg px-3 py-1.5 text-sm"
-                      />
+                        className="border rounded-lg px-3 py-1.5 text-sm" aria-label="Date" />
                     </div>
                   )}
                 </div>
@@ -2772,7 +2688,7 @@ export default function ReportsPage() {
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
                       <div className="flex items-center justify-between px-6 py-4 border-b">
                         <h3 className="font-bold text-gray-900">Stock Adjustment — {writeOffItem.name}</h3>
-                        <button onClick={() => setWriteOffItem(null)} className="text-gray-400 hover:text-gray-600">
+                        <button onClick={() => setWriteOffItem(null)} className="text-gray-400 hover:text-gray-600" aria-label="Close">
                           <X className="w-5 h-5" />
                         </button>
                       </div>
@@ -3643,8 +3559,7 @@ export default function ReportsPage() {
                   <select
                     value={empSalesFilter}
                     onChange={(e) => setEmpSalesFilter(e.target.value)}
-                    className="border rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 min-w-[200px]"
-                  >
+                    className="border rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 min-w-[200px]">
                     <option value="">All Employees</option>
                     {businessUsers.map((u) => (
                       <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
@@ -3697,7 +3612,7 @@ export default function ReportsPage() {
                               <div style="text-align:right;font-size:9pt">Sales: <strong>${emp.salesCount}</strong> &bull; Revenue: <strong>${formatKES(emp.totalCents)}</strong> &bull; M-Pesa: <strong>${formatKES(emp.mpesaTotalCents)}</strong></div>
                             </div>
                             ${catRows}${mpesaRows}
-                            <div style="margin-top:8px;padding:6px;background:#f0f9ff;border-left:4px solid #2563eb">
+                            <div style="margin-top:8px;padding:6px;background:#f0f9ff;border-left:4px solid #7A35FF">
                               Cash Expected = Total Revenue (${formatKES(emp.totalCents)}) &minus; M-Pesa (${formatKES(emp.mpesaTotalCents)}) = <strong>${formatKES(emp.totalCents - emp.mpesaTotalCents)}</strong>
                             </div>
                           </div>`;

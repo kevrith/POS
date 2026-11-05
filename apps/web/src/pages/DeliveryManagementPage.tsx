@@ -117,7 +117,7 @@ function LiveGPSMap({ deliveries, driverLocations }: { deliveries: DeliveryOrder
       label: d.name,
       // Stale pins say "last seen" outright so nobody reads an old fix as live.
       sublabel: fresh === 'stale' ? `last seen ${formatAge(d.timestamp)}` : formatAge(d.timestamp),
-      color: fresh === 'stale' ? '#6b7280' : d.activeDeliveries > 0 ? '#2563eb' : '#16a34a',
+      color: fresh === 'stale' ? '#6b7280' : d.activeDeliveries > 0 ? '#7A35FF' : '#16a34a',
       muted: fresh === 'stale',
     };
   });
@@ -407,13 +407,12 @@ export default function DeliveryManagementPage() {
               <select
                 value={selectedStatus}
                 onChange={e => setSelectedStatus(e.target.value)}
-                className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
-              >
+                className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white" aria-label="Filter by status">
                 <option value="">All Status</option>
                 {Object.keys(STATUS_COLORS).map(s => <option key={s}>{s}</option>)}
               </select>
               <button onClick={() => qc.invalidateQueries({ queryKey: ['delivery-orders'] })}
-                className="p-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
+                className="p-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" aria-label="Refresh">
                 <RefreshCw className="w-4 h-4 text-gray-600 dark:text-gray-400" />
               </button>
             </div>
@@ -605,10 +604,10 @@ export default function DeliveryManagementPage() {
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               <input type="date" value={slaStart} onChange={e => setSlaStart(e.target.value)}
-                className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
+                className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white" aria-label="Date" />
               <span className="text-gray-500">to</span>
               <input type="date" value={slaEnd} onChange={e => setSlaEnd(e.target.value)}
-                className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
+                className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white" aria-label="End date" />
             </div>
 
             {slaReport ? (
@@ -656,7 +655,7 @@ export default function DeliveryManagementPage() {
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md">
             <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
               <h2 className="font-bold text-gray-900 dark:text-white">Assign Driver</h2>
-              <button onClick={() => setShowAssignDriver(null)}><X className="w-5 h-5 text-gray-400" /></button>
+              <button onClick={() => setShowAssignDriver(null)} aria-label="Close"><X className="w-5 h-5 text-gray-400" /></button>
             </div>
             <div className="p-4 space-y-2">
               {drivers.length === 0 ? <p className="text-gray-500 text-sm">No drivers found</p> : drivers.map(d => (

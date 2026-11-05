@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { subscribeToEvent, SocketEvents } from '../lib/socket';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import { Button, PageHeader, StatTile, Tabs } from '../components/ui';
 import { useAuthStore } from '../stores/auth';
 import { formatKES } from '@pos/shared';
 import { printHtml } from '../lib/printHtml';
@@ -14,6 +15,7 @@ import {
   Monitor, Plus, Play, Pause, Square, Clock, BarChart3,
   Package, List, Wifi, WifiOff, Printer, Coffee,
   CheckCircle, X, Tag, Trash2, TrendingUp, Timer, Zap,
+  Globe, Gamepad2, Briefcase, Bell, Link2,
 } from 'lucide-react';
 
 type Tab = 'stations' | 'sessions' | 'packages' | 'rates' | 'stats';
@@ -47,11 +49,11 @@ const STATION_TYPE_BADGE: Record<StationType, string> = {
   WORKSTATION: 'bg-gray-100 text-gray-600',
   PRINTING: 'bg-orange-100 text-orange-700',
 };
-const STATION_TYPE_ICON: Record<StationType, string> = {
-  BROWSING: '🌐',
-  GAMING: '🎮',
-  WORKSTATION: '💼',
-  PRINTING: '🖨️',
+const STATION_TYPE_ICON: Record<StationType, React.ReactNode> = {
+  BROWSING: <Globe className="w-3 h-3" />,
+  GAMING: <Gamepad2 className="w-3 h-3" />,
+  WORKSTATION: <Briefcase className="w-3 h-3" />,
+  PRINTING: <Printer className="w-3 h-3" />,
 };
 
 const PAYMENT_METHODS = ['CASH', 'MPESA', 'CARD', 'CREDIT'];
@@ -233,7 +235,7 @@ export default function CybercafePage() {
     const unsub = subscribeToEvent(SocketEvents.CYBER_CALL_ATTENDANT, (data: any) => {
       const label = data.stationLabel ?? `PC ${data.stationNumber}`;
       playAlertSound();
-      toast.warning(`🔔 ${label} is calling for assistance!`, {
+      toast.warning(`${label} is calling for assistance!`, {
         duration: 20000,
         position: 'top-center',
         style: { fontSize: '1rem', fontWeight: 600 },
@@ -432,70 +434,24 @@ export default function CybercafePage() {
 
   return (
     <div className="p-3 sm:p-6 space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Monitor className="w-6 h-6 text-indigo-600" />
-          <h1 className="text-2xl font-bold">Cybercafe Management</h1>
-        </div>
-        <button
-          onClick={() => setAddStationModal(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700"
-        >
-          <Plus className="w-4 h-4" /> Add Station
-        </button>
-      </div>
+      <PageHeader
+        title="Cybercafe Management"
+        icon={<Monitor className="w-5 h-5" />}
+        actions={<Button icon={<Plus className="w-4 h-4" />} onClick={() => setAddStationModal(true)}>Add Station</Button>}
+      />
 
-      {/* Daily Summary Bar */}
+      {/* Daily summary: one tile style, colour kept for status */}
       {dailySummary && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
-            <p className="text-xs text-blue-600 font-medium flex items-center justify-center gap-1">
-              <Zap className="w-3 h-3" /> Active Sessions
-            </p>
-            <p className="text-2xl font-bold text-blue-700">{dailySummary.activeSessions}</p>
-          </div>
-          <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
-            <p className="text-xs text-green-600 font-medium flex items-center justify-center gap-1">
-              <Monitor className="w-3 h-3" /> Total Stations
-            </p>
-            <p className="text-2xl font-bold text-green-700">{dailySummary.totalStations}</p>
-          </div>
-          <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 text-center">
-            <p className="text-xs text-indigo-600 font-medium flex items-center justify-center gap-1">
-              <TrendingUp className="w-3 h-3" /> Today's Revenue
-            </p>
-            <p className="text-xl font-bold text-indigo-700">{formatKES(dailySummary.todayRevenueCents)}</p>
-          </div>
-          <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 text-center">
-            <p className="text-xs text-purple-600 font-medium flex items-center justify-center gap-1">
-              <CheckCircle className="w-3 h-3" /> Today's Sessions
-            </p>
-            <p className="text-2xl font-bold text-purple-700">{dailySummary.todaySessions}</p>
-          </div>
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">
-            <p className="text-xs text-amber-600 font-medium flex items-center justify-center gap-1">
-              <Timer className="w-3 h-3" /> Today's Hours
-            </p>
-            <p className="text-xl font-bold text-amber-700">{((dailySummary.todayMinutes ?? 0) / 60).toFixed(1)}h</p>
-          </div>
+          <StatTile label="Active Sessions" value={dailySummary.activeSessions} icon={<Zap className="w-4 h-4" />} />
+          <StatTile label="Total Stations" value={dailySummary.totalStations} icon={<Monitor className="w-4 h-4" />} />
+          <StatTile label="Today's Revenue" value={formatKES(dailySummary.todayRevenueCents)} icon={<TrendingUp className="w-4 h-4" />} />
+          <StatTile label="Today's Sessions" value={dailySummary.todaySessions} icon={<CheckCircle className="w-4 h-4" />} />
+          <StatTile label="Today's Hours" value={`${((dailySummary.todayMinutes ?? 0) / 60).toFixed(1)}h`} icon={<Timer className="w-4 h-4" />} />
         </div>
       )}
 
-      {/* Tab Bar */}
-      <div className="flex gap-1 border-b overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
-              tab === t.id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {t.icon}{t.label}
-          </button>
-        ))}
-      </div>
+      <Tabs tabs={TABS} value={tab} onChange={setTab} />
 
       {/* ── STATION GRID ── */}
       {tab === 'stations' && (
@@ -524,11 +480,12 @@ export default function CybercafePage() {
                   {/* Call attendant alert banner */}
                   {isCalling && (
                     <div className="flex items-center justify-between bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded -mx-1 -mt-1">
-                      <span>🔔 CALLING FOR HELP</span>
+                      <span className="inline-flex items-center gap-1"><Bell className="w-3 h-3" /> CALLING FOR HELP</span>
                       <button
                         onClick={() => setCallingStations((prev) => { const n = { ...prev }; delete n[station.id]; return n; })}
-                        className="ml-2 hover:text-orange-200"
-                      >✕</button>
+                        className="ml-2 hover:text-orange-200" aria-label="Delete">
+                        <X className="w-3 h-3" aria-label="Dismiss" />
+                      </button>
                     </div>
                   )}
 
@@ -545,7 +502,7 @@ export default function CybercafePage() {
 
                   {/* Station type badge */}
                   <span className={`text-xs px-1.5 py-0.5 rounded font-medium self-start ${STATION_TYPE_BADGE[stationType]}`}>
-                    {STATION_TYPE_ICON[stationType]} {stationType}
+                    <span className="inline-flex items-center gap-1">{STATION_TYPE_ICON[stationType]} {stationType}</span>
                   </span>
 
                   {station.label && <p className="text-xs text-gray-500 truncate">{station.label}</p>}
@@ -561,7 +518,7 @@ export default function CybercafePage() {
                     <div className="bg-white/70 rounded-lg p-2 space-y-1 text-xs">
                       <p className="font-semibold truncate">{session.customerName ?? 'Walk-in'}</p>
                       {session.package && (
-                        <p className="text-indigo-600 truncate">📦 {session.package.name}</p>
+                        <p className="text-brand-700 truncate inline-flex items-center gap-1"><Package className="w-3 h-3 flex-shrink-0" /> {session.package.name}</p>
                       )}
                       <SessionTimer
                         startedAt={session.startedAt}
@@ -685,7 +642,7 @@ export default function CybercafePage() {
                       }}
                       className="w-full py-1 border border-indigo-200 text-indigo-600 rounded text-xs hover:bg-indigo-50 flex items-center justify-center gap-1"
                     >
-                      🔗 Copy Kiosk URL
+                      <Link2 className="w-3 h-3" /> Copy Kiosk URL
                     </button>
                   </div>
                 </div>
@@ -705,8 +662,8 @@ export default function CybercafePage() {
       {tab === 'sessions' && (
         <div className="space-y-4">
           <div className="flex gap-2 items-center flex-wrap">
-            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={startDate} onChange={(e) => setStartDate(e.target.value)} aria-label="Date" />
+            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={endDate} onChange={(e) => setEndDate(e.target.value)} aria-label="Start date" />
           </div>
           <div className="bg-white border rounded-lg overflow-x-auto">
             <table className="w-full text-sm">
@@ -1008,8 +965,7 @@ ${catRates.map((r: any) => `<tr><td>${r.service}</td><td style="font-size:11px;c
                                 <button
                                   onClick={async () => { const ok = await confirm({ title: 'Delete Rate', message: 'Delete this pricing rate?', variant: 'danger', confirmLabel: 'Delete' }); if (ok) deleteRateMut.mutate(r.id); }}
                                   disabled={deleteRateMut.isPending}
-                                  className="text-red-400 hover:text-red-600"
-                                >
+                                  className="text-red-400 hover:text-red-600" aria-label="Delete">
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               </>
@@ -1038,8 +994,8 @@ ${catRates.map((r: any) => `<tr><td>${r.service}</td><td style="font-size:11px;c
       {tab === 'stats' && (
         <div className="space-y-4">
           <div className="flex gap-2 items-center">
-            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={startDate} onChange={(e) => setStartDate(e.target.value)} aria-label="Date" />
+            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={endDate} onChange={(e) => setEndDate(e.target.value)} aria-label="Start date" />
           </div>
           {stats && (
             <>
@@ -1146,7 +1102,7 @@ ${catRates.map((r: any) => `<tr><td>${r.service}</td><td style="font-size:11px;c
                 <Play className="w-5 h-5 text-indigo-600" />
                 Start Session — PC {startModal.station.number}
               </h2>
-              <button onClick={() => setStartModal(null)}><X className="w-5 h-5 text-gray-400" /></button>
+              <button onClick={() => setStartModal(null)} aria-label="Close"><X className="w-5 h-5 text-gray-400" /></button>
             </div>
 
             <div className="space-y-3">
@@ -1169,8 +1125,7 @@ ${catRates.map((r: any) => `<tr><td>${r.service}</td><td style="font-size:11px;c
                 <select
                   className="w-full border rounded px-3 py-2 text-sm"
                   value={startForm.packageId}
-                  onChange={(e) => setStartForm({ ...startForm, packageId: e.target.value })}
-                >
+                  onChange={(e) => setStartForm({ ...startForm, packageId: e.target.value })}>
                   <option value="">Hourly billing</option>
                   {packages.map((pkg: any) => (
                     <option key={pkg.id} value={pkg.id}>
@@ -1238,7 +1193,7 @@ ${catRates.map((r: any) => `<tr><td>${r.service}</td><td style="font-size:11px;c
                 <Square className="w-5 h-5 text-red-600" />
                 End Session & Bill
               </h2>
-              <button onClick={() => setEndModal(null)}><X className="w-5 h-5 text-gray-400" /></button>
+              <button onClick={() => setEndModal(null)} aria-label="Close"><X className="w-5 h-5 text-gray-400" /></button>
             </div>
 
             {/* Session summary */}
@@ -1368,8 +1323,7 @@ ${catRates.map((r: any) => `<tr><td>${r.service}</td><td style="font-size:11px;c
                     <select
                       className="w-full border rounded px-3 py-2 text-sm"
                       value={endForm.customerId}
-                      onChange={(e) => setEndForm({ ...endForm, customerId: e.target.value })}
-                    >
+                      onChange={(e) => setEndForm({ ...endForm, customerId: e.target.value })}>
                       <option value="">Choose a customer…</option>
                       {creditCustomers.map((c) => <option key={c.id} value={c.id}>{c.name}{c.phone ? ` · ${c.phone}` : ''}</option>)}
                     </select>
@@ -1423,7 +1377,7 @@ ${catRates.map((r: any) => `<tr><td>${r.service}</td><td style="font-size:11px;c
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="font-bold text-lg">Add Station</h2>
-              <button onClick={() => setAddStationModal(false)}><X className="w-5 h-5 text-gray-400" /></button>
+              <button onClick={() => setAddStationModal(false)} aria-label="Close"><X className="w-5 h-5 text-gray-400" /></button>
             </div>
             <div className="space-y-3">
               <input className="w-full border rounded px-3 py-2 text-sm" placeholder="Station number (e.g. 1)" type="number"
@@ -1437,12 +1391,11 @@ ${catRates.map((r: any) => `<tr><td>${r.service}</td><td style="font-size:11px;c
                 <select
                   className="w-full border rounded px-3 py-2 text-sm"
                   value={stationForm.stationType}
-                  onChange={(e) => setStationForm({ ...stationForm, stationType: e.target.value })}
-                >
-                  <option value="BROWSING">🌐 Browsing</option>
-                  <option value="GAMING">🎮 Gaming</option>
-                  <option value="WORKSTATION">💼 Workstation</option>
-                  <option value="PRINTING">🖨️ Printing</option>
+                  onChange={(e) => setStationForm({ ...stationForm, stationType: e.target.value })}>
+                  <option value="BROWSING">Browsing</option>
+                  <option value="GAMING">Gaming</option>
+                  <option value="WORKSTATION">Workstation</option>
+                  <option value="PRINTING">Printing</option>
                 </select>
               </div>
               <div>
@@ -1475,7 +1428,7 @@ ${catRates.map((r: any) => `<tr><td>${r.service}</td><td style="font-size:11px;c
                 <Timer className="w-5 h-5 text-indigo-600" />
                 Extend Session
               </h2>
-              <button onClick={() => setExtendModal(null)}><X className="w-5 h-5 text-gray-400" /></button>
+              <button onClick={() => setExtendModal(null)} aria-label="Close"><X className="w-5 h-5 text-gray-400" /></button>
             </div>
 
             <div className="bg-indigo-50 rounded-xl p-3 text-sm space-y-1">

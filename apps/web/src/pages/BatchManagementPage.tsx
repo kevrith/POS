@@ -109,7 +109,7 @@ function RecallModal({ batch, businessId, onClose, onSuccess }: RecallModalProps
             <AlertTriangle className="w-5 h-5" />
             {result ? 'Recall Complete' : 'Confirm Recall'}
           </h2>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100" aria-label="Close">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
@@ -202,7 +202,7 @@ function HistoryModal({ batchId, businessId, onClose }: HistoryModalProps) {
             <History className="w-5 h-5 text-blue-500" />
             Batch History
           </h2>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100" aria-label="Close">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
@@ -326,7 +326,7 @@ function AddBatchModal({ businessId, storeId, onClose, onSuccess }: AddBatchModa
       <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="text-lg font-bold text-gray-800">Add Batch</h2>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100" aria-label="Close">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
@@ -344,7 +344,7 @@ function AddBatchModal({ businessId, storeId, onClose, onSuccess }: AddBatchModa
                 <span className="text-sm font-semibold text-blue-800">
                   {batchableItems.find((i) => i.id === form.itemId)?.name ?? form.itemSearch}
                 </span>
-                <button onClick={() => setForm({ ...form, itemId: '', itemSearch: '' })} className="text-blue-400 hover:text-blue-600">
+                <button onClick={() => setForm({ ...form, itemId: '', itemSearch: '' })} className="text-blue-400 hover:text-blue-600" aria-label="Close">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -404,8 +404,7 @@ function AddBatchModal({ businessId, storeId, onClose, onSuccess }: AddBatchModa
                 type="date"
                 value={form.manufacturingDate}
                 onChange={(e) => setForm({ ...form, manufacturingDate: e.target.value })}
-                className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-              />
+                className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" aria-label="Date" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Expiry Date</label>
@@ -413,8 +412,7 @@ function AddBatchModal({ businessId, storeId, onClose, onSuccess }: AddBatchModa
                 type="date"
                 value={form.expiryDate}
                 onChange={(e) => setForm({ ...form, expiryDate: e.target.value })}
-                className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-              />
+                className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" aria-label="Date" />
             </div>
           </div>
         </div>
@@ -496,8 +494,7 @@ export default function BatchManagementPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => void refetch()}
-              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
-            >
+              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg" aria-label="Refresh">
               <RefreshCw className="w-5 h-5" />
             </button>
             <button
@@ -559,8 +556,7 @@ export default function BatchManagementPage() {
             <select
               value={expiryDays}
               onChange={(e) => setExpiryDays(Number(e.target.value))}
-              className="border rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 dark:border-gray-700"
-            >
+              className="border rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 dark:border-gray-700">
               <option value={7}>7 days</option>
               <option value={14}>14 days</option>
               <option value={30}>30 days</option>

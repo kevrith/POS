@@ -125,7 +125,7 @@ function printPayslips(run: PayrollRun) {
         .right { text-align: right; }
         .total-row td { font-weight: bold; border-top: 2px solid #333; }
         .section-header { background: #e8e8e8; font-weight: bold; }
-        .net-row td { background: #2563eb; color: white; font-size: 14px; font-weight: bold; }
+        .net-row td { background: #7A35FF; color: white; font-size: 14px; font-weight: bold; }
       </style>
     </head>
     <body>
@@ -301,7 +301,7 @@ function NewClaimModal({ employees, businessId, onClose, onCreate, isPending }: 
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">New Expense Claim</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" aria-label="Close">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -312,8 +312,7 @@ function NewClaimModal({ employees, businessId, onClose, onCreate, isPending }: 
               value={employeeId}
               onChange={(e) => setEmployeeId(e.target.value)}
               required
-              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            >
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
               <option value="">Select employee...</option>
               {employees.map((emp) => (
                 <option key={emp.id} value={emp.id}>{emp.user.name}</option>
@@ -1016,7 +1015,7 @@ export default function PayrollPage() {
               {runs.map((run) => (
                 <div
                   key={run.id}
-                  className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 cursor-pointer hover:shadow-md transition-shadow"
+                  className="surface-interactive rounded-xl p-4" role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                   onClick={async () => {
                     const full = await api.get<PayrollRun>(`/hr/payroll/${run.id}/payslips`);
                     setSelectedRun(full);

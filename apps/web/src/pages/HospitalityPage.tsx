@@ -11,6 +11,7 @@ import {
   Sparkles, Wrench, ChevronLeft,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { Button, IconButton } from '../components/ui';
 import { useAuthStore } from '../stores/auth';
 import PaymentModal from '../components/PaymentModal';
 import { printKOT, printBill, printKOTWithRouting } from '../lib/printer';
@@ -314,7 +315,7 @@ function ItemPicker({ businessId, storeId, coverCount = 1, onAdd, onClose }: Ite
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="text-lg font-bold text-gray-800">Add Items</h2>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100" aria-label="Close">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
@@ -543,7 +544,7 @@ function ReservationsModal({ storeId, businessId, tables, onClose, tablePrefix =
             <CalendarDays className="w-5 h-5 text-blue-600" />
             <h2 className="text-lg font-bold text-gray-800">Today's Reservations</h2>
           </div>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100" aria-label="Close">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
@@ -632,8 +633,7 @@ function ReservationsModal({ storeId, businessId, tables, onClose, tablePrefix =
                   <select
                     value={form.tableId}
                     onChange={(e) => setForm((f) => ({ ...f, tableId: e.target.value }))}
-                    className="w-full px-3 py-2 border rounded-lg text-sm"
-                  >
+                    className="w-full px-3 py-2 border rounded-lg text-sm">
                     <option value="">Select table</option>
                     {availableTables.map((t) => (
                       <option key={t.id} value={t.id}>{fmtTable(t.number, tablePrefix)} ({t.capacity} seats)</option>
@@ -832,7 +832,7 @@ function FastFoodPanel({ businessId, storeId, userId, userName, onClose }: FastF
                 <p className="text-xs text-amber-600 mt-0.5">Pay first, then send to kitchen</p>
               </div>
             </div>
-            <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200">
+            <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200" aria-label="Close">
               <X className="w-5 h-5 text-gray-500" />
             </button>
           </div>
@@ -871,8 +871,7 @@ function FastFoodPanel({ businessId, storeId, userId, userName, onClose }: FastF
                 </span>
                 <button
                   onClick={() => setPendingItems((prev) => prev.filter((_, i) => i !== idx))}
-                  className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                >
+                  className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg" aria-label="Delete">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
@@ -1069,7 +1068,7 @@ function SplitBillModal({ order, table, tablePrefix, businessId, storeId, userId
                 </p>
               </div>
             </div>
-            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full">
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full" aria-label="Close">
               <X className="w-4 h-4 text-gray-500" />
             </button>
           </div>
@@ -1671,7 +1670,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
                   <GitMerge className="w-4 h-4" />
                 </button>
               )}
-              <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200">
+              <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200" aria-label="Close">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
@@ -1803,8 +1802,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
                             {table.status !== 'BILL_REQUESTED' && (
                               <button
                                 onClick={() => activeOrder && removeItem.mutate({ orderId: activeOrder.id, itemId: item.id })}
-                                className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                              >
+                                className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg" aria-label="Delete">
                                 <Trash2 className="w-4 h-4" />
                               </button>
                             )}
@@ -1875,8 +1873,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
                   </span>
                   <button
                     onClick={() => setPendingItems((prev) => prev.filter((_, i) => i !== idx))}
-                    className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                  >
+                    className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg" aria-label="Delete">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -2058,7 +2055,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
                 <ArrowLeftRight className="w-5 h-5 text-blue-600" />
                 <h3 className="font-bold text-gray-800">Transfer to Table</h3>
               </div>
-              <button onClick={() => setShowTransfer(false)} className="p-2 hover:bg-gray-100 rounded-full">
+              <button onClick={() => setShowTransfer(false)} className="p-2 hover:bg-gray-100 rounded-full" aria-label="Close">
                 <X className="w-4 h-4 text-gray-500" />
               </button>
             </div>
@@ -2095,7 +2092,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
                 <GitMerge className="w-5 h-5 text-purple-600" />
                 <h3 className="font-bold text-gray-800">Merge Tables</h3>
               </div>
-              <button onClick={() => setShowMerge(false)} className="p-2 hover:bg-gray-100 rounded-full">
+              <button onClick={() => setShowMerge(false)} className="p-2 hover:bg-gray-100 rounded-full" aria-label="Close">
                 <X className="w-4 h-4 text-gray-500" />
               </button>
             </div>
@@ -2607,68 +2604,33 @@ export default function HospitalityPage() {
             <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
               <button
                 onClick={() => setView('tables')}
-                className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors ${view === 'tables' ? 'bg-white dark:bg-gray-600 shadow text-blue-600' : 'text-gray-600 dark:text-gray-300'}`}
+                className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors ${view === 'tables' ? 'bg-white dark:bg-gray-600 shadow text-brand-700' : 'text-gray-600 dark:text-gray-300'}`}
               >
                 Tables
               </button>
               <button
                 onClick={() => setView('bar-tabs')}
-                className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors ${view === 'bar-tabs' ? 'bg-white dark:bg-gray-600 shadow text-purple-600' : 'text-gray-600 dark:text-gray-300'}`}
+                className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors ${view === 'bar-tabs' ? 'bg-white dark:bg-gray-600 shadow text-brand-700' : 'text-gray-600 dark:text-gray-300'}`}
               >
                 Bar Tabs
               </button>
               <button
                 onClick={() => setView('rooms')}
-                className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors flex items-center gap-1.5 ${view === 'rooms' ? 'bg-white dark:bg-gray-600 shadow text-teal-600' : 'text-gray-600 dark:text-gray-300'}`}
+                className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors flex items-center gap-1.5 ${view === 'rooms' ? 'bg-white dark:bg-gray-600 shadow text-brand-700' : 'text-gray-600 dark:text-gray-300'}`}
               >
                 <BedDouble className="w-3.5 h-3.5" /> Rooms
               </button>
             </div>
           </div>
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 xl:pb-0 [&>button]:shrink-0 [&>button]:whitespace-nowrap">
-            <button
-              onClick={() => void refetch()}
-              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
-              title="Refresh"
-            >
+          <div className="flex flex-wrap items-center gap-2">
+            <IconButton label="Refresh" onClick={() => void refetch()}>
               <RefreshCw className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => setShowReservations(true)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg font-medium text-sm transition-colors"
-            >
-              <CalendarDays className="w-4 h-4" />
-              Reservations
-            </button>
-            <button
-              onClick={() => setShowFastFood(true)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg font-medium text-sm transition-colors"
-            >
-              <Zap className="w-4 h-4" />
-              Fast Food
-            </button>
-            <button
-              onClick={() => setShowHappyHourModal(true)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg font-medium text-sm transition-colors"
-              title="Happy Hours"
-            >
-              <Sparkles className="w-4 h-4" />
-              Happy Hours
-            </button>
-            <button
-              onClick={() => navigate('/kds')}
-              className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors"
-            >
-              <ChefHat className="w-4 h-4" />
-              KDS
-            </button>
-            <button
-              onClick={openAddTable}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Add Table
-            </button>
+            </IconButton>
+            <Button variant="secondary" icon={<CalendarDays className="w-4 h-4" />} onClick={() => setShowReservations(true)}>Reservations</Button>
+            <Button variant="secondary" icon={<Zap className="w-4 h-4" />} onClick={() => setShowFastFood(true)}>Fast Food</Button>
+            <Button variant="secondary" icon={<Sparkles className="w-4 h-4" />} onClick={() => setShowHappyHourModal(true)} title="Happy Hours">Happy Hours</Button>
+            <Button variant="secondary" icon={<ChefHat className="w-4 h-4" />} onClick={() => navigate('/kds')}>KDS</Button>
+            <Button icon={<Plus className="w-4 h-4" />} onClick={openAddTable}>Add Table</Button>
           </div>
         </div>
 
@@ -2689,7 +2651,7 @@ export default function HospitalityPage() {
                  s === 'BILL_REQUESTED' ? 'Bill Req.' :
                  s.charAt(0) + s.slice(1).toLowerCase()}
                 {' '}
-                <span className="opacity-70">
+                <span className="opacity-100">
                   ({s === 'ALL' ? tables.length :
                     s === 'AVAILABLE' ? stats.available :
                     s === 'OCCUPIED' ? stats.occupied :
@@ -2771,13 +2733,13 @@ export default function HospitalityPage() {
                       <div key={table.id} className="relative group">
                         <button
                           onClick={() => setSelectedTable(table)}
-                          className={`w-full relative p-4 rounded-2xl border-2 transition-all hover:shadow-lg active:scale-95 shadow-sm ${TABLE_COLORS[table.status]}`}
+                          className={`w-full relative p-4 rounded-2xl border-2 lift shadow-sm ${TABLE_COLORS[table.status]}`}
                         >
                           {/* Status dot */}
                           <div className={`absolute top-3 right-3 w-2.5 h-2.5 rounded-full ${TABLE_DOTS[table.status]}`} />
                           <div className="text-center">
                             <div className="text-2xl font-black mb-1">{tableLabel(table.number)}</div>
-                            <div className="text-xs opacity-70 flex items-center justify-center gap-1">
+                            <div className="text-xs opacity-100 flex items-center justify-center gap-1">
                               <Users className="w-3 h-3" />
                               {table.capacity}
                             </div>
@@ -2792,7 +2754,7 @@ export default function HospitalityPage() {
                             {table.status === 'OCCUPIED' && !table.hasReadyKOT && !table.hasPendingKOT && (
                               <div className="mt-1 flex items-center justify-center gap-1">
                                 <Clock className="w-3 h-3 opacity-60" />
-                                <span className="text-xs opacity-60">Active</span>
+                                <span className="text-xs opacity-100">Active</span>
                               </div>
                             )}
                             {table.status !== 'AVAILABLE' && table.coverCount != null && table.coverCount > 0 && (
@@ -3007,8 +2969,7 @@ export default function HospitalityPage() {
                   type="date"
                   value={revPASHDate}
                   onChange={(e) => setRevPASHDate(e.target.value)}
-                  className="px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
-                />
+                  className="px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" aria-label="Date" />
                 <button
                   onClick={() => void refetchRevPASH()}
                   className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium transition-colors"
@@ -3156,7 +3117,7 @@ export default function HospitalityPage() {
                 )}
               </button>
             </div>
-            <button onClick={() => void refetchRooms()} className="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100">
+            <button onClick={() => void refetchRooms()} className="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100" aria-label="Refresh">
               <RefreshCw className="w-4 h-4" />
             </button>
           </div>
@@ -3243,7 +3204,7 @@ export default function HospitalityPage() {
                 </h2>
                 <p className="text-sm text-gray-500">{selectedRoom.type} · Capacity: {selectedRoom.capacity} · Floor: {selectedRoom.floor ?? 'Ground'}</p>
               </div>
-              <button onClick={() => setSelectedRoom(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+              <button onClick={() => setSelectedRoom(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Close">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
@@ -3408,8 +3369,7 @@ export default function HospitalityPage() {
                               {charge.type !== 'ROOM_RATE' && charge.type !== 'POS_SALE' && (
                                 <button
                                   onClick={() => removeFolioChargeMutation.mutate(charge.id)}
-                                  className="text-red-400 hover:text-red-600 p-1"
-                                >
+                                  className="text-red-400 hover:text-red-600 p-1" aria-label="Remove">
                                   <X className="w-3.5 h-3.5" />
                                 </button>
                               )}
@@ -3576,7 +3536,7 @@ export default function HospitalityPage() {
               <h2 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
                 <Receipt className="w-5 h-5 text-green-600" /> Checkout Invoice
               </h2>
-              <button onClick={() => setShowCheckoutInvoice(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+              <button onClick={() => setShowCheckoutInvoice(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Close">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
@@ -3691,7 +3651,7 @@ export default function HospitalityPage() {
               <h2 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-amber-500" /> Housekeeping Queue
               </h2>
-              <button onClick={() => setShowHousekeepingModal(false)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+              <button onClick={() => setShowHousekeepingModal(false)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Close">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
@@ -3760,7 +3720,7 @@ export default function HospitalityPage() {
               <h2 className="text-lg font-bold text-gray-800 dark:text-white">
                 Check In — Room {showBookingModal.number}
               </h2>
-              <button onClick={() => setShowBookingModal(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+              <button onClick={() => setShowBookingModal(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Close">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
@@ -3793,8 +3753,7 @@ export default function HospitalityPage() {
                     type="date"
                     value={bookingForm.checkInDate}
                     onChange={e => setBookingForm(f => ({ ...f, checkInDate: e.target.value }))}
-                    className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  />
+                    className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" aria-label="Date" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Check-out Date</label>
@@ -3807,8 +3766,7 @@ export default function HospitalityPage() {
                         : 1;
                       setBookingForm(f => ({ ...f, checkOutDate: e.target.value, nightCount: nights }));
                     }}
-                    className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  />
+                    className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" aria-label="Date" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -3893,7 +3851,7 @@ export default function HospitalityPage() {
             <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-sm shadow-2xl">
               <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
                 <h2 className="text-lg font-bold text-gray-800 dark:text-white">Check Out</h2>
-                <button onClick={() => setCheckoutFor(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+                <button onClick={() => setCheckoutFor(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Close">
                   <X className="w-5 h-5 text-gray-500" />
                 </button>
               </div>
@@ -3991,7 +3949,7 @@ export default function HospitalityPage() {
             <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-sm shadow-2xl">
               <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
                 <h2 className="text-lg font-bold text-gray-800 dark:text-white">Cancel Reservation</h2>
-                <button onClick={() => setCancelFor(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+                <button onClick={() => setCancelFor(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Close">
                   <X className="w-5 h-5 text-gray-500" />
                 </button>
               </div>
@@ -4043,7 +4001,7 @@ export default function HospitalityPage() {
             <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-sm shadow-2xl">
               <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
                 <h2 className="text-lg font-bold text-gray-800 dark:text-white">Take a Deposit</h2>
-                <button onClick={() => setDepositFor(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+                <button onClick={() => setDepositFor(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Close">
                   <X className="w-5 h-5 text-gray-500" />
                 </button>
               </div>
@@ -4092,7 +4050,7 @@ export default function HospitalityPage() {
           <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-sm shadow-2xl">
             <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
               <h2 className="text-lg font-bold text-gray-800 dark:text-white">Add Room</h2>
-              <button onClick={() => setShowAddRoomModal(false)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+              <button onClick={() => setShowAddRoomModal(false)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Close">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
@@ -4185,7 +4143,7 @@ export default function HospitalityPage() {
           <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-sm shadow-2xl">
             <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
               <h2 className="text-lg font-bold text-gray-800 dark:text-white">Edit Room {editingRoom.number}</h2>
-              <button onClick={() => setEditingRoom(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+              <button onClick={() => setEditingRoom(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Close">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
@@ -4280,7 +4238,7 @@ export default function HospitalityPage() {
               <h2 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
                 <CalendarDays className="w-5 h-5 text-teal-600" /> All Bookings
               </h2>
-              <button onClick={() => setShowBookingsListModal(false)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+              <button onClick={() => setShowBookingsListModal(false)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Close">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
@@ -4376,7 +4334,7 @@ export default function HospitalityPage() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
             <div className="flex items-center justify-between px-6 py-4 border-b">
               <h2 className="text-lg font-bold text-gray-900">Add Table</h2>
-              <button onClick={() => setShowAddTableModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowAddTableModal(false)} className="text-gray-400 hover:text-gray-600" aria-label="Close">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -4471,7 +4429,7 @@ export default function HospitalityPage() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
             <div className="flex items-center justify-between px-6 py-4 border-b">
               <h2 className="text-lg font-bold text-gray-900">Edit Table T{editingTable.number}</h2>
-              <button onClick={() => setEditingTable(null)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setEditingTable(null)} className="text-gray-400 hover:text-gray-600" aria-label="Close">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -4610,7 +4568,7 @@ export default function HospitalityPage() {
                 <Sparkles className="w-5 h-5 text-amber-500" />
                 <h2 className="text-lg font-bold text-gray-800">Happy Hours</h2>
               </div>
-              <button onClick={() => setShowHappyHourModal(false)} className="p-2 rounded-full hover:bg-gray-100">
+              <button onClick={() => setShowHappyHourModal(false)} className="p-2 rounded-full hover:bg-gray-100" aria-label="Close">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
@@ -4632,8 +4590,7 @@ export default function HospitalityPage() {
                       <button
                         onClick={() => deleteHappyHourMutation.mutate(hh.id)}
                         disabled={deleteHappyHourMutation.isPending}
-                        className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                      >
+                        className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg" aria-label="Delete">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -4697,8 +4654,7 @@ export default function HospitalityPage() {
                     <select
                       value={happyHourForm.appliesTo}
                       onChange={e => setHappyHourForm(f => ({ ...f, appliesTo: e.target.value }))}
-                      className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400"
-                    >
+                      className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400">
                       <option value="ALL">All Items</option>
                       <option value="DRINKS">Drinks</option>
                       <option value="FOOD">Food</option>

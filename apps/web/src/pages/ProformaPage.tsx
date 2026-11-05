@@ -223,7 +223,7 @@ export default function ProformaPage() {
                 <h2 className="text-xl font-bold">Proforma {selectedProforma.receiptNumber}</h2>
                 <p className="text-gray-600">{selectedProforma.customerName || 'Walk-in Customer'}</p>
               </div>
-              <button onClick={() => setSelectedProforma(null)} className="text-gray-500">
+              <button onClick={() => setSelectedProforma(null)} className="text-gray-500" aria-label="Close">
                 <X size={24} />
               </button>
             </div>

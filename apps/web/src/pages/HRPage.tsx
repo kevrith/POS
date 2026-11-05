@@ -153,7 +153,7 @@ function LeaveModal({ employeeId, onClose, onSuccess }: LeaveModalProps) {
       <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="text-lg font-bold text-gray-800">Request Leave</h2>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100"><X className="w-5 h-5 text-gray-500" /></button>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100" aria-label="Close"><X className="w-5 h-5 text-gray-500" /></button>
         </div>
         <div className="p-6 space-y-4">
           {error && (
@@ -172,12 +172,12 @@ function LeaveModal({ employeeId, onClose, onSuccess }: LeaveModalProps) {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
               <input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })}
-                className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" aria-label="Start date" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
               <input type="date" value={form.endDate} min={form.startDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })}
-                className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" aria-label="End date" />
             </div>
           </div>
           <div>
@@ -248,7 +248,7 @@ function AddShiftModal({ businessId, storeId, employees, onClose, onSuccess, onS
       <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="text-lg font-bold text-gray-800">Add Shift</h2>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100"><X className="w-5 h-5 text-gray-500" /></button>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100" aria-label="Close"><X className="w-5 h-5 text-gray-500" /></button>
         </div>
         <div className="p-6 space-y-4">
           {error && (
@@ -505,7 +505,7 @@ function EditEmployeePanel({ employee, businessId, onClose, onSuccess }: {
         <div className="bg-gradient-to-r from-gray-800 to-gray-900 px-6 py-5 text-white flex-shrink-0">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold">Edit Employee</h2>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10">
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10" aria-label="Close">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -651,7 +651,7 @@ function EditEmployeePanel({ employee, businessId, onClose, onSuccess }: {
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Start Date</label>
                 <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500" />
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500" aria-label="Start date" />
               </div>
 
               <div>
@@ -952,7 +952,7 @@ function AddEmployeeModal({ businessId, onClose, onSuccess }: {
               <h2 className="text-lg font-bold">Add Staff Member</h2>
               <p className="text-sm text-gray-500 mt-0.5">Creates a login account and employee record</p>
             </div>
-            <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
+            <button onClick={onClose} aria-label="Close"><X className="w-5 h-5 text-gray-400" /></button>
           </div>
 
           {error && <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</div>}
@@ -1069,7 +1069,7 @@ function AddEmployeeModal({ businessId, onClose, onSuccess }: {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" />
+                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" aria-label="Start date" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact</label>
@@ -1325,7 +1325,7 @@ export default function HRPage() {
             </p>
           </div>
           <button onClick={() => { void refetchEmps(); void refetchAtt(); }}
-            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg">
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg" aria-label="Refresh">
             <RefreshCw className="w-5 h-5" />
           </button>
         </div>
@@ -1482,7 +1482,7 @@ export default function HRPage() {
                             </button>
                           ) : (
                             <button onClick={() => setEditingEmployee(emp)}
-                              className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors">
+                              className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors" aria-label="Edit">
                               <Edit2 className="w-4 h-4" />
                             </button>
                           ))}
@@ -1503,7 +1503,7 @@ export default function HRPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
                 <input type="date" value={attendanceDate} onChange={(e) => setAttendanceDate(e.target.value)}
-                  className="border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                  className="border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" aria-label="End date" />
               </div>
               <div className="flex gap-3">
                 <div className="text-center bg-white border rounded-xl px-4 py-2">
@@ -1715,12 +1715,12 @@ export default function HRPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">From</label>
                 <input type="date" value={commFrom} onChange={(e) => setCommFrom(e.target.value)}
-                  className="border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                  className="border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" aria-label="Start date" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
                 <input type="date" value={commTo} onChange={(e) => setCommTo(e.target.value)}
-                  className="border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                  className="border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" aria-label="End date" />
               </div>
             </div>
 
@@ -1803,7 +1803,7 @@ export default function HRPage() {
               <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
                 <span>{shiftError}</span>
-                <button onClick={() => setShiftError('')} className="ml-auto text-red-400 hover:text-red-600">
+                <button onClick={() => setShiftError('')} className="ml-auto text-red-400 hover:text-red-600" aria-label="Close">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -2051,7 +2051,7 @@ export default function HRPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Incident Date</label>
                   <input type="date" value={discForm.incidentDate} onChange={e => setDiscForm(f => ({ ...f, incidentDate: e.target.value }))}
-                    className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                    className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" aria-label="Date" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
@@ -2276,7 +2276,7 @@ export default function HRPage() {
           <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md shadow-2xl">
             <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
               <h2 className="text-lg font-bold text-gray-800 dark:text-white">Allocate Leave</h2>
-              <button onClick={() => setShowAllocateModal(false)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+              <button onClick={() => setShowAllocateModal(false)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Close">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>

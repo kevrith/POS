@@ -1002,7 +1002,7 @@ export default function POSPage() {
               )}
             </div>
             <div className="text-left">
-              <p className="text-[10px] text-slate-500 leading-none">Cart</p>
+              <p className="text-[10px] text-slate-400 leading-none">Cart</p>
               <p className="text-sm font-bold text-slate-100 leading-tight mt-0.5">{formatKES(totalCents)}</p>
             </div>
           </button>
@@ -1010,7 +1010,7 @@ export default function POSPage() {
             onClick={() => void handlePayClick()}
             disabled={cart.length === 0 || checkoutMutation.isPending}
             className="relative flex-1 py-3 font-bold text-sm xs:text-base transition-colors disabled:opacity-40"
-            style={{ background: cart.length === 0 ? '#1e293b' : '#2563eb' }}
+            style={{ background: cart.length === 0 ? '#1e293b' : '#7A35FF' }}
           >
             <span className="text-white">
               {checkoutMutation.isPending ? 'Processing…' : cart.length > 0 ? `Charge ${formatKES(totalCents)}` : 'Add items to pay'}
@@ -1072,8 +1072,7 @@ export default function POSPage() {
             </div>
             <button
               onClick={() => { setLastReceipt(null); setReceiptData(null); }}
-              className="p-1.5 bg-green-700 rounded-lg hover:bg-green-800 flex-shrink-0"
-            >
+              className="p-1.5 bg-green-700 rounded-lg hover:bg-green-800 flex-shrink-0" aria-label="Close">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -1152,7 +1151,7 @@ export default function POSPage() {
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-6 max-w-sm w-full">
             <div className="flex justify-between items-center mb-3">
               <h3 className="font-bold text-gray-900 dark:text-white text-base">Select Packaging</h3>
-              <button onClick={() => setUomPickerItem(null)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+              <button onClick={() => setUomPickerItem(null)} className="text-gray-400 hover:text-gray-600" aria-label="Close"><X className="w-5 h-5" /></button>
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{uomPickerItem.name}</p>
             <div className="space-y-2">
@@ -1211,7 +1210,7 @@ export default function POSPage() {
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-6 max-w-md w-full">
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-bold text-gray-900 dark:text-white text-lg">Save as Proforma Invoice</h3>
-              <button onClick={() => setShowInvoiceModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+              <button onClick={() => setShowInvoiceModal(false)} className="text-gray-400 hover:text-gray-600" aria-label="Close"><X className="w-5 h-5" /></button>
             </div>
 
             {/* Line items preview */}
@@ -1256,8 +1255,7 @@ export default function POSPage() {
                   value={invoiceValidUntil}
                   min={new Date().toISOString().slice(0, 10)}
                   onChange={(e) => setInvoiceValidUntil(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                />
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" aria-label="Date" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Notes (optional)</label>

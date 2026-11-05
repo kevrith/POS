@@ -93,7 +93,7 @@ const PRICE_LEVEL_LABELS: Record<PriceLevel, string> = {
 
 // Department icon map (category name → colour)
 const DEPT_COLORS: Record<string, string> = {
-  fresh: '#22c55e', dairy: '#60a5fa', beverages: '#f59e0b',
+  fresh: '#22c55e', dairy: '#9F6EFF', beverages: '#f59e0b',
   bread: '#f97316', household: '#a78bfa', frozen: '#06b6d4',
   snacks: '#ec4899', cleaning: '#14b8a6', pharmacy: '#ef4444',
   electronics: '#8b5cf6', default: '#6b7280',
@@ -593,15 +593,14 @@ export default function SupermarketPOSPage() {
             <span className="font-black text-white tracking-wide text-sm hidden sm:inline">KASTRA</span>
           </div>
           <div className="h-4 w-px bg-slate-700 hidden sm:block" />
-          <span className="text-xs text-slate-400 font-mono truncate hidden md:inline">{effectiveStoreName}</span>
           <span className="text-xs bg-blue-900 text-blue-300 px-2 py-0.5 rounded font-mono shrink-0">
             #{sessionNum}
           </span>
         </div>
 
-        {/* Centre: clock */}
-        <div className="flex items-center gap-1.5 text-slate-300 shrink-0">
-          <Clock className="w-3.5 h-3.5 text-slate-500 hidden sm:inline" />
+        {/* Centre: clock. The app header already shows the time from md up, so this is for phones only. */}
+        <div className="flex md:hidden items-center gap-1.5 text-slate-300 shrink-0">
+          <Clock className="w-3.5 h-3.5 text-slate-400 hidden sm:inline" />
           <span className="font-mono text-sm tabular-nums">
             {now.toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </span>
@@ -620,17 +619,17 @@ export default function SupermarketPOSPage() {
           )}
           <button
             onClick={() => window.open('/pole-display', '_blank', 'width=1024,height=600')}
-            className="hidden md:flex p-1.5 text-slate-500 hover:text-blue-400 rounded-lg transition-colors"
+            className="hidden md:flex p-1.5 text-slate-400 hover:text-blue-400 rounded-lg transition-colors"
             title="Open pole display"
           >
             <Monitor className="w-4 h-4" />
           </button>
-          <div className="flex items-center gap-1.5 px-2 py-1.5 bg-slate-800 rounded-lg border border-slate-700">
+          <div className="flex md:hidden items-center gap-1.5 px-2 py-1.5 bg-slate-800 rounded-lg border border-slate-700">
             <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-xs text-slate-300 hidden sm:inline">{user?.name ?? 'Cashier'}</span>
           </div>
           <button
-            onClick={() => navigate('/sales')}
+            onClick={() => navigate('/sales-list')}
             className="hidden sm:block px-2 py-1.5 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors"
           >
             Sales
@@ -656,7 +655,7 @@ export default function SupermarketPOSPage() {
                 </div>
               )}
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   ref={scanRef}
                   type="text"
@@ -664,12 +663,12 @@ export default function SupermarketPOSPage() {
                   onChange={(e) => setScan(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') handleScanEnter(); }}
                   placeholder={qtyMultiplier ? `Scan item — QTY ${qtyMultiplier}× set` : 'Scan barcode, enter PLU code, or type item name…'}
-                  className="w-full bg-slate-800 border border-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 rounded-xl pl-10 pr-12 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none transition-all"
+                  className="w-full bg-slate-800 border border-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 rounded-xl pl-10 pr-12 py-2.5 text-sm text-slate-100 placeholder-slate-400 outline-none transition-all"
                   autoFocus
                 />
                 <button
                   onClick={() => void startCamera()}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-blue-400 transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-blue-400 transition-colors"
                   title="Camera scan"
                 >
                   <Camera className="w-4 h-4" />
@@ -794,7 +793,7 @@ export default function SupermarketPOSPage() {
                     <p className="text-xs font-medium text-slate-200 leading-tight line-clamp-2 mb-1">{item.name}</p>
                     <p className="text-sm font-bold text-blue-400">{fmt(price)}</p>
                     {item.trackStock && (
-                      <p className={`text-xs mt-0.5 ${outOfStock ? 'text-red-500' : 'text-slate-600'}`}>
+                      <p className={`text-xs mt-0.5 ${outOfStock ? 'text-red-500' : 'text-slate-400'}`}>
                         {outOfStock ? 'Out of stock' : `${item.currentStock ?? 0} left`}
                       </p>
                     )}
@@ -803,7 +802,7 @@ export default function SupermarketPOSPage() {
               })}
             </div>
             {filteredItems.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-20 text-slate-600">
+              <div className="flex flex-col items-center justify-center py-20 text-slate-400">
                 <Package className="w-12 h-12 mb-3 opacity-20" />
                 <p className="text-sm">No items in this department</p>
               </div>
@@ -821,7 +820,7 @@ export default function SupermarketPOSPage() {
                     {qtyMultiplier ? (
                       <span className="text-blue-400">{qtyMultiplier}× </span>
                     ) : null}
-                    {numpadBuffer || <span className="text-slate-600">0</span>}
+                    {numpadBuffer || <span className="text-slate-400">0</span>}
                   </div>
                   <div className="flex gap-1">
                     {(['qty', 'plu'] as const).map((m) => (
@@ -829,7 +828,7 @@ export default function SupermarketPOSPage() {
                         key={m}
                         onClick={() => setNumpadMode(m)}
                         className={`px-2 py-1 text-xs rounded font-semibold transition-colors ${
-                          numpadMode === m ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                          numpadMode === m ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                         }`}
                       >
                         {m.toUpperCase()}
@@ -920,12 +919,12 @@ export default function SupermarketPOSPage() {
             </div>
 
             {/* Keyboard hints — desktop only */}
-            <div className="hidden lg:flex gap-3 mt-2 text-xs text-slate-600 overflow-x-auto">
-              <span><kbd className="bg-slate-700 text-slate-400 px-1 rounded">F1</kbd> Charge</span>
-              <span><kbd className="bg-slate-700 text-slate-400 px-1 rounded">F2</kbd> Customer</span>
-              <span><kbd className="bg-slate-700 text-slate-400 px-1 rounded">F5</kbd> Hold</span>
-              <span><kbd className="bg-slate-700 text-slate-400 px-1 rounded">F6</kbd> Held</span>
-              <span><kbd className="bg-slate-700 text-slate-400 px-1 rounded">Esc</kbd> Clear scan</span>
+            <div className="hidden lg:flex gap-3 mt-2 text-xs text-slate-400 overflow-x-auto">
+              <span><kbd className="bg-slate-700 text-slate-300 px-1 rounded">F1</kbd> Charge</span>
+              <span><kbd className="bg-slate-700 text-slate-300 px-1 rounded">F2</kbd> Customer</span>
+              <span><kbd className="bg-slate-700 text-slate-300 px-1 rounded">F5</kbd> Hold</span>
+              <span><kbd className="bg-slate-700 text-slate-300 px-1 rounded">F6</kbd> Held</span>
+              <span><kbd className="bg-slate-700 text-slate-300 px-1 rounded">Esc</kbd> Clear scan</span>
             </div>
           </div>
         </div>
@@ -939,9 +938,9 @@ export default function SupermarketPOSPage() {
               <button onClick={() => setCartOpen(false)} aria-label="Back to products" className="md:hidden -ml-1 p-1.5 text-slate-400 hover:text-slate-200">
                 <X className="w-5 h-5" />
               </button>
-              <ShoppingCart className="w-4 h-4 text-slate-500" />
+              <ShoppingCart className="w-4 h-4 text-slate-400" />
               <span className="text-sm font-semibold text-slate-300">TRANSACTION</span>
-              <span className="text-xs bg-slate-800 text-slate-500 px-2 py-0.5 rounded font-mono">
+              <span className="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-mono">
                 {totalItems} item{totalItems !== 1 ? 's' : ''}
               </span>
               {appliedPromotion && (
@@ -958,7 +957,7 @@ export default function SupermarketPOSPage() {
                 {loyaltyData && loyaltyData.loyaltyPoints > 0 && (
                   <span className="text-yellow-400 font-bold ml-1">{loyaltyData.loyaltyPoints}pts</span>
                 )}
-                <button onClick={() => setCustomer(null, null)} className="text-blue-600 hover:text-blue-400 ml-0.5">
+                <button onClick={() => setCustomer(null, null)} className="text-blue-600 hover:text-blue-400 ml-0.5" aria-label="Close">
                   <X className="w-3 h-3" />
                 </button>
               </div>
@@ -968,7 +967,7 @@ export default function SupermarketPOSPage() {
           {/* Cart — transaction tape */}
           <div className="flex-1 overflow-y-auto min-h-0">
             {cart.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-slate-700 py-16">
+              <div className="flex flex-col items-center justify-center h-full text-slate-400 py-16">
                 <ShoppingCart className="w-16 h-16 mb-4 opacity-20" />
                 <p className="text-sm font-medium">No items scanned</p>
                 <p className="text-xs mt-1">Scan a barcode to begin</p>
@@ -976,7 +975,7 @@ export default function SupermarketPOSPage() {
             ) : (
               <div className="divide-y divide-slate-800/60">
                 {/* Column headers */}
-                <div className="hidden md:grid grid-cols-12 px-4 py-1.5 text-xs font-semibold text-slate-600 uppercase tracking-wider bg-slate-900 sticky top-0 z-10">
+                <div className="hidden md:grid grid-cols-12 px-4 py-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider bg-slate-900 sticky top-0 z-10">
                   <div className="col-span-3">Item</div>
                   <div className="col-span-2 text-center">Qty</div>
                   <div className="col-span-4 text-center">Discount</div>
@@ -996,15 +995,14 @@ export default function SupermarketPOSPage() {
                       <div className="col-span-7 md:col-span-3 order-1 md:order-none pr-1 min-w-0">
                         <p className="text-xs text-slate-200 font-medium leading-tight truncate">{item.name}</p>
                         {(item as any).sku && (
-                          <p className="text-xs text-slate-600 font-mono truncate">{(item as any).sku}</p>
+                          <p className="text-xs text-slate-400 font-mono truncate">{(item as any).sku}</p>
                         )}
                       </div>
                       {/* Qty controls */}
                       <div className="col-span-5 md:col-span-2 order-4 md:order-none flex items-center justify-start md:justify-center gap-1">
                         <button
                           onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                          className="w-5 h-5 rounded bg-slate-700 hover:bg-slate-600 flex items-center justify-center text-slate-400 hover:text-red-400 transition-colors"
-                        >
+                          className="w-5 h-5 rounded bg-slate-700 hover:bg-slate-600 flex items-center justify-center text-slate-400 hover:text-red-400 transition-colors" aria-label="Decrease">
                           <Minus className="w-3 h-3" />
                         </button>
                         <span className="text-sm font-bold text-slate-200 w-6 text-center tabular-nums">
@@ -1012,8 +1010,7 @@ export default function SupermarketPOSPage() {
                         </span>
                         <button
                           onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                          className="w-5 h-5 rounded bg-slate-700 hover:bg-slate-600 flex items-center justify-center text-slate-400 hover:text-emerald-400 transition-colors"
-                        >
+                          className="w-5 h-5 rounded bg-slate-700 hover:bg-slate-600 flex items-center justify-center text-slate-400 hover:text-emerald-400 transition-colors" aria-label="Add">
                           <Plus className="w-3 h-3" />
                         </button>
                       </div>
@@ -1027,10 +1024,10 @@ export default function SupermarketPOSPage() {
                           value={item.discountPercent ? parseFloat(item.discountPercent.toFixed(1)) : ''}
                           onChange={(e) => updateDiscount(item.id, Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))}
                           placeholder="0"
-                          className="w-11 px-1 py-0.5 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-600 focus:ring-1 focus:ring-orange-500 outline-none text-right"
+                          className="w-11 px-1 py-0.5 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-400 focus:ring-1 focus:ring-orange-500 outline-none text-right"
                         />
-                        <span className="text-slate-600 text-[10px]">%</span>
-                        <span className="text-slate-700 text-[10px]">/</span>
+                        <span className="text-slate-400 text-[10px]">%</span>
+                        <span className="text-slate-400 text-[10px]">/</span>
                         <input
                           type="number"
                           min="0"
@@ -1045,13 +1042,13 @@ export default function SupermarketPOSPage() {
                             updateDiscount(item.id, Math.round(pct * 10) / 10);
                           }}
                           placeholder="0"
-                          className="w-12 px-1 py-0.5 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-600 focus:ring-1 focus:ring-orange-500 outline-none text-right"
+                          className="w-12 px-1 py-0.5 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-400 focus:ring-1 focus:ring-orange-500 outline-none text-right"
                         />
-                        <span className="text-slate-600 text-[10px]">K</span>
+                        <span className="text-slate-400 text-[10px]">K</span>
                       </div>
                       {/* Unit price */}
                       <div className="col-span-4 md:col-span-2 order-2 md:order-none text-right">
-                        <span className="text-xs text-slate-500 tabular-nums">{fmt(item.unitPriceCents)}</span>
+                        <span className="text-xs text-slate-400 tabular-nums">{fmt(item.unitPriceCents)}</span>
                         {item.discountPercent && item.discountPercent > 0 && (
                           <div className="text-emerald-400 text-[10px]">-{item.discountPercent}%</div>
                         )}
@@ -1060,8 +1057,7 @@ export default function SupermarketPOSPage() {
                       <div className="col-span-1 order-3 md:order-none flex justify-end">
                         <button
                           onClick={() => removeFromCart(item.id)}
-                          className="w-5 h-5 rounded text-slate-700 hover:text-red-500 hover:bg-red-900/30 flex items-center justify-center opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 transition-all"
-                        >
+                          className="w-5 h-5 rounded text-slate-400 hover:text-red-500 hover:bg-red-900/30 flex items-center justify-center opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 transition-all" aria-label="Remove">
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -1074,7 +1070,7 @@ export default function SupermarketPOSPage() {
 
           {/* ── Totals panel ── */}
           <div className="border-t border-slate-700/60 px-4 pt-4 pb-3 bg-slate-900/80 space-y-2">
-            <div className="flex justify-between text-[13px] text-slate-500">
+            <div className="flex justify-between text-[13px] text-slate-400">
               <span>Subtotal ({cart.length} line{cart.length !== 1 ? 's' : ''})</span>
               <span className="font-mono tabular-nums text-slate-400">KES {fmt(subtotalCents)}</span>
             </div>
@@ -1090,7 +1086,7 @@ export default function SupermarketPOSPage() {
             {/* Manual sale discount — bidirectional % ↔ KES */}
             <div className="space-y-1 py-1 border-y border-slate-800/60">
               <div className="flex items-center gap-1.5">
-                <span className="text-slate-500 text-xs whitespace-nowrap w-14">Discount</span>
+                <span className="text-slate-400 text-xs whitespace-nowrap w-14">Discount</span>
                 <div className="flex items-center gap-1 flex-1">
                   <input
                     type="number"
@@ -1103,10 +1099,10 @@ export default function SupermarketPOSPage() {
                       setManualDiscountCents(Math.round(subtotalCents * pct / 100));
                     }}
                     placeholder="0"
-                    className="w-14 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-600 focus:ring-1 focus:ring-orange-500 focus:border-orange-500 outline-none text-right"
+                    className="w-14 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-400 focus:ring-1 focus:ring-orange-500 focus:border-orange-500 outline-none text-right"
                   />
-                  <span className="text-slate-600 text-xs">%</span>
-                  <span className="text-slate-700 text-xs">/</span>
+                  <span className="text-slate-400 text-xs">%</span>
+                  <span className="text-slate-400 text-xs">/</span>
                   <input
                     type="number"
                     min="0"
@@ -1117,11 +1113,11 @@ export default function SupermarketPOSPage() {
                       setManualDiscountCents(Math.min(Math.round(amt * 100), subtotalCents));
                     }}
                     placeholder="0"
-                    className="w-16 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-600 focus:ring-1 focus:ring-orange-500 focus:border-orange-500 outline-none text-right"
+                    className="w-16 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-400 focus:ring-1 focus:ring-orange-500 focus:border-orange-500 outline-none text-right"
                   />
-                  <span className="text-slate-600 text-xs">KES</span>
+                  <span className="text-slate-400 text-xs">KES</span>
                   {manualDiscountCents > 0 && (
-                    <button onClick={() => setManualDiscountCents(0)} className="text-slate-600 hover:text-red-400 ml-auto">
+                    <button onClick={() => setManualDiscountCents(0)} className="text-slate-400 hover:text-red-400 ml-auto" aria-label="Close">
                       <X className="w-3.5 h-3.5" />
                     </button>
                   )}
@@ -1134,7 +1130,7 @@ export default function SupermarketPOSPage() {
                 </div>
               )}
             </div>
-            <div className="flex justify-between text-[12px] text-slate-600">
+            <div className="flex justify-between text-[12px] text-slate-400">
               <span>VAT (16% incl.)</span>
               <span className="font-mono tabular-nums">KES {fmt(vatCents)}</span>
             </div>

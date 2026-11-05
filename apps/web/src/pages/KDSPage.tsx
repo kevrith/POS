@@ -393,7 +393,7 @@ export default function KDSPage() {
             <ChefHat className="w-6 h-6 text-orange-400 shrink-0" />
             <div className="min-w-0">
               <h1 className="text-lg md:text-xl font-bold leading-tight">Kitchen Display</h1>
-              <p className="text-xs text-gray-400 truncate">{sharedMode ? 'Shared terminal' : user?.name}</p>
+              <p className="text-xs text-slate-400 truncate">{sharedMode ? 'Shared terminal' : user?.name}</p>
             </div>
           </div>
           <div className="flex items-center gap-1.5 md:gap-3 shrink-0">
@@ -406,7 +406,7 @@ export default function KDSPage() {
             <span
               title={live ? 'Live: tickets appear the moment they are sent' : 'Reconnecting: refreshing every 10 seconds'}
               className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold border ${
-                live ? 'bg-green-500/10 text-green-400 border-green-500/30' : 'bg-gray-800 text-gray-500 border-gray-700'
+                live ? 'bg-green-500/10 text-green-400 border-green-500/30' : 'bg-gray-800 text-slate-400 border-gray-700'
               }`}
             >
               <Radio className={`w-3.5 h-3.5 ${isFetching && !live ? 'animate-pulse' : ''}`} />
@@ -417,7 +417,7 @@ export default function KDSPage() {
               aria-pressed={soundOn}
               title={soundOn ? 'Sound on: a chime plays for each new ticket' : 'Turn on the new-ticket chime'}
               className={`min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg border ${
-                soundOn ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-gray-800 text-gray-500 border-gray-700'
+                soundOn ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-gray-800 text-slate-400 border-gray-700'
               }`}
             >
               {soundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
@@ -430,14 +430,14 @@ export default function KDSPage() {
               className={`min-h-[40px] flex items-center gap-1.5 px-2 md:px-3 rounded-lg text-xs font-semibold transition-colors ${
                 sharedMode
                   ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                  : 'bg-gray-800 text-gray-500 border border-gray-700 hover:text-gray-300'
+                  : 'bg-gray-800 text-slate-400 border border-gray-700 hover:text-gray-300'
               }`}
             >
               <Users className="w-3.5 h-3.5" />
               <span className="hidden md:inline">{sharedMode ? 'Shared' : 'Personal'}</span>
               <KeyRound className="w-3 h-3 opacity-60" />
             </button>
-            <button onClick={close} aria-label="Close kitchen display" className="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg hover:bg-gray-700 text-gray-400 hover:text-white">
+            <button onClick={close} aria-label="Close kitchen display" className="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg hover:bg-gray-700 text-slate-400 hover:text-white">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -455,7 +455,7 @@ export default function KDSPage() {
                 aria-selected={active}
                 onClick={() => chooseStation(st)}
                 className={`shrink-0 min-h-[40px] flex items-center gap-2 px-3 rounded-lg text-sm font-semibold border transition-colors ${
-                  active ? 'bg-orange-500 text-white border-orange-400' : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-white'
+                  active ? 'bg-orange-500 text-white border-orange-400' : 'bg-gray-800 text-slate-400 border-gray-700 hover:text-white'
                 }`}
               >
                 <Icon className="w-4 h-4" />
@@ -470,7 +470,7 @@ export default function KDSPage() {
       {/* KOT Grid */}
       <div className="flex-1 overflow-y-auto p-3 md:p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         {visible.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500">
+          <div className="flex flex-col items-center justify-center h-full text-slate-400">
             <CheckCircle className="w-16 h-16 mb-4 text-green-600" />
             <p className="text-xl font-medium">All clear!</p>
             <p className="text-sm mt-1">{station === 'ALL' ? 'No pending orders' : `Nothing waiting at ${KOT_STATION_LABELS[station]}`}</p>
@@ -526,7 +526,7 @@ export default function KDSPage() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="text-2xl font-bold truncate">{tableLabel}</div>
-                      <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                      <div className="flex items-center gap-1.5 text-xs text-slate-400">
                         <StationIcon className="w-3 h-3" />
                         <span>#{kot.kotNumber}</span>
                         <span>·</span>
@@ -537,7 +537,7 @@ export default function KDSPage() {
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_BADGE[kot.status] ?? 'bg-gray-600 text-white'}`}>
                         {kot.status.replace('_', ' ')}
                       </span>
-                      <div className={`flex items-center gap-1 text-xs ${isLate ? 'text-red-300 font-bold' : isWarm ? 'text-amber-300 font-semibold' : 'text-gray-400'}`}>
+                      <div className={`flex items-center gap-1 text-xs ${isLate ? 'text-red-300 font-bold' : isWarm ? 'text-amber-300 font-semibold' : 'text-slate-400'}`}>
                         {isLate ? <AlertTriangle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
                         {ageMin}m{isLate ? ' - late' : ' ago'}
                       </div>
@@ -576,7 +576,7 @@ export default function KDSPage() {
                     </div>
                   )}
                   {kot.status === 'PENDING' && kot.estimatedPrepMinutes && (
-                    <div className="flex items-center gap-1.5 text-xs text-gray-400 bg-black/20 rounded-lg px-2 py-1.5">
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-black/20 rounded-lg px-2 py-1.5">
                       <Timer className="w-3 h-3" />
                       <span>Est. prep: {kot.estimatedPrepMinutes} min</span>
                     </div>
@@ -585,7 +585,7 @@ export default function KDSPage() {
                   {/* Items */}
                   <div className="flex-1 space-y-1.5 min-h-0">
                     {kot.order.items.length === 0 && (
-                      <div className="text-xs text-gray-500 italic px-1">Items on this ticket were voided</div>
+                      <div className="text-xs text-slate-400 italic px-1">Items on this ticket were voided</div>
                     )}
                     {kot.order.items.map((item) => {
                       const mods = modifierNames(item.modifiers);

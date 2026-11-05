@@ -138,7 +138,7 @@ export default function DeliveryPage() {
   ] as const;
 
   return (
-    <div className="space-y-4">
+    <div className="p-4 md:p-6 space-y-4">
       {/* Header */}
       <div className="flex flex-wrap gap-3 items-center justify-between">
         <div>
@@ -245,7 +245,7 @@ export default function DeliveryPage() {
                 </p>
               )}
               <select value={selectedDriver} onChange={(e) => setSelectedDriver(e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white mb-4">
+                className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white mb-4" aria-label="Select driver…">
                 <option value="">Select driver…</option>
                 {drivers.map((d) => <option key={d.id} value={d.id}>{d.name} — {d.role}</option>)}
               </select>

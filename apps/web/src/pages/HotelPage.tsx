@@ -142,8 +142,7 @@ export default function HotelPage() {
             <select
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
-              className="text-sm border rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500"
-            >
+              className="text-sm border rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500" aria-label="Filter by rooms">
               <option value="">All Rooms</option>
               <option value="OCCUPIED">Occupied</option>
               <option value="VACANT">Vacant</option>

@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { api } from '../lib/api';
+import { Button, ErrorState, Menu } from '../components/ui';
 import { useAuthStore } from '../stores/auth';
 import { barcodeSvg, downloadZPL, printZPLviaUSB } from '../lib/printer';
 import { printHtml } from '../lib/printHtml';
@@ -257,7 +258,7 @@ interface AddItemModalProps {
 /** Which preparation area makes an item. Empty lets the system guess from the name. */
 function StationSelect({ value, onChange, className }: { value: string; onChange: (v: string) => void; className: string }) {
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className={className}>
+    <select value={value} onChange={(e) => onChange(e.target.value)} className={className} aria-label="Automatic (guess from name)">
       <option value="">Automatic (guess from name)</option>
       {KOT_STATIONS.map((st) => <option key={st} value={st}>{KOT_STATION_LABELS[st]}</option>)}
     </select>
@@ -347,7 +348,7 @@ function AddItemModal({ businessId, storeId, categories, posMode, existingItems 
     }
     const duplicate = existingItems.find(i => i.barcode && i.barcode === barcode.trim());
     if (duplicate) {
-      const errorMsg = `⚠️ Barcode "${barcode.trim()}" is already used by "${duplicate.name}"`;
+      const errorMsg = `Barcode "${barcode.trim()}" is already used by "${duplicate.name}"`;
       setBarcodeError(errorMsg);
       toast.error(errorMsg, { duration: 5000 });
     } else {
@@ -371,7 +372,7 @@ function AddItemModal({ businessId, storeId, categories, posMode, existingItems 
     // Selling price below cost price warning
     const costPriceCents = Math.round(parseFloat(form.costPrice || '0') * 100);
     if (costPriceCents > 0 && retailPriceCents < costPriceCents && !priceWarningShown) {
-      setError(`⚠️ Retail price (KES ${(retailPriceCents / 100).toFixed(2)}) is below cost price (KES ${(costPriceCents / 100).toFixed(2)}). You will be selling at a loss! Click "Add Item" again to proceed anyway.`);
+      setError(`Retail price (KES ${(retailPriceCents / 100).toFixed(2)}) is below cost price (KES ${(costPriceCents / 100).toFixed(2)}). You will be selling at a loss! Click "Add Item" again to proceed anyway.`);
       setPriceWarningShown(true);
       return;
     }
@@ -414,7 +415,7 @@ function AddItemModal({ businessId, storeId, categories, posMode, existingItems 
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Add New Item</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close"><X className="w-5 h-5" /></button>
         </div>
 
         {error && <div className="mb-3 px-3 py-2 bg-red-50 text-red-700 rounded text-sm">{error}</div>}
@@ -559,7 +560,7 @@ function AddItemModal({ businessId, storeId, categories, posMode, existingItems 
 
       {showAddItemCamera && (
         <div className="fixed inset-0 bg-black/90 flex flex-col items-center justify-center z-50 p-4">
-          <button onClick={stopAddItemCamera} className="absolute top-4 right-4 text-white p-2 hover:bg-gray-700 rounded">
+          <button onClick={stopAddItemCamera} className="absolute top-4 right-4 text-white p-2 hover:bg-gray-700 rounded" aria-label="Close">
             <X className="w-6 h-6" />
           </button>
           <div className="w-full max-w-md aspect-video bg-black rounded-lg border-2 border-blue-400 overflow-hidden">
@@ -630,7 +631,7 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
     const retailPriceCents = Math.round(parseFloat(form.retailPrice) * 100);
     const costPriceCents = Math.round(parseFloat(form.costPrice || '0') * 100);
     if (costPriceCents > 0 && retailPriceCents > 0 && retailPriceCents < costPriceCents && !priceWarningShown) {
-      setError(`⚠️ Retail price (KES ${(retailPriceCents / 100).toFixed(2)}) is below cost price (KES ${(costPriceCents / 100).toFixed(2)}). You will be selling at a loss! Click "Save Changes" again to proceed anyway.`);
+      setError(`Retail price (KES ${(retailPriceCents / 100).toFixed(2)}) is below cost price (KES ${(costPriceCents / 100).toFixed(2)}). You will be selling at a loss! Click "Save Changes" again to proceed anyway.`);
       setPriceWarningShown(true);
       return;
     }
@@ -673,7 +674,7 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Edit Item — {item.name}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close"><X className="w-5 h-5" /></button>
         </div>
 
         {error && <div className="mb-3 px-3 py-2 bg-red-50 text-red-700 rounded text-sm">{error}</div>}
@@ -921,7 +922,7 @@ function AdjustStockModal({ item, businessId, storeId, onClose }: AdjustStockMod
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Adjust Stock — {item.name}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close"><X className="w-5 h-5" /></button>
         </div>
 
         <p className="text-sm text-gray-500 mb-4">
@@ -1038,7 +1039,7 @@ function VariantsModal({ item, businessId, onClose }: VariantsModalProps) {
             <h2 className="text-lg font-semibold text-gray-900">Variants — {item.name}</h2>
             <p className="text-xs text-gray-500 mt-0.5">Manage size, color, or other attribute variants</p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Close"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
@@ -1253,7 +1254,7 @@ Cola 300ml,Drinks,40,35,30,25,9988776655,150,2025-12-31,""`;
       <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="text-lg font-bold">Import Items from CSV</h2>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100" aria-label="Close">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -1262,7 +1263,7 @@ Cola 300ml,Drinks,40,35,30,25,9988776655,150,2025-12-31,""`;
           {step === 'upload' && (
             <div className="space-y-4">
               <div className="bg-blue-50 rounded-lg p-4 text-sm text-blue-800">
-                <p className="font-semibold mb-2">📋 CSV Format Requirements</p>
+                <p className="font-semibold mb-2">CSV format requirements</p>
                 <p className="mb-1"><strong>Required columns:</strong></p>
                 <ul className="list-disc list-inside mb-2 ml-2">
                   <li><code className="bg-blue-100 px-1 rounded">name</code> - Item name</li>
@@ -1328,7 +1329,7 @@ Cola 300ml,Drinks,40,35,30,25,9988776655,150,2025-12-31,""`;
                 <div>
                   <p className="text-sm font-medium text-gray-700">{preview.length} rows to import</p>
                   {preview.some(r => !r.name || !r.retailPrice) && (
-                    <p className="text-xs text-red-600 mt-1">⚠️ Some rows are missing required fields (name, retailPrice) and will be skipped</p>
+                    <p className="text-xs text-red-600 mt-1">Some rows are missing required fields (name, retailPrice) and will be skipped</p>
                   )}
                 </div>
                 <button onClick={() => setStep('upload')} className="text-sm text-blue-600">← Back</button>
@@ -1436,7 +1437,7 @@ function BarcodeLabelModal({ items, onClose }: { items: Array<{ id: string; name
       <div className="bg-white rounded-2xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="text-lg font-bold">Print Barcode Labels</h2>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100" aria-label="Close"><X className="w-5 h-5" /></button>
         </div>
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           <div className="flex gap-4">
@@ -1518,7 +1519,7 @@ function BarcodeLabelModal({ items, onClose }: { items: Array<{ id: string; name
             className="flex-1 py-2.5 bg-purple-700 text-white font-bold rounded-lg disabled:opacity-40 text-sm"
             title="Print directly to USB Zebra printer (Chrome/Edge only)"
           >
-            🖨 USB Zebra
+            USB Zebra
           </button>
         </div>
       </div>
@@ -1578,7 +1579,7 @@ function CategoryManager({ businessId, onClose }: CategoryManagerProps) {
           <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <Tag className="w-5 h-5 text-blue-600" /> Manage Categories
           </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close"><X className="w-5 h-5" /></button>
         </div>
 
         {/* Add new */}
@@ -1651,13 +1652,11 @@ function CategoryManager({ businessId, onClose }: CategoryManagerProps) {
                   <span className="flex-1 text-sm font-medium text-gray-800 dark:text-gray-200">{cat.name}</span>
                   <button
                     onClick={() => { setEditId(cat.id!); setEditName(cat.name); setEditColor(cat.color ?? '#6B7280'); }}
-                    className="opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 text-gray-400 hover:text-blue-600 p-1 transition-opacity"
-                  ><Edit2 className="w-3.5 h-3.5" /></button>
+                    className="opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 text-gray-400 hover:text-blue-600 p-1 transition-opacity" aria-label="Edit"><Edit2 className="w-3.5 h-3.5" /></button>
                   <button
                     onClick={async () => { const ok = await confirm({ title: 'Delete Category', message: `Delete "${cat.name}"? Items in this category will become uncategorised.`, variant: 'danger', confirmLabel: 'Delete' }); if (ok) deleteMut.mutate(cat.id!); }}
                     disabled={deleteMut.isPending}
-                    className="opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 text-gray-400 hover:text-red-600 p-1 transition-opacity disabled:opacity-50"
-                  ><Trash2 className="w-3.5 h-3.5" /></button>
+                    className="opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 text-gray-400 hover:text-red-600 p-1 transition-opacity disabled:opacity-50" aria-label="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                 </>
               )}
             </div>
@@ -1771,7 +1770,7 @@ function UOMEditor({ item, businessId, onClose }: UOMEditorProps) {
           <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <Layers className="w-5 h-5 text-teal-600" /> Packaging Units
           </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close"><X className="w-5 h-5" /></button>
         </div>
         <p className="text-sm text-gray-500 mb-4">
           <span className="font-medium text-gray-700">{item.name}</span> — define how this item is packaged and sold. Stock is always tracked in the base unit.
@@ -1851,20 +1850,18 @@ function UOMEditor({ item, businessId, onClose }: UOMEditorProps) {
                         <p className="text-xs text-gray-500">
                           1 {u.unitAbbrev} = {u.conversionFactor === 1 ? '1 (base)' : `${u.conversionFactor} base units`}
                           {u.priceCents && ` · KES ${(u.priceCents / 100).toLocaleString()}`}
-                          {u.barcode && ` · 🔢 ${u.barcode}`}
+                          {u.barcode && ` · Barcode ${u.barcode}`}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => { setEditUom(u); setEditForm({ unitName: u.unitName, unitAbbrev: u.unitAbbrev, conversionFactor: String(u.conversionFactor), isBaseUnit: u.isBaseUnit, price: u.priceCents ? String(u.priceCents / 100) : '', barcode: u.barcode ?? '' }); }}
-                        className="text-gray-400 hover:text-blue-600 p-1"
-                      ><Edit2 className="w-4 h-4" /></button>
+                        className="text-gray-400 hover:text-blue-600 p-1" aria-label="Edit"><Edit2 className="w-4 h-4" /></button>
                       <button
                         onClick={async () => { const ok = await confirm({ title: 'Remove Packaging Unit', message: `Remove "${u.unitName}" packaging unit?`, variant: 'danger', confirmLabel: 'Remove' }); if (ok) deleteMut.mutate(u.id); }}
                         disabled={deleteMut.isPending}
-                        className="text-gray-400 hover:text-red-600 p-1 disabled:opacity-50"
-                      ><Trash2 className="w-4 h-4" /></button>
+                        className="text-gray-400 hover:text-red-600 p-1 disabled:opacity-50" aria-label="Delete"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </div>
                 )}
@@ -2069,7 +2066,7 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
     ...(search ? { search } : {}),
   });
 
-  const { data: items = [], isLoading } = useQuery<InventoryItem[]>({
+  const { data: items = [], isLoading, isError, error: itemsError, refetch: refetchItems } = useQuery<InventoryItem[]>({
     queryKey: ['items', businessId, storeId, search],
     queryFn: () => api.get<InventoryItem[]>(`/items?${params.toString()}`),
     enabled: !!businessId,
@@ -2114,8 +2111,7 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="border rounded-lg pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
-          >
+            className="border rounded-lg pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none" aria-label="Filter by categories">
             <option value="">All Categories</option>
             {categories.map((c, i) => <option key={c.name ?? i} value={c.name}>{c.name}</option>)}
           </select>
@@ -2135,8 +2131,7 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="border rounded-lg pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
-          >
+            className="border rounded-lg pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none" aria-label="Filter by types">
             <option value="">All Types</option>
             {ITEM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
@@ -2237,6 +2232,8 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
             <Loader2 className="w-5 h-5 animate-spin" />
             Loading items…
           </div>
+        ) : isError ? (
+          <ErrorState error={itemsError} subject="items" onRetry={() => void refetchItems()} />
         ) : filtered.length === 0 ? (
           <div className="p-12 text-center">
             <Package className="w-10 h-10 text-gray-200 mx-auto mb-2" />
@@ -2293,7 +2290,7 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
                       </div>
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-gray-500">{item.barcode ?? '—'}</td>
-                    <td className="px-4 py-3 font-medium text-gray-700">
+                    <td className="px-4 py-3 font-medium text-gray-700 whitespace-nowrap tabular-nums">
                       {item.costPriceCents ? fmt(item.costPriceCents) : <span className="text-gray-400">—</span>}
                     </td>
                     <td className="px-4 py-3">
@@ -2315,7 +2312,7 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
                         );
                       })()}
                     </td>
-                    <td className="px-4 py-3 font-medium">{fmt(item.retailPriceCents)}</td>
+                    <td className="px-4 py-3 font-medium whitespace-nowrap tabular-nums">{fmt(item.retailPriceCents)}</td>
                     <td className="px-4 py-3">
                       {item.trackStock ? (
                         item.currentStock === 0 ? (
@@ -2375,50 +2372,24 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
                       </button>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <button onClick={() => setEditItem(item)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Edit</button>
-                        {item.trackStock && (
-                          <button onClick={() => setAdjustItem(item)} className="text-xs text-orange-600 hover:text-orange-800 font-medium flex items-center gap-1">
-                            <RotateCcw className="w-3 h-3" />
-                            Adjust
-                          </button>
-                        )}
-                        <button onClick={() => setVariantItem(item)} className="text-xs text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1">
-                          <Sliders className="w-3 h-3" />
-                          Variants
-                        </button>
-                        <button
-                          onClick={() => setUomItem(item)}
-                          className="text-xs text-teal-600 hover:text-teal-800 font-medium flex items-center gap-1"
-                          title="Manage packaging units (piece/dozen/carton/bale)"
-                        >
-                          <Layers className="w-3 h-3" />
-                          Packaging
-                        </button>
-                        {item.trackStock && item.currentStock === 0 && (
-                          <button
-                            onClick={() => { setDemandItem(item); setDemandQty('1'); }}
-                            className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
-                            title="Record that a customer asked for this item"
-                          >
-                            <TrendingUp className="w-3 h-3" />
-                            Demand
-                          </button>
-                        )}
-                        {canDelete && (
-                          <button
-                            onClick={async () => {
-                              const ok = await confirm({ title: 'Delete Item', message: `Delete "${item.name}"? This cannot be undone.`, variant: 'danger', confirmLabel: 'Delete' });
-                              if (ok) deleteItemMutation.mutate(item);
-                            }}
-                            disabled={deleteItemMutation.isPending}
-                            className="text-xs text-red-500 hover:text-red-700 font-medium flex items-center gap-1 disabled:opacity-40"
-                            title="Delete item (Manager/Owner only)"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                            Delete
-                          </button>
-                        )}
+                      <div className="flex items-center gap-2 whitespace-nowrap">
+                        <Button size="sm" variant="secondary" onClick={() => setEditItem(item)}>Edit</Button>
+                        <Menu
+                          label={`More actions for ${item.name}`}
+                          items={[
+                            ...(item.trackStock ? [{ label: 'Adjust stock', icon: <RotateCcw className="w-4 h-4" />, onSelect: () => setAdjustItem(item) }] : []),
+                            { label: 'Variants', icon: <Sliders className="w-4 h-4" />, onSelect: () => setVariantItem(item) },
+                            { label: 'Packaging units', icon: <Layers className="w-4 h-4" />, onSelect: () => setUomItem(item) },
+                            ...(item.trackStock && item.currentStock === 0 ? [{ label: 'Record customer request', icon: <TrendingUp className="w-4 h-4" />, onSelect: () => { setDemandItem(item); setDemandQty('1'); } }] : []),
+                            ...(canDelete ? [{
+                              label: 'Delete item', icon: <Trash2 className="w-4 h-4" />, danger: true, disabled: deleteItemMutation.isPending,
+                              onSelect: async () => {
+                                const ok = await confirm({ title: 'Delete Item', message: `Delete "${item.name}"? This cannot be undone.`, variant: 'danger', confirmLabel: 'Delete' });
+                                if (ok) deleteItemMutation.mutate(item);
+                              },
+                            }] : []),
+                          ]}
+                        />
                       </div>
                     </td>
                   </tr>
@@ -2566,8 +2537,7 @@ function MovementsTab({ businessId, storeId }: MovementsTabProps) {
           <select
             value={selectedItemId}
             onChange={(e) => setSelectedItemId(e.target.value)}
-            className="w-full border rounded-lg pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
-          >
+            className="w-full border rounded-lg pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none">
             <option value="">Choose an item…</option>
             {items.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
           </select>

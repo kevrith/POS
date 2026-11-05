@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { X, DollarSign, Smartphone, CreditCard, Scissors, AlertCircle, Loader2, CheckCircle, Gift, BedDouble, Building2, Camera, Nfc, Terminal, BookOpen } from 'lucide-react';
+import { X, DollarSign, SmartphoneNfc, QrCode, Smartphone, CreditCard, Scissors, AlertCircle, Loader2, CheckCircle, Gift, BedDouble, Building2, Camera, Nfc, Terminal, BookOpen } from 'lucide-react';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { api } from '../lib/api';
 import IncomingPaymentsPanel from './pos/IncomingPaymentsPanel';
@@ -574,7 +574,7 @@ export default function PaymentModal({
             <h2 className="text-lg font-bold text-gray-800">Payment</h2>
             <div className="text-2xl font-bold text-blue-600">{formatKES(totalCents)}</div>
           </div>
-          <button onClick={onCancel} className="p-2 rounded-full hover:bg-gray-100">
+          <button onClick={onCancel} className="p-2 rounded-full hover:bg-gray-100" aria-label="Close">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
@@ -858,7 +858,7 @@ export default function PaymentModal({
                 )}
                 {qrDemoMode && !qrLoading && (
                   <div className="flex flex-col items-center gap-2 py-2">
-                    <div className="text-4xl">📵</div>
+                    <SmartphoneNfc className="w-10 h-10 text-amber-600" aria-hidden />
                     <p className="text-sm font-semibold text-amber-700">Demo Mode — No M-Pesa Credentials</p>
                     <p className="text-xs text-amber-600 max-w-[220px]">
                       Configure your Safaricom Daraja credentials in Settings → M-Pesa to generate real scannable QR codes.
@@ -867,7 +867,7 @@ export default function PaymentModal({
                 )}
                 {!qrImage && !qrDemoMode && !qrLoading && (
                   <>
-                    <div className="text-5xl mb-3">📲</div>
+                    <QrCode className="w-12 h-12 mb-3 text-teal-600 mx-auto" aria-hidden />
                     <p className="text-sm text-teal-700 font-medium">QR code will display here</p>
                     <p className="text-xs text-teal-600 mt-1">Customer scans with M-Pesa app</p>
                   </>
@@ -896,7 +896,7 @@ export default function PaymentModal({
                     disabled={isProcessing}
                     className="w-full py-3.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl disabled:opacity-40 transition-colors"
                   >
-                    {isProcessing ? 'Processing…' : qrDemoMode ? 'Simulate Payment ✓' : 'Payment Received ✓'}
+                    {isProcessing ? 'Processing…' : qrDemoMode ? 'Simulate payment' : 'Payment received'}
                   </button>
                   <button
                     onClick={() => void handleQR()}
@@ -1420,8 +1420,7 @@ export default function PaymentModal({
                     <span className="font-bold">{formatKES(leg.amountCents)}</span>
                     <button
                       onClick={() => removeSplitLeg(idx)}
-                      className="text-red-400 hover:text-red-600"
-                    >
+                      className="text-red-400 hover:text-red-600" aria-label="Remove">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
@@ -1483,7 +1482,7 @@ export default function PaymentModal({
 
       {showGcCamera && (
         <div className="fixed inset-0 bg-black/90 flex flex-col items-center justify-center z-[60] p-4">
-          <button onClick={() => setShowGcCamera(false)} className="absolute top-4 right-4 text-white p-2 hover:bg-gray-700 rounded">
+          <button onClick={() => setShowGcCamera(false)} className="absolute top-4 right-4 text-white p-2 hover:bg-gray-700 rounded" aria-label="Close">
             <X className="w-6 h-6" />
           </button>
           <div className="w-full max-w-md aspect-video bg-black rounded-lg border-2 border-purple-400 overflow-hidden">

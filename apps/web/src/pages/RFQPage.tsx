@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import {
   FileText, Plus, ChevronDown, ChevronRight, Send, Award, X, Loader2, RefreshCw,
   MessageCircle, Mail, Link2,
+  AlertTriangle,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
@@ -233,8 +234,7 @@ function RecipientsPanel({
           <select
             value={adding}
             onChange={(e) => setAdding(e.target.value)}
-            className="flex-1 px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
+            className="flex-1 px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" aria-label="Invite a supplier…">
             <option value="">Invite a supplier…</option>
             {available.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
@@ -290,8 +290,7 @@ function QuoteForm({
         <select
           value={supplierId}
           onChange={(e) => setSupplierId(e.target.value)}
-          className="flex-1 min-w-40 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
-        >
+          className="flex-1 min-w-40 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm" aria-label="Select supplier…">
           <option value="">Select supplier…</option>
           {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
@@ -454,8 +453,7 @@ export default function RFQPage() {
         {tab === 'list' && (
           <button
             onClick={() => refetch()}
-            className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-          >
+            className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" aria-label="Refresh">
             <RefreshCw className="w-4 h-4" />
           </button>
         )}
@@ -661,8 +659,7 @@ export default function RFQPage() {
               type="date"
               value={formDeadline}
               onChange={(e) => setFormDeadline(e.target.value)}
-              className="w-full sm:w-48 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+              className="w-full sm:w-48 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" aria-label="Date" />
           </div>
 
           {/* Suppliers to invite */}
@@ -698,7 +695,7 @@ export default function RFQPage() {
                         title={reachable ? undefined : 'No phone or email on this supplier'}
                       >
                         {s.name}
-                        {!reachable && <span className="ml-1 opacity-60">⚠</span>}
+                        {!reachable && <AlertTriangle className="inline w-3 h-3 ml-1 opacity-60" aria-label="Not reachable" />}
                       </button>
                     );
                   })}
@@ -728,8 +725,7 @@ export default function RFQPage() {
                   <select
                     value={item.itemId}
                     onChange={(e) => updateItem(idx, 'itemId', e.target.value)}
-                    className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
+                    className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" aria-label="Select item…">
                     <option value="">Select item…</option>
                     {items.map((it) => (
                       <option key={it.id} value={it.id}>
@@ -749,8 +745,7 @@ export default function RFQPage() {
                     <button
                       type="button"
                       onClick={() => removeItem(idx)}
-                      className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-                    >
+                      className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors" aria-label="Remove">
                       <X className="w-4 h-4" />
                     </button>
                   )}

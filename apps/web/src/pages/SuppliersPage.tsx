@@ -191,7 +191,7 @@ function CreatePOModal({ businessId, storeId, suppliers, onClose, onSuccess }: C
       <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="text-lg font-bold text-gray-800">New Purchase Order</h2>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100" aria-label="Close">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
@@ -210,8 +210,7 @@ function CreatePOModal({ businessId, storeId, suppliers, onClose, onSuccess }: C
               <select
                 value={supplierId}
                 onChange={(e) => setSupplierId(e.target.value)}
-                className="w-full px-3 py-2 border rounded-xl text-sm focus:ring-2 focus:ring-blue-500"
-              >
+                className="w-full px-3 py-2 border rounded-xl text-sm focus:ring-2 focus:ring-blue-500">
                 <option value="">Select supplier...</option>
                 {suppliers.map((s) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
@@ -224,8 +223,7 @@ function CreatePOModal({ businessId, storeId, suppliers, onClose, onSuccess }: C
                 type="date"
                 value={expectedDelivery}
                 onChange={(e) => setExpectedDelivery(e.target.value)}
-                className="w-full px-3 py-2 border rounded-xl text-sm focus:ring-2 focus:ring-blue-500"
-              />
+                className="w-full px-3 py-2 border rounded-xl text-sm focus:ring-2 focus:ring-blue-500" aria-label="Date" />
             </div>
           </div>
 
@@ -309,8 +307,7 @@ function CreatePOModal({ businessId, storeId, suppliers, onClose, onSuccess }: C
                       <td className="px-2 py-2">
                         <button
                           onClick={() => setLines(lines.filter((_, i) => i !== idx))}
-                          className="text-red-400 hover:text-red-600"
-                        >
+                          className="text-red-400 hover:text-red-600" aria-label="Close">
                           <X className="w-4 h-4" />
                         </button>
                       </td>
@@ -395,7 +392,7 @@ function GRNModal({ po, storeId, onClose, onSuccess }: GRNModalProps) {
             <h2 className="text-lg font-bold text-gray-800">Record Goods Received</h2>
             <p className="text-sm text-gray-500">PO: {po.poNumber}</p>
           </div>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100" aria-label="Close">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
@@ -453,8 +450,7 @@ function GRNModal({ po, storeId, onClose, onSuccess }: GRNModalProps) {
                     onChange={(e) => setReceiving(receiving.map((x, i) =>
                       i === idx ? { ...x, expiry: e.target.value } : x,
                     ))}
-                    className="w-full border rounded-lg px-3 py-2 text-sm"
-                  />
+                    className="w-full border rounded-lg px-3 py-2 text-sm" aria-label="Date" />
                 </div>
               </div>
               {r.received < r.ordered && (
@@ -556,7 +552,7 @@ function PODetail({ po, storeId, onBack, onRefresh }: PODetailProps) {
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-4 px-6 py-4 border-b bg-gray-50">
-        <button onClick={onBack} className="p-2 hover:bg-gray-200 rounded-lg">
+        <button onClick={onBack} className="p-2 hover:bg-gray-200 rounded-lg" aria-label="Back">
           <ArrowLeft className="w-5 h-5 text-gray-600" />
         </button>
         <div className="flex-1">
@@ -924,8 +920,7 @@ function VendorCatalogueTab({
         <select
           value={catalogueSupplierId}
           onChange={e => setCatalogueSupplierId(e.target.value)}
-          className="border rounded-lg px-3 py-2 text-sm min-w-48"
-        >
+          className="border rounded-lg px-3 py-2 text-sm min-w-48" aria-label="— Select supplier —">
           <option value="">— Select supplier —</option>
           {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
@@ -992,8 +987,7 @@ function VendorCatalogueTab({
                     <td className="px-2 py-2.5">
                       <button
                         onClick={async () => { const ok = await confirm({ title: 'Remove Item', message: 'Remove this item from the supplier catalogue?', variant: 'danger', confirmLabel: 'Remove' }); if (ok) deleteItem.mutate(item.id); }}
-                        className="text-red-400 hover:text-red-600"
-                      >
+                        className="text-red-400 hover:text-red-600" aria-label="Remove">
                         <X className="w-4 h-4" />
                       </button>
                     </td>
@@ -1041,8 +1035,7 @@ function VendorCatalogueTab({
                   <button
                     onClick={() => setCatalogueItems(catalogueItems.filter((_, i) => i !== idx))}
                     disabled={catalogueItems.length === 1}
-                    className="text-red-400 hover:text-red-600 disabled:opacity-30"
-                  >
+                    className="text-red-400 hover:text-red-600 disabled:opacity-30" aria-label="Close">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
@@ -1127,8 +1120,7 @@ function AutoReorderTab({
           <select
             value={reorderSupplierId}
             onChange={e => setReorderSupplierId(e.target.value)}
-            className="border rounded-lg px-3 py-2 text-sm w-full max-w-xs"
-          >
+            className="border rounded-lg px-3 py-2 text-sm w-full max-w-xs">
             <option value="">— Use default supplier —</option>
             {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
@@ -1480,8 +1472,7 @@ export default function SuppliersPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => { void refetchSuppliers(); void refetchPOs(); }}
-              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
-            >
+              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg" aria-label="Refresh">
               <RefreshCw className="w-5 h-5" />
             </button>
             {tab === 'suppliers' ? (
@@ -1583,7 +1574,7 @@ export default function SuppliersPage() {
                     <Pencil className="w-4 h-4 text-blue-600" />
                     Edit Supplier — {editingSupplier.name}
                   </h2>
-                  <button onClick={() => { setEditingSupplier(null); setFormError(''); setSupplierForm({ name: '', contact: '', phone: '', email: '', address: '', paymentTerms: '', creditLimit: '' }); }} className="p-1 hover:bg-gray-100 rounded-lg">
+                  <button onClick={() => { setEditingSupplier(null); setFormError(''); setSupplierForm({ name: '', contact: '', phone: '', email: '', address: '', paymentTerms: '', creditLimit: '' }); }} className="p-1 hover:bg-gray-100 rounded-lg" aria-label="Close">
                     <X className="w-5 h-5 text-gray-500" />
                   </button>
                 </div>
@@ -1627,8 +1618,7 @@ export default function SuppliersPage() {
                     <select
                       value={supplierForm.paymentTerms}
                       onChange={(e) => setSupplierForm({ ...supplierForm, paymentTerms: e.target.value })}
-                      className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                    >
+                      className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
                       <option value="">Select...</option>
                       <option value="CASH">Cash on Delivery</option>
                       <option value="NET_7">Net 7 days</option>
@@ -1681,7 +1671,7 @@ export default function SuppliersPage() {
               <div className="bg-white rounded-2xl border shadow-sm mb-4 p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="font-bold text-gray-800">New Supplier</h2>
-                  <button onClick={() => { setShowAddSupplier(false); setFormError(''); }} className="p-1 hover:bg-gray-100 rounded-lg">
+                  <button onClick={() => { setShowAddSupplier(false); setFormError(''); }} className="p-1 hover:bg-gray-100 rounded-lg" aria-label="Close">
                     <X className="w-5 h-5 text-gray-500" />
                   </button>
                 </div>
@@ -1725,8 +1715,7 @@ export default function SuppliersPage() {
                     <select
                       value={supplierForm.paymentTerms}
                       onChange={(e) => setSupplierForm({ ...supplierForm, paymentTerms: e.target.value })}
-                      className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                    >
+                      className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
                       <option value="">Select...</option>
                       <option value="CASH">Cash on Delivery</option>
                       <option value="NET_7">Net 7 days</option>
@@ -1963,8 +1952,7 @@ export default function SuppliersPage() {
                     <select
                       value={cnForm.supplierId}
                       onChange={(e) => setCnForm((f) => ({ ...f, supplierId: e.target.value }))}
-                      className="w-full border rounded-lg px-3 py-2 text-sm"
-                    >
+                      className="w-full border rounded-lg px-3 py-2 text-sm">
                       <option value="">— Select supplier —</option>
                       {suppliers.map((s) => (
                         <option key={s.id} value={s.id}>{s.name}</option>
@@ -2077,8 +2065,7 @@ export default function SuppliersPage() {
                     <select
                       value={returnForm.supplierId}
                       onChange={(e) => setReturnForm((f) => ({ ...f, supplierId: e.target.value }))}
-                      className="w-full border rounded-lg px-3 py-2 text-sm"
-                    >
+                      className="w-full border rounded-lg px-3 py-2 text-sm">
                       <option value="">— Select supplier —</option>
                       {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
@@ -2118,8 +2105,7 @@ export default function SuppliersPage() {
                             unitCostKES: item?.costPriceCents ? String(item.costPriceCents / 100) : f.unitCostKES,
                           }));
                         }}
-                        className="w-full border rounded-lg px-3 py-2 text-sm"
-                      >
+                        className="w-full border rounded-lg px-3 py-2 text-sm">
                         <option value="">— Select item —</option>
                         {catalogItems.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
                       </select>
@@ -2224,7 +2210,7 @@ export default function SuppliersPage() {
                       {matchResult.overallStatus}
                     </span>
                   </h3>
-                  <button onClick={() => setMatchResult(null)} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+                  <button onClick={() => setMatchResult(null)} className="text-gray-400 hover:text-gray-600" aria-label="Close"><X className="w-4 h-4" /></button>
                 </div>
                 <div className="mb-2 text-sm text-gray-600">
                   PO Value: {fmt(matchResult.po.totalCents)} | Invoice Value: {matchResult.invoice ? fmt(matchResult.invoice.totalCents) : 'No invoice'} |
@@ -2257,8 +2243,7 @@ export default function SuppliersPage() {
                     <select
                       value={invoiceForm.supplierId}
                       onChange={(e) => setInvoiceForm((f) => ({ ...f, supplierId: e.target.value }))}
-                      className="w-full border rounded-lg px-3 py-2 text-sm"
-                    >
+                      className="w-full border rounded-lg px-3 py-2 text-sm">
                       <option value="">— Select supplier —</option>
                       {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
@@ -2279,8 +2264,7 @@ export default function SuppliersPage() {
                       type="date"
                       value={invoiceForm.invoiceDateStr}
                       onChange={(e) => setInvoiceForm((f) => ({ ...f, invoiceDateStr: e.target.value }))}
-                      className="w-full border rounded-lg px-3 py-2 text-sm"
-                    />
+                      className="w-full border rounded-lg px-3 py-2 text-sm" aria-label="Date" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Amount (KES) *</label>
@@ -2297,8 +2281,7 @@ export default function SuppliersPage() {
                     <select
                       value={invoiceForm.purchaseOrderId}
                       onChange={(e) => setInvoiceForm((f) => ({ ...f, purchaseOrderId: e.target.value }))}
-                      className="w-full border rounded-lg px-3 py-2 text-sm"
-                    >
+                      className="w-full border rounded-lg px-3 py-2 text-sm">
                       <option value="">— None —</option>
                       {purchaseOrders.map((po) => <option key={po.id} value={po.id}>{po.poNumber}</option>)}
                     </select>
@@ -2391,7 +2374,7 @@ export default function SuppliersPage() {
             {/* Filter */}
             <div className="flex items-center gap-3">
               <select value={priceAgreementSupplierId} onChange={e => setPriceAgreementSupplierId(e.target.value)}
-                className="border rounded-lg px-3 py-2 text-sm">
+                className="border rounded-lg px-3 py-2 text-sm" aria-label="Filter by suppliers">
                 <option value="">All Suppliers</option>
                 {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
@@ -2421,12 +2404,12 @@ export default function SuppliersPage() {
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Valid From</label>
                   <input type="date" className="w-full border rounded-lg px-3 py-2 text-sm" value={paForm.validFrom}
-                    onChange={e => setPaForm(f => ({ ...f, validFrom: e.target.value }))} />
+                    onChange={e => setPaForm(f => ({ ...f, validFrom: e.target.value }))} aria-label="Start date" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Valid To</label>
                   <input type="date" className="w-full border rounded-lg px-3 py-2 text-sm" value={paForm.validTo}
-                    onChange={e => setPaForm(f => ({ ...f, validTo: e.target.value }))} />
+                    onChange={e => setPaForm(f => ({ ...f, validTo: e.target.value }))} aria-label="End date" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Min Qty</label>

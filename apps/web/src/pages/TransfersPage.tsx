@@ -123,8 +123,7 @@ function NewTransferModal({
             <select
               value={toStoreId}
               onChange={(e) => setToStoreId(e.target.value)}
-              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            >
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
               <option value="">— Select destination —</option>
               {stores.filter((s) => s.id !== fromStoreId).map((s) => (
                 <option key={s.id} value={s.id}>{s.name} ({s.storeCode})</option>
@@ -149,8 +148,7 @@ function NewTransferModal({
                   <select
                     value={line.itemId}
                     onChange={(e) => updateLine(i, 'itemId', e.target.value)}
-                    className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  >
+                    className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white" aria-label="— Select item —">
                     <option value="">— Select item —</option>
                     {items.map((item) => (
                       <option key={item.id} value={item.id}>
@@ -167,7 +165,7 @@ function NewTransferModal({
                     className="w-24 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   />
                   {lines.length > 1 && (
-                    <button onClick={() => removeLine(i)} className="text-red-500 hover:text-red-700">
+                    <button onClick={() => removeLine(i)} className="text-red-500 hover:text-red-700" aria-label="Remove">
                       <XCircle className="w-4 h-4" />
                     </button>
                   )}

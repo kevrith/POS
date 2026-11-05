@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/auth';
 import { useDialog } from '../components/Dialog';
 import { toast } from 'sonner';
 import { Plus, Search, CreditCard, ChevronRight, X, DollarSign, Users, AlertTriangle, Star, Upload, FileText, GitMerge, TrendingUp, CheckCircle, ShieldCheck, Clock } from 'lucide-react';
+import { Button, PageHeader, Segmented, StatTile } from '../components/ui';
 
 interface Customer {
   id: string;
@@ -314,46 +315,28 @@ export default function CustomersPage() {
   return (
     <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center">
-              <Users className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white">Customers</h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400">{customers.length} registered customers</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {activeTab === 'list' && (
-              <>
-                <button onClick={() => { setShowDupes(true); setShowForm(false); setShowImport(false); setSelected(null); }} className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 text-sm font-semibold rounded-xl transition-colors">
-                  <GitMerge className="w-4 h-4" /> Find Duplicates
-                </button>
-                <button onClick={() => { setShowImport(true); setShowForm(false); setSelected(null); setCsvRows([]); setImportResult(null); }} className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 text-sm font-semibold rounded-xl transition-colors">
-                  <Upload className="w-4 h-4" /> Import CSV
-                </button>
-                <button onClick={() => { setShowForm(!showForm); setSelected(null); setShowImport(false); }} className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm">
-                  <Plus className="w-4 h-4" /> Add Customer
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-        <div className="flex gap-1 mt-4">
-          <button onClick={() => setActiveTab('list')} className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${activeTab === 'list' ? 'bg-indigo-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}>
-            <Users className="w-3.5 h-3.5" /> All Customers
-          </button>
-          <button onClick={() => setActiveTab('segments')} className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${activeTab === 'segments' ? 'bg-indigo-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}>
-            <TrendingUp className="w-3.5 h-3.5" /> RFM Segments
-          </button>
-          {isManager && (
-            <button onClick={() => setActiveTab('credit-requests')} className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${activeTab === 'credit-requests' ? 'bg-indigo-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}>
-              <ShieldCheck className="w-3.5 h-3.5" /> Credit Requests
-            </button>
-          )}
-        </div>
+      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 sm:px-6 py-5 space-y-4">
+        <PageHeader
+          title="Customers"
+          subtitle={`${customers.length} registered customers`}
+          icon={<Users className="w-5 h-5" />}
+          actions={activeTab === 'list' ? (
+            <>
+              <Button variant="secondary" icon={<GitMerge className="w-4 h-4" />} onClick={() => { setShowDupes(true); setShowForm(false); setShowImport(false); setSelected(null); }}>Find Duplicates</Button>
+              <Button variant="secondary" icon={<Upload className="w-4 h-4" />} onClick={() => { setShowImport(true); setShowForm(false); setSelected(null); setCsvRows([]); setImportResult(null); }}>Import CSV</Button>
+              <Button icon={<Plus className="w-4 h-4" />} onClick={() => { setShowForm(!showForm); setSelected(null); setShowImport(false); }}>Add Customer</Button>
+            </>
+          ) : undefined}
+        />
+        <Segmented
+          value={activeTab}
+          onChange={setActiveTab}
+          items={[
+            { id: 'list', label: 'All Customers', icon: <Users className="w-3.5 h-3.5" /> },
+            { id: 'segments', label: 'RFM Segments', icon: <TrendingUp className="w-3.5 h-3.5" /> },
+            ...(isManager ? [{ id: 'credit-requests' as const, label: 'Credit Requests', icon: <ShieldCheck className="w-3.5 h-3.5" /> }] : []),
+          ]}
+        />
       </div>
 
       <div className="flex-1 overflow-hidden flex flex-col p-6 gap-5">
@@ -512,30 +495,14 @@ export default function CustomersPage() {
         {activeTab === 'list' && (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Total Customers</p>
-                  <Users className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                </div>
-                <p className="text-2xl font-bold text-indigo-700 dark:text-indigo-300">{customers.length}</p>
-              </div>
-              <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Outstanding Credit</p>
-                  <AlertTriangle className="w-4 h-4 text-amber-500 dark:text-amber-400" />
-                </div>
-                <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{withCreditCount} customers</p>
-                {totalOutstandingDebtCents > 0 && (
-                  <p className="text-xs text-amber-700 dark:text-amber-500 mt-0.5 font-semibold">{formatKES(totalOutstandingDebtCents)} owed</p>
-                )}
-              </div>
-              <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Total Loyalty Pts</p>
-                  <Star className="w-4 h-4 text-yellow-500 dark:text-yellow-400" />
-                </div>
-                <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{totalLoyaltyPoints.toLocaleString()}</p>
-              </div>
+              <StatTile label="Total Customers" value={customers.length} icon={<Users className="w-4 h-4" />} />
+              <StatTile
+                label="Outstanding Credit"
+                value={`${withCreditCount} customers`}
+                note={totalOutstandingDebtCents > 0 ? `${formatKES(totalOutstandingDebtCents)} owed` : undefined}
+                icon={<AlertTriangle className="w-4 h-4" />}
+              />
+              <StatTile label="Total Loyalty Pts" value={totalLoyaltyPoints.toLocaleString()} icon={<Star className="w-4 h-4" />} />
             </div>
 
             {/* Pending credit increase requests alert */}
@@ -567,7 +534,7 @@ export default function CustomersPage() {
               <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-5">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="font-bold text-gray-900 dark:text-white">Import Customers from CSV</h2>
-                  <button onClick={() => setShowImport(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"><X className="w-4 h-4" /></button>
+                  <button onClick={() => setShowImport(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" aria-label="Close"><X className="w-4 h-4" /></button>
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">CSV format: <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">name,phone,email,credit_limit</code></p>
                 <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileChange} className="block w-full text-sm text-gray-700 dark:text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 dark:file:bg-indigo-900/30 file:text-indigo-700 dark:file:text-indigo-300 hover:file:bg-indigo-100 dark:hover:file:bg-indigo-900/50 mb-3" />
@@ -619,7 +586,7 @@ export default function CustomersPage() {
               <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-5">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="font-bold text-gray-900 dark:text-white">New Customer</h2>
-                  <button onClick={() => setShowForm(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"><X className="w-4 h-4" /></button>
+                  <button onClick={() => setShowForm(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" aria-label="Close"><X className="w-4 h-4" /></button>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <input placeholder="Full Name *" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 p-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" />
@@ -742,7 +709,7 @@ export default function CustomersPage() {
                       </div>
                       <div className="flex gap-1">
                         <button onClick={() => { setEditCustomer(selected); setEditForm({ name: selected.name, phone: selected.phone ?? '', email: selected.email ?? '', kraPin: selected.kraPin ?? '', creditLimitCents: selected.creditLimitCents }); }} className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" title="Edit customer"><Plus className="w-4 h-4 rotate-45" /></button>
-                        <button onClick={() => setSelected(null)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"><X className="w-4 h-4" /></button>
+                        <button onClick={() => setSelected(null)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" aria-label="Close"><X className="w-4 h-4" /></button>
                       </div>
                     </div>
                     <button onClick={() => openStatementModal(selected)} className="mt-3 w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 text-xs font-semibold rounded-xl transition-colors border border-gray-200 dark:border-gray-600">
@@ -879,7 +846,7 @@ export default function CustomersPage() {
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between p-5 border-b border-gray-200 dark:border-gray-700">
               <h2 className="font-bold text-gray-900 dark:text-white text-lg">Duplicate Customers</h2>
-              <button onClick={() => setShowDupes(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"><X className="w-4 h-4" /></button>
+              <button onClick={() => setShowDupes(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" aria-label="Close"><X className="w-4 h-4" /></button>
             </div>
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               {dupes.length === 0 ? (
@@ -931,7 +898,7 @@ export default function CustomersPage() {
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-gray-900 dark:text-white">Edit Customer</h3>
-              <button onClick={() => setEditCustomer(null)} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"><X className="w-4 h-4" /></button>
+              <button onClick={() => setEditCustomer(null)} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Close"><X className="w-4 h-4" /></button>
             </div>
             <div className="space-y-3">
               <input placeholder="Full Name *" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
@@ -962,7 +929,7 @@ export default function CustomersPage() {
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-bold text-gray-900 dark:text-white">Request Credit Increase</h2>
-              <button onClick={() => setShowCreditRequest(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"><X className="w-4 h-4" /></button>
+              <button onClick={() => setShowCreditRequest(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" aria-label="Close"><X className="w-4 h-4" /></button>
             </div>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
               Requesting credit increase for <strong className="text-gray-900 dark:text-white">{creditRequestCustomer.name}</strong>
@@ -1017,7 +984,7 @@ export default function CustomersPage() {
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-bold text-gray-900 dark:text-white">Set Credit Limit</h2>
-              <button onClick={() => setShowSetLimit(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"><X className="w-4 h-4" /></button>
+              <button onClick={() => setShowSetLimit(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" aria-label="Close"><X className="w-4 h-4" /></button>
             </div>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
               Customer: <strong className="text-gray-900 dark:text-white">{setLimitCustomer.name}</strong>
@@ -1092,17 +1059,17 @@ export default function CustomersPage() {
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-bold text-gray-900 dark:text-white">Customer Statement</h2>
-              <button onClick={() => setShowStatement(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"><X className="w-4 h-4" /></button>
+              <button onClick={() => setShowStatement(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" aria-label="Close"><X className="w-4 h-4" /></button>
             </div>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Generating statement for <strong className="text-gray-900 dark:text-white">{statementCustomer.name}</strong></p>
             <div className="space-y-3 mb-5">
               <div>
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Start Date</label>
-                <input type="date" value={stmtStart} onChange={(e) => setStmtStart(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" />
+                <input type="date" value={stmtStart} onChange={(e) => setStmtStart(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" aria-label="Start date" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">End Date</label>
-                <input type="date" value={stmtEnd} onChange={(e) => setStmtEnd(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" />
+                <input type="date" value={stmtEnd} onChange={(e) => setStmtEnd(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" aria-label="End date" />
               </div>
             </div>
             <div className="flex gap-2">

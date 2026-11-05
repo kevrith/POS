@@ -90,7 +90,7 @@ function fmtDate(s?: string) {
 
 const DAYS: Day[] = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 const DAY_LABELS: Record<Day, string> = { MON: 'Mon', TUE: 'Tue', WED: 'Wed', THU: 'Thu', FRI: 'Fri', SAT: 'Sat', SUN: 'Sun' };
-const PRESET_COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+const PRESET_COLORS = ['#8B4EFF', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
 
 const RUN_STATUS_STYLE: Record<RunStatus, string> = {
   PLANNED:     'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
@@ -152,7 +152,7 @@ function ProofOfDeliveryModal({
     const ctx = canvas.getContext('2d'); if (!ctx) return;
     const pos = getPos(e.nativeEvent, canvas);
     ctx.lineTo(pos.x, pos.y);
-    ctx.strokeStyle = '#1e40af'; ctx.lineWidth = 2.5;
+    ctx.strokeStyle = '#531BB8'; ctx.lineWidth = 2.5;
     ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
   }
 
@@ -174,7 +174,7 @@ function ProofOfDeliveryModal({
     const ctx = canvas.getContext('2d'); if (!ctx) return;
     const pos = getPos(e.nativeEvent, canvas);
     ctx.lineTo(pos.x, pos.y);
-    ctx.strokeStyle = '#1e40af'; ctx.lineWidth = 2.5;
+    ctx.strokeStyle = '#531BB8'; ctx.lineWidth = 2.5;
     ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
   }
 
@@ -228,7 +228,7 @@ function ProofOfDeliveryModal({
             <h2 className="font-bold text-gray-900 dark:text-white">Proof of Delivery</h2>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{customerName} &bull; {orderNumber}</p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Close">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -275,7 +275,7 @@ function ProofOfDeliveryModal({
                 <span className="text-xs text-green-700 dark:text-green-300 font-mono">
                   {location.lat.toFixed(6)}, {location.lng.toFixed(6)}
                 </span>
-                <button onClick={() => setLocation(null)} className="ml-auto text-green-500 hover:text-red-500">
+                <button onClick={() => setLocation(null)} className="ml-auto text-green-500 hover:text-red-500" aria-label="Close">
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -361,7 +361,7 @@ function RouteModal({
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between p-5 border-b border-gray-200 dark:border-gray-700">
           <h2 className="font-bold text-gray-900 dark:text-white">{route ? 'Edit Route' : 'New Route'}</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Close"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-5 space-y-4">
           <div>
@@ -397,8 +397,7 @@ function RouteModal({
             <select
               value={driverUserId}
               onChange={(e) => setDriverUserId(e.target.value)}
-              className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none"
-            >
+              className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none">
               <option value="">No driver assigned</option>
               {driverOptions.users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
@@ -485,7 +484,7 @@ function CreateRunModal({
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-5 border-b border-gray-200 dark:border-gray-700">
           <h2 className="font-bold text-gray-900 dark:text-white">Create Delivery Run</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Close"><X className="w-4 h-4" /></button>
         </div>
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           <div>
@@ -493,23 +492,21 @@ function CreateRunModal({
             <select
               value={routeId}
               onChange={(e) => setRouteId(e.target.value)}
-              className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none"
-            >
+              className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none">
               <option value="">Select route…</option>
               {routes.filter((r) => r.isActive).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Date *</label>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none" />
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none" aria-label="Date" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Driver</label>
             <select
               value={driverUserId}
               onChange={(e) => setDriverUserId(e.target.value)}
-              className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none"
-            >
+              className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none">
               <option value="">No driver assigned</option>
               {driverOptions.users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
@@ -612,7 +609,7 @@ function RunDetailModal({ run, businessId, onClose }: { run: DeliveryRun; busine
             <h2 className="font-bold text-gray-900 dark:text-white">{d.routeName ?? 'Delivery Run'}</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400">{fmtDate(d.date)} &bull; {d.driverName ?? 'No driver'}</p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Close"><X className="w-4 h-4" /></button>
         </div>
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
           {/* Orders */}
@@ -789,7 +786,7 @@ function RoutesTab({ businessId }: { businessId: string }) {
           <div key={r.id} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden">
             <div className="flex items-center gap-3 px-4 py-3">
               {/* Color dot */}
-              <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: r.color ?? '#6366f1' }} />
+              <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: r.color ?? '#8B4EFF' }} />
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
@@ -823,14 +820,12 @@ function RoutesTab({ businessId }: { businessId: string }) {
                 </button>
                 <button
                   onClick={() => { setEditRoute(r); setShowModal(true); }}
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-                >
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors" aria-label="Edit">
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={() => handleDelete(r)}
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                >
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" aria-label="Delete">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -907,13 +902,13 @@ function RunsTab({ businessId }: { businessId: string }) {
     <div>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div className="flex items-center gap-2 flex-wrap">
-          <select value={routeFilter} onChange={(e) => setRouteFilter(e.target.value)} className="border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none">
+          <select value={routeFilter} onChange={(e) => setRouteFilter(e.target.value)} className="border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none" aria-label="Filter by routes">
             <option value="">All Routes</option>
             {routes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
-          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none" />
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none" aria-label="Date" />
           <span className="text-gray-400 text-sm">–</span>
-          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none" />
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none" aria-label="Date" />
         </div>
         <button onClick={() => setShowCreateModal(true)} className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors">
           <Plus className="w-4 h-4" /> Create Run
@@ -927,7 +922,7 @@ function RunsTab({ businessId }: { businessId: string }) {
           <div
             key={r.id}
             onClick={() => setSelectedRun(r)}
-            className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 cursor-pointer hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-600 transition-all"
+            className="surface-interactive p-4" role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
           >
             <div className="flex items-start justify-between">
               <div>

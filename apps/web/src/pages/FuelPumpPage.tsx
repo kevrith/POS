@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import { PageHeader, Tabs } from '../components/ui';
 import { useAuthStore } from '../stores/auth';
 import { useDialog } from '../components/Dialog';
 import { formatKES } from '@pos/shared';
@@ -402,26 +403,9 @@ export default function FuelPumpPage() {
 
   return (
     <div className="p-3 sm:p-6 space-y-4">
-      {/* Header */}
-      <div className="flex items-center gap-2">
-        <Fuel className="w-6 h-6 text-orange-600" />
-        <h1 className="text-2xl font-bold">Fuel Station Management</h1>
-      </div>
+      <PageHeader title="Fuel Station Management" icon={<Fuel className="w-5 h-5" />} />
 
-      {/* Tab Bar */}
-      <div className="flex gap-1 border-b overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
-              tab === t.id ? 'border-orange-600 text-orange-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {t.icon}{t.label}
-          </button>
-        ))}
-      </div>
+      <Tabs tabs={TABS} value={tab} onChange={setTab} />
 
       {/* ── PUMP CONTROL ── */}
       {tab === 'pumps' && (
@@ -456,7 +440,7 @@ export default function FuelPumpPage() {
             {connMode === 'serial' && (
               <div className="flex items-center gap-2 flex-wrap">
                 <select value={hwProtocol} onChange={(e) => setHwProtocol(e.target.value as PumpProtocol)}
-                  disabled={hwConnected} className="border rounded px-2 py-1 text-xs disabled:opacity-50">
+                  disabled={hwConnected} className="border rounded px-2 py-1 text-xs disabled:opacity-50" aria-label="Gilbarco GVR">
                   <option value="GILBARCO">Gilbarco GVR</option>
                   <option value="WAYNE">Wayne Dresser</option>
                   <option value="TOKHEIM">Tokheim</option>
@@ -483,7 +467,7 @@ export default function FuelPumpPage() {
                   <input value={tcpPort} onChange={(e) => setTcpPort(e.target.value)} disabled={tcpConnected}
                     placeholder="Port" className="border rounded px-2 py-1 text-xs w-20 disabled:opacity-50" />
                   <select value={tcpProtocol} onChange={(e) => setTcpProtocol(e.target.value as PumpProtocol)}
-                    disabled={tcpConnected} className="border rounded px-2 py-1 text-xs disabled:opacity-50">
+                    disabled={tcpConnected} className="border rounded px-2 py-1 text-xs disabled:opacity-50" aria-label="Gilbarco GVR (10001)">
                     <option value="GILBARCO">Gilbarco GVR (10001)</option>
                     <option value="WAYNE">Wayne Dresser (10002)</option>
                     <option value="IFSF">IFSF/Tokheim (5555)</option>
@@ -529,7 +513,7 @@ export default function FuelPumpPage() {
               <input className="border rounded px-3 py-1.5 text-sm" placeholder="Label (optional)"
                 value={pumpForm.label} onChange={(e) => setPumpForm({ ...pumpForm, label: e.target.value })} />
               <select className="border rounded px-3 py-1.5 text-sm" value={pumpForm.gradeId}
-                onChange={(e) => setPumpForm({ ...pumpForm, gradeId: e.target.value })}>
+                onChange={(e) => setPumpForm({ ...pumpForm, gradeId: e.target.value })} aria-label="Select grade">
                 <option value="">Select grade</option>
                 {grades.map((g: any) => <option key={g.id} value={g.id}>{g.name}</option>)}
               </select>
@@ -539,7 +523,7 @@ export default function FuelPumpPage() {
             <button
               onClick={() => createPump.mutate({ ...pumpForm, businessId, storeId, pumpNumber: parseInt(pumpForm.pumpNumber), nozzleCount: parseInt(pumpForm.nozzleCount) })}
               disabled={!pumpForm.pumpNumber || !pumpForm.gradeId || createPump.isPending}
-              className="bg-orange-600 text-white px-4 py-1.5 rounded text-sm font-medium disabled:opacity-50">
+              className="bg-brand-600 text-white px-4 py-1.5 rounded text-sm font-medium disabled:opacity-50">
               <Plus className="w-4 h-4 inline mr-1" />Add Pump
             </button>
           </div>
@@ -591,14 +575,14 @@ export default function FuelPumpPage() {
                       {saleForm.paymentMethod === 'FLEET' && saleForm.pumpId === pump.id ? (
                         <select className="border rounded px-2 py-1 text-sm"
                           value={saleForm.fleetAccountId}
-                          onChange={(e) => setSaleForm({ ...saleForm, fleetAccountId: e.target.value })}>
+                          onChange={(e) => setSaleForm({ ...saleForm, fleetAccountId: e.target.value })} aria-label="Select fleet account">
                           <option value="">Select fleet account</option>
                           {fleetAccounts.map((fa: any) => <option key={fa.id} value={fa.id}>{fa.companyName}</option>)}
                         </select>
                       ) : saleForm.paymentMethod === 'CREDIT' && saleForm.pumpId === pump.id ? (
                         <select className="border rounded px-2 py-1 text-sm"
                           value={saleForm.customerId}
-                          onChange={(e) => setSaleForm({ ...saleForm, customerId: e.target.value })}>
+                          onChange={(e) => setSaleForm({ ...saleForm, customerId: e.target.value })} aria-label="Select customer">
                           <option value="">Select customer</option>
                           {creditCustomers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                         </select>
@@ -609,7 +593,7 @@ export default function FuelPumpPage() {
                       )}
                     </div>
                     {saleForm.pumpId === pump.id && saleForm.litresDispensed && (
-                      <p className="text-sm font-semibold text-orange-700">
+                      <p className="text-sm font-semibold text-brand-700">
                         Total: {formatKES(Math.round(parseFloat(saleForm.litresDispensed) * (pump.grade?.pricePerLitreCents ?? 0)))}
                       </p>
                     )}
@@ -628,7 +612,7 @@ export default function FuelPumpPage() {
                       disabled={!saleForm.litresDispensed || saleForm.pumpId !== pump.id || recordSale.isPending
                         || (saleForm.paymentMethod === 'CREDIT' && !saleForm.customerId)
                         || (saleForm.paymentMethod === 'FLEET' && !saleForm.fleetAccountId)}
-                      className="w-full bg-orange-600 text-white py-1.5 rounded text-sm font-medium disabled:opacity-50">
+                      className="w-full bg-brand-600 text-white py-1.5 rounded text-sm font-medium disabled:opacity-50">
                       Complete Sale
                     </button>
                   </div>
@@ -658,7 +642,7 @@ export default function FuelPumpPage() {
             <button
               onClick={() => createGrade.mutate({ ...gradeForm, businessId, storeId, pricePerLitreCents: parseInt(gradeForm.pricePerLitreCents) })}
               disabled={!gradeForm.name || !gradeForm.code || !gradeForm.pricePerLitreCents || createGrade.isPending}
-              className="bg-orange-600 text-white px-4 py-1.5 rounded text-sm font-medium disabled:opacity-50">
+              className="bg-brand-600 text-white px-4 py-1.5 rounded text-sm font-medium disabled:opacity-50">
               <Plus className="w-4 h-4 inline mr-1" />Add Grade
             </button>
           </div>
@@ -673,7 +657,7 @@ export default function FuelPumpPage() {
                       value={editGrade.pricePerLitreCents} onChange={(e) => setEditGrade({ ...editGrade, pricePerLitreCents: parseInt(e.target.value) })} />
                     <div className="flex gap-2">
                       <button onClick={() => updateGrade.mutate(editGrade)} disabled={updateGrade.isPending}
-                        className="flex-1 bg-orange-600 text-white py-1 rounded text-sm">Save</button>
+                        className="flex-1 bg-brand-600 text-white py-1 rounded text-sm">Save</button>
                       <button onClick={() => setEditGrade(null)} className="flex-1 border py-1 rounded text-sm">Cancel</button>
                     </div>
                   </div>
@@ -682,7 +666,7 @@ export default function FuelPumpPage() {
                     <div>
                       <p className="font-semibold">{g.name}</p>
                       <p className="text-xs text-gray-500 font-mono">{g.code}</p>
-                      <p className="text-lg font-bold text-orange-600 mt-1">{formatKES(g.pricePerLitreCents)}<span className="text-sm font-normal text-gray-500">/L</span></p>
+                      <p className="text-lg font-bold text-brand-600 mt-1">{formatKES(g.pricePerLitreCents)}<span className="text-sm font-normal text-gray-500">/L</span></p>
                     </div>
                     <div className="flex flex-col gap-1 items-end">
                       <button onClick={() => updateGrade.mutate({ id: g.id, isActive: !g.isActive })}
@@ -712,7 +696,7 @@ export default function FuelPumpPage() {
               <input className="border rounded px-3 py-1.5 text-sm" placeholder="Label (optional)"
                 value={tankForm.label} onChange={(e) => setTankForm({ ...tankForm, label: e.target.value })} />
               <select className="border rounded px-3 py-1.5 text-sm" value={tankForm.gradeId}
-                onChange={(e) => setTankForm({ ...tankForm, gradeId: e.target.value })}>
+                onChange={(e) => setTankForm({ ...tankForm, gradeId: e.target.value })} aria-label="Select grade">
                 <option value="">Select grade</option>
                 {grades.map((g: any) => <option key={g.id} value={g.id}>{g.name}</option>)}
               </select>
@@ -727,7 +711,7 @@ export default function FuelPumpPage() {
               capacityLitres: parseFloat(tankForm.capacityLitres),
               minLevelLitres: parseFloat(tankForm.minLevelLitres),
             })} disabled={!tankForm.tankNumber || !tankForm.gradeId || !tankForm.capacityLitres || createTank.isPending}
-              className="bg-orange-600 text-white px-4 py-1.5 rounded text-sm font-medium disabled:opacity-50">
+              className="bg-brand-600 text-white px-4 py-1.5 rounded text-sm font-medium disabled:opacity-50">
               <Plus className="w-4 h-4 inline mr-1" />Add Tank
             </button>
           </div>
@@ -906,7 +890,7 @@ export default function FuelPumpPage() {
                 businessId, storeId, cashierId: user?.id, cashierName: shiftOpenForm.cashierName,
                 readings: shiftOpenForm.readings.filter((r: any) => r.openingLitres).map((r: any) => ({ pumpId: r.pumpId, openingLitres: parseFloat(r.openingLitres) || 0 })),
               })} disabled={!shiftOpenForm.cashierName || openShiftMut.isPending}
-                className="bg-orange-600 text-white px-4 py-1.5 rounded text-sm font-medium disabled:opacity-50">
+                className="bg-brand-600 text-white px-4 py-1.5 rounded text-sm font-medium disabled:opacity-50">
                 Open Shift
               </button>
             </div>
@@ -964,12 +948,12 @@ export default function FuelPumpPage() {
                       </td>
                     </tr>
                     {expandedShift === s.id && shiftSummary && (
-                      <tr key={`${s.id}-summary`} className="bg-orange-50">
+                      <tr key={`${s.id}-summary`} className="bg-brand-50">
                         <td colSpan={6} className="px-6 py-4">
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-3">
                             <div className="bg-white rounded p-3 text-center border">
                               <p className="text-xs text-gray-500">Total Revenue</p>
-                              <p className="font-bold text-orange-600">{formatKES(shiftSummary.totalRevenueCents)}</p>
+                              <p className="font-bold text-brand-600">{formatKES(shiftSummary.totalRevenueCents)}</p>
                             </div>
                             <div className="bg-white rounded p-3 text-center border">
                               <p className="text-xs text-gray-500">Total Litres</p>
@@ -1049,7 +1033,7 @@ export default function FuelPumpPage() {
             </div>
             <button onClick={() => createFleet.mutate({ ...fleetForm, businessId, creditLimitCents: parseInt(fleetForm.creditLimitCents) || 0 })}
               disabled={!fleetForm.companyName || createFleet.isPending}
-              className="bg-orange-600 text-white px-4 py-1.5 rounded text-sm font-medium disabled:opacity-50">
+              className="bg-brand-600 text-white px-4 py-1.5 rounded text-sm font-medium disabled:opacity-50">
               <Plus className="w-4 h-4 inline mr-1" />Add Account
             </button>
           </div>
@@ -1156,12 +1140,12 @@ export default function FuelPumpPage() {
       {tab === 'sales' && (
         <div className="space-y-3">
           <div className="flex gap-2 flex-wrap items-center">
-            <select className="border rounded px-3 py-1.5 text-sm" value={filterPump} onChange={(e) => setFilterPump(e.target.value)}>
+            <select className="border rounded px-3 py-1.5 text-sm" value={filterPump} onChange={(e) => setFilterPump(e.target.value)} aria-label="Filter by pumps">
               <option value="">All Pumps</option>
               {pumps.map((p: any) => <option key={p.id} value={p.id}>Pump {p.pumpNumber}</option>)}
             </select>
-            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={startDate} onChange={(e) => setStartDate(e.target.value)} aria-label="Date" />
+            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={endDate} onChange={(e) => setEndDate(e.target.value)} aria-label="Start date" />
           </div>
           <div className="bg-white border rounded-lg overflow-hidden">
             <table className="w-full text-sm">
@@ -1222,15 +1206,15 @@ export default function FuelPumpPage() {
       {tab === 'stats' && (
         <div className="space-y-4">
           <div className="flex gap-2 items-center">
-            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={startDate} onChange={(e) => setStartDate(e.target.value)} aria-label="Date" />
+            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={endDate} onChange={(e) => setEndDate(e.target.value)} aria-label="Start date" />
           </div>
           {stats && (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 <div className="bg-white border rounded-lg p-4">
                   <p className="text-sm text-gray-500">Total Revenue</p>
-                  <p className="text-2xl font-bold text-orange-600">{formatKES(stats.totalRevenueCents)}</p>
+                  <p className="text-2xl font-bold text-brand-600">{formatKES(stats.totalRevenueCents)}</p>
                 </div>
                 <div className="bg-white border rounded-lg p-4">
                   <p className="text-sm text-gray-500">Total Litres</p>
@@ -1275,8 +1259,8 @@ export default function FuelPumpPage() {
         <div className="space-y-4">
           <div className="flex gap-2 items-center flex-wrap">
             <span className="text-sm text-gray-600 font-medium">Date Range:</span>
-            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={startDate} onChange={(e) => setStartDate(e.target.value)} aria-label="Date" />
+            <input type="date" className="border rounded px-3 py-1.5 text-sm" value={endDate} onChange={(e) => setEndDate(e.target.value)} aria-label="Start date" />
           </div>
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
             <strong>Variance Report</strong> — Compares fuel dispensed (from sales) vs dipping readings to detect shrinkage, leaks, or meter errors. Variance &gt;1% triggers an ALERT.
@@ -1348,8 +1332,7 @@ export default function FuelPumpPage() {
               <select
                 className="border rounded px-3 py-1.5 text-sm"
                 value={maintForm.pumpId}
-                onChange={(e) => setMaintForm({ ...maintForm, pumpId: e.target.value })}
-              >
+                onChange={(e) => setMaintForm({ ...maintForm, pumpId: e.target.value })} aria-label="Select Pump">
                 <option value="">Select Pump</option>
                 {(pumps ?? []).map((p: any) => (
                   <option key={p.id} value={p.id}>Pump {p.pumpNumber}{p.label ? ` — ${p.label}` : ''}</option>
@@ -1408,7 +1391,7 @@ export default function FuelPumpPage() {
                 createMaintMutation.mutate({ ...maintForm, businessId });
               }}
               disabled={!maintForm.pumpId || !maintForm.description || createMaintMutation.isPending}
-              className="px-4 py-1.5 bg-orange-600 text-white rounded text-sm hover:bg-orange-700 disabled:opacity-50"
+              className="px-4 py-1.5 bg-brand-600 text-white rounded text-sm hover:bg-brand-700 disabled:opacity-50"
             >
               {createMaintMutation.isPending ? 'Saving...' : 'Log Maintenance'}
             </button>
@@ -1420,8 +1403,7 @@ export default function FuelPumpPage() {
             <select
               className="border rounded px-3 py-1.5 text-sm"
               value={maintFilter}
-              onChange={(e) => setMaintFilter(e.target.value)}
-            >
+              onChange={(e) => setMaintFilter(e.target.value)} aria-label="Filter by pumps">
               <option value="">All Pumps</option>
               {(pumps ?? []).map((p: any) => (
                 <option key={p.id} value={p.id}>Pump {p.pumpNumber}{p.label ? ` — ${p.label}` : ''}</option>

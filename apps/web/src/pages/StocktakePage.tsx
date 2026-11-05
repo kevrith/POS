@@ -132,8 +132,7 @@ function SessionsList({
                 {s.status !== 'FINALIZED' && (
                   <button
                     onClick={() => onDelete(s.id)}
-                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                  >
+                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" aria-label="Delete">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 )}
@@ -236,8 +235,7 @@ function CountSheet({
         <div className="flex items-center gap-3 mb-4">
           <button
             onClick={onBack}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
-          >
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors" aria-label="Previous">
             <ChevronLeft className="w-5 h-5 text-gray-500" />
           </button>
           <div className="flex-1">

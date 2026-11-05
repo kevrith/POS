@@ -1,3 +1,13 @@
+import fs from 'node:fs';
+import colors from 'tailwindcss/colors';
+import { buildPalette } from './tailwind.palette.js';
+
+// Design tokens: design/tokens.json is the single source (see design/README.md). The CSS variables that carry the
+// dark-mode values are generated into src/styles/tokens.css.
+const tokens = JSON.parse(fs.readFileSync(new URL('../../design/tokens.json', import.meta.url), 'utf8'));
+const v = (name) => `rgb(var(--${name}) / <alpha-value>)`;
+const palette = buildPalette(tokens, colors);
+
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: 'class',
@@ -13,18 +23,48 @@ export default {
     },
     extend: {
       colors: {
-        brand: {
-          50:  '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
-          400: '#60a5fa',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          800: '#1e40af',
-          900: '#1e3a8a',
-        },
+        // The brand is Signal Violet. The old blue / indigo / purple families all point at it, so a page written
+        // with `bg-blue-600` or `text-indigo-700` is on-brand without being rewritten.
+        brand: tokens.brand,
+        blue: tokens.brand,
+        indigo: tokens.brand,
+        purple: tokens.brand,
+        violet: tokens.brand,
+        sky: tokens.brand,
+        cyan: tokens.brand,
+        // Text in these families is used at the 600 shade; Tailwind's own 600s are below 4.5:1 on white, so they are darker here.
+        green: { ...colors.green, 600: tokens.statusShades.green600 },
+        emerald: { ...colors.emerald, 600: tokens.statusShades.emerald600 },
+        amber: { ...colors.amber, 600: tokens.statusShades.amber600 },
+        orange: { ...colors.orange, 600: tokens.statusShades.orange600 },
+        // A second green family used as a module accent is the one success green.
+        teal: { ...colors.emerald, 600: tokens.statusShades.emerald600 },
+        // Neutrals are a cool, slightly violet grey; gray-100 is Mist Gray.
+        gray: tokens.neutral,
+        slate: tokens.neutral,
+        zinc: tokens.neutral,
+        stone: tokens.neutral,
+      },
+      // These utilities follow the theme: white and the light greys become dark surfaces under `.dark`, and the
+      // grey text steps become light text. A page with no `dark:` classes of its own is therefore readable in dark
+      // mode. An explicit `dark:` class still wins, so pages that were styled by hand look as they did.
+      backgroundColor: {
+        ...palette.backgroundColor,
+        white: v('c-white'),
+        gray: { 50: v('c-gray-50'), 100: v('c-gray-100'), 200: v('c-gray-200') },
+      },
+      borderColor: {
+        ...palette.borderColor,
+        white: v('c-white'),
+        gray: { 100: v('c-gray-100'), 200: v('c-gray-200'), 300: v('c-gray-300') },
+      },
+      textColor: {
+        ...palette.textColor,
+        gray: { 400: v('c-text-400'), 500: v('c-text-500'), 600: v('c-text-600'), 700: v('c-text-700'), 800: v('c-text-800'), 900: v('c-text-900') },
+      },
+      borderRadius: {
+        sm: `${tokens.radius.sm}px`, DEFAULT: `${tokens.radius.sm}px`, md: `${tokens.radius.md}px`,
+        lg: `${tokens.radius.md}px`, xl: `${tokens.radius.lg}px`, '2xl': `${tokens.radius.xl}px`,
       },
       fontFamily: {
         sans: ['"Inter"', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'sans-serif'],
@@ -36,7 +76,7 @@ export default {
         'card-lg': '0 8px 32px -4px rgba(0,0,0,0.12), 0 2px 8px -2px rgba(0,0,0,0.06)',
         'modal': '0 24px 64px -12px rgba(0,0,0,0.35)',
         'modal-sm': '0 12px 36px -8px rgba(0,0,0,0.25)',
-        'glow-blue': '0 0 24px rgba(59,130,246,0.35)',
+        'glow-blue': '0 0 24px rgba(122,53,255,0.35)',
         'glow-green': '0 0 24px rgba(16,185,129,0.3)',
         'inner-sm': 'inset 0 1px 3px rgba(0,0,0,0.07)',
         'btn': '0 1px 2px rgba(0,0,0,0.08), 0 1px 1px rgba(0,0,0,0.04)',
@@ -63,5 +103,8 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // CSS variables behind the status and brand utilities above (light values on :root, dark values under .dark)
+    ({ addBase }) => addBase(palette.vars),
+  ],
 };

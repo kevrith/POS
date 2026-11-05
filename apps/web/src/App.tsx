@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState, useEffect } from 'react';
-import { Routes, Route, Navigate, useParams } from 'react-router-dom';
+import { Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
+import { RouteErrorBoundary } from './components/RouteErrorBoundary';
 import { Toaster } from 'sonner';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useAuthStore } from './stores/auth';
@@ -97,10 +98,25 @@ function isTauriEnv(): boolean {
   return !!(window.__TAURI_INTERNALS__ ?? window.__TAURI__);
 }
 
+/** The error boundary, cleared whenever the user goes to another page (it needs the router's location, which App itself does not track). */
+function ErrorBoundaryForRoute({ children }: { children: React.ReactNode }) {
+  const { pathname } = useLocation();
+  return <RouteErrorBoundary resetKey={pathname}>{children}</RouteErrorBoundary>;
+}
+
+/**
+ * Shown while a page's code is on its way. It looks like a page (a title, some tiles, a table) rather than a lone
+ * spinner, and a thin bar runs across the top, so a click always gets an answer within a frame.
+ */
 function PageLoader() {
   return (
-    <div className="flex items-center justify-center h-full">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+    <div className="relative h-full" role="status" aria-label="Loading page">
+      <div className="absolute inset-x-0 top-0 h-0.5 overflow-hidden bg-brand-100 dark:bg-brand-500/20"><div className="progress-indeterminate h-full bg-brand-600" /></div>
+      <div className="p-4 md:p-6 space-y-5 animate-fade-in">
+        <div className="skeleton h-8 w-56" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">{[0, 1, 2, 3].map((i) => <div key={i} className="skeleton h-24 rounded-2xl" />)}</div>
+        <div className="skeleton h-64 rounded-2xl" />
+      </div>
     </div>
   );
 }
@@ -288,6 +304,7 @@ export default function App() {
         <Toaster position="top-right" richColors closeButton duration={4000} />
         <PrintBridge />
         <Layout>
+          <ErrorBoundaryForRoute>
           <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/" element={<Navigate to="/pos" replace />} />
@@ -345,6 +362,7 @@ export default function App() {
               <Route path="*" element={<Navigate to="/pos" replace />} />
             </Routes>
           </Suspense>
+          </ErrorBoundaryForRoute>
         </Layout>
       </>
     </DialogProvider>

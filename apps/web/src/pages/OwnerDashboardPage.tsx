@@ -6,10 +6,11 @@ import { useAuthStore } from '../stores/auth';
 import {
   TrendingUp, TrendingDown, ShoppingCart, Store, DollarSign,
   Package, ArrowRight, BarChart2, Users, AlertTriangle,
-  CheckCircle2, Activity, Zap, Calendar, ChevronRight,
-  FileText, CreditCard, Truck, RefreshCw,
+  CheckCircle2, Activity, Zap, Calendar,
+  FileText, CreditCard, Truck, RefreshCw, Medal,
 } from 'lucide-react';
 import { formatKES } from '@pos/shared';
+import { ActionCard } from '../components/ui';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -90,7 +91,7 @@ function pctChange(current: number, previous: number) {
 
 // ─── Sparkline SVG ────────────────────────────────────────────────────────────
 
-function MiniBar({ values, color = '#3b82f6' }: { values: number[]; color?: string }) {
+function MiniBar({ values, color = '#8B4EFF' }: { values: number[]; color?: string }) {
   if (!values.length) return null;
   const max = Math.max(...values, 1);
   const w = 100 / values.length;
@@ -132,7 +133,7 @@ function KpiCard({
 }) {
   const up = trend !== undefined && trend >= 0;
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5 flex flex-col gap-3 hover:shadow-md transition-shadow">
+    <div className="surface p-5 flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{label}</span>
         <div className={`w-9 h-9 rounded-xl ${accent} flex items-center justify-center`}>
@@ -171,13 +172,13 @@ function StoreRow({
   const avgTicket = store.transactionCount > 0
     ? store.totalRevenueCents / store.transactionCount
     : 0;
-  const medals = ['🥇', '🥈', '🥉'];
+  const medalColors = ['text-yellow-500', 'text-gray-400', 'text-amber-700'];
 
   return (
     <tr className="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50/60 dark:hover:bg-gray-700/30 transition-colors group">
       <td className="px-5 py-4">
         <div className="flex items-center gap-3">
-          <span className="text-lg w-6 text-center">{medals[rank] ?? `#${rank + 1}`}</span>
+          <span className="w-6 flex justify-center text-sm font-bold text-gray-500">{rank < 3 ? <Medal className={`w-5 h-5 ${medalColors[rank]}`} aria-label={`Rank ${rank + 1}`} /> : `#${rank + 1}`}</span>
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs font-black flex-shrink-0">
             {store.storeCode.slice(0, 3)}
           </div>
@@ -221,28 +222,17 @@ function StoreRow({
 // ─── Quick Action Card ────────────────────────────────────────────────────────
 
 function QuickAction({
-  icon: Icon, label, desc, onClick, color,
+  icon: Icon, label, desc, onClick,
 }: {
   icon: React.ElementType;
   label: string;
   desc: string;
   onClick: () => void;
-  color: string;
+  /** Accepted so call sites need not change; every action now uses the brand icon tile. */
+  color?: string;
 }) {
   return (
-    <button
-      onClick={onClick}
-      className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl hover:shadow-md hover:border-gray-200 dark:hover:border-gray-600 transition-all text-left group"
-    >
-      <div className={`w-10 h-10 rounded-xl ${color} flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform`}>
-        <Icon className="w-5 h-5" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-gray-900 dark:text-white">{label}</p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{desc}</p>
-      </div>
-      <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500 flex-shrink-0 transition-colors" />
-    </button>
+    <ActionCard icon={<Icon className="w-5 h-5" />} title={label} description={desc} onClick={onClick} />
   );
 }
 

@@ -161,7 +161,7 @@ export default function AppointmentsPage() {
   const isToday = viewDate === toDateStr(new Date());
 
   return (
-    <div className="space-y-4">
+    <div className="p-4 md:p-6 space-y-4">
       {/* Header */}
       <div className="flex flex-wrap gap-3 items-center justify-between">
         <div>
@@ -180,12 +180,12 @@ export default function AppointmentsPage() {
       {/* Day nav + stats */}
       <div className="flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-1 bg-white dark:bg-gray-800 rounded-lg shadow px-2 py-1">
-          <button onClick={prevDay} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"><ChevronLeft className="w-4 h-4" /></button>
+          <button onClick={prevDay} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md" aria-label="Previous"><ChevronLeft className="w-4 h-4" /></button>
           <button onClick={() => setViewDate(toDateStr(new Date()))}
             className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${isToday ? 'bg-blue-50 text-blue-700' : 'text-gray-700 dark:text-gray-200'}`}>
             {isToday ? 'Today' : new Date(viewDate).toLocaleDateString('en-KE', { weekday: 'short', month: 'short', day: 'numeric' })}
           </button>
-          <button onClick={nextDay} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"><ChevronRight className="w-4 h-4" /></button>
+          <button onClick={nextDay} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md" aria-label="Next"><ChevronRight className="w-4 h-4" /></button>
         </div>
         {/* Stats chips */}
         <div className="flex gap-2">

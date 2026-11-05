@@ -164,7 +164,7 @@ export default function DispenseModal({
               </label>
               {insured && (
                 <div className="grid grid-cols-2 gap-3">
-                  <select className="col-span-2 border rounded-lg px-3 py-2 text-sm" value={providerId} onChange={(e) => setProviderId(e.target.value)}>
+                  <select className="col-span-2 border rounded-lg px-3 py-2 text-sm" value={providerId} onChange={(e) => setProviderId(e.target.value)} aria-label="Choose insurer…">
                     <option value="">Choose insurer…</option>
                     {providers.filter((p) => p.isActive).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>

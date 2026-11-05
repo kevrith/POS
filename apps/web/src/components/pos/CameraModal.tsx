@@ -231,7 +231,7 @@ export default function CameraModal({ onScan, onClose }: Props) {
             >
               <Keyboard className="w-4 h-4" />
             </button>
-            <button onClick={handleClose} className="p-1 rounded hover:bg-gray-100 transition-colors">
+            <button onClick={handleClose} className="p-1 rounded hover:bg-gray-100 transition-colors" aria-label="Close">
               <X className="w-5 h-5" />
             </button>
           </div>

@@ -121,8 +121,7 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
               </div>
               <button
                 onClick={() => resolveConfirm(false)}
-                className="flex-shrink-0 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              >
+                className="flex-shrink-0 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" aria-label="Close">
                 <X className="w-4 h-4 text-gray-400" />
               </button>
             </div>
@@ -164,8 +163,7 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
               <h3 className="text-base font-semibold text-gray-900 dark:text-white">{promptState.title}</h3>
               <button
                 onClick={() => resolvePrompt(null)}
-                className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              >
+                className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" aria-label="Close">
                 <X className="w-4 h-4 text-gray-400" />
               </button>
             </div>

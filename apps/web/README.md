@@ -301,3 +301,38 @@ real receipt number and the eTIMS record are made when it uploads (the entry kee
   `192.168.x.x`; use Star/Epson (browser to printer) or a LAN-hosted server there.
 - Web Bluetooth and WebUSB exist only in Chromium browsers; there is no support in Safari
   or on iOS.
+
+## Design system
+
+The look comes from `design/tokens.json` (Signal Violet on Mist Gray; see `design/README.md`). `tailwind.config.js` maps the
+old blue/indigo/purple families onto the brand and makes `bg-white`, `bg-gray-*` and `text-gray-*` follow the dark theme
+through CSS variables, so a page with no `dark:` classes is still readable in dark mode. Shared controls live in
+`src/components/ui` (Button, IconButton, Input, Select, Textarea, Switch, Card, Badge, Tabs, Segmented, SideNav, Menu,
+StatTile, EmptyState, PageHeader); new screens should use them. Inventory, Fuel, Cybercafe, Tables, Dashboard, Customers,
+Settings and Reports already do.
+
+Dark mode: `bg-white`, `bg-gray-*`, `text-gray-*` and the status and brand families (`bg-green-50`, `text-red-700`,
+`border-amber-200`, the old `blue`/`indigo`/`purple`) follow the theme through CSS variables generated in
+`tailwind.palette.js`, and `tests` check their contrast in both modes. An explicit `dark:` class still wins.
+
+Rules that bite: an opacity step must exist in Tailwind's scale (`text-white/70`, not `/72`, or the class is silently
+dropped); an icon-only button needs an `aria-label` (use `IconButton`); a default style for form controls must be wrapped
+in `:where()` or it outranks utility classes.
+Tests: `src/styles/__tests__/tokens.test.ts` (contrast of every text pairing, generated files in step) and
+`src/components/ui/__tests__/ui.test.tsx`.
+
+## Startup speed and navigation feedback
+
+- **Token expiry is read from the token** (`lib/api.ts`, `tokenExpiryMs`). It used to stay 0 after a reload, so every page load
+  began with a needless `/auth/refresh` and every other request waited behind it. `lib/__tests__/tokenRestore.test.ts` pins this.
+- **The menu is drawn from the last-known settings** (`lib/lastKnown.ts`, used by `Layout`): the business type and subscription are
+  remembered in this browser and re-checked in the background, so the menu is right on the first paint. On a first-ever visit it shows
+  placeholders, never a guessed RETAIL menu. They are cleared on sign-out.
+- **Pages are preloaded** when the pointer, a focus or a touch reaches a menu item (`lib/routeLoaders.ts`, `prefetchRoute`), and in
+  production the first eight menu pages are fetched when the browser is idle. `routeLoaders.test.ts` fails if a lazy route is missing
+  from the map.
+- **No `v7_startTransition`** on the router (`main.tsx`). With it React keeps showing the old page while a new page's code loads, so the
+  sidebar does not move and a click looks dead. Without it the page area switches at once to the `PageLoader` skeleton.
+- **`RouteErrorBoundary`** turns a page that fails to load into a message with a Reload button (and reloads once automatically for a stale
+  or missing page file), instead of a blank screen.
+- Dev server: run a second API on another port and point Vite at it with `VITE_API_PROXY=http://localhost:3110 npx vite --port 3006`.

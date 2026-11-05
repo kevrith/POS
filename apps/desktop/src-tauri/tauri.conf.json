@@ -18,7 +18,8 @@
         "minHeight": 600,
         "resizable": true,
         "fullscreen": false,
-        "center": true
+        "center": true,
+        "backgroundColor": "#F0F2F5"
       }
     ],
     "security": {

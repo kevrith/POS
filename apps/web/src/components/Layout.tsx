@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   ShoppingCart, BarChart3, Package, Settings, LogOut, Users,
   CreditCard, Truck, DollarSign, UserCheck, Coffee, Layers,
-  Bell, ChevronDown, ChevronRight, Wallet, Hash, ChefHat, Box,
+  Bell, ChevronDown, Wallet, Hash, ChefHat, Box,
   Tag, Gift, Sun, Moon, Monitor, Wand2, ArrowRightLeft, LayoutDashboard,
   AlertTriangle, X, Pill, CalendarClock, TrendingUp, GitBranch, Landmark,
   Fuel, Lock, BedDouble, CheckCircle2, Trash2, Radio, BookOpen,
@@ -12,6 +12,8 @@ import {
   ShoppingBag,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import { readLastKnown, writeLastKnown } from '../lib/lastKnown';
+import { prefetchRoute } from '../lib/routeLoaders';
 import { api, getToken } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { useThemeStore } from '../stores/theme';
@@ -151,8 +153,9 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
 /** Generate initials avatar colour from name */
 function avatarColor(name: string) {
   const colors = [
-    'bg-blue-500', 'bg-violet-500', 'bg-emerald-500', 'bg-amber-500',
-    'bg-rose-500', 'bg-cyan-500', 'bg-fuchsia-500', 'bg-indigo-500',
+    // 600 to 700 shades: white initials on them reach 4.5:1 (the 500s do not)
+    'bg-brand-600', 'bg-brand-800', 'bg-emerald-700', 'bg-amber-700',
+    'bg-rose-600', 'bg-gray-700', 'bg-fuchsia-700', 'bg-orange-700',
   ];
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
@@ -188,8 +191,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     const stored = localStorage.getItem('sidebar-collapsed');
     if (stored !== null) return stored === 'true';
-    // Default: collapsed on fold/tablet screens narrower than 1024px
-    return window.innerWidth < 1024;
+    // Default: collapsed below 1180px (tablets, and a desktop window at its 1024px minimum), where the 260px menu
+    // would take a quarter of the screen. The user's own choice is remembered once they toggle it.
+    return window.innerWidth < 1180;
   });
 
   const toggleSidebar = useCallback(() => {
@@ -200,26 +204,43 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const { data: subscription } = useQuery<{
-    subscriptionStatus: string;
-    trialEndsAt: string | null;
-    daysRemaining: number | null;
-    isTrialExpired: boolean;
-  }>({
-    queryKey: ['subscription', user?.businessId],
-    queryFn: () => api.get(`/business/${user!.businessId}/subscription`),
-    enabled: !!user?.businessId,
+  const bizId = user?.businessId;
+  type SubscriptionInfo = { subscriptionStatus: string; trialEndsAt: string | null; daysRemaining: number | null; isTrialExpired: boolean };
+  type BusinessInfo = { posMode: string; enabledModules?: string; name: string; subscriptionTier: string; stores?: { id: string; name: string; storeCode: string }[] };
+
+  // Both are drawn from what the server last said (initialData, marked stale so they are re-fetched straight away), so the
+  // menu is right on the first paint and only changes if something really changed.
+  const { data: subscription } = useQuery<SubscriptionInfo>({
+    queryKey: ['subscription', bizId],
+    queryFn: () => api.get(`/business/${bizId}/subscription`),
+    enabled: !!bizId,
     staleTime: 5 * 60_000,
     retry: false,
+    initialData: () => (bizId ? readLastKnown<SubscriptionInfo>(`subscription:${bizId}`) : undefined),
+    initialDataUpdatedAt: 0,
   });
 
-  const { data: businessSettings } = useQuery<{ posMode: string; enabledModules?: string; name: string; subscriptionTier: string; stores?: { id: string; name: string; storeCode: string }[] }>({
-    queryKey: ['business-settings', user?.businessId],
-    queryFn: () => api.get(`/business/${user!.businessId}/settings`),
-    enabled: !!user?.businessId,
+  const { data: businessSettings, isPending: settingsPending } = useQuery<BusinessInfo>({
+    queryKey: ['business-settings', bizId],
+    queryFn: () => api.get(`/business/${bizId}/settings`),
+    enabled: !!bizId,
     staleTime: 10 * 60_000,
     retry: false,
+    initialData: () => (bizId ? readLastKnown<BusinessInfo>(`settings:${bizId}`) : undefined),
+    initialDataUpdatedAt: 0,
   });
+
+  useEffect(() => { if (bizId && subscription) writeLastKnown(`subscription:${bizId}`, subscription); }, [bizId, subscription]);
+  useEffect(() => {
+    if (bizId && businessSettings) {
+      // only what the menu needs, not the whole settings document
+      const { posMode, enabledModules, name, subscriptionTier, stores } = businessSettings;
+      writeLastKnown(`settings:${bizId}`, { posMode, enabledModules, name, subscriptionTier, stores });
+    }
+  }, [bizId, businessSettings]);
+
+  // True only on a first-ever visit with nothing remembered: the menu then shows placeholders instead of guessing RETAIL.
+  const menuLoading = !!bizId && settingsPending && !businessSettings;
 
   const businessType = businessSettings?.posMode ?? 'RETAIL';
   const enabledModules = parseEnabledModules(businessSettings?.enabledModules);
@@ -463,6 +484,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     const allItems = NAV_GROUPS.flatMap((g) => g.items);
     const match = allItems.find((item) => isActive(item.to));
     if (match) return { label: match.label, Icon: match.icon };
+    // Screens that are not in the menu still say what they are, instead of falling back to "Dashboard".
+    if (location.pathname.startsWith('/supermart')) return { label: 'Supermarket POS', Icon: ShoppingCart };
     if (location.pathname === '/notifications') return { label: 'Notifications', Icon: Bell };
     if (location.pathname.startsWith('/settings'))   return { label: 'Settings',      Icon: Settings };
     if (location.pathname.startsWith('/setup'))      return { label: 'Setup Wizard',  Icon: Wand2 };
@@ -494,6 +517,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       ),
     }))
     .filter((g) => g.items.length > 0);
+
+  // Once the menu is settled, quietly fetch the first few pages while the browser is idle, so they open instantly.
+  // Production only: in development this would make the dev server compile eight pages nobody asked for.
+  useEffect(() => {
+    if (!import.meta.env.PROD || menuLoading) return;
+    const conn = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+    if (conn?.saveData) return;
+    const targets = visibleGroups.flatMap((g) => g.items.map((i) => i.to)).filter((to) => to !== location.pathname).slice(0, 8);
+    const idle = (window as Window & { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback;
+    const timers: number[] = [];
+    targets.forEach((to, i) => {
+      const run = () => prefetchRoute(to);
+      if (idle) idle(run); else timers.push(window.setTimeout(run, 1500 + i * 400));
+    });
+    return () => timers.forEach((t) => window.clearTimeout(t));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuLoading, businessType]);
 
   const showSettings = canSee(['OWNER', 'MANAGER']);
 
@@ -593,13 +633,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   // ─── Main layout ──────────────────────────────────────────────────────────
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-950 overflow-hidden">
+    <div className="flex h-screen bg-gray-100 dark:bg-gray-950 overflow-hidden">
 
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
-      <aside className={`hidden md:flex flex-col flex-shrink-0 bg-[#f8f9fb] dark:bg-[#0d1117] border-r border-gray-200/80 dark:border-white/[0.055] relative transition-all duration-300 ease-in-out overflow-hidden ${sidebarCollapsed ? 'w-0 border-r-0' : 'w-[260px]'}`}>
+      <aside className={`hidden md:flex flex-col flex-shrink-0 bg-white dark:bg-gray-900 border-r border-gray-200/80 dark:border-white/[0.055] relative transition-all duration-300 ease-in-out overflow-hidden ${sidebarCollapsed ? 'w-0 border-r-0' : 'w-[260px]'}`}>
 
         {/* 2px gradient accent line at the very top */}
-        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500 z-10" />
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-brand-400 via-brand-600 to-brand-500 z-10" />
 
         {/* ── Brand header ──────────────────────────────────────────────── */}
         <div className="px-4 pt-6 pb-4 mt-[2px]">
@@ -621,7 +661,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 <span className="text-white font-extrabold text-lg">K</span>
               </div>
               {/* Online dot */}
-              <div className="absolute -bottom-0.5 -right-0.5 w-[11px] h-[11px] bg-emerald-400 rounded-full border-2 border-[#f8f9fb] dark:border-[#0d1117] shadow-sm" />
+              <div className="absolute -bottom-0.5 -right-0.5 w-[11px] h-[11px] bg-emerald-400 rounded-full border-2 border-white dark:border-gray-900 shadow-sm" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-[14px] font-extrabold text-gray-900 dark:text-white leading-tight tracking-[-0.01em] truncate" title={businessName}>
@@ -645,7 +685,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
                     : subscription?.subscriptionStatus === 'TRIAL'
                       ? 'bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400'
-                      : 'bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-white/40'
+                      : 'bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-white/60'
                 }`}>
                   {subscription?.subscriptionStatus === 'ACTIVE' ? 'Active' : subscription?.subscriptionStatus === 'TRIAL' ? 'Trial' : 'Free'}
                 </span>
@@ -662,11 +702,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <div className="text-[13px] font-semibold text-gray-800 dark:text-white/90 truncate leading-tight">{user?.name}</div>
               <div className="flex items-center gap-1.5 mt-[2px]">
                 <div className="w-[5px] h-[5px] rounded-full bg-emerald-400 ring-[2px] ring-emerald-400/25 flex-shrink-0" />
-                <span className="text-[11px] text-gray-400 dark:text-white/35 capitalize font-medium leading-none">{user?.role?.toLowerCase()}</span>
+                <span className="text-[11px] text-gray-400 dark:text-white/60 capitalize font-medium leading-none">{user?.role?.toLowerCase()}</span>
                 {currentStore && (
                   <>
-                    <span className="text-[9px] text-gray-300 dark:text-white/15">·</span>
-                    <span className="text-[10px] text-gray-400 dark:text-white/30 font-medium leading-none truncate max-w-[70px]" title={currentStore.name}>
+                    <span className="text-[9px] text-gray-300 dark:text-white/60">·</span>
+                    <span className="text-[10px] text-gray-400 dark:text-white/60 font-medium leading-none truncate max-w-[70px]" title={currentStore.name}>
                       {currentStore.storeCode}
                     </span>
                   </>
@@ -684,8 +724,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div className="mx-3.5 h-px bg-gray-200/70 dark:bg-white/[0.055]" />
 
         {/* ── Navigation ────────────────────────────────────────────────── */}
-        <nav className="flex-1 overflow-y-auto py-2.5 px-2.5 scrollbar-thin scrollbar-thumb-gray-300/60 dark:scrollbar-thumb-white/10 scrollbar-track-transparent">
-          {visibleGroups.map((group) => {
+        <nav className="stagger flex-1 overflow-y-auto py-2.5 px-2.5 scrollbar-thin scrollbar-thumb-gray-300/60 dark:scrollbar-thumb-white/10 scrollbar-track-transparent">
+          {menuLoading && (
+            <div className="space-y-5 px-1.5 py-2" aria-busy="true" aria-label="Loading menu">
+              {[4, 5, 3].map((rows, g) => (
+                <div key={g} className="space-y-2">
+                  <div className="skeleton h-2.5 w-16" />
+                  {Array.from({ length: rows }).map((_, i) => <div key={i} className="skeleton h-7 w-full" />)}
+                </div>
+              ))}
+            </div>
+          )}
+          {!menuLoading && visibleGroups.map((group) => {
             const collapsed = collapsedGroups.has(group.label);
             return (
               <div key={group.label} className="mb-2">
@@ -693,53 +743,36 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 {/* Group header */}
                 <button
                   onClick={() => toggleGroup(group.label)}
-                  className="w-full flex items-center justify-between px-2 py-[5px] mb-[3px] rounded-md transition-colors duration-150 group hover:bg-black/[0.03] dark:hover:bg-white/[0.03]"
+                  aria-expanded={!collapsed}
+                  className="w-full flex items-center justify-between px-2 py-[5px] mb-[3px] rounded-md transition-colors duration-150 group hover:bg-black/[0.04] dark:hover:bg-white/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600"
                 >
-                  <span className="text-[9.5px] font-bold text-gray-400/70 dark:text-white/22 uppercase tracking-[0.14em] group-hover:text-gray-500 dark:group-hover:text-white/45 transition-colors duration-150">
+                  <span className="text-[10px] font-bold text-gray-600 dark:text-white/60 uppercase tracking-[0.14em] group-hover:text-gray-800 dark:group-hover:text-white/70 transition-colors duration-150">
                     {group.label}
                   </span>
-                  {collapsed
-                    ? <ChevronRight className="w-[11px] h-[11px] text-gray-300/80 dark:text-white/15 group-hover:text-gray-400 dark:group-hover:text-white/35 transition-colors" />
-                    : <ChevronDown className="w-[11px] h-[11px] text-gray-300/80 dark:text-white/15 group-hover:text-gray-400 dark:group-hover:text-white/35 transition-colors" />
-                  }
+                  <ChevronDown className="nav-chevron w-[11px] h-[11px] text-gray-400 dark:text-white/60 group-hover:text-gray-700 dark:group-hover:text-white" aria-hidden />
                 </button>
 
                 {/* Group items */}
-                <div className={`overflow-hidden transition-all duration-200 ease-out ${
-                  collapsed ? 'max-h-0 opacity-0' : 'max-h-[900px] opacity-100'
-                }`}>
-                  <div className="space-y-[2px]">
+                <div
+                  aria-hidden={collapsed}
+                  className={`grid transition-[grid-template-rows,opacity,visibility] duration-[260ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                    collapsed ? 'grid-rows-[0fr] opacity-0 invisible' : 'grid-rows-[1fr] opacity-100 visible'
+                  }`}
+                >
+                  <div className="space-y-[2px] overflow-hidden min-h-0">
                     {group.items.map((item) => {
                       const active = isActive(item.to);
-                      const navCls = `group flex items-center gap-2.5 px-2 py-[7px] rounded-lg text-[13px] font-medium transition-all duration-150 ${
-                        active
-                          ? 'bg-blue-600/[0.10] dark:bg-blue-500/[0.16] text-blue-700 dark:text-blue-300 shadow-[inset_2px_0_0_#3b82f6] dark:shadow-[inset_2px_0_0_#60a5fa]'
-                          : 'text-gray-500/90 dark:text-white/38 hover:text-gray-800 dark:hover:text-white/75 hover:bg-gray-900/[0.04] dark:hover:bg-white/[0.05]'
-                      }`;
+                      const navCls = 'nav-item group';
                       const isInventoryItem = item.to === '/inventory';
                       const navInner = (
                         <>
-                          <div className={`flex-shrink-0 flex items-center justify-center w-[26px] h-[26px] rounded-md transition-all duration-150 ${
-                            active
-                              ? 'bg-blue-600/[0.12] dark:bg-blue-400/[0.18]'
-                              : 'bg-transparent group-hover:bg-gray-900/[0.05] dark:group-hover:bg-white/[0.07]'
-                          }`}>
-                            <item.icon className={`w-[14px] h-[14px] transition-colors duration-150 ${
-                              active
-                                ? 'text-blue-600 dark:text-blue-400'
-                                : 'text-gray-400 dark:text-white/32 group-hover:text-gray-600 dark:group-hover:text-white/60'
-                            }`} />
-                          </div>
-                          <span className={`flex-1 truncate transition-all duration-150 ${active ? 'font-semibold' : 'font-medium'}`}>
-                            {item.label}
-                          </span>
+                          <span className="nav-icon"><item.icon className="w-[14px] h-[14px]" /></span>
+                          <span className="nav-label">{item.label}</span>
                           {isInventoryItem && stockRequestCount > 0 && (
-                            <span className="flex-shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                            <span className="flex-shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[9px] font-bold flex items-center justify-center">
                               {stockRequestCount > 99 ? '99+' : stockRequestCount}
                             </span>
                           )}
-                          {!isInventoryItem && active && <div className="flex-shrink-0 w-1 h-1 rounded-full bg-blue-500 dark:bg-blue-400 opacity-70" />}
-                          {isInventoryItem && active && stockRequestCount === 0 && <div className="flex-shrink-0 w-1 h-1 rounded-full bg-blue-500 dark:bg-blue-400 opacity-70" />}
                         </>
                       );
                       return item.newTab ? (
@@ -763,6 +796,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                           key={item.to}
                           to={item.to}
                           className={navCls}
+                          aria-current={active ? 'page' : undefined}
+                          // Start fetching the page now, so the click finds it already loaded.
+                          onMouseEnter={() => prefetchRoute(item.to)}
+                          onFocus={() => prefetchRoute(item.to)}
+                          onTouchStart={() => prefetchRoute(item.to)}
                         >
                           {navInner}
                         </Link>
@@ -787,29 +825,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <>
                 <Link
                   to="/settings"
-                  className={`group flex items-center gap-2.5 px-3 py-[8px] text-[13px] font-medium transition-all duration-150 ${
-                    isActive('/settings')
-                      ? 'bg-blue-600/[0.09] dark:bg-blue-500/[0.14] text-blue-700 dark:text-blue-300 shadow-[inset_2px_0_0_#3b82f6] dark:shadow-[inset_2px_0_0_#60a5fa]'
-                      : 'text-gray-500 dark:text-white/42 hover:text-gray-800 dark:hover:text-white/75 hover:bg-gray-50 dark:hover:bg-white/[0.05]'
-                  }`}
+                  className="nav-item group !px-3 !py-[8px] !rounded-none"
+                  aria-current={isActive('/settings') ? 'page' : undefined}
+                  onMouseEnter={() => prefetchRoute('/settings')}
+                  onFocus={() => prefetchRoute('/settings')}
                 >
-                  <div className={`flex-shrink-0 flex items-center justify-center w-[26px] h-[26px] rounded-md transition-all duration-150 ${isActive('/settings') ? 'bg-blue-600/[0.12] dark:bg-blue-400/[0.18]' : 'bg-transparent group-hover:bg-gray-900/[0.05] dark:group-hover:bg-white/[0.07]'}`}>
-                    <Settings className={`w-[14px] h-[14px] group-hover:rotate-90 transition-all duration-300 ${isActive('/settings') ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-white/32 group-hover:text-gray-600 dark:group-hover:text-white/60'}`} />
-                  </div>
-                  <span className="flex-1">Settings</span>
+                  <span className="nav-icon"><Settings className="w-[14px] h-[14px] transition-transform duration-300 group-hover:rotate-90" /></span>
+                  <span className="nav-label">Settings</span>
                 </Link>
                 <Link
                   to="/setup"
-                  className={`group flex items-center gap-2.5 px-3 py-[8px] text-[13px] font-medium transition-all duration-150 ${
-                    isActive('/setup')
-                      ? 'bg-blue-600/[0.09] dark:bg-blue-500/[0.14] text-blue-700 dark:text-blue-300 shadow-[inset_2px_0_0_#3b82f6] dark:shadow-[inset_2px_0_0_#60a5fa]'
-                      : 'text-gray-500 dark:text-white/42 hover:text-gray-800 dark:hover:text-white/75 hover:bg-gray-50 dark:hover:bg-white/[0.05]'
-                  }`}
+                  className="nav-item group !px-3 !py-[8px] !rounded-none"
+                  aria-current={isActive('/setup') ? 'page' : undefined}
+                  onMouseEnter={() => prefetchRoute('/setup')}
+                  onFocus={() => prefetchRoute('/setup')}
                 >
-                  <div className={`flex-shrink-0 flex items-center justify-center w-[26px] h-[26px] rounded-md transition-all duration-150 ${isActive('/setup') ? 'bg-blue-600/[0.12] dark:bg-blue-400/[0.18]' : 'bg-transparent group-hover:bg-gray-900/[0.05] dark:group-hover:bg-white/[0.07]'}`}>
-                    <Wand2 className={`w-[14px] h-[14px] ${isActive('/setup') ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-white/32 group-hover:text-gray-600 dark:group-hover:text-white/60'}`} />
-                  </div>
-                  <span className="flex-1">Setup Wizard</span>
+                  <span className="nav-icon"><Wand2 className="w-[14px] h-[14px]" /></span>
+                  <span className="nav-label">Setup Wizard</span>
                 </Link>
               </>
             )}
@@ -817,7 +849,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             {/* Sign out */}
             <button
               onClick={logout}
-              className="w-full group flex items-center gap-2.5 px-3 py-[8px] text-[13px] font-medium text-gray-400 dark:text-white/32 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50/80 dark:hover:bg-red-500/[0.07] transition-all duration-150"
+              className="w-full group flex items-center gap-2.5 px-3 py-[8px] text-[13px] font-medium text-gray-600 dark:text-white/60 active:scale-[0.98] transition-transform focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50/80 dark:hover:bg-red-500/[0.07] transition-all duration-150"
             >
               <div className="flex-shrink-0 flex items-center justify-center w-[26px] h-[26px] rounded-md bg-transparent group-hover:bg-red-100/60 dark:group-hover:bg-red-500/10 transition-all duration-150">
                 <LogOut className="w-[14px] h-[14px] group-hover:translate-x-0.5 transition-transform duration-200" />
@@ -834,14 +866,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <OfflineBanner />
 
         {/* ── Top header bar (desktop) ──────────────────────────────────── */}
-        <header className="hidden md:flex items-center justify-between px-5 h-[52px] bg-white/95 dark:bg-[#0d1117]/95 backdrop-blur-sm border-b border-gray-200/60 dark:border-white/[0.055] flex-shrink-0 z-10">
+        <header className="hidden md:flex items-center justify-between px-5 h-[52px] bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border-b border-gray-200/60 dark:border-white/[0.055] flex-shrink-0 z-10">
           {/* Left: Sidebar toggle + Page title */}
           <div className="flex items-center gap-2 min-w-0">
             {/* Sidebar collapse / expand toggle */}
             <button
               onClick={toggleSidebar}
               title={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
-              className="flex-shrink-0 p-1.5 rounded-lg text-gray-400 dark:text-white/30 hover:bg-gray-100 dark:hover:bg-white/[0.06] hover:text-gray-600 dark:hover:text-white/65 transition-all duration-150"
+              className="flex-shrink-0 p-1.5 rounded-lg text-gray-400 dark:text-white/60 hover:bg-gray-100 dark:hover:bg-white/[0.06] hover:text-gray-600 dark:hover:text-white transition-all duration-150"
             >
               {sidebarCollapsed
                 ? <PanelLeftOpen className="w-[15px] h-[15px]" />
@@ -849,12 +881,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </button>
             <div className="w-px h-4 bg-gray-200 dark:bg-white/[0.07]" />
             <div className="w-6 h-6 rounded-md bg-gray-100 dark:bg-white/[0.07] flex items-center justify-center flex-shrink-0">
-              <currentPageInfo.Icon className="w-3.5 h-3.5 text-gray-500 dark:text-white/40" />
+              <currentPageInfo.Icon className="w-3.5 h-3.5 text-gray-500 dark:text-white/60" />
             </div>
             <h1 className="text-[14px] font-bold text-gray-800 dark:text-white/90 tracking-tight truncate">{currentPageInfo.label}</h1>
             {/* Store context pill */}
             {currentStore && (
-              <span className="hidden lg:inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 dark:text-white/28 bg-gray-100 dark:bg-white/[0.05] border border-gray-200/70 dark:border-white/[0.06] px-2 py-[3px] rounded-full">
+              <span className="hidden lg:inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 dark:text-white/60 bg-gray-100 dark:bg-white/[0.05] border border-gray-200/70 dark:border-white/[0.06] px-2 py-[3px] rounded-full">
                 <Building2 className="w-[9px] h-[9px]" />
                 {currentStore.name}
               </span>
@@ -865,7 +897,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             {/* Live clock */}
             <div className="hidden lg:flex flex-col items-end mr-2 select-none">
               <span className="text-[13px] font-bold text-gray-700 dark:text-white/75 tabular-nums leading-tight">{timeStr}</span>
-              <span className="text-[9.5px] text-gray-400 dark:text-white/30 leading-tight">{dateStr}</span>
+              <span className="text-[10px] text-gray-600 dark:text-white/60 leading-tight">{dateStr}</span>
             </div>
             <div className="hidden lg:block w-px h-5 bg-gray-200 dark:bg-white/[0.07] mx-1" />
 
@@ -894,7 +926,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   );
                 }}
                 title="Launch Kiosk Mode (opens in new tab)"
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-gray-400 dark:text-white/30 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all duration-150 mr-0.5"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-gray-400 dark:text-white/60 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all duration-150 mr-0.5"
               >
                 <Tablet className="w-3.5 h-3.5" />
                 Kiosk
@@ -902,17 +934,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             )}
             <Link
               to="/notifications"
-              className="relative p-2 rounded-lg text-gray-400 dark:text-white/30 hover:bg-gray-100 dark:hover:bg-white/[0.06] hover:text-gray-600 dark:hover:text-white/65 transition-all duration-150"
+              className="relative p-2 rounded-lg text-gray-400 dark:text-white/60 hover:bg-gray-100 dark:hover:bg-white/[0.06] hover:text-gray-600 dark:hover:text-white transition-all duration-150"
               title="Notifications"
             >
               <Bell className="w-[15px] h-[15px]" />
               {unreadCount > 0 && (
-                <span className="absolute top-[7px] right-[7px] w-[7px] h-[7px] rounded-full bg-red-500 border-[1.5px] border-white dark:border-[#0d1117]" />
+                <span className="absolute top-[7px] right-[7px] w-[7px] h-[7px] rounded-full bg-red-500 border-[1.5px] border-white dark:border-gray-900" />
               )}
             </Link>
             <button
               onClick={toggleTheme}
-              className="p-2 rounded-lg text-gray-400 dark:text-white/30 hover:bg-gray-100 dark:hover:bg-white/[0.06] hover:text-gray-600 dark:hover:text-white/65 transition-all duration-150"
+              className="p-2 rounded-lg text-gray-400 dark:text-white/60 hover:bg-gray-100 dark:hover:bg-white/[0.06] hover:text-gray-600 dark:hover:text-white transition-all duration-150"
               title={isDark ? 'Light mode' : 'Dark mode'}
             >
               {isDark
@@ -954,7 +986,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         )}
 
         <main
-          className={`flex-1 flex flex-col bg-gray-50 dark:bg-gray-950 relative ${
+          className={`flex-1 flex flex-col bg-gray-100 dark:bg-gray-950 relative ${
             ['/pos', '/supermart', '/hospitality', '/kds', '/fuel-pump', '/cybercafe'].some(p => location.pathname.startsWith(p))
               ? 'overflow-hidden'
               : 'overflow-y-auto'

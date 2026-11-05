@@ -255,14 +255,13 @@ export default function ReconciliationPage() {
             <select
               value={selectedStatementId}
               onChange={e => setSelectedStatementId(e.target.value)}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm dark:bg-gray-700 dark:text-white"
-            >
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm dark:bg-gray-700 dark:text-white" aria-label="Select Statement">
               <option value="">Select Statement</option>
               {statements.map(s => (
                 <option key={s.id} value={s.id}>{s.fileName} ({formatDate(s.periodStart)} – {formatDate(s.periodEnd)})</option>
               ))}
             </select>
-            <select value={entryFilter} onChange={e => setEntryFilter(e.target.value)} className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm dark:bg-gray-700 dark:text-white">
+            <select value={entryFilter} onChange={e => setEntryFilter(e.target.value)} className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm dark:bg-gray-700 dark:text-white" aria-label="All">
               <option value="">All</option>
               <option value="UNMATCHED">Unmatched</option>
               <option value="MATCHED">Matched</option>
@@ -351,9 +350,9 @@ export default function ReconciliationPage() {
       {tab === 'summary' && (
         <div className="max-w-2xl">
           <div className="flex items-center gap-3 mb-6">
-            <input type="date" value={summaryStart} onChange={e => setSummaryStart(e.target.value)} className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm dark:bg-gray-700 dark:text-white" />
+            <input type="date" value={summaryStart} onChange={e => setSummaryStart(e.target.value)} className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm dark:bg-gray-700 dark:text-white" aria-label="Date" />
             <span className="text-gray-500">to</span>
-            <input type="date" value={summaryEnd} onChange={e => setSummaryEnd(e.target.value)} className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm dark:bg-gray-700 dark:text-white" />
+            <input type="date" value={summaryEnd} onChange={e => setSummaryEnd(e.target.value)} className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm dark:bg-gray-700 dark:text-white" aria-label="End date" />
             <button onClick={loadSummary} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">Generate</button>
           </div>
 

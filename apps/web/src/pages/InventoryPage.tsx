@@ -1454,7 +1454,7 @@ function BarcodeLabelModal({ items, onClose }: { items: Array<{ id: string; name
                   <input
                     type="checkbox"
                     checked={selected.has(item.id)}
-                    onChange={() => setSelected(prev => { const n = new Set(prev); n.has(item.id) ? n.delete(item.id) : n.add(item.id); return n; })}
+                    onChange={() => setSelected(prev => { const n = new Set(prev); if (n.has(item.id)) n.delete(item.id); else n.add(item.id); return n; })}
                     className="rounded"
                   />
                   <div className="flex-1">

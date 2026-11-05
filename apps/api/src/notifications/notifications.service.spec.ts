@@ -2,7 +2,7 @@ import { NotificationsService } from './notifications.service';
 
 const sendMock = jest.fn();
 const atFactory = jest.fn((cfg: { username: string }) => ({ SMS: { send: (args: unknown) => sendMock(cfg.username, args) } }));
-jest.mock('africastalking', () => (cfg: { username: string }) => atFactory(cfg), { virtual: true });
+jest.mock('./africastalking.client', () => ({ createAtClient: (cfg: { username: string }) => atFactory(cfg) }));
 
 const OK = { SMSMessageData: { Recipients: [{ status: 'Success', messageId: 'm1' }] } };
 

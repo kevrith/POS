@@ -135,6 +135,8 @@ describe('receipt bytes', () => {
     const widest = (w: 58 | 80) => {
       printer.setPaperWidth(w);
       const text = Buffer.from(printer.receiptBytes(receipt)).toString('latin1');
+      // Control bytes are stripped on purpose: the width test counts printable characters only.
+      // eslint-disable-next-line no-control-regex
       return Math.max(...text.split('\n').map((l) => l.replace(/[\x00-\x1f]/g, '').length));
     };
     expect(widest(58)).toBeLessThanOrEqual(32 + 8);

@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 import { createDecipheriv } from 'crypto';
 import { toE164 } from '../common/phone';
+import { createAtClient } from './africastalking.client';
 
 export type SmsPurpose = 'OTP' | 'GENERAL';
 
@@ -68,9 +69,7 @@ export class NotificationsService {
     const pick = order.find(([, creds]) => !!creds);
     if (!pick) return null;
     const [channel, creds] = pick;
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const AfricasTalking = require('africastalking');
-    const at = AfricasTalking({ apiKey: creds!.apiKey, username: creds!.username });
+    const at = createAtClient({ apiKey: creds!.apiKey, username: creds!.username });
     return { at, creds: creds!, channel };
   }
 

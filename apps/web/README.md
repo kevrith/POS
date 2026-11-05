@@ -13,10 +13,13 @@ Dev server: **http://localhost:3005** (proxies `/api` → `http://localhost:3010
 npm install
 npm run dev          # :3005
 npm run build        # tsc + vite build → dist/
+npm run lint         # eslint (flat config: eslint.config.js)
 npm run preview
 ```
 
 `npm run build` type-checks before bundling, so it doubles as the type gate in CI.
+
+`npm run lint` uses typescript-eslint plus the two classic hook rules (`rules-of-hooks` as an error, `exhaustive-deps` as a warning). The React Compiler rules from the `eslint-plugin-react-hooks` v7 preset are left off because the app does not use the compiler. Unused locals are left to `tsc` (`noUnusedLocals`).
 
 > The dev server uses file **polling** (`usePolling: true`) to sidestep the Linux
 > inotify watcher limit. If it still fails with `ENOSPC`, raise

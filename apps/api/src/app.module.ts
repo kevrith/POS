@@ -175,6 +175,6 @@ import { DbBackupModule } from './backup/db-backup.module';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(TenantMiddleware).forRoutes('*');
+    consumer.apply(TenantMiddleware).forRoutes('{*splat}');
   }
 }

@@ -895,7 +895,7 @@ export default function SettingsPage() {
       if ((settings as any).displayCurrencies) {
         try {
           setSelectedCurrencies(JSON.parse((settings as any).displayCurrencies) as string[]);
-        } catch {}
+        } catch { /* malformed saved currency list: keep the defaults */ }
       }
     }
   }, [settings]);

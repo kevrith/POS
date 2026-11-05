@@ -101,8 +101,6 @@ export default function VoidModal({
     (isSelfAuthorized || managerPin.length >= 4) &&
     reason.trim().length > 0 &&
     (voidType === 'FULL_VOID' || selectedCount > 0);
-    reason.trim().length > 0 &&
-    (voidType === 'FULL_VOID' || selectedCount > 0);
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">

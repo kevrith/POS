@@ -81,10 +81,10 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': path.resolve(import.meta.dirname, './src'),
       // Resolve the shared package locally — no workspace install needed
-      '@pos/shared': path.resolve(__dirname, '../../packages/shared/index.ts'),
-      '@pos/print-core': path.resolve(__dirname, '../../packages/print-core/src/index.ts'),
+      '@pos/shared': path.resolve(import.meta.dirname, '../../packages/shared/index.ts'),
+      '@pos/print-core': path.resolve(import.meta.dirname, '../../packages/print-core/src/index.ts'),
     },
   },
   server: {

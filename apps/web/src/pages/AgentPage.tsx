@@ -1652,7 +1652,7 @@ export default function AgentPage() {
     async function syncQueue() {
       const queue = loadOfflineQueue();
       if (queue.length === 0) return;
-      let remaining: object[] = [];
+      const remaining: object[] = [];
       for (const payload of queue) {
         try {
           await api.post('/field-sales/orders', payload);

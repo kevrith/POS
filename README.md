@@ -128,6 +128,16 @@ openssl rand -hex 32        # ENCRYPTION_KEY  (must be exactly 64 hex chars)
 
 ### 4. Migrate + seed
 
+To rehearse migrations without touching Supabase, run a throwaway local Postgres and point both URLs at it
+(the Supabase image has the same `anon` / `authenticated` roles, so the RLS lock-down migration is exercised too):
+
+```bash
+docker run -d --name pos-pg-local -e POSTGRES_PASSWORD=your-password-here -p 54329:5432 public.ecr.aws/supabase/postgres:17.6.1.054
+export DATABASE_URL="postgresql://postgres:your-password-here@localhost:54329/postgres"
+export DIRECT_URL="$DATABASE_URL"
+npx prisma migrate deploy --schema prisma/schema.prisma   # confirm the "Datasource" line says localhost first
+```
+
 ```bash
 cd apps/api
 npx prisma migrate deploy --schema ../../prisma/schema.prisma

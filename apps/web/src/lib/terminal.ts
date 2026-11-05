@@ -190,7 +190,7 @@ export async function readNFCTag(timeoutMs = 30000): Promise<NFCReadResult> {
     reader.onreading = (event: any) => {
       clearTimeout(timer);
       const records = (event.message?.records ?? []).map((r: any) => {
-        let data = '';
+        let data: string;
         try {
           data = new TextDecoder().decode(r.data);
         } catch {

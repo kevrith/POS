@@ -27,7 +27,6 @@ export const getPairedBluetoothPrinter = () => readPaired(BT_PAIRED_KEY);
 
 const USB_FILTERS = [{ classCode: 7 }, { classCode: 255 }]; // printer class, vendor-specific
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 function usbApi(): any {
   const usb = (navigator as any).usb;
   if (!usb) throw new Error('This browser cannot talk to USB printers (WebUSB). Use Chrome or Edge, or choose a network printer.');
@@ -165,7 +164,6 @@ export async function printRawBluetooth(bytes: Uint8Array): Promise<void> {
     else await characteristic.writeValue(chunk);
   }
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 // ---- LAN printer reached through the API (the API host must be on the same LAN as the printer)
 

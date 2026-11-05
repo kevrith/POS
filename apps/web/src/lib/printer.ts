@@ -162,8 +162,8 @@ async function postToPrinter(url: string, body: string, contentType: string, ext
   try {
     return await fetch(url, { method: 'POST', headers: { 'Content-Type': contentType, ...extraHeaders }, body, signal: controller.signal });
   } catch (err) {
-    if (controller.signal.aborted) throw new Error(`The printer at ${url.split('/')[2]} did not answer`);
-    throw new Error(`Cannot reach the printer at ${url.split('/')[2]}. A browser cannot send to a printer from an https page.`);
+    if (controller.signal.aborted) throw new Error(`The printer at ${url.split('/')[2]} did not answer`, { cause: err });
+    throw new Error(`Cannot reach the printer at ${url.split('/')[2]}. A browser cannot send to a printer from an https page.`, { cause: err });
   } finally {
     clearTimeout(timer);
   }
@@ -407,7 +407,7 @@ export async function printZPLviaUSB(label: BarcodeLabelData, copies = 1): Promi
   try {
     await printRawUSBPicked(encodeLatin1(job), 0x0a5f); // 0x0A5F: Zebra Technologies
   } catch (error) {
-    throw new Error(`ZPL print failed: ${error instanceof Error ? error.message : 'unknown error'}`);
+    throw new Error(`ZPL print failed: ${error instanceof Error ? error.message : 'unknown error'}`, { cause: error });
   }
 }
 

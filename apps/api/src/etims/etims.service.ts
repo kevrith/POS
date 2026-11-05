@@ -1,7 +1,9 @@
+import { etimsPaymentType } from './etims-payment';
 import { Injectable, BadRequestException, BadGatewayException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import * as crypto from 'crypto';
+import { etimsLineTax, etimsTaxTotals } from './etims-tax';
 
 /** What the sandbox generates in place of a KRA control number: ETM + a millisecond timestamp. */
 const MOCK_CONTROL_NUMBER = /^ETM\d{10,}$/;
@@ -501,17 +503,6 @@ export class EtimsService {
 
   // ─── Real KRA eTIMS HTTP calls ────────────────────────────────────────────
 
-  /** Map POS payment method to KRA eTIMS payment type code */
-  private mapPaymentType(payments: any[]): string {
-    if (!payments?.length) return '01'; // default cash
-    const methods = payments.map((p: any) => p.method ?? p.paymentMethod ?? '');
-    if (methods.some((m: string) => m.includes('MPESA') || m.includes('MOBILE'))) return '04'; // Mobile money
-    if (methods.some((m: string) => m.includes('CARD') || m.includes('PAYSTACK'))) return '05'; // Card
-    if (methods.some((m: string) => m.includes('BANK') || m.includes('TRANSFER'))) return '03'; // Bank transfer
-    if (methods.some((m: string) => m.includes('CREDIT'))) return '02'; // Credit
-    return '01'; // Cash
-  }
-
   private async submitToEtims(sale: any, business: any): Promise<{ controlNumber: string; intrlData: string }> {
     const creds = this.decryptCredentials(business.etimsCredentialsEncrypted);
     const [saleWithItems, customerRecord] = await Promise.all([
@@ -523,17 +514,16 @@ export class EtimsService {
         ? this.prisma.customer.findUnique({ where: { id: sale.customerId }, select: { kraPin: true } })
         : null,
     ]);
-    const buyerKraPin = customerRecord?.kraPin ?? null;
+    // The customer's own PIN, else the one recorded on the sale (a fleet company is not a Customer record).
+    const buyerKraPin = customerRecord?.kraPin ?? (sale as { buyerKraPin?: string | null }).buyerKraPin ?? null;
 
     const saleDateStr = new Date(sale.createdAt).toISOString().slice(0, 10).replace(/-/g, '');
 
+    const lineTaxes = (saleWithItems?.items ?? []).map((si) => etimsLineTax(si));
     const itemList: EtimsInvoiceItem[] = (saleWithItems?.items ?? []).map((si, idx) => {
+      const tx = lineTaxes[idx];
       const unitPrice = si.unitPriceCents / 100;
       const qty = si.quantity;
-      const totalAmt = Math.round(si.totalCents) / 100;
-      // Extract VAT from inclusive price (16/116)
-      const taxblAmt = Math.round((totalAmt / 1.16) * 100) / 100;
-      const taxAmt = Math.round((totalAmt - taxblAmt) * 100) / 100;
       // Use KRA item classification code stored on item, fall back to generic goods code
       const itemClsCd = (si.item as any)?.kraItemCode ?? '5020230602';
 
@@ -548,20 +538,19 @@ export class EtimsService {
         qtyUnitCd: 'U',
         qty,
         prc: unitPrice,
-        splyAmt: totalAmt,
-        dcRt: (si as any).discountPercent ?? 0,
-        dcAmt: (si as any).discountCents ? (si as any).discountCents / 100 : 0,
-        taxblAmt,
-        taxTyCd: 'B', // VAT 16%
-        taxAmt,
-        totAmt: totalAmt,
+        splyAmt: tx.supplyCents / 100,
+        dcRt: tx.supplyCents > 0 ? Math.round((tx.discountCents / tx.supplyCents) * 10000) / 100 : 0,
+        dcAmt: tx.discountCents / 100,
+        taxblAmt: tx.taxableCents / 100,
+        taxTyCd: tx.taxTyCd,
+        taxAmt: tx.taxCents / 100,
+        totAmt: tx.amountCents / 100,
       };
     });
+    const taxTotals = etimsTaxTotals(lineTaxes);
 
     const totalAmt = sale.totalCents / 100;
-    const vatAmt = (sale.vatCents ?? 0) / 100;
-    const taxblAmt = Math.round((totalAmt - vatAmt) * 100) / 100;
-    const pmtTyCd = this.mapPaymentType(saleWithItems?.payments ?? []);
+    const pmtTyCd = etimsPaymentType(saleWithItems?.payments ?? [], sale.type === 'CREDIT');
 
     const payload: EtimsInvoicePayload = {
       invoiceNo: sale.receiptNumber,
@@ -577,16 +566,7 @@ export class EtimsService {
       cfmDt: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
       prchrAcptcYn: buyerKraPin ? 'Y' : 'N',
       ...(buyerKraPin ? { prchrTpin: buyerKraPin } : {}),
-      taxblAmtA: 0,
-      taxblAmtB: taxblAmt,
-      taxblAmtC: 0,
-      taxblAmtD: 0,
-      taxAmtA: 0,
-      taxAmtB: vatAmt,
-      taxAmtC: 0,
-      taxAmtD: 0,
-      totTaxblAmt: taxblAmt,
-      totTaxAmt: vatAmt,
+      ...taxTotals,
       totAmt: totalAmt,
       itemList,
     };
@@ -643,10 +623,9 @@ export class EtimsService {
 
     const cnDate = new Date().toISOString().slice(0, 10).replace(/-/g, '');
 
+    const lineTaxes = itemsToReturn.map((si: any) => etimsLineTax(si));
     const itemList = itemsToReturn.map((si: any, idx: number) => {
-      const totalAmt  = Math.round(si.totalCents) / 100;
-      const taxblAmt  = Math.round((totalAmt / 1.16) * 100) / 100;
-      const taxAmt    = Math.round((totalAmt - taxblAmt) * 100) / 100;
+      const tx = lineTaxes[idx];
       return {
         itemSeq:    idx + 1,
         itemCd:     si.item?.barcode ?? si.item?.sku ?? `KA${String(idx + 1).padStart(5,'0')}`,
@@ -658,19 +637,19 @@ export class EtimsService {
         qtyUnitCd:  'U',
         qty:        si.quantity,
         prc:        si.unitPriceCents / 100,
-        splyAmt:    totalAmt,
-        dcRt:       0,
-        dcAmt:      0,
-        taxblAmt,
-        taxTyCd:    'B',
-        taxAmt,
-        totAmt:     totalAmt,
+        splyAmt:    tx.supplyCents / 100,
+        dcRt:       tx.supplyCents > 0 ? Math.round((tx.discountCents / tx.supplyCents) * 10000) / 100 : 0,
+        dcAmt:      tx.discountCents / 100,
+        taxblAmt:   tx.taxableCents / 100,
+        taxTyCd:    tx.taxTyCd,
+        taxAmt:     tx.taxCents / 100,
+        totAmt:     tx.amountCents / 100,
       };
     });
 
-    const totAmt   = itemsToReturn.reduce((s: number, i: any) => s + i.totalCents, 0) / 100;
-    const totVat   = Math.round((totAmt - totAmt / 1.16) * 100) / 100;
-    const totTaxbl = Math.round((totAmt / 1.16) * 100) / 100;
+    // The credit note refunds what was paid for the returned lines: after their share of the discount.
+    const totAmt = lineTaxes.reduce((sum: number, l: { amountCents: number }) => sum + l.amountCents, 0) / 100;
+    const taxTotals = etimsTaxTotals(lineTaxes);
 
     const payload = {
       invoiceNo:    `${sale.receiptNumber}-CN`,
@@ -687,10 +666,7 @@ export class EtimsService {
       tradeTerms:   'CSH',
       prchrAcptcYn: 'N',
       totItemCnt:   itemList.length,
-      taxblAmtA: 0, taxblAmtB: totTaxbl, taxblAmtC: 0, taxblAmtD: 0,
-      taxAmtA:   0, taxAmtB:   totVat,   taxAmtC:   0, taxAmtD:   0,
-      totTaxblAmt: totTaxbl,
-      totTaxAmt:   totVat,
+      ...taxTotals,
       totAmt,
       itemList,
     };

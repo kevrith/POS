@@ -31,7 +31,7 @@ import { useAuthStore } from '../stores/auth';
 import { barcodeSvg, downloadZPL, printZPLviaUSB } from '../lib/printer';
 import { printHtml } from '../lib/printHtml';
 import { escapeHtml } from '@pos/print-core';
-import { KOT_STATIONS, KOT_STATION_LABELS } from '@pos/shared';
+import { KOT_STATIONS, KOT_STATION_LABELS, TAX_CLASSES, TAX_CLASS_INFO, taxClassOf, type TaxClass } from '@pos/shared';
 import { useRestaurantAccess } from '../lib/useRestaurantAccess';
 
 // ---------------------------------------------------------------------------
@@ -79,6 +79,8 @@ interface InventoryItem {
   reorderPoint?: number;
   unit?: string;
   vatApplicable: boolean;
+  /** KRA tax class: A exempt, B 16%, C zero-rated, D not VAT. */
+  taxClass?: TaxClass;
   category?: Category;
   isActive?: boolean;
   imageUrl?: string;
@@ -127,7 +129,7 @@ interface CreateItemPayload {
   trackStock: boolean;
   initialStock: number;
   unit: string;
-  vatApplicable: boolean;
+  taxClass: TaxClass;
   prepTimeMinutes?: number;
   /** KITCHEN / BAR / DESSERT, or empty to guess from the name. */
   station?: string;
@@ -278,7 +280,7 @@ function AddItemModal({ businessId, storeId, categories, posMode, existingItems 
     initialStock: '',
     reorderLevel: '',
     unit: 'pcs',
-    vatApplicable: false,
+    taxClass: 'B' as TaxClass,
     prepTimeMinutes: 5,
     station: '',
     blockOversell: false, // false = allow selling when OOS (ALLOW policy); true = hard block (BLOCK policy)
@@ -387,7 +389,7 @@ function AddItemModal({ businessId, storeId, categories, posMode, existingItems 
       initialStock: form.trackStock ? parseInt(form.initialStock) || 0 : 0,
       reorderLevel: parseInt(form.reorderLevel) || 0,
       unit: form.unit,
-      vatApplicable: form.vatApplicable,
+      taxClass: form.taxClass,
       prepTimeMinutes: form.prepTimeMinutes,
       station: form.station,
       negativeStockPolicy: form.blockOversell ? 'BLOCK' : 'ALLOW',
@@ -532,9 +534,11 @@ function AddItemModal({ businessId, storeId, categories, posMode, existingItems 
               <input type="checkbox" checked={form.trackStock} onChange={(e) => setForm(f => ({ ...f, trackStock: e.target.checked }))} className="w-4 h-4 rounded text-blue-600" />
               <span className="text-sm text-gray-700">Track Stock</span>
             </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={form.vatApplicable} onChange={(e) => setForm(f => ({ ...f, vatApplicable: e.target.checked }))} className="w-4 h-4 rounded text-blue-600" />
-              <span className="text-sm text-gray-700">VAT Applicable</span>
+            <label className="flex items-center gap-2" title="Exempt and zero-rated goods carry no VAT on the receipt or the KRA invoice. Check with your accountant if unsure.">
+              <span className="text-sm text-gray-700">Tax class</span>
+              <select value={form.taxClass} onChange={(e) => setForm(f => ({ ...f, taxClass: e.target.value as TaxClass }))} className="border rounded-lg px-2 py-1 text-sm">
+                {TAX_CLASSES.map((c) => <option key={c} value={c}>{c} - {TAX_CLASS_INFO[c].label}</option>)}
+              </select>
             </label>
             {form.trackStock && (
               <label className="flex items-center gap-2 cursor-pointer" title="When unchecked, cashiers can sell this item even when stock is 0 (stock goes negative and reconciles on next GRN)">
@@ -593,7 +597,7 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
     vipPrice: item.vipPriceCents ? (item.vipPriceCents / 100).toString() : '',
     costPrice: item.costPriceCents ? (item.costPriceCents / 100).toString() : '',
     unit: item.unit ?? 'pcs',
-    vatApplicable: item.vatApplicable,
+    taxClass: taxClassOf(item),
     trackStock: item.trackStock,
     prepTimeMinutes: (item as any).prepTimeMinutes ?? 5,
     station: (item as any).station ?? '',
@@ -640,7 +644,7 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
       vipPriceCents: Math.round(parseFloat(form.vipPrice || '0') * 100),
       costPriceCents: Math.round(parseFloat(form.costPrice || '0') * 100),
       unit: form.unit,
-      vatApplicable: form.vatApplicable,
+      taxClass: form.taxClass,
       trackStock: form.trackStock,
       prepTimeMinutes: form.prepTimeMinutes,
       station: form.station,
@@ -844,9 +848,11 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
               <input type="checkbox" checked={form.trackStock} onChange={(e) => setForm(f => ({ ...f, trackStock: e.target.checked }))} className="w-4 h-4 rounded" />
               <span className="text-sm text-gray-700">Track Stock</span>
             </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={form.vatApplicable} onChange={(e) => setForm(f => ({ ...f, vatApplicable: e.target.checked }))} className="w-4 h-4 rounded" />
-              <span className="text-sm text-gray-700">VAT Applicable</span>
+            <label className="flex items-center gap-2" title="Exempt and zero-rated goods carry no VAT on the receipt or the KRA invoice. Check with your accountant if unsure.">
+              <span className="text-sm text-gray-700">Tax class</span>
+              <select value={form.taxClass} onChange={(e) => setForm(f => ({ ...f, taxClass: e.target.value as TaxClass }))} className="border rounded-lg px-2 py-1 text-sm">
+                {TAX_CLASSES.map((c) => <option key={c} value={c}>{c} - {TAX_CLASS_INFO[c].label}</option>)}
+              </select>
             </label>
             {form.trackStock && (
               <label className="flex items-center gap-2 cursor-pointer" title="When checked, cashiers cannot sell this item when stock is 0">
@@ -897,7 +903,8 @@ function AdjustStockModal({ item, businessId, storeId, onClose }: AdjustStockMod
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const qty = parseInt(quantity);
+    // Loose goods are adjusted in fractions (+2.5 kg), to the nearest gram.
+    const qty = Math.round(parseFloat(quantity) * 1000) / 1000;
     if (isNaN(qty) || qty === 0) { setError('Enter a non-zero quantity'); return; }
     mutation.mutate({
       itemId: item.id,
@@ -930,15 +937,16 @@ function AdjustStockModal({ item, businessId, storeId, onClose }: AdjustStockMod
             </label>
             <input
               type="number"
+              step="any"
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="+10 or -5"
               required
             />
-            {quantity && !isNaN(parseInt(quantity)) && (
+            {quantity && !isNaN(parseFloat(quantity)) && (
               <p className="text-xs text-gray-500 mt-1">
-                New stock will be: <span className="font-semibold">{item.currentStock + parseInt(quantity)} {item.unit ?? 'pcs'}</span>
+                New stock will be: <span className="font-semibold">{Math.round((item.currentStock + parseFloat(quantity)) * 1000) / 1000} {item.unit ?? 'pcs'}</span>
               </p>
             )}
           </div>
@@ -1208,10 +1216,11 @@ function CsvImportModal({ businessId, storeId, onClose, onSuccess }: {
         costPrice: r.costPrice ?? r.cost_price ? parseFloat(r.costPrice ?? r.cost_price) : undefined,
         barcode: r.barcode ?? r.Barcode ?? undefined,
         currentStock: r.currentStock ?? r.stock_quantity ?? r.quantity ?? r.qty
-          ? parseInt(r.currentStock ?? r.stock_quantity ?? r.quantity ?? r.qty)
+          ? parseFloat(r.currentStock ?? r.stock_quantity ?? r.quantity ?? r.qty)
           : undefined,
         expiryDate: r.expiryDate ?? r.expiry_date ?? undefined,
         lotNumber: r.lotNumber ?? r.lot_number ?? undefined,
+        taxClass: r.taxClass ?? r.tax_class ?? r['Tax Class'] ?? undefined,
       })).filter(r => r.name);
       return api.post<{ imported: number; failed: number }>('/items/import-csv', { businessId, storeId, rows });
     },
@@ -1221,11 +1230,12 @@ function CsvImportModal({ businessId, storeId, onClose, onSuccess }: {
     },
   });
 
-  const sampleCsv = `name,category,retailPrice,wholesalePrice,vipPrice,costPrice,barcode,currentStock,expiryDate,lotNumber
-Bread,Food,50,45,40,30,1234567890,100,"",""
-Milk 500ml,Drinks,65,60,55,45,0987654321,50,"",""
-Sugar 1kg,Food,130,120,110,90,"",200,"",""
-Yoghurt 400g,Dairy,85,80,75,60,1122334455,30,2026-06-01,LOT-001
+  const sampleCsv = `name,category,retailPrice,wholesalePrice,vipPrice,costPrice,barcode,currentStock,expiryDate,lotNumber,taxClass
+Bread,Food,50,45,40,30,1234567890,100,"","",B
+Maize flour 2kg,Food,190,180,170,150,"",80,"","",exempt
+Milk 500ml,Drinks,65,60,55,45,0987654321,50,"","",C
+Sugar 1kg,Food,130,120,110,90,"",200,"","",B
+Yoghurt 400g,Dairy,85,80,75,60,1122334455,30,2026-06-01,LOT-001,B
 Cola 300ml,Drinks,40,35,30,25,9988776655,150,2025-12-31,""`;
 
   function downloadSampleCsv() {
@@ -1268,8 +1278,9 @@ Cola 300ml,Drinks,40,35,30,25,9988776655,150,2025-12-31,""`;
                   <li><code className="bg-blue-100 px-1 rounded">currentStock</code> - Initial stock quantity (can also use: stock_quantity, quantity, qty)</li>
                   <li><code className="bg-blue-100 px-1 rounded">expiryDate</code> - Format: YYYY-MM-DD (e.g., 2026-06-01) - for perishable items</li>
                   <li><code className="bg-blue-100 px-1 rounded">lotNumber</code> - Batch/lot number (optional, auto-generated if expiry date provided)</li>
+                  <li><code className="bg-blue-100 px-1 rounded">taxClass</code> - A or exempt, B or standard (16%), C or zero-rated, D or non-VAT. Blank means standard (can also use: tax_class)</li>
                 </ul>
-                <p className="text-xs mt-2 text-blue-700">💡 Tip: Use empty quotes "" for empty fields. LOT number is optional - system auto-generates if you provide expiry date.</p>
+                <p className="text-xs mt-2 text-blue-700">Tip: Use empty quotes "" for empty fields. LOT number is optional - system auto-generates if you provide expiry date.</p>
                 <button
                   onClick={downloadSampleCsv}
                   className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700"
@@ -1962,6 +1973,9 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [stockFilter, setStockFilter] = useState<'all' | 'out' | 'low'>('all');
+  const [taxFilter, setTaxFilter] = useState<'' | TaxClass>('');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkTaxClass, setBulkTaxClass] = useState<TaxClass>('A');
   const [showAdd, setShowAdd] = useState(false);
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);
   const [adjustItem, setAdjustItem] = useState<InventoryItem | null>(null);
@@ -1977,6 +1991,17 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [uomItem, setUomItem] = useState<InventoryItem | null>(null);
   const qc = useQueryClient();
+
+  // Classify many items at once: the flour shelf, the exempt medicines.
+  const bulkTaxMutation = useMutation({
+    mutationFn: (v: { itemIds: string[]; taxClass: TaxClass }) => api.patch<{ updated: number }>(`/items/tax-class?businessId=${businessId}`, v),
+    onSuccess: (r, v) => {
+      qc.invalidateQueries({ queryKey: ['items'] });
+      toast.success(`${r.updated} item${r.updated === 1 ? '' : 's'} set to ${TAX_CLASS_INFO[v.taxClass].label}`);
+      setSelected(new Set());
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
 
   const toggleActiveMutation = useMutation({
     mutationFn: (item: InventoryItem) =>
@@ -2064,6 +2089,7 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
         !(item.barcode ?? '').toLowerCase().includes(search.toLowerCase())) return false;
     if (categoryFilter && item.category?.name !== categoryFilter) return false;
     if (typeFilter && item.type !== typeFilter) return false;
+    if (taxFilter && taxClassOf(item) !== taxFilter) return false;
     if (stockFilter === 'out' && !(item.trackStock && item.currentStock === 0)) return false;
     if (stockFilter === 'low' && !(item.trackStock && item.currentStock > 0 && item.reorderPoint !== undefined && item.currentStock <= item.reorderPoint)) return false;
     return true;
@@ -2127,6 +2153,19 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
           Record Request
         </button>
 
+        <div className="relative">
+          <select
+            value={taxFilter}
+            onChange={(e) => setTaxFilter(e.target.value as '' | TaxClass)}
+            className="appearance-none border rounded-lg pl-3 pr-8 py-2 text-sm text-gray-700 bg-white"
+            title="Show only items of one tax class"
+          >
+            <option value="">All tax classes</option>
+            {TAX_CLASSES.map((c) => <option key={c} value={c}>{c} - {TAX_CLASS_INFO[c].label}</option>)}
+          </select>
+          <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
+        </div>
+
         {/* Stock status quick filters */}
         <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
           <button onClick={() => setStockFilter('all')} className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${stockFilter === 'all' ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}>All</button>
@@ -2171,6 +2210,26 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
         </button>
       </div>
 
+      {selected.size > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm">
+          <span className="font-medium text-blue-900">{selected.size} selected</span>
+          <label className="flex items-center gap-2 text-blue-900">
+            Set tax class
+            <select value={bulkTaxClass} onChange={(e) => setBulkTaxClass(e.target.value as TaxClass)} className="border rounded-lg px-2 py-1 bg-white text-gray-800">
+              {TAX_CLASSES.map((c) => <option key={c} value={c}>{c} - {TAX_CLASS_INFO[c].label}</option>)}
+            </select>
+          </label>
+          <button
+            onClick={() => bulkTaxMutation.mutate({ itemIds: [...selected], taxClass: bulkTaxClass })}
+            disabled={bulkTaxMutation.isPending}
+            className="px-3 py-1.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50"
+          >
+            {bulkTaxMutation.isPending ? 'Applying...' : 'Apply'}
+          </button>
+          <button onClick={() => setSelected(new Set())} className="px-3 py-1.5 rounded-lg border bg-white text-gray-700 hover:bg-gray-50">Clear</button>
+        </div>
+      )}
+
       {/* Table */}
       <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
         {isLoading ? (
@@ -2188,7 +2247,16 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  {['Name', 'Barcode', 'Cost Price', 'Type', 'Retail Price', 'Stock', 'Bin', 'Status', 'Actions'].map(h => (
+                  <th className="px-4 py-3 w-8">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all items shown"
+                      checked={filtered.length > 0 && filtered.every((i) => selected.has(i.id))}
+                      onChange={(e) => setSelected(e.target.checked ? new Set(filtered.map((i) => i.id)) : new Set())}
+                      className="w-4 h-4 rounded"
+                    />
+                  </th>
+                  {['Name', 'Barcode', 'Cost Price', 'Type', 'Tax', 'Retail Price', 'Stock', 'Bin', 'Status', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
@@ -2199,13 +2267,21 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
                   return (
                   <tr key={item.id} className={`hover:bg-gray-50 transition-colors ${item.isActive === false ? 'opacity-60' : ''}`}>
                     <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${item.name}`}
+                        checked={selected.has(item.id)}
+                        onChange={(e) => setSelected((prev) => { const next = new Set(prev); if (e.target.checked) next.add(item.id); else next.delete(item.id); return next; })}
+                        className="w-4 h-4 rounded"
+                      />
+                    </td>
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         {item.imageUrl && (
                           <img src={item.imageUrl} alt={item.name} className="w-8 h-8 rounded object-cover flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                         )}
                         <div>
                           <p className="font-medium text-gray-900">{item.name}</p>
-                          {item.vatApplicable && <span className="text-xs text-blue-500 mr-1">VAT</span>}
                           {allergenList.length > 0 && (
                             <div className="flex flex-wrap gap-0.5 mt-0.5">
                               {allergenList.map(a => (
@@ -2224,6 +2300,20 @@ function ItemsTab({ businessId, storeId, posMode }: ItemsTabProps) {
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${typeBadgeColor(item.type)}`}>
                         {item.type}
                       </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {(() => {
+                        const c = taxClassOf(item);
+                        // Standard-rated is the norm and stays quiet; the exceptions are what the owner needs to see.
+                        return (
+                          <span
+                            title={TAX_CLASS_INFO[c].label}
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${c === 'B' ? 'bg-gray-100 text-gray-500' : c === 'A' ? 'bg-amber-100 text-amber-800' : c === 'C' ? 'bg-teal-100 text-teal-800' : 'bg-slate-200 text-slate-700'}`}
+                          >
+                            {c === 'B' ? '16%' : TAX_CLASS_INFO[c].short}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3 font-medium">{fmt(item.retailPriceCents)}</td>
                     <td className="px-4 py-3">

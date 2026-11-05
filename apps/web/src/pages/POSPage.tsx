@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { computeTaxes } from '@pos/shared';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -35,7 +36,7 @@ interface SalePayload {
   priceLevel: PriceLevel;
   customerId?: string;
   items: Array<{ itemId: string; quantity: number }>;
-  payments: Array<{ method: string; amountCents: number; reference?: string }>;
+  payments: Array<{ method: string; amountCents: number; reference?: string; roomNumber?: string }>;
   discountCents?: number;
   promotionId?: string;
   serviceChargeCents?: number;
@@ -364,10 +365,14 @@ export default function POSPage() {
   })();
   const totalDiscountCents = promoDiscountCents + (loyaltyDiscountApplied ? loyaltyDiscountCents : 0) + manualDiscountCents;
   const taxBase = subtotalCents - totalDiscountCents;
-  const vatApplicableTotal = cart.filter((i) => i.vatApplicable).reduce((s, i) => s + i.totalCents, 0);
-  const vatApplicableAfterDiscount = vatApplicableTotal * (Math.max(taxBase, 0) / Math.max(subtotalCents, 1));
-  // Only extract tax if the business has that tax type enabled
-  const vatCents  = taxType === 'VAT'  ? Math.round(vatApplicableAfterDiscount * 16 / 116) : 0;
+  // VAT line by line from each item's tax class, the discount shared across the lines. This is the function the
+  // server uses, so the receipt printed here is the same figure that is recorded and sent to KRA. A business that
+  // is not VAT-registered has none.
+  const vatCents = computeTaxes(
+    cart.map((i) => ({ totalCents: i.totalCents, taxClass: i.taxClass })),
+    Math.max(0, totalDiscountCents),
+    { vatRegistered: taxType === 'VAT' },
+  ).vatCents;
   const totCentsDisplay = taxType === 'TOT' ? Math.round(Math.max(taxBase, 0) * totRate / (100 + totRate)) : 0;
   const tipCents = Math.round(parseFloat(tipInput || '0') * 100);
   const totalCents = Math.max(0, taxBase) + serviceChargeCents + tipCents;

@@ -5,6 +5,7 @@ import { WebhooksService } from '../webhooks/webhooks.service';
 import { v4 as uuidv4 } from 'uuid';
 import * as net from 'node:net';
 
+import { roundQty } from '../common/quantity';
 /** Minimal SMTP client using node:net (no external packages). Supports AUTH LOGIN. */
 async function sendSmtpEmail(opts: {
   host: string; port: number; user: string; pass: string;
@@ -866,7 +867,7 @@ export class SupplierService {
         where: { itemId: item.id, storeId },
         _sum: { quantity: true },
       });
-      const stock = agg._sum.quantity ?? 0;
+      const stock = roundQty(agg._sum.quantity ?? 0);
       if (stock <= (item.reorderLevel ?? 0)) {
         triggered.push({
           itemId: item.id,

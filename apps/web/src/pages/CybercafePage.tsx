@@ -7,6 +7,9 @@ import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { formatKES } from '@pos/shared';
 import { printHtml } from '../lib/printHtml';
+import { printToBrowser, type ReceiptData } from '../lib/printer';
+import { buildDirectSaleReceipt } from '../lib/directSaleReceipt';
+import { autoPrintReceipt, printWithPreferredPrinter, printErrorMessage } from '../lib/receiptPrint';
 import {
   Monitor, Plus, Play, Pause, Square, Clock, BarChart3,
   Package, List, Wifi, WifiOff, Printer, Coffee,
@@ -193,7 +196,7 @@ export default function CybercafePage() {
     customerName: '', customerPhone: '', packageId: '', ratePerHourCents: 0, notes: '',
   });
   const [endForm, setEndForm] = useState({
-    paymentMethod: 'CASH', paymentRef: '', printPagesCents: 0, extrasCents: 0, notes: '',
+    paymentMethod: 'CASH', paymentRef: '', printPagesCents: 0, extrasCents: 0, notes: '', customerId: '', buyerKraPin: '',
   });
   const [stationForm, setStationForm] = useState({
     number: 1, label: '', specs: '', ratePerHourCents: 6000, stationType: 'BROWSING',
@@ -319,9 +322,38 @@ export default function CybercafePage() {
     onSuccess: () => { void refetchStations(); },
   });
 
+  // The business's customers, for a session paid on credit: credit is only for someone registered.
+  const { data: creditCustomers = [] } = useQuery<Array<{ id: string; name: string; phone?: string }>>({
+    queryKey: ['customers', businessId, ''],
+    queryFn: () => api.get(`/businesses/${businessId}/customers`),
+    enabled: !!businessId && endModal?.session && endForm.paymentMethod === 'CREDIT' && !endModal.session.customerId,
+    staleTime: 60_000,
+  });
+  const { data: bizSettings } = useQuery<{ name?: string; receiptHeader?: string; receiptFooter?: string }>({
+    queryKey: ['biz-settings', businessId],
+    queryFn: () => api.get(`/business/${businessId}/settings`),
+    enabled: !!businessId,
+    staleTime: 5 * 60_000,
+  });
+  // The fiscal receipt, when this business records cyber takings as sales.
+  const [fiscalReceipt, setFiscalReceipt] = useState<ReceiptData | null>(null);
+
   const endSessionMut = useMutation({
-    mutationFn: ({ sessionId, dto }: any) => api.post(`/cybercafe/sessions/${sessionId}/end`, dto),
+    mutationFn: ({ sessionId, dto }: any) => api.post(`/cybercafe/sessions/${sessionId}/end`, {
+      ...dto,
+      customerId: dto.customerId || undefined,
+      buyerKraPin: dto.buyerKraPin?.trim() || undefined,
+    }),
+    onError: (err: Error) => toast.error(err.message),
     onSuccess: (data: any) => {
+      const receipt = buildDirectSaleReceipt(data ?? {}, {
+        businessName: bizSettings?.name, cashierName: user?.name, receiptHeader: bizSettings?.receiptHeader,
+        receiptFooter: bizSettings?.receiptFooter, fallbackName: 'Cyber cafe',
+      });
+      if (receipt) {
+        setFiscalReceipt(receipt);
+        void autoPrintReceipt(receipt, false).catch((err) => toast.error(`Auto-print failed: ${printErrorMessage(err)}`));
+      }
       void refetchStations();
       void qc.invalidateQueries({ queryKey: ['cyber-sessions'] });
       void qc.invalidateQueries({ queryKey: ['cyber-stats'] });
@@ -387,7 +419,8 @@ export default function CybercafePage() {
   };
 
   const openEndModal = (session: any) => {
-    setEndForm({ paymentMethod: 'CASH', paymentRef: '', printPagesCents: 0, extrasCents: 0, notes: '' });
+    setEndForm({ paymentMethod: 'CASH', paymentRef: '', printPagesCents: 0, extrasCents: 0, notes: '', customerId: '', buyerKraPin: '' });
+    setFiscalReceipt(null);
     setEndModal({ session });
   };
 
@@ -1255,10 +1288,28 @@ ${catRates.map((r: any) => `<tr><td>${r.service}</td><td style="font-size:11px;c
                   <CheckCircle className="w-8 h-8 text-green-600 mx-auto" />
                   <p className="font-semibold text-green-700">Session Completed</p>
                   <p className="text-2xl font-bold text-green-800">{formatKES(endModal.completedSession.totalCents)}</p>
+                  {endModal.completedSession.receiptNumber && (
+                    <p className="text-xs font-mono text-green-700">{endModal.completedSession.receiptNumber}</p>
+                  )}
                 </div>
+                {endModal.completedSession.receiptNumber && (
+                  <p className={`text-xs text-center ${endModal.completedSession.etims?.success ? 'text-green-700' : 'text-amber-700'}`}>
+                    {endModal.completedSession.etims?.success
+                      ? (endModal.completedSession.etims.testMode ? 'eTIMS: test mode, not registered with KRA' : `eTIMS: submitted${endModal.completedSession.etims.controlNumber ? ` (${endModal.completedSession.etims.controlNumber})` : ''}`)
+                      : 'eTIMS: pending. It will be sent to KRA automatically.'}
+                  </p>
+                )}
                 <div className="flex gap-2">
                   <button
-                    onClick={() => printSessionReceipt(endModal.completedSession)}
+                    onClick={() => {
+                      if (fiscalReceipt) {
+                        void printWithPreferredPrinter(fiscalReceipt, false)
+                          .then((printed) => { if (!printed) return printToBrowser(fiscalReceipt); })
+                          .catch((err) => toast.error(`Print failed: ${printErrorMessage(err)}`));
+                      } else {
+                        printSessionReceipt(endModal.completedSession);
+                      }
+                    }}
                     className="flex-1 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 flex items-center justify-center gap-1"
                   >
                     <Printer className="w-4 h-4" /> Print Receipt
@@ -1311,6 +1362,27 @@ ${catRates.map((r: any) => `<tr><td>${r.service}</td><td style="font-size:11px;c
                   </div>
                 </div>
 
+                {endForm.paymentMethod === 'CREDIT' && !endModal.session.customerId && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Customer (credit is only for registered customers)</label>
+                    <select
+                      className="w-full border rounded px-3 py-2 text-sm"
+                      value={endForm.customerId}
+                      onChange={(e) => setEndForm({ ...endForm, customerId: e.target.value })}
+                    >
+                      <option value="">Choose a customer…</option>
+                      {creditCustomers.map((c) => <option key={c.id} value={c.id}>{c.name}{c.phone ? ` · ${c.phone}` : ''}</option>)}
+                    </select>
+                  </div>
+                )}
+
+                <input
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  placeholder="Buyer KRA PIN (company customer, optional)"
+                  value={endForm.buyerKraPin}
+                  onChange={(e) => setEndForm({ ...endForm, buyerKraPin: e.target.value.toUpperCase() })}
+                />
+
                 {endForm.paymentMethod === 'MPESA' && (
                   <input
                     className="w-full border rounded px-3 py-2 text-sm"
@@ -1332,7 +1404,7 @@ ${catRates.map((r: any) => `<tr><td>${r.service}</td><td style="font-size:11px;c
                   <button onClick={() => setEndModal(null)} className="flex-1 py-2 border rounded-lg text-sm">Cancel</button>
                   <button
                     onClick={() => endSessionMut.mutate({ sessionId: endModal.session.id, dto: endForm })}
-                    disabled={endSessionMut.isPending}
+                    disabled={endSessionMut.isPending || (endForm.paymentMethod === 'CREDIT' && !endModal.session.customerId && !endForm.customerId)}
                     className="flex-1 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-1"
                   >
                     <CheckCircle className="w-4 h-4" />

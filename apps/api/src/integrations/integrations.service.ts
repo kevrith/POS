@@ -4,6 +4,7 @@ import { createCipheriv, createDecipheriv } from 'crypto';
 
 import { requireString } from '../common/validate';
 
+import { roundQty } from '../common/quantity';
 @Injectable()
 export class IntegrationsService {
   private readonly logger = new Logger(IntegrationsService.name);
@@ -437,7 +438,7 @@ export class IntegrationsService {
         where: { itemId: item.id, businessId },
         _sum: { quantity: true },
       });
-      const qty = stock._sum.quantity ?? 0;
+      const qty = roundQty(stock._sum.quantity ?? 0);
 
       // Update inventory level in Shopify
       const setResp = await fetch(`${baseUrl}/inventory_levels/set.json`, {
@@ -671,7 +672,7 @@ export class IntegrationsService {
     return {
       success: true,
       item: item?.name,
-      stock: stock._sum.quantity ?? 0,
+      stock: roundQty(stock._sum.quantity ?? 0),
       syncedAt: new Date(),
     };
   }

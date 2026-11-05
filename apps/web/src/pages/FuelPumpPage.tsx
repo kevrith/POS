@@ -2,7 +2,13 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
+import { useDialog } from '../components/Dialog';
 import { formatKES } from '@pos/shared';
+import { toast } from 'sonner';
+import type { ReceiptData } from '../lib/printer';
+import { buildDirectSaleReceipt } from '../lib/directSaleReceipt';
+import DirectSaleReceiptModal from '../components/DirectSaleReceiptModal';
+import { autoPrintReceipt, printErrorMessage } from '../lib/receiptPrint';
 import {
   Fuel, Plus, Zap, ZapOff, BarChart3, List, Settings,
   Droplets, Truck, Clock, Building2, ArrowDownCircle, ArrowUpCircle, Usb, Wifi, WifiOff,
@@ -145,7 +151,7 @@ export default function FuelPumpPage() {
       try {
         await hwStopPump(pump.pumpNumber, hwConfig);
         const txn = await getPumpTransaction(pump.pumpNumber, hwConfig);
-        setSaleForm({ pumpId: pump.id, gradeId: pump.gradeId, litresDispensed: txn.litresDispensed.toFixed(3), vehiclePlate: '', paymentMethod: 'CASH', paymentRef: '', fleetAccountId: '' });
+        setSaleForm({ pumpId: pump.id, gradeId: pump.gradeId, litresDispensed: txn.litresDispensed.toFixed(3), vehiclePlate: '', paymentMethod: 'CASH', paymentRef: '', fleetAccountId: '', customerId: '' });
       } catch { /* fall through */ }
     }
     stopPump.mutate(pump.id);
@@ -192,15 +198,41 @@ export default function FuelPumpPage() {
 
   // ── Sale recording ────────────────────────────────────────────────────────
   const [saleForm, setSaleForm] = useState({
-    pumpId: '', gradeId: '', litresDispensed: '', vehiclePlate: '', paymentMethod: 'CASH', paymentRef: '', fleetAccountId: '',
+    pumpId: '', gradeId: '', litresDispensed: '', vehiclePlate: '', paymentMethod: 'CASH', paymentRef: '', fleetAccountId: '', customerId: '',
   });
+
+  // Credit goes to a registered customer who can be billed.
+  const { data: creditCustomers = [] } = useQuery<Array<{ id: string; name: string }>>({
+    queryKey: ['fuel-credit-customers', businessId],
+    queryFn: () => api.get(`/businesses/${businessId}/customers`),
+    enabled: !!businessId && saleForm.paymentMethod === 'CREDIT',
+    staleTime: 60_000,
+  });
+  const { data: bizSettings } = useQuery<{ name?: string; receiptHeader?: string; receiptFooter?: string }>({
+    queryKey: ['biz-settings', businessId],
+    queryFn: () => api.get(`/business/${businessId}/settings`),
+    enabled: !!businessId,
+    staleTime: 5 * 60_000,
+  });
+
+  // The receipt of the last sale, when this business records fuel takings as sales.
+  const [fuelReceipt, setFuelReceipt] = useState<ReceiptData | null>(null);
   const recordSale = useMutation({
-    mutationFn: (d: any) => api.post('/fuel-pump/sales', d),
-    onSuccess: () => {
+    mutationFn: (d: any) => api.post<any>('/fuel-pump/sales', d),
+    onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['fuel-pumps'] });
       void qc.invalidateQueries({ queryKey: ['fuel-sales'] });
       void qc.invalidateQueries({ queryKey: ['fuel-stats'] });
-      setSaleForm({ pumpId: '', gradeId: '', litresDispensed: '', vehiclePlate: '', paymentMethod: 'CASH', paymentRef: '', fleetAccountId: '' });
+      setSaleForm({ pumpId: '', gradeId: '', litresDispensed: '', vehiclePlate: '', paymentMethod: 'CASH', paymentRef: '', fleetAccountId: '', customerId: '' });
+      const receipt = buildDirectSaleReceipt(res ?? {}, {
+        businessName: bizSettings?.name, cashierName: user?.name ?? 'Attendant', receiptHeader: bizSettings?.receiptHeader,
+        receiptFooter: bizSettings?.receiptFooter, fallbackName: 'Fuel station',
+      });
+      if (receipt) {
+        setFuelReceipt(receipt);
+        // Print straight away when this terminal is set to; otherwise the receipt window has a Print button.
+        void autoPrintReceipt(receipt, false).catch((err) => toast.error(`Auto-print failed: ${printErrorMessage(err)}`));
+      }
     },
   });
 
@@ -258,10 +290,10 @@ export default function FuelPumpPage() {
     queryFn: () => api.get<any[]>(`/fuel-pump/fleet?businessId=${businessId}`),
     enabled: tab === 'fleet',
   });
-  const [fleetForm, setFleetForm] = useState({ companyName: '', contactName: '', contactPhone: '', contactEmail: '', creditLimitCents: '' });
+  const [fleetForm, setFleetForm] = useState({ companyName: '', contactName: '', contactPhone: '', contactEmail: '', kraPin: '', creditLimitCents: '' });
   const createFleet = useMutation({
     mutationFn: (d: any) => api.post('/fuel-pump/fleet', d),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['fleet-accounts'] }); setFleetForm({ companyName: '', contactName: '', contactPhone: '', contactEmail: '', creditLimitCents: '' }); },
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['fleet-accounts'] }); setFleetForm({ companyName: '', contactName: '', contactPhone: '', contactEmail: '', kraPin: '', creditLimitCents: '' }); },
   });
   const [selectedFleet, setSelectedFleet] = useState<any>(null);
   const { data: fleetTx = [] } = useQuery({
@@ -269,10 +301,10 @@ export default function FuelPumpPage() {
     queryFn: () => api.get<any[]>(`/fuel-pump/fleet/${selectedFleet.id}/transactions`),
     enabled: !!selectedFleet,
   });
-  const [paymentForm, setPaymentForm] = useState({ amountCents: '', reference: '', description: '' });
+  const [paymentForm, setPaymentForm] = useState({ amountCents: '', reference: '', description: '', method: 'CASH' });
   const recordPayment = useMutation({
     mutationFn: ({ id, ...d }: any) => api.post(`/fuel-pump/fleet/${id}/payment`, d),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['fleet-accounts'] }); void qc.invalidateQueries({ queryKey: ['fleet-tx'] }); setPaymentForm({ amountCents: '', reference: '', description: '' }); },
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['fleet-accounts'] }); void qc.invalidateQueries({ queryKey: ['fleet-tx'] }); setPaymentForm({ amountCents: '', reference: '', description: '', method: 'CASH' }); },
   });
 
   // ── Sales list ────────────────────────────────────────────────────────────
@@ -289,6 +321,21 @@ export default function FuelPumpPage() {
       return api.get<any[]>(url);
     },
     enabled: tab === 'sales',
+  });
+
+  // A manager takes a sale back: the litres return to the tank, a fleet account is credited, an invoice is voided.
+  const { prompt } = useDialog();
+  const canVoid = ['OWNER', 'ADMIN', 'MANAGER'].includes(String(user?.role));
+  const voidSaleMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) => api.post(`/fuel-pump/sales/${id}/void`, { reason }),
+    onSuccess: () => {
+      toast.success('Sale voided');
+      void qc.invalidateQueries({ queryKey: ['fuel-sales'] });
+      void qc.invalidateQueries({ queryKey: ['fuel-tanks'] });
+      void qc.invalidateQueries({ queryKey: ['fuel-stats'] });
+      void qc.invalidateQueries({ queryKey: ['fleet-accounts'] });
+    },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   // ── Stats ─────────────────────────────────────────────────────────────────
@@ -548,6 +595,13 @@ export default function FuelPumpPage() {
                           <option value="">Select fleet account</option>
                           {fleetAccounts.map((fa: any) => <option key={fa.id} value={fa.id}>{fa.companyName}</option>)}
                         </select>
+                      ) : saleForm.paymentMethod === 'CREDIT' && saleForm.pumpId === pump.id ? (
+                        <select className="border rounded px-2 py-1 text-sm"
+                          value={saleForm.customerId}
+                          onChange={(e) => setSaleForm({ ...saleForm, customerId: e.target.value })}>
+                          <option value="">Select customer</option>
+                          {creditCustomers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
                       ) : (
                         <input className="border rounded px-2 py-1 text-sm" placeholder="Ref (opt)"
                           value={saleForm.pumpId === pump.id ? saleForm.paymentRef : ''}
@@ -569,8 +623,11 @@ export default function FuelPumpPage() {
                         paymentMethod: saleForm.paymentMethod,
                         paymentRef: saleForm.paymentRef || undefined,
                         fleetAccountId: saleForm.fleetAccountId || undefined,
+                        customerId: saleForm.paymentMethod === 'CREDIT' ? saleForm.customerId || undefined : undefined,
                       })}
-                      disabled={!saleForm.litresDispensed || saleForm.pumpId !== pump.id || recordSale.isPending}
+                      disabled={!saleForm.litresDispensed || saleForm.pumpId !== pump.id || recordSale.isPending
+                        || (saleForm.paymentMethod === 'CREDIT' && !saleForm.customerId)
+                        || (saleForm.paymentMethod === 'FLEET' && !saleForm.fleetAccountId)}
                       className="w-full bg-orange-600 text-white py-1.5 rounded text-sm font-medium disabled:opacity-50">
                       Complete Sale
                     </button>
@@ -985,6 +1042,8 @@ export default function FuelPumpPage() {
                 value={fleetForm.contactPhone} onChange={(e) => setFleetForm({ ...fleetForm, contactPhone: e.target.value })} />
               <input className="border rounded px-3 py-1.5 text-sm" placeholder="Contact email"
                 value={fleetForm.contactEmail} onChange={(e) => setFleetForm({ ...fleetForm, contactEmail: e.target.value })} />
+              <input className="border rounded px-3 py-1.5 text-sm" placeholder="KRA PIN (for invoices)"
+                value={fleetForm.kraPin} onChange={(e) => setFleetForm({ ...fleetForm, kraPin: e.target.value.toUpperCase() })} />
               <input className="border rounded px-3 py-1.5 text-sm" placeholder="Credit limit (KES cents)" type="number"
                 value={fleetForm.creditLimitCents} onChange={(e) => setFleetForm({ ...fleetForm, creditLimitCents: e.target.value })} />
             </div>
@@ -1045,9 +1104,12 @@ export default function FuelPumpPage() {
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       <input className="border rounded px-3 py-1.5 text-sm" placeholder="Amount (KES cents)" type="number"
                         value={paymentForm.amountCents} onChange={(e) => setPaymentForm({ ...paymentForm, amountCents: e.target.value })} />
+                      <select className="border rounded px-2 py-1.5 text-sm" value={paymentForm.method} onChange={(e) => setPaymentForm({ ...paymentForm, method: e.target.value })}>
+                        {['CASH', 'MPESA', 'CARD', 'BANK'].map((m) => <option key={m} value={m}>{m}</option>)}
+                      </select>
                       <input className="border rounded px-3 py-1.5 text-sm" placeholder="Reference"
                         value={paymentForm.reference} onChange={(e) => setPaymentForm({ ...paymentForm, reference: e.target.value })} />
-                      <button onClick={() => recordPayment.mutate({ id: selectedFleet.id, businessId, amountCents: parseInt(paymentForm.amountCents) || 0, reference: paymentForm.reference || undefined })}
+                      <button onClick={() => recordPayment.mutate({ id: selectedFleet.id, businessId, amountCents: parseInt(paymentForm.amountCents) || 0, method: paymentForm.method, reference: paymentForm.reference || undefined })}
                         disabled={!paymentForm.amountCents || recordPayment.isPending}
                         className="bg-green-600 text-white px-3 py-1.5 rounded text-sm font-medium disabled:opacity-50">
                         <ArrowUpCircle className="w-4 h-4 inline mr-1" />Record
@@ -1113,6 +1175,7 @@ export default function FuelPumpPage() {
                   <th className="text-left px-4 py-2">Total</th>
                   <th className="text-left px-4 py-2">Payment</th>
                   <th className="text-left px-4 py-2">Plate</th>
+                  {canVoid && <th className="px-4 py-2"></th>}
                 </tr>
               </thead>
               <tbody>
@@ -1128,9 +1191,27 @@ export default function FuelPumpPage() {
                       <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs">{s.paymentMethod}</span>
                     </td>
                     <td className="px-4 py-2 text-gray-500">{s.vehiclePlate ?? '—'}</td>
+                    {canVoid && (
+                      <td className="px-4 py-2 text-right">
+                        {s.status === 'VOIDED' ? (
+                          <span className="text-xs text-gray-400">Voided</span>
+                        ) : (
+                          <button
+                            disabled={voidSaleMutation.isPending}
+                            onClick={async () => {
+                              const reason = await prompt({ title: 'Void this sale', message: 'The litres go back into the tank and any invoice is cancelled.', placeholder: 'Reason', confirmLabel: 'Void sale' });
+                              if (reason) voidSaleMutation.mutate({ id: s.id, reason });
+                            }}
+                            className="text-xs text-red-600 hover:underline disabled:opacity-50"
+                          >
+                            Void
+                          </button>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
-                {sales.length === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No sales found</td></tr>}
+                {sales.length === 0 && <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">No sales found</td></tr>}
               </tbody>
             </table>
           </div>
@@ -1398,6 +1479,11 @@ export default function FuelPumpPage() {
             </table>
           </div>
         </div>
+      )}
+
+      {/* Receipt of the sale just made: shown only when this business records fuel takings as sales */}
+      {fuelReceipt && (
+        <DirectSaleReceiptModal receipt={fuelReceipt} onClose={() => setFuelReceipt(null)} quantityLabel={(q) => `${q.toFixed(3)} L`} />
       )}
     </div>
   );

@@ -397,6 +397,9 @@ export class AuthService {
           name: data.businessName,
           shortCode,
           trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14-day trial
+          // A new business has no history of ringing these takings through the till, so there is nothing to double
+          // count: its fuel, hotel, pharmacy and cyber takings are real sales from the first day.
+          verticalSalesFrom: new Date(),
         },
       });
 
@@ -469,6 +472,7 @@ export class AuthService {
           name: profile.businessName,
           shortCode,
           trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+          verticalSalesFrom: new Date(),
         },
       });
       await tx.store.create({

@@ -109,52 +109,17 @@ export class BatchService {
     };
   }
 
-  async getBatchesFEFO(itemId: string) {
+  /** The order stock would be sold in: in-date batches with units left, soonest expiry first. */
+  async getBatchesFEFO(itemId: string, businessId?: string) {
     return this.prisma.batch.findMany({
       where: {
         itemId,
         status: 'ACTIVE',
         quantityRemaining: { gt: 0 },
+        ...(businessId ? { item: { businessId } } : {}),
       },
       orderBy: { expiryDate: 'asc' },
     });
-  }
-
-  async deductFromBatchesFEFO(itemId: string, quantity: number, saleId: string, businessId: string) {
-    const batches = await this.getBatchesFEFO(itemId);
-    let remaining = quantity;
-    const movements = [];
-
-    for (const batch of batches) {
-      if (remaining <= 0) break;
-
-      const deductQty = Math.min(remaining, batch.quantityRemaining);
-      
-      await this.prisma.batch.update({
-        where: { id: batch.id },
-        data: { quantityRemaining: { decrement: deductQty } },
-      });
-
-      movements.push({
-        offlineId: uuidv4(),
-        businessId,
-        itemId,
-        storeId: batch.storeId,
-        type: 'SALE',
-        quantity: -deductQty,
-        batchId: batch.id,
-        saleId,
-        source: 'POS',
-      });
-
-      remaining -= deductQty;
-    }
-
-    if (remaining > 0) {
-      throw new BadRequestException(`Insufficient batch stock. Missing ${remaining} units`);
-    }
-
-    return movements;
   }
 
   async getBatchHistory(batchId: string, businessId: string) {

@@ -33,6 +33,7 @@ interface CreateItemDto {
   trackBatches?: boolean;
   trackExpiry?: boolean;
   defaultExpiryDays?: number;
+  taxClass?: string;
   vatApplicable?: boolean;
   totApplicable?: boolean;
   storeId: string;
@@ -186,6 +187,15 @@ export class ItemsController {
   }
 
   // ── PATCH / DELETE ────────────────────────────────────────────────────────────
+
+  /** Set the tax class of many items. Before `:id`, so "tax-class" is not read as an item id. */
+  @Patch('tax-class')
+  setTaxClass(
+    @Query('businessId') businessId: string,
+    @Body() body: { itemIds: string[]; taxClass: string },
+  ) {
+    return this.items.setTaxClass(businessId, body?.itemIds, body?.taxClass);
+  }
 
   @Patch(':id')
   update(

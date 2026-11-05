@@ -27,6 +27,8 @@ interface PaymentEntry {
   method: string;
   amountCents: number;
   reference?: string;
+  /** For ROOM_CHARGE: the room whose guest is billed. */
+  roomNumber?: string;
 }
 
 // Paystack Inline type declaration
@@ -1023,13 +1025,14 @@ export default function PaymentModal({
                 />
               </div>
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700">
-                This charge will be posted to the room account. Ensure the guest has authorised room charges.
+                This is added to the folio of the guest checked in to that room and paid at check-out. Ensure the guest has authorised room charges.
               </div>
               <button
                 onClick={() =>
                   onComplete([{
                     method: 'ROOM_CHARGE',
                     amountCents: totalCents,
+                    roomNumber: roomNumber.trim(),
                     reference: roomGuestName
                       ? `Room ${roomNumber} — ${roomGuestName}`
                       : `Room ${roomNumber}`,

@@ -281,9 +281,10 @@ export default function CustomersPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['customers', businessId] }),
   });
 
+  const [settleMethod, setSettleMethod] = useState('CASH');
   const markCreditPaidMutation = useMutation({
-    mutationFn: (saleId: string) =>
-      api.patch(`/sales/${saleId}/mark-credit-paid?businessId=${businessId}`, {}),
+    mutationFn: ({ saleId, method }: { saleId: string; method: string }) =>
+      api.patch(`/sales/${saleId}/mark-credit-paid?businessId=${businessId}`, { method }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['customers', businessId] });
       qc.invalidateQueries({ queryKey: ['customer-detail', businessId, selected?.id] });
@@ -820,8 +821,19 @@ export default function CustomersPage() {
                               </div>
                               <div className="flex items-center justify-between mt-1.5">
                                 <span className="text-xs text-gray-400 dark:text-gray-500">{formatDate(sale.createdAt)}</span>
+                                <select
+                                  value={settleMethod}
+                                  onChange={(e) => setSettleMethod(e.target.value)}
+                                  className="ml-auto mr-2 px-1.5 py-1 border rounded-lg text-xs bg-white dark:bg-gray-800"
+                                  aria-label="Paid by"
+                                >
+                                  <option value="CASH">Cash</option>
+                                  <option value="MPESA">M-Pesa</option>
+                                  <option value="CARD">Card</option>
+                                  <option value="BANK">Bank</option>
+                                </select>
                                 <button
-                                  onClick={() => markCreditPaidMutation.mutate(sale.id)}
+                                  onClick={() => markCreditPaidMutation.mutate({ saleId: sale.id, method: settleMethod })}
                                   disabled={markCreditPaidMutation.isPending}
                                   className="flex items-center gap-1 px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
                                 >

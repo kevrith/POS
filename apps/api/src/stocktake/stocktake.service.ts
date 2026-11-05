@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { v4 as uuidv4 } from 'uuid';
 
+import { roundQty } from '../common/quantity';
 @Injectable()
 export class StocktakeService {
   constructor(private prisma: PrismaService) {}
@@ -47,7 +48,7 @@ export class StocktakeService {
       _sum: { quantity: true },
     });
 
-    const stockMap = new Map(movements.map((m) => [m.itemId, m._sum.quantity ?? 0]));
+    const stockMap = new Map(movements.map((m) => [m.itemId, roundQty(m._sum.quantity ?? 0)]));
 
     const session = await this.prisma.stocktakeSession.create({
       data: {
@@ -90,7 +91,10 @@ export class StocktakeService {
 
     await Promise.all(
       updates.map((u) => {
-        const qty = Math.floor(Math.max(0, u.countedQty)); // enforce non-negative integer
+        // Loose goods are counted in fractions (12.5 kg): keep three decimals, never below zero.
+        const counted = Number(u.countedQty);
+        if (!Number.isFinite(counted)) throw new BadRequestException('A counted quantity must be a number');
+        const qty = roundQty(Math.max(0, counted));
         return this.prisma.stocktakeCount.update({
           where: { id: u.countId },
           data: {
@@ -122,7 +126,7 @@ export class StocktakeService {
       for (const count of session.counts) {
         if (count.countedQty === null || count.countedQty === undefined) continue;
 
-        const varianceQty = count.countedQty - count.systemQty;
+        const varianceQty = roundQty(count.countedQty - count.systemQty);
 
         await tx.stocktakeCount.update({
           where: { id: count.id },
@@ -137,7 +141,7 @@ export class StocktakeService {
               businessId: session.businessId,
               itemId: count.itemId,
               storeId: session.storeId,
-              quantity: Math.round(varianceQty),
+              quantity: roundQty(varianceQty),
               type: 'ADJUSTMENT',
               source: `STOCKTAKE:${sessionId}`,
             },

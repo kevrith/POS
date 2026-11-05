@@ -16,8 +16,12 @@ export interface DrawerSummary {
   refundsCents: number;
   cashRefundsCents: number;
   expensesCents: number;
+  /** Cash taken in outside a sale (a hotel deposit) during the session, by this cashier. */
+  cashPayInsCents: number;
+  /** Cash paid out outside a sale (a deposit handed back) during the session, by this cashier. */
+  cashPayOutsCents: number;
   paymentBreakdown: Array<{ method: string; amountCents: number; count: number }>;
-  /** Opening float + cash in − cash refunds − cash paid out. This is what should be counted. */
+  /** Opening float + cash sales + cash pay-ins − cash refunds − cash paid out − cash pay-outs. This is what should be counted. */
   expectedClosingCents: number;
 }
 
@@ -227,7 +231,7 @@ export class CashDrawerService {
         id: true,
         totalCents: true,
         vatCents: true,
-        payments: { select: { method: true, amountCents: true } },
+        payments: { select: { method: true, amountCents: true, reference: true } },
       },
     });
 
@@ -235,8 +239,12 @@ export class CashDrawerService {
     const totalVatCents = sales.reduce((s, x) => s + (x.vatCents ?? 0), 0);
 
     const breakdown = new Map<string, { amountCents: number; count: number }>();
+    // Cash a customer paid later against a credit sale is a pay-in below (it may belong to another day's sale), so
+    // it is not counted a second time as one of this sale's payments.
+    let settledCashCents = 0;
     for (const sale of sales) {
       for (const p of sale.payments) {
+        if (p.reference === 'Credit settlement' && CASH_METHODS.includes(p.method)) settledCashCents += p.amountCents;
         const row = breakdown.get(p.method) ?? { amountCents: 0, count: 0 };
         row.amountCents += p.amountCents;
         row.count += 1;
@@ -250,7 +258,7 @@ export class CashDrawerService {
 
     const cashSalesCents = paymentBreakdown
       .filter((p) => CASH_METHODS.includes(p.method))
-      .reduce((s, p) => s + p.amountCents, 0);
+      .reduce((s, p) => s + p.amountCents, 0) - settledCashCents;
     const mpesaSalesCents = paymentBreakdown
       .filter((p) => p.method.startsWith('MPESA'))
       .reduce((s, p) => s + p.amountCents, 0);
@@ -278,6 +286,20 @@ export class CashDrawerService {
     });
     const expensesCents = expenses._sum.amountCents ?? 0;
 
+    // Cash that moved outside a sale: a guest's deposit taken at the desk, or handed back. Only cash is in the drawer.
+    const movements = await this.prisma.cashMovement.findMany({
+      where: {
+        businessId: session.businessId,
+        storeId: session.storeId,
+        cashierId: session.cashierId,
+        method: { in: CASH_METHODS },
+        createdAt: { gte: from, lte: to },
+      },
+      select: { kind: true, amountCents: true },
+    });
+    const cashPayInsCents = movements.filter((m) => m.kind === 'PAY_IN').reduce((sum, m) => sum + m.amountCents, 0);
+    const cashPayOutsCents = movements.filter((m) => m.kind === 'PAY_OUT').reduce((sum, m) => sum + m.amountCents, 0);
+
     return {
       totalSalesCents,
       salesCount: sales.length,
@@ -289,9 +311,11 @@ export class CashDrawerService {
       refundsCents,
       cashRefundsCents,
       expensesCents,
+      cashPayInsCents,
+      cashPayOutsCents,
       paymentBreakdown,
       expectedClosingCents:
-        session.openingBalanceCents + cashSalesCents - cashRefundsCents - expensesCents,
+        session.openingBalanceCents + cashSalesCents + cashPayInsCents - cashRefundsCents - expensesCents - cashPayOutsCents,
     };
   }
 }

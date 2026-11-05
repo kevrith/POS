@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 import { requireString } from '../common/validate';
@@ -8,6 +8,12 @@ export class ChannelManagerService {
   constructor(private prisma: PrismaService) {}
 
   async receiveWebhook(channel: string, payload: any, businessId: string, storeId: string) {
+    requireString(channel, 'channel');
+    const store = storeId
+      ? await this.prisma.store.findFirst({ where: { id: storeId, businessId }, select: { id: true } })
+      : null;
+    if (!store) throw new BadRequestException('storeId must be a store of the business that owns this API key');
+    if (!payload || typeof payload !== 'object') throw new BadRequestException('A booking payload is required');
     // Parse channel-specific payload
     const data: any = {
       businessId,

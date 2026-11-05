@@ -32,7 +32,7 @@ function build() {
   };
   const notifications: any = { sendWhatsApp: jest.fn().mockResolvedValue(undefined) };
   const events: any = { emitKotCreated: jest.fn(), emitKotUpdated: jest.fn(), emitKotVoided: jest.fn() };
-  return { prisma, notifications, events, service: new HospitalityService(prisma, notifications, events) };
+  return { prisma, notifications, events, service: new HospitalityService(prisma, notifications, events, { isEnabled: jest.fn().mockResolvedValue(false) } as any, {} as any) };
 }
 
 const line = (id: string, name: string, extra: Record<string, unknown> = {}) => ({

@@ -254,6 +254,106 @@ export function calculateTOT(inclusiveAmountCents: number, ratePct = 3): number 
   return Math.round(inclusiveAmountCents * ratePct / (100 + ratePct));
 }
 
+// ─── TAX CLASSES ─────────────────────────────────────────────
+//
+// Kenya taxes supplies at different rates, and the tax invoice must say which: flour and unprocessed foods
+// are exempt, many medicines are exempt or zero-rated, most goods are standard-rated at 16%. An item carries
+// one class, and every sale line snapshots it, so a later change to the item never rewrites a past invoice.
+
+/** A = exempt, B = standard rate (16%), C = zero-rated (0%), D = not subject to VAT. The letters are eTIMS's. */
+export type TaxClass = 'A' | 'B' | 'C' | 'D';
+
+export const TAX_CLASSES: readonly TaxClass[] = ['A', 'B', 'C', 'D'];
+
+export const STANDARD_VAT_RATE_PCT = 16;
+
+export const TAX_CLASS_INFO: Record<TaxClass, { label: string; short: string; ratePct: number }> = {
+  A: { label: 'Exempt', short: 'Exempt', ratePct: 0 },
+  B: { label: 'Standard rate (16%)', short: '16%', ratePct: STANDARD_VAT_RATE_PCT },
+  C: { label: 'Zero-rated (0%)', short: '0%', ratePct: 0 },
+  D: { label: 'Not subject to VAT', short: 'Non-VAT', ratePct: 0 },
+};
+
+export function isTaxClass(value: unknown): value is TaxClass {
+  return typeof value === 'string' && (TAX_CLASSES as readonly string[]).includes(value);
+}
+
+/**
+ * An item's tax class: its own class, else standard-rated. The older yes/no `vatApplicable` flag is NOT consulted:
+ * the create form defaulted it to unchecked, so `false` usually means nobody chose, not "exempt". Treating it as
+ * exempt would under-declare VAT. (The parameter still accepts it so callers can pass a whole item.)
+ */
+export function taxClassOf(item: { taxClass?: string | null; vatApplicable?: boolean | null }): TaxClass {
+  return isTaxClass(item.taxClass) ? item.taxClass : 'B';
+}
+
+/**
+ * A tax class typed by a person (a spreadsheet column): the letter, or the word. Blank is "not said" (undefined);
+ * anything unrecognised returns null so the caller can reject the row instead of guessing.
+ */
+export function parseTaxClass(input: unknown): TaxClass | undefined | null {
+  const t = String(input ?? '').trim().toLowerCase().replace(/[\s_-]+/g, ' ');
+  if (!t) return undefined;
+  if (['a', 'exempt', 'vat exempt', 'exempted'].includes(t)) return 'A';
+  if (['b', 'standard', 'standard rate', 'standard rated', 'vat', '16', '16%', 'taxable'].includes(t)) return 'B';
+  if (['c', 'zero', 'zero rated', 'zero rate', '0', '0%'].includes(t)) return 'C';
+  if (['d', 'none', 'non vat', 'not vat', 'no vat', 'out of scope', 'not subject to vat'].includes(t)) return 'D';
+  return null;
+}
+
+export interface TaxLineInput { totalCents: number; taxClass: TaxClass }
+export interface TaxLineResult {
+  /** The class the line was taxed under: `D` for every line when the business is not VAT-registered. */
+  taxClass: TaxClass;
+  /** This line's share of the sale-level discount. */
+  discountCents: number;
+  /** What the customer pays for the line after its discount share, VAT included. */
+  netCents: number;
+  vatCents: number;
+}
+export interface TaxSummary {
+  lines: TaxLineResult[];
+  vatCents: number;
+  byClass: Record<TaxClass, { netCents: number; vatCents: number }>;
+}
+
+/**
+ * Split `amountCents` across lines in proportion to `values`, to the cent: the shares always add up to the
+ * amount (largest remainder), never more than a line is worth. Used to spread a sale-level discount.
+ */
+export function allocateByValue(values: number[], amountCents: number): number[] {
+  const weights = values.map((v) => Math.max(0, v));
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (!(amountCents > 0) || total <= 0) return values.map(() => 0);
+  const amount = Math.min(Math.round(amountCents), total);
+  const exact = weights.map((w) => (w * amount) / total);
+  const shares = exact.map((e) => Math.floor(e));
+  let left = amount - shares.reduce((a, b) => a + b, 0);
+  const byRemainder = exact.map((e, i) => ({ i, r: e - Math.floor(e) })).sort((x, y) => y.r - x.r || x.i - y.i);
+  for (let k = 0; left > 0 && k < byRemainder.length; k++, left--) shares[byRemainder[k].i] += 1;
+  // A line can never take more than it is worth.
+  return shares.map((sh, i) => Math.min(sh, weights[i]));
+}
+
+/**
+ * VAT for a sale, line by line. Prices include VAT, so VAT is extracted (16/116) from standard-rated lines only,
+ * after each line's share of the discount. Exempt, zero-rated and non-VAT lines carry none. A business that is
+ * not VAT-registered charges no VAT on anything, and every line is class D.
+ */
+export function computeTaxes(lines: TaxLineInput[], discountCents: number, opts: { vatRegistered: boolean }): TaxSummary {
+  const shares = allocateByValue(lines.map((l) => l.totalCents), discountCents);
+  const byClass: TaxSummary['byClass'] = { A: { netCents: 0, vatCents: 0 }, B: { netCents: 0, vatCents: 0 }, C: { netCents: 0, vatCents: 0 }, D: { netCents: 0, vatCents: 0 } };
+  const results = lines.map((l, i): TaxLineResult => {
+    const taxClass: TaxClass = opts.vatRegistered ? l.taxClass : 'D';
+    const netCents = l.totalCents - shares[i];
+    const vatCents = taxClass === 'B' ? Math.round((netCents * STANDARD_VAT_RATE_PCT) / (100 + STANDARD_VAT_RATE_PCT)) : 0;
+    byClass[taxClass].netCents += netCents;
+    byClass[taxClass].vatCents += vatCents;
+    return { taxClass, discountCents: shares[i], netCents, vatCents };
+  });
+  return { lines: results, vatCents: results.reduce((a, r) => a + r.vatCents, 0), byClass };
+}
+
 export function calculateServiceCharge(
   subtotalCents: number,
   rate: number, // e.g. 10 for 10%

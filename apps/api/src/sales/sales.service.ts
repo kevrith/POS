@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { AuditService } from '../audit/audit.service';
@@ -11,8 +11,16 @@ import { EventsGateway } from '../events/events.gateway';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { SubscriptionLimitsService } from '../subscription/subscription-limits.service';
 import { LedgerService } from '../ledger/ledger.service';
-import { SaleType, SaleStatus, InventoryMovementType, calculateVAT, calculateTOT, calculateServiceCharge, normalizeTier, SubscriptionTier } from '@pos/shared';
+import { SaleType, SaleStatus, InventoryMovementType, calculateTOT, calculateServiceCharge, normalizeTier, SubscriptionTier, computeTaxes, taxClassOf, type TaxClass } from '@pos/shared';
 import { v4 as uuidv4 } from 'uuid';
+import { hasTooManyDecimals, roundQty } from '../common/quantity';
+import { intInRange, oneOf } from '../common/validate';
+import { postSaleJournal, postSettlementJournal, reverseJournalLines, type SaleJournalInput } from './sale-ledger';
+import { drawStock, restoreStock } from '../batch/batch-allocation';
+import { ROOM_CHARGE_FOLIO_TYPE } from '../common/folio';
+
+/** How a customer may settle a credit sale. */
+const CREDIT_SETTLEMENT_METHODS = ['CASH', 'MPESA', 'CARD', 'BANK'] as const;
 
 interface FindAllOptions {
   businessId: string;
@@ -58,7 +66,7 @@ interface CreateSaleDto {
   type: SaleType;
   priceLevel: 'RETAIL' | 'WHOLESALE' | 'VIP';
   items: Array<{ itemId: string; quantity: number }>;
-  payments: Array<{ method: string; amountCents: number; reference?: string }>;
+  payments: Array<{ method: string; amountCents: number; reference?: string; roomNumber?: string }>;
   discountCents?: number;
   promotionId?: string;
   /** When provided by the frontend (0 = disabled, >0 = enabled), use it directly.
@@ -245,6 +253,8 @@ export class SalesService {
 
     let subtotalCents = 0;
     const saleItems = [];
+    // Each line's tax class, parallel to saleItems. The class is the item's at the moment of the sale.
+    const lineClasses: TaxClass[] = [];
 
     for (const cartItem of cart) {
       const item = items.find(i => i.id === cartItem.itemId);
@@ -254,6 +264,9 @@ export class SalesService {
       // that skips the refund rules, and it lowers the total.
       if (!Number.isFinite(cartItem.quantity) || cartItem.quantity <= 0) {
         throw new BadRequestException(`Quantity of ${item.name} must be greater than zero`);
+      }
+      if (hasTooManyDecimals(cartItem.quantity)) {
+        throw new BadRequestException(`Quantity of ${item.name} can have at most 3 decimal places`);
       }
 
       const priceKey = `${dto.priceLevel.toLowerCase()}PriceCents` as keyof typeof item;
@@ -269,6 +282,7 @@ export class SalesService {
         unitPriceCents: cartItem.totalCents !== undefined ? Math.round(cartItem.totalCents / cartItem.quantity) : unitPrice,
         totalCents,
       });
+      lineClasses.push(taxClassOf(item));
 
       if (item.trackStock) {
         const stock = await this.inventory.getStockLevel(item.id, dto.storeId);
@@ -313,8 +327,16 @@ export class SalesService {
     }
     if (discountCents > subtotalCents) throw new BadRequestException('The discount is larger than the sale');
     const taxBase = subtotalCents - discountCents;
-    // VAT/TOT are inclusive in item prices — extract for reporting only, do NOT add to total
-    const vatCents = store.business.taxType === 'VAT' ? calculateVAT(taxBase) : 0;
+    // VAT/TOT are inclusive in item prices — extract for reporting only, do NOT add to total.
+    // VAT is worked out line by line from each item's tax class: exempt, zero-rated and non-VAT lines carry
+    // none, and the discount is shared across the lines. It used to be 16/116 of the whole sale, so flour and
+    // exempt medicines were charged VAT on the books and on the eTIMS invoice.
+    const taxes = computeTaxes(
+      saleItems.map((l, i) => ({ totalCents: l.totalCents, taxClass: lineClasses[i] })),
+      discountCents,
+      { vatRegistered: store.business.taxType === 'VAT' },
+    );
+    const vatCents = taxes.vatCents;
     const totCents = store.business.taxType === 'TOT' ? calculateTOT(taxBase, store.business.totRate ?? 3) : 0;
     const totalCents = taxBase + serviceChargeCents + tipCents;
 
@@ -382,7 +404,15 @@ export class SalesService {
           vatCents,
           totCents,
           totalCents,
-          items: { create: saleItems },
+          taxClassified: true,
+          items: {
+            create: saleItems.map((l, i) => ({
+              ...l,
+              taxClass: taxes.lines[i].taxClass,
+              vatCents: taxes.lines[i].vatCents,
+              discountCents: taxes.lines[i].discountCents,
+            })),
+          },
           payments: {
             create: dto.payments.map(p => ({
               offlineId: uuidv4(),
@@ -406,20 +436,20 @@ export class SalesService {
       for (const cartItem of cart) {
         const item = items.find(i => i.id === cartItem.itemId);
         if (item?.trackStock) {
-          await tx.inventoryMovement.create({
-            data: {
-              offlineId: uuidv4(),
-              businessId,
-              itemId: cartItem.itemId,
-              storeId: dto.storeId,
-              type: InventoryMovementType.SALE,
-              quantity: -cartItem.quantity,
-              saleId: createdSale.id,
-              source: 'POS',
-            },
+          // First-expiry-first-out from the item's batches when it has them; one plain movement otherwise.
+          await drawStock(tx, {
+            businessId,
+            storeId: dto.storeId,
+            itemId: cartItem.itemId,
+            itemName: item.name,
+            quantity: cartItem.quantity,
+            saleId: createdSale.id,
+            trackBatches: !!item.trackBatches,
           });
         }
       }
+
+      await this.chargeToRoom(tx, businessId, dto.cashierId, createdSale, dto.payments);
 
       return createdSale;
     }, { timeout: 15000 });
@@ -506,93 +536,69 @@ export class SalesService {
   }
 
   /**
-   * Kenyan retail chart-of-accounts posting for one sale.
-   *
-   *   Dr  Cash / M-Pesa / Bank / Accounts Receivable   (what was tendered)
-   *     Cr  Sales Revenue                              (net of tax & service charge)
-   *     Cr  VAT / Turnover Tax Payable                 (tax extracted from the inclusive price)
-   *     Cr  Service Charge Income, Tips Payable        (when charged)
+   * A sale paid by ROOM_CHARGE lands on the folio of the guest in that room, to be settled at check-out. It used to
+   * be recorded as a payment only, so the guest was never billed for it. The room is named by number; it must hold a
+   * checked-in guest, and the whole sale goes to that one room. Inside the sale's transaction: no room, no sale.
    */
-  private async postSaleToLedger(input: {
-    businessId: string;
-    storeId: string;
-    receiptNumber: string;
-    isCredit: boolean;
-    totalCents: number;
-    vatCents: number;
-    totCents: number;
-    serviceChargeCents: number;
-    tipCents: number;
-    payments: Array<{ method: string; amountCents: number }>;
-  }): Promise<void> {
-    const lines: Array<{
-      accountCode: string;
-      accountName: string;
-      debitCents: number;
-      creditCents: number;
-    }> = [];
+  private async chargeToRoom(
+    tx: any,
+    businessId: string,
+    cashierId: string,
+    sale: { id: string; receiptNumber: string; storeId: string | null; totalCents: number },
+    payments: Array<{ method: string; amountCents: number; reference?: string; roomNumber?: string }>,
+  ) {
+    const charged = payments.filter((p) => p.method === 'ROOM_CHARGE' && p.amountCents > 0);
+    if (charged.length === 0) return;
+    if (charged.length > 1) throw new BadRequestException('Charge a sale to one room only');
+    const p = charged[0];
+    // Older tills sent only the reference ("Room 101 - Name").
+    const number = String(p.roomNumber ?? /^Room\s+(\S+)/i.exec(p.reference ?? '')?.[1] ?? '').trim();
+    if (!number) throw new BadRequestException('Say which room to charge');
+    if (p.amountCents > sale.totalCents) throw new BadRequestException('A room cannot be charged more than the sale comes to');
 
-    const debit = (accountCode: string, accountName: string, amount: number) => {
-      if (amount > 0) lines.push({ accountCode, accountName, debitCents: amount, creditCents: 0 });
-    };
-    const credit = (accountCode: string, accountName: string, amount: number) => {
-      if (amount > 0) lines.push({ accountCode, accountName, debitCents: 0, creditCents: amount });
-    };
-
-    if (input.isCredit) {
-      debit('1200', 'Accounts Receivable', input.totalCents);
-    } else {
-      const tendered = new Map<string, number>();
-      for (const p of input.payments) {
-        tendered.set(p.method, (tendered.get(p.method) ?? 0) + p.amountCents);
-      }
-      // Over-tender is change handed back, so never debit more than the sale total.
-      const totalTendered = [...tendered.values()].reduce((s, v) => s + v, 0);
-      const scale = totalTendered > input.totalCents && totalTendered > 0
-        ? input.totalCents / totalTendered
-        : 1;
-
-      for (const [method, amount] of tendered) {
-        const value = Math.round(amount * scale);
-        if (method === 'CASH') debit('1000', 'Cash on Hand', value);
-        else if (method.startsWith('MPESA')) debit('1010', 'M-Pesa Control', value);
-        else if (method === 'CARD') debit('1020', 'Card Settlement', value);
-        else debit('1030', 'Bank / Other Receipts', value);
-      }
-    }
-
-    credit('2100', 'VAT Payable', input.vatCents);
-    credit('2110', 'Turnover Tax Payable', input.totCents);
-    credit('4100', 'Service Charge Income', input.serviceChargeCents);
-    credit('2200', 'Tips Payable', input.tipCents);
-
-    const revenue =
-      input.totalCents -
-      input.vatCents -
-      input.totCents -
-      input.serviceChargeCents -
-      input.tipCents;
-    credit('4000', 'Sales Revenue', revenue);
-
-    const debits = lines.reduce((s, l) => s + l.debitCents, 0);
-    const credits = lines.reduce((s, l) => s + l.creditCents, 0);
-    // Rounding from tax extraction can leave a cent; park it so the entry balances.
-    if (debits !== credits) {
-      const diff = debits - credits;
-      if (diff > 0) credit('4900', 'Rounding Difference', diff);
-      else debit('4900', 'Rounding Difference', -diff);
-    }
-
-    if (lines.length === 0) return;
-
-    await this.ledger.autoPost({
-      businessId: input.businessId,
-      storeId: input.storeId,
-      description: `Sale ${input.receiptNumber}`,
-      reference: input.receiptNumber,
-      sourceType: 'SALE',
-      lines,
+    const stays: Array<{ id: string; storeId: string; guestName: string }> = await tx.roomBooking.findMany({
+      where: { businessId, status: 'CHECKED_IN', room: { number } },
+      select: { id: true, storeId: true, guestName: true },
     });
+    const here = stays.filter((b) => b.storeId === sale.storeId);
+    const stay = here.length === 1 ? here[0] : stays.length === 1 ? stays[0] : null;
+    if (!stay) {
+      throw new BadRequestException(stays.length === 0 ? `Room ${number} has no checked-in guest to charge` : `More than one guest is checked in to a room numbered ${number}`);
+    }
+
+    await tx.guestFolioCharge.create({
+      data: {
+        bookingId: stay.id,
+        businessId,
+        type: ROOM_CHARGE_FOLIO_TYPE,
+        description: `Charged to room from sale ${sale.receiptNumber}`,
+        amountCents: p.amountCents,
+        quantity: 1,
+        totalCents: p.amountCents,
+        postedBy: cashierId,
+        saleId: sale.id,
+      },
+    });
+  }
+
+  /**
+   * Voiding a room-charged sale takes it back off the guest's folio, while the guest is still in. After check-out the
+   * guest has paid it, and giving that back is a refund, not a void.
+   */
+  private async releaseRoomCharge(tx: any, businessId: string, saleId: string, refundCents: number, whole: boolean) {
+    const charge = await tx.guestFolioCharge.findFirst({ where: { businessId, saleId, type: ROOM_CHARGE_FOLIO_TYPE }, include: { booking: { select: { status: true } } } });
+    if (!charge) return;
+    if (charge.booking.status !== 'CHECKED_IN') {
+      throw new BadRequestException('This sale was charged to a room whose guest has checked out. Refund it instead.');
+    }
+    const left = whole ? 0 : Math.max(0, charge.totalCents - refundCents);
+    if (left === 0) await tx.guestFolioCharge.deleteMany({ where: { id: charge.id, businessId } });
+    else await tx.guestFolioCharge.updateMany({ where: { id: charge.id, businessId }, data: { amountCents: left, totalCents: left } });
+  }
+
+  /** Journal entry for one sale (shared with direct sales: see sale-ledger.ts). */
+  private async postSaleToLedger(input: SaleJournalInput): Promise<void> {
+    await postSaleJournal(this.ledger, input);
   }
 
   private async checkAndDispatchLowStock(businessId: string, storeId: string, itemIds: string[]): Promise<void> {
@@ -645,10 +651,13 @@ export class SalesService {
   }
 
   async getSale(id: string, businessId: string) {
-    return this.prisma.sale.findFirst({
+    const sale = await this.prisma.sale.findFirst({
       where: { id, businessId },
       include: { items: true, payments: true, customer: true, cashier: true, voidRecords: true },
     });
+    // Another business's sale, or none at all, is not found: an empty 200 told the caller nothing and hid the mistake.
+    if (!sale) throw new NotFoundException('Sale not found');
+    return sale;
   }
 
   async getVoidedAndReturns(businessId: string, storeId?: string, startDate?: Date, endDate?: Date) {
@@ -679,83 +688,144 @@ export class SalesService {
     voidedItemIds?: string[],
     voidedItemQuantities?: Array<{ itemId: string; quantity: number }>,
   ) {
-    const result = await this.prisma.$transaction(async (tx) => {
-      const sale = await tx.sale.findFirst({
-        where: { id: saleId, businessId },
-        include: { items: true },
-      });
+    const result = await this.prisma.$transaction(
+      (tx) => this.voidInTx(tx, saleId, businessId, managerId, reason, voidedItemIds, voidedItemQuantities),
+      { timeout: 15000 },
+    );
+    await this.afterVoid(saleId, businessId, managerId, reason, result);
+    return { success: result.success, refundAmountCents: result.refundAmountCents };
+  }
 
-      if (!sale || sale.status !== SaleStatus.PAID) {
-        throw new BadRequestException('Can only void paid sales');
-      }
+  /**
+   * The database half of a void, for a caller (a pump sale, a prescription fill) that voids the sale inside its OWN
+   * transaction, next to what else must be undone with it. Pair it with `afterVoid` once that transaction commits.
+   */
+  async voidInTx(
+    tx: any,
+    saleId: string,
+    businessId: string,
+    managerId: string,
+    reason: string,
+    voidedItemIds?: string[],
+    voidedItemQuantities?: Array<{ itemId: string; quantity: number }>,
+  ) {
+    const sale = await tx.sale.findFirst({
+      where: { id: saleId, businessId },
+      include: { items: true, payments: true },
+    });
 
-      const hasQuantityVoid = voidedItemQuantities && voidedItemQuantities.length > 0;
-      const isLineItemVoid = hasQuantityVoid || (voidedItemIds && voidedItemIds.length > 0);
-      const itemsToVoid = isLineItemVoid
-        ? sale.items.filter(i => voidedItemIds?.includes(i.id) || voidedItemQuantities?.some(v => v.itemId === i.id))
-        : sale.items;
+    // A credit sale can be voided too (a pump sale charged to a customer, say): what the customer owed is cancelled.
+    if (!sale || ![SaleStatus.PAID, SaleStatus.CREDIT].includes(sale.status)) {
+      throw new BadRequestException('Can only void paid sales');
+    }
 
-      let refundAmount = 0;
+    if (sale.status === SaleStatus.CREDIT && sale.payments.length > 0) {
+      throw new BadRequestException('Part of this credit sale has been paid. Refund those payments before voiding it.');
+    }
 
-      // Reverse inventory (using explicit quantities if provided)
-      for (const item of itemsToVoid) {
-        const qtyOverride = hasQuantityVoid
-          ? (voidedItemQuantities!.find(v => v.itemId === item.id)?.quantity ?? item.quantity)
-          : item.quantity;
-        const clampedQty = Math.min(qtyOverride, item.quantity);
+    const hasQuantityVoid = voidedItemQuantities && voidedItemQuantities.length > 0;
+    const isLineItemVoid = hasQuantityVoid || (voidedItemIds && voidedItemIds.length > 0);
+    const itemsToVoid = isLineItemVoid
+      ? sale.items.filter((i: any) => voidedItemIds?.includes(i.id) || voidedItemQuantities?.some((v) => v.itemId === i.id))
+      : sale.items;
 
-        if (item.itemId) {
-          await tx.inventoryMovement.create({
-            data: {
-              offlineId: uuidv4(),
-              businessId,
-              itemId: item.itemId,
-              storeId: sale.storeId!,
-              type: InventoryMovementType.VOID,
-              quantity: clampedQty,
-              saleId: sale.id,
-              source: 'POS',
-            },
-          });
-        }
+    let refundAmount = 0;
+    /** What is being taken back, line by line, for whatever else must follow it (a prescription's register, its claim). */
+    const returned: Array<{ name: string; quantity: number; cents: number }> = [];
 
-        const itemRefund = Math.round(item.unitPriceCents * clampedQty);
-        refundAmount += itemRefund;
+    // Reverse inventory (using explicit quantities if provided)
+    for (const item of itemsToVoid) {
+      const qtyOverride = hasQuantityVoid
+        ? (voidedItemQuantities!.find((v) => v.itemId === item.id)?.quantity ?? item.quantity)
+        : item.quantity;
+      const clampedQty = Math.min(qtyOverride, item.quantity);
 
-        // If partial quantity void: reduce item quantity on the sale
-        if (hasQuantityVoid && clampedQty < item.quantity) {
-          await tx.saleItem.update({
-            where: { id: item.id },
-            data: {
-              quantity: item.quantity - clampedQty,
-              totalCents: item.unitPriceCents * (item.quantity - clampedQty),
-            },
-          });
-        }
-      }
-
-      await tx.voidRecord.create({
-        data: {
+      if (item.itemId) {
+        await restoreStock(tx, {
+          businessId,
+          storeId: sale.storeId!,
+          itemId: item.itemId,
+          quantity: clampedQty,
           saleId: sale.id,
-          type: isLineItemVoid ? 'LINE_ITEM_VOID' : 'FULL_VOID',
-          authorizedBy: managerId,
-          reason,
-          voidedItemIds: itemsToVoid.map(i => i.id).join(','),
-          refundAmountCents: refundAmount,
-        },
-      });
+          type: InventoryMovementType.VOID,
+        });
+      }
 
-      // Update sale status
-      const newStatus = isLineItemVoid ? SaleStatus.AMENDED : SaleStatus.VOIDED;
-      await tx.sale.update({
-        where: { id: saleId },
-        data: { status: newStatus },
-      });
+      // What the customer paid for this much of the line: its value after its share of the sale discount.
+      // Lines from before quantities were exact (quantity 0 from the old integer column) fall back to price x qty.
+      const paidForLine = item.totalCents - (item.discountCents ?? 0);
+      const itemRefund = item.quantity > 0
+        ? Math.round((paidForLine * clampedQty) / item.quantity)
+        : Math.round(item.unitPriceCents * clampedQty);
+      refundAmount += itemRefund;
+      returned.push({ name: item.name, quantity: clampedQty, cents: itemRefund });
 
-      return { success: true, refundAmountCents: refundAmount, newStatus, isLineItemVoid };
-    }, { timeout: 15000 });
+      // If partial quantity void: reduce item quantity on the sale, and the line's VAT and discount with it
+      if (hasQuantityVoid && clampedQty < item.quantity) {
+        const keep = (item.quantity - clampedQty) / item.quantity;
+        await tx.saleItem.update({
+          where: { id: item.id },
+          data: {
+            quantity: roundQty(item.quantity - clampedQty),
+            totalCents: Math.round(item.totalCents * keep),
+            vatCents: Math.round((item.vatCents ?? 0) * keep),
+            discountCents: Math.round((item.discountCents ?? 0) * keep),
+          },
+        });
+      }
+    }
 
-    // Audit log after transaction commits
+    const record = await tx.voidRecord.create({
+      data: {
+        saleId: sale.id,
+        type: isLineItemVoid ? 'LINE_ITEM_VOID' : 'FULL_VOID',
+        authorizedBy: managerId,
+        reason,
+        voidedItemIds: itemsToVoid.map((i: any) => i.id).join(','),
+        refundAmountCents: refundAmount,
+      },
+    });
+
+    // What was owed on account is no longer owed.
+    if (sale.status === SaleStatus.CREDIT && sale.customerId) {
+      await tx.customer.update({ where: { id: sale.customerId }, data: { balanceCents: { increment: refundAmount } } });
+    }
+
+    await this.releaseRoomCharge(tx, businessId, sale.id, refundAmount, !isLineItemVoid);
+    // A cyber session that was invoiced as this sale is no longer revenue.
+    if (!isLineItemVoid) {
+      await tx.cyberSession.updateMany({ where: { saleId: sale.id, businessId, status: 'COMPLETED' }, data: { status: 'VOIDED' } });
+      // An appointment invoiced as this sale is no longer a finished, paid one.
+      await tx.appointment.updateMany({ where: { saleId: sale.id, businessId, status: 'COMPLETED' }, data: { status: 'CANCELLED' } });
+    }
+    await this.releasePharmacyFill(tx, businessId, sale, !isLineItemVoid, managerId, returned);
+
+    // Update sale status
+    const newStatus = isLineItemVoid ? SaleStatus.AMENDED : SaleStatus.VOIDED;
+    await tx.sale.update({
+      where: { id: saleId },
+      data: { status: newStatus },
+    });
+
+    return {
+      success: true,
+      refundAmountCents: refundAmount,
+      newStatus,
+      isLineItemVoid: !!isLineItemVoid,
+      receiptNumber: sale.receiptNumber as string | null,
+      saleTotalCents: sale.totalCents as number,
+      voidRecordId: record.id as string,
+    };
+  }
+
+  /** What follows a committed void: the audit trail, KRA's credit note and the books taking the sale back. */
+  async afterVoid(
+    saleId: string,
+    businessId: string,
+    managerId: string,
+    reason: string,
+    result: { newStatus: string; isLineItemVoid: boolean; receiptNumber: string | null; saleTotalCents: number; refundAmountCents: number; voidRecordId: string },
+  ) {
     await this.audit.createEntry({
       businessId,
       actor: managerId,
@@ -770,12 +840,132 @@ export class SalesService {
     // Best-effort eTIMS void submission (non-blocking)
     this.etims.voidSale(saleId, reason).catch(() => {});
 
-    return { success: result.success, refundAmountCents: result.refundAmountCents };
+    // The books take back what the sale put in. Best-effort like the sale's own posting.
+    if (result.receiptNumber) {
+      const fraction = result.isLineItemVoid ? (result.saleTotalCents > 0 ? result.refundAmountCents / result.saleTotalCents : 0) : 1;
+      this.reverseSaleJournal(businessId, result.receiptNumber, fraction, result.isLineItemVoid ? `VOIDLINE-${result.voidRecordId}` : `VOID-${result.receiptNumber}`).catch(() => {});
+    }
+  }
+
+  /** Post the mirror image of a sale's journal entry (all of it, or the share a line void took back). */
+  private async reverseSaleJournal(businessId: string, receiptNumber: string, fraction: number, reference: string): Promise<void> {
+    const original = await this.prisma.journalEntry.findFirst({ where: { businessId, reference: receiptNumber, sourceType: 'SALE' }, include: { lines: true } });
+    if (!original || fraction <= 0) return;
+    const lines = reverseJournalLines(original.lines, fraction);
+    if (lines.length === 0) return;
+    await this.ledger.autoPost({
+      businessId,
+      storeId: original.storeId ?? undefined,
+      description: `Void of ${receiptNumber}`,
+      reference,
+      sourceType: 'SALE_VOID',
+      lines,
+    });
+  }
+
+  /**
+   * Voiding a fill's sale takes it back. In FULL, the prescription goes back to the fill before it, the insurer's claim
+   * is cancelled and the controlled-drug register gets a return for what is still out. In PART (some medicines, or
+   * some of a quantity, returned), the prescription stays as it is (the patient keeps the rest), the claim comes down
+   * by the insurer's share of what came back, and the register gets a return for just those. The register is a legal
+   * record, so nothing in it is deleted: a return is a new line. The stock was already restored by the void itself.
+   * Not once the insurer has paid the claim.
+   */
+  private async releasePharmacyFill(
+    tx: any,
+    businessId: string,
+    sale: { id: string; receiptNumber: string | null; totalCents?: number },
+    whole: boolean,
+    managerId: string,
+    returned: Array<{ name: string; quantity: number; cents: number }> = [],
+  ) {
+    const fill = await tx.prescriptionFill.findFirst({ where: { saleId: sale.id, businessId } });
+    if (!fill) return;
+    const claim = await tx.insuranceClaim.findFirst({ where: { saleId: sale.id, businessId } });
+    if (claim?.status === 'PAID') {
+      throw new BadRequestException('The insurer has already paid this claim. Settle that with the insurer before returning the fill.');
+    }
+    const returnedCents = returned.reduce((sum, r) => sum + r.cents, 0);
+
+    if (whole) {
+      if (claim) await tx.insuranceClaim.updateMany({ where: { id: claim.id, businessId }, data: { status: 'VOIDED' } });
+      const rx = await tx.prescription.findFirst({ where: { id: fill.prescriptionId, businessId } });
+      if (rx) {
+        const left = Math.max(0, rx.refillsUsed - 1);
+        await tx.prescription.updateMany({
+          where: { id: rx.id, businessId },
+          data: left === 0
+            ? { status: 'PENDING', refillsUsed: 0, dispensedAt: null, dispensedBy: null, lastFillDate: null, nextFillDate: null }
+            : { refillsUsed: left, lastFillDate: fill.prevLastFillDate, nextFillDate: fill.prevNextFillDate },
+        });
+      }
+      await tx.prescriptionFill.updateMany({ where: { id: fill.id, businessId }, data: { voidedAt: new Date() } });
+    } else if (claim && (sale.totalCents ?? 0) > 0) {
+      // The insurer's share of what came back, in the same proportion the sale was split.
+      const share = Math.min(claim.billedCents, Math.round((returnedCents * claim.billedCents) / (sale.totalCents as number)));
+      const billed = claim.billedCents - share;
+      const approved = claim.approvedCents > 0 ? Math.max(0, claim.approvedCents - Math.round((claim.approvedCents * share) / Math.max(1, claim.billedCents))) : 0;
+      await tx.insuranceClaim.updateMany({
+        where: { id: claim.id, businessId },
+        data: billed === 0 ? { status: 'VOIDED', billedCents: 0, approvedCents: 0 } : { billedCents: billed, approvedCents: approved },
+      });
+    }
+
+    // What the register still shows out for this fill, drug by drug (earlier returns are negative lines).
+    const logged = await tx.controlledSubstanceLog.findMany({
+      where: { businessId, prescriptionId: fill.prescriptionId, notes: { contains: `receipt ${sale.receiptNumber}` } },
+    });
+    const byDrug = new Map<string, { entry: any; out: number }>();
+    for (const l of logged) {
+      const row = byDrug.get(l.itemName) ?? { entry: l, out: 0 };
+      row.out += l.quantityDispensed;
+      byDrug.set(l.itemName, row);
+    }
+    for (const [name, { entry, out }] of byDrug) {
+      const back = whole ? out : Math.min(out, returned.filter((r) => r.name === name).reduce((sum, r) => sum + r.quantity, 0));
+      if (!(back > 0)) continue;
+      await tx.controlledSubstanceLog.create({
+        data: {
+          businessId,
+          prescriptionId: entry.prescriptionId,
+          itemName: entry.itemName,
+          scheduleClass: entry.scheduleClass,
+          quantityDispensed: -back,
+          unit: entry.unit,
+          patientName: entry.patientName,
+          patientIdNumber: entry.patientIdNumber,
+          prescriberName: entry.prescriberName,
+          prescriberLicense: entry.prescriberLicense,
+          dispensedBy: managerId,
+          notes: `Returned${whole ? '' : ' in part'}: fill voided, receipt ${sale.receiptNumber}`,
+        },
+      });
+    }
   }
 
   async verifyManagerPin(pin: string, businessId: string) {
     if (!pin || !businessId) throw new BadRequestException('pin and businessId are required');
     return this.auth.verifyManagerPin(pin, businessId);
+  }
+
+  /**
+   * Who authorised a void. The request used to name its own approver, so anyone signed in could void a
+   * paid sale by sending a manager's user id. The approver is now established here: either a manager PIN
+   * checked against this business's managers, or the caller's own session when the caller is an owner or
+   * manager. A bare id naming someone else counts for nothing.
+   */
+  async resolveVoidApprover(
+    user: { id: string; role: string },
+    businessId: string,
+    dto: { managerId?: string; managerPin?: string },
+  ): Promise<string> {
+    if (dto.managerPin) {
+      const manager = await this.auth.verifyManagerPin(dto.managerPin, businessId);
+      return manager.userId;
+    }
+    const isManager = ['OWNER', 'ADMIN', 'MANAGER'].includes(user.role);
+    if (isManager && (!dto.managerId || dto.managerId === user.id)) return user.id;
+    throw new ForbiddenException('Voiding a sale needs a manager. Enter a manager PIN.');
   }
 
   async returnSale(
@@ -800,22 +990,19 @@ export class SalesService {
         ? sale.items.filter(i => dto.returnedItemIds!.includes(i.id))
         : sale.items;
 
-      const refundAmount = itemsToReturn.reduce((sum, i) => sum + i.totalCents, 0);
+      // Refund what was paid: the line's value after its share of the sale discount.
+      const refundAmount = itemsToReturn.reduce((sum, i) => sum + i.totalCents - (i.discountCents ?? 0), 0);
 
       // Reverse inventory
       for (const item of itemsToReturn) {
         if (item.itemId) {
-          await tx.inventoryMovement.create({
-            data: {
-              offlineId: uuidv4(),
-              businessId,
-              itemId: item.itemId,
-              storeId: sale.storeId!,
-              type: InventoryMovementType.RETURN,
-              quantity: item.quantity,
-              saleId: sale.id,
-              source: 'POS',
-            },
+          await restoreStock(tx, {
+            businessId,
+            storeId: sale.storeId!,
+            itemId: item.itemId,
+            quantity: item.quantity,
+            saleId: sale.id,
+            type: InventoryMovementType.RETURN,
           });
         }
       }
@@ -1107,17 +1294,14 @@ export class SalesService {
         if (item.itemId) {
           const dbItem = await tx.item.findUnique({ where: { id: item.itemId } });
           if (dbItem?.trackStock && dbItem.type !== 'SERVICE') {
-            await tx.inventoryMovement.create({
-              data: {
-                offlineId: uuidv4(),
-                businessId: proforma.businessId,
-                itemId: item.itemId,
-                storeId,
-                type: InventoryMovementType.SALE,
-                quantity: -item.quantity,
-                saleId: newSale.id,
-                source: 'POS',
-              },
+            await drawStock(tx, {
+              businessId: proforma.businessId,
+              storeId,
+              itemId: item.itemId,
+              itemName: dbItem.name,
+              quantity: item.quantity,
+              saleId: newSale.id,
+              trackBatches: !!dbItem.trackBatches,
             });
           }
         }
@@ -1208,43 +1392,66 @@ export class SalesService {
     });
   }
 
-  async markCreditPaid(saleId: string, businessId: string, amountCents?: number) {
-    const sale = await this.prisma.sale.findFirst({
-      where: { id: saleId, businessId },
-    });
+  /**
+   * A customer paying down a credit sale. The method they paid by decides where the money lands (cash goes in the
+   * drawer as a pay-in), the receivable is cleared in the books, and the sale becomes PAID only once what has been
+   * paid covers it: a part-payment used to close the whole sale.
+   */
+  async markCreditPaid(
+    saleId: string,
+    businessId: string,
+    amountCents?: number,
+    method = 'CASH',
+    actor?: { id?: string },
+  ) {
+    const sale = await this.prisma.sale.findFirst({ where: { id: saleId, businessId }, include: { payments: true } });
     if (!sale) throw new NotFoundException('Sale not found');
     if (sale.status !== SaleStatus.CREDIT) throw new BadRequestException('Sale is not a credit sale');
 
-    const paidAmount = amountCents ?? sale.totalCents;
+    const how = oneOf(String(method ?? 'CASH').toUpperCase(), 'Payment method', CREDIT_SETTLEMENT_METHODS);
+    const paidSoFar = sale.payments.reduce((sum, p) => sum + p.amountCents, 0);
+    const owing = Math.max(0, sale.totalCents - paidSoFar);
+    const paidAmount = intInRange(amountCents ?? owing, 'Amount paid', 1, Math.max(1, owing));
+    const settled = paidAmount >= owing;
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.sale.update({
-        where: { id: saleId },
-        data: { status: SaleStatus.PAID },
+    const payment = await this.prisma.$transaction(async (tx) => {
+      // Conditional on the sale still being a credit sale, so two clicks cannot settle it twice.
+      const claimed = await tx.sale.updateMany({
+        where: { id: saleId, businessId, status: SaleStatus.CREDIT },
+        // A part payment writes the sale back unchanged: the conditional update is what claims it (an empty update writes nothing).
+        data: settled ? { status: SaleStatus.PAID } : { notes: sale.notes ?? null },
       });
-      // Reverse the balance deduction
+      if (claimed.count !== 1) throw new BadRequestException('This sale was just settled by someone else. Reload it.');
       if (sale.customerId) {
-        await tx.customer.update({
-          where: { id: sale.customerId },
-          data: { balanceCents: { increment: paidAmount } },
+        await tx.customer.update({ where: { id: sale.customerId }, data: { balanceCents: { increment: paidAmount } } });
+      }
+      const created = await tx.payment.create({
+        data: { offlineId: uuidv4(), saleId, method: how, amountCents: paidAmount, reference: 'Credit settlement' },
+      });
+      // Cash received outside a sale reaches the drawer as a pay-in.
+      if (sale.storeId) {
+        await tx.cashMovement.create({
+          data: { businessId, storeId: sale.storeId, cashierId: actor?.id, kind: 'PAY_IN', method: how, amountCents: paidAmount, reason: 'CREDIT_SETTLEMENT', reference: sale.receiptNumber },
         });
       }
-      await tx.payment.create({
-        data: {
-          offlineId: require('uuid').v4(),
-          saleId,
-          method: 'CASH',
-          amountCents: paidAmount,
-          reference: 'Credit settlement',
-        },
-      });
+      return created;
     });
+
+    void postSettlementJournal(this.ledger, {
+      businessId,
+      storeId: sale.storeId ?? undefined,
+      description: `Credit sale ${sale.receiptNumber} paid`,
+      reference: `SETTLE-${sale.receiptNumber}-${payment.id.slice(0, 8)}`,
+      sourceType: 'CREDIT_SETTLEMENT',
+      method: how,
+      amountCents: paidAmount,
+    }).catch(() => undefined);
 
     // Award loyalty points now that debt is settled
     if (sale.customerId) {
       await this.loyalty.earnPoints(sale.customerId, paidAmount, saleId).catch(() => {});
     }
 
-    return { success: true };
+    return { success: true, settled, paidCents: paidAmount, owingCents: Math.max(0, owing - paidAmount) };
   }
 }

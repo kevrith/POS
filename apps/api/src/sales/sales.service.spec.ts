@@ -624,3 +624,119 @@ describe('SalesService.resolveCashierId (offline sales uploaded by someone else)
     expect(await service.resolveCashierId('biz-1', { id: 'joy', role: 'MANAGER' }, 'joy')).toBe('joy');
   });
 });
+
+describe('SalesService.resolveVoidApprover', () => {
+  const verifyManagerPin = jest.fn();
+  const svc = () => makeService({ auth: { verifyManagerPin } as any });
+  beforeEach(() => verifyManagerPin.mockReset());
+
+  it('refuses a cashier who only names a manager id', async () => {
+    await expect(svc().resolveVoidApprover({ id: 'cash-1', role: 'CASHIER' }, 'biz-001', { managerId: 'owner-1' }))
+      .rejects.toThrow(/needs a manager/);
+    expect(verifyManagerPin).not.toHaveBeenCalled();
+  });
+
+  it('refuses a waiter with no PIN and no managerId', async () => {
+    await expect(svc().resolveVoidApprover({ id: 'w-1', role: 'WAITER' }, 'biz-001', {})).rejects.toThrow(/needs a manager/);
+  });
+
+  it('accepts a manager voiding under their own session', async () => {
+    await expect(svc().resolveVoidApprover({ id: 'mgr-1', role: 'MANAGER' }, 'biz-001', { managerId: 'mgr-1' })).resolves.toBe('mgr-1');
+    await expect(svc().resolveVoidApprover({ id: 'own-1', role: 'OWNER' }, 'biz-001', {})).resolves.toBe('own-1');
+  });
+
+  it('does not let a manager attribute the void to a different user', async () => {
+    await expect(svc().resolveVoidApprover({ id: 'mgr-1', role: 'MANAGER' }, 'biz-001', { managerId: 'owner-1' }))
+      .rejects.toThrow(/needs a manager/);
+  });
+
+  it('accepts a cashier who supplies a PIN that verifies, and attributes the void to that manager', async () => {
+    verifyManagerPin.mockResolvedValue({ userId: 'mgr-9', name: 'Pat' });
+    await expect(svc().resolveVoidApprover({ id: 'cash-1', role: 'CASHIER' }, 'biz-001', { managerPin: '1234', managerId: 'someone-else' }))
+      .resolves.toBe('mgr-9');
+    expect(verifyManagerPin).toHaveBeenCalledWith('1234', 'biz-001');
+  });
+
+  it('rejects a cashier whose PIN does not verify', async () => {
+    verifyManagerPin.mockRejectedValue(new BadRequestException('Invalid manager PIN'));
+    await expect(svc().resolveVoidApprover({ id: 'cash-1', role: 'CASHIER' }, 'biz-001', { managerPin: '0000' }))
+      .rejects.toThrow(/Invalid manager PIN/);
+  });
+});
+
+describe('SalesService.createSale tax classes', () => {
+  /** Runs a sale and returns what was written to `sale.create`. */
+  async function sell(opts: { items: any[]; cart: Array<{ itemId: string; quantity: number }>; taxType?: string; discountCents?: number; tender?: number }) {
+    const deps = makeDeps();
+    const store = makeStore({ business: { taxType: opts.taxType ?? 'VAT', totRate: 3, serviceChargeRate: 0, negativePolicyDefault: 'ALLOW' } });
+    deps.prisma.store.findUnique.mockResolvedValue(store);
+    deps.prisma.item.findMany.mockResolvedValue(opts.items);
+    deps.prisma.$transaction.mockImplementation(async (fn: any) => {
+      deps.prisma.store.update.mockResolvedValue({ ...store, receiptSequence: 1, storeCode: 'NRB01' });
+      deps.prisma.sale.create.mockImplementation(async ({ data }: any) => ({ id: 'sale-1', receiptNumber: 'R-1', ...data, items: [], payments: [] }));
+      deps.prisma.inventoryMovement.create.mockResolvedValue({});
+      return fn(deps.prisma);
+    });
+    const svc = makeService(deps as any);
+    await (svc as any).createSale('biz-001', {
+      ...BASE_DTO,
+      items: opts.cart,
+      discountCents: opts.discountCents ?? 0,
+      serviceChargeCents: 0,
+      payments: [{ method: 'CASH', amountCents: opts.tender ?? 10_000_000 }],
+    });
+    return deps.prisma.sale.create.mock.calls[0][0].data;
+  }
+
+  const milk = (o: Record<string, any> = {}) => ({ ...makeItem(), id: 'milk', name: 'Milk', retailPriceCents: 11_600, trackStock: false, taxClass: 'B', ...o });
+  const flour = (o: Record<string, any> = {}) => ({ ...makeItem(), id: 'flour', name: 'Maize flour', retailPriceCents: 20_000, trackStock: false, taxClass: 'A', ...o });
+
+  it('takes VAT only from standard-rated lines', async () => {
+    const data = await sell({ items: [milk(), flour()], cart: [{ itemId: 'milk', quantity: 1 }, { itemId: 'flour', quantity: 1 }] });
+    expect(data.vatCents).toBe(1_600);
+    expect(data.subtotalCents).toBe(31_600);
+    expect(data.taxClassified).toBe(true);
+    expect(data.items.create.map((l: any) => [l.itemId, l.taxClass, l.vatCents])).toEqual([['milk', 'B', 1_600], ['flour', 'A', 0]]);
+  });
+
+  it('a basket of exempt goods carries no VAT, where 16/116 of it was charged before', async () => {
+    const data = await sell({ items: [flour()], cart: [{ itemId: 'flour', quantity: 3 }] });
+    expect(data.vatCents).toBe(0);
+    expect(data.totalCents).toBe(60_000);
+  });
+
+  it('shares the sale discount across the lines, and VAT follows the discounted amount', async () => {
+    const data = await sell({ items: [milk(), flour({ retailPriceCents: 11_600 })], cart: [{ itemId: 'milk', quantity: 1 }, { itemId: 'flour', quantity: 1 }], discountCents: 2_320 });
+    expect(data.items.create.map((l: any) => l.discountCents)).toEqual([1_160, 1_160]);
+    expect(data.vatCents).toBe(Math.round((10_440 * 16) / 116));
+    expect(data.totalCents).toBe(23_200 - 2_320);
+  });
+
+  it('a business that is not VAT-registered records no VAT, and every line is class D', async () => {
+    const data = await sell({ items: [milk(), flour()], cart: [{ itemId: 'milk', quantity: 1 }, { itemId: 'flour', quantity: 1 }], taxType: 'NONE' });
+    expect(data.vatCents).toBe(0);
+    expect(data.items.create.every((l: any) => l.taxClass === 'D')).toBe(true);
+  });
+
+  it('an item with no class is standard-rated, whatever its older VAT-applicable flag says', async () => {
+    const legacy = { ...milk(), taxClass: undefined, vatApplicable: false };
+    const data = await sell({ items: [legacy], cart: [{ itemId: 'milk', quantity: 1 }] });
+    expect(data.vatCents).toBe(1_600);
+    expect(data.items.create[0].taxClass).toBe('B');
+  });
+
+  it('zero-rated and non-VAT lines carry none either', async () => {
+    const data = await sell({
+      items: [milk({ id: 'z', taxClass: 'C' }), milk({ id: 'n', taxClass: 'D' })],
+      cart: [{ itemId: 'z', quantity: 1 }, { itemId: 'n', quantity: 1 }],
+    });
+    expect(data.vatCents).toBe(0);
+    expect(data.items.create.map((l: any) => l.taxClass)).toEqual(['C', 'D']);
+  });
+
+  it('TOT is still worked out on the whole sale for a TOT business, with no VAT', async () => {
+    const data = await sell({ items: [milk()], cart: [{ itemId: 'milk', quantity: 1 }], taxType: 'TOT' });
+    expect(data.vatCents).toBe(0);
+    expect(data.totCents).toBe(Math.round((11_600 * 3) / 103));
+  });
+});

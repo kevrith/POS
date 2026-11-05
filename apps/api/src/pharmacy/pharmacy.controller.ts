@@ -1,6 +1,8 @@
 import { Feature } from '@pos/shared';
 import { RequiresFeature } from '../auth/subscription.guard';
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, Req, UseGuards } from '@nestjs/common';
+import type { Request } from 'express';
+import type { AuthUser } from '../auth/auth.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PharmacyService } from './pharmacy.service';
 
@@ -59,8 +61,8 @@ export class PharmacyController {
   }
 
   @Patch('claims/:id')
-  updateClaim(@Param('id') id: string, @Body() dto: any) {
-    return this.svc.updateClaim(id, dto);
+  updateClaim(@Param('id') id: string, @Body() dto: any, @Req() req: Request & { user: AuthUser }) {
+    return this.svc.updateClaim(id, req.user.businessId, dto);
   }
 
   // Drug Catalogue

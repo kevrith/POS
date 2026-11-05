@@ -295,17 +295,30 @@ export class HospitalityController {
     guestName: string;
     guestPhone?: string;
     guestIdNumber?: string;
+    guestKraPin?: string;
     checkInDate: string;
     checkOutDate?: string;
     nightCount: number;
     depositCents?: number;
+    depositMethod?: string;
     notes?: string;
   }) {
     return this.hospitalityService.createRoomBooking({
       ...body,
       checkInDate: new Date(body.checkInDate),
       checkOutDate: body.checkOutDate ? new Date(body.checkOutDate) : undefined,
-    }, businessOf(req));
+    }, businessOf(req), this.actor(req));
+  }
+
+  /** Take a further deposit against a booking (a part-payment up front, or a top-up). */
+  @Post('room-bookings/:id/deposit')
+  addDeposit(@Req() req: AuthedRequest, @Param('id') id: string, @Body() body: { amountCents: number; method?: string }) {
+    return this.hospitalityService.addDeposit(id, body, businessOf(req), this.actor(req));
+  }
+
+  private actor(req: AuthedRequest) {
+    const u = userOf(req);
+    return { id: u.id, name: u.name, role: String(u.role) };
   }
 
   @Post('room-bookings/:id/check-in')
@@ -314,13 +327,24 @@ export class HospitalityController {
   }
 
   @Post('room-bookings/:id/check-out')
-  checkOutGuest(@Req() req: AuthedRequest, @Param('id') id: string, @Body('payments') payments: Array<{ method: string; amountCents: number }>) {
-    return this.hospitalityService.checkOutGuest(id, payments ?? [], businessOf(req));
+  checkOutGuest(
+    @Req() req: AuthedRequest,
+    @Param('id') id: string,
+    @Body('payments') payments: Array<{ method: string; amountCents: number }>,
+    @Body('refundMethod') refundMethod?: string,
+  ) {
+    return this.hospitalityService.checkOutGuest(id, payments ?? [], businessOf(req), this.actor(req), { refundMethod });
+  }
+
+  /** What it costs to check this guest out now. The desk collects this before calling check-out. */
+  @Get('room-bookings/:id/checkout-quote')
+  getCheckoutQuote(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.hospitalityService.getCheckoutQuote(id, businessOf(req));
   }
 
   @Post('room-bookings/:id/cancel')
-  cancelRoomBooking(@Req() req: AuthedRequest, @Param('id') id: string) {
-    return this.hospitalityService.cancelRoomBooking(id, businessOf(req));
+  cancelRoomBooking(@Req() req: AuthedRequest, @Param('id') id: string, @Body('forfeit') forfeit?: boolean, @Body('refundMethod') refundMethod?: string) {
+    return this.hospitalityService.cancelRoomBooking(id, businessOf(req), this.actor(req), { forfeit: forfeit === true, refundMethod });
   }
 
   // ── Guest Folio ───────────────────────────────────────────────────────────
@@ -336,7 +360,7 @@ export class HospitalityController {
     @Param('id') id: string,
     @Body() body: { type: string; description: string; amountCents: number; quantity?: number },
   ) {
-    return this.hospitalityService.addFolioCharge(id, body, businessOf(req), userOf(req).name);
+    return this.hospitalityService.addFolioCharge(id, body, businessOf(req), userOf(req).name, String(userOf(req).role));
   }
 
   @Delete('folio-charges/:id')

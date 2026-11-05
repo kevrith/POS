@@ -410,7 +410,7 @@ p,li,td,th,h1,h2,h3,h4,code{overflow-wrap:break-word;word-wrap:break-word}
       <span class="badge">User Guide</span>
       <h1>KASTRA POS</h1>
       <div class="sub">For owners, managers and shop-floor staff</div>
-      <div class="meta">Last updated 28 October 2026</div>
+      <div class="meta">Last updated 05 November 2026</div>
     </div>
 
 <h1 id="kastra-pos-user-guide">KASTRA POS — User Guide</h1>
@@ -535,7 +535,12 @@ refreshing. This is the secure option for anything involving money,
 staff or settings.</p>
 <p><strong>PIN</strong> — for the shop floor. Four to six digits, and
 the session lasts <strong>12 hours</strong>, so a cashier is not
-retyping a password all shift. Tap your name, enter your PIN.</p>
+retyping a password all shift. Tap your name, enter your PIN. Every
+person needs their <strong>own</strong> PIN: KASTRA refuses to save a
+PIN that a colleague already uses, because a PIN is how it knows who
+rang up a sale or approved a void. If two staff already share one from
+before, they can still sign in by tapping their name first; a manager
+override will ask the owner to give each manager a different PIN.</p>
 <p>Owners may also enable:</p>
 <ul>
 <li><strong>Google sign-in</strong></li>
@@ -692,7 +697,9 @@ their credit limit</td>
 </tr>
 <tr class="odd">
 <td><strong>Room Charge</strong></td>
-<td>Hotel mode — bills it to a guest’s room folio</td>
+<td>Hotel mode — type the room number; the sale is added to the folio of
+the guest checked in to that room and paid at check-out. A room with no
+checked-in guest is refused</td>
 </tr>
 <tr class="even">
 <td><strong>Split Pay</strong></td>
@@ -819,6 +826,23 @@ delete</li>
 </ul>
 <p>Use a void when the sale should never have happened — wrong item rung
 up, duplicate charge, customer changed their mind at the counter.</p>
+<ul>
+<li>The <strong>books are corrected too</strong>: the sale’s revenue,
+tax and payment are taken back</li>
+<li>A <strong>credit sale</strong> can be voided (what the customer owed
+is cancelled), unless part of it has been paid</li>
+<li>A <strong>prescription</strong> that was dispensed is returned by
+voiding its sale: stock comes back, the prescription is waiting again
+(or goes back to its previous fill), the insurer’s claim is cancelled
+and the controlled-drug register gets a return line. To take back only
+some of the medicines, void just those lines (or part of a quantity):
+the patient keeps the rest and the insurer’s claim comes down by its
+share. You can do this once per fill. Not possible once the insurer has
+paid that claim</li>
+<li>A <strong>pump sale</strong> is voided from the fuel screen’s
+<strong>Sales</strong> list (managers): the litres go back into the tank
+and a fleet account is credited</li>
+</ul>
 <h3 id="later-refund-return">Later — refund / return</h3>
 <p>The customer comes back tomorrow with the goods. Use
 <strong>Return</strong> from the sale in the sales list. Stock comes
@@ -856,13 +880,81 @@ and <strong>split</strong> for separate bills.</p>
 long before anyone pays. KASTRA keeps <em>orders</em> (what the kitchen
 is making) separate from <em>sales</em> (money that changed hands). The
 order becomes a sale when the bill is settled.</p>
-<p><strong>Kitchen tickets (KOT).</strong> When you send an order, each
-line goes to the right printer automatically — food to the kitchen,
-drinks to the bar. You set that routing once, per category.</p>
+<p><strong>Taking payment on a phone.</strong> On the table’s order
+screen, tap <strong>Bill</strong> when the guest asks for it, then
+<strong>Take payment</strong> (it appears once the bill is requested,
+and you can also choose it straight from the “Bill requested” message).
+The checkout shows exactly what is on the table, with no cart involved,
+and the table is freed when payment goes through. If someone adds or
+voids a line on another screen while you are at the checkout, the
+payment is refused with a message and you reopen the order to see the
+new total, so nobody is charged an amount they were not shown. A table
+cannot be paid while offline, because the order has to be closed on the
+server; the phone tells you the table is still open instead of queuing
+the payment. As on the web till, no service charge is added to a table
+bill, because dine-in prices already include it.</p>
+<p><strong>The bill is the order.</strong> When you take payment for a
+table, the sale is built from what is on the order, at the prices it was
+taken at, with any priced extras included. It does not depend on what
+the till screen sends. The payments must cover the total, and the order
+is closed in the same step, so two tills cannot both take payment for
+one table. A sale on a normal (paid-up) sale needs payments that cover
+the total; credit and layaway sales are the exceptions.</p>
+<p><strong>Selling out of stock.</strong> An item marked sold out can
+still be ordered and sold, so a forgotten stock receipt never stops
+service. Stock simply goes negative (sell 5 with none in hand and it
+shows -5), and when you later receive stock it is added on top, so the 5
+you already sold come off automatically. To make an item <em>refuse</em>
+to sell at zero, set its stock policy to Block.</p>
+<p><strong>Kitchen tickets (KOT).</strong> When you send an order, it is
+split into one ticket per station — <strong>Kitchen</strong>,
+<strong>Bar</strong> or <strong>Dessert</strong> — so the bartender sees
+only the drinks and the cook only the food. Each ticket has a number
+that restarts at #1 every day. Set where an item is made on the item
+itself (<strong>Inventory, Edit item, Made at</strong>). Leave it on
+<em>Automatic</em> and KASTRA guesses from the name and category, with
+the kitchen as the fallback. Each station’s tickets print on the printer
+set up for it in Settings, Printers.</p>
+<p>Send an order twice by mistake and nothing is cooked twice: lines
+already sent are refused, and the waiter’s screen says so.</p>
 <p><strong>Kitchen display (KDS).</strong> Instead of paper, the kitchen
-can run a screen showing live orders. Kitchen staff tap to mark items
-<em>in progress</em> and <em>ready</em>. Waiters see the status without
-walking to the pass.</p>
+can run a screen showing live tickets, on a wall screen, a tablet or a
+phone. Tickets arrive the moment they are sent (with an optional chime),
+and turn amber then red as they wait. Pick <strong>Kitchen</strong>,
+<strong>Bar</strong> or <strong>Dessert</strong> along the top to
+dedicate a screen to one station; the choice is remembered on that
+device. Each ticket shows the table or room, the waiter, modifiers,
+special instructions in a highlighted box, allergens, and a <strong>+
+Add-on</strong> tag when it adds to an order already being made. Kitchen
+staff tap <strong>Start</strong>, then <strong>Ready</strong>; a drink
+goes straight to <strong>Ready</strong>. A ticket marked ready by
+mistake can be <strong>recalled</strong>. Waiters (and managers) mark it
+<strong>Served</strong> from the order panel or the display.</p>
+<p>On a shared kitchen screen, switch on <strong>Shared</strong>. To
+start a ticket the cook taps <strong>their name</strong>, then types
+their PIN. The ticket is then recorded against that cook, not the
+screen’s login.</p>
+<p><strong>Voids and cancellations reach the kitchen.</strong>
+Cancelling an order cancels its open tickets. Removing a line the
+kitchen already has needs a <strong>manager</strong> and a reason; the
+line comes off its ticket and every kitchen screen shows a red warning
+(“Stop making it”) with a chime, instead of the cooks finding out when
+the guest asks.</p>
+<p><strong>Kitchen on a phone.</strong> The mobile app has the same
+kitchen screen: the same live tickets, station tabs, and Start / Ready /
+Recall buttons. A kitchen account opens straight onto it and signs out
+from its header. Waiters mark tickets served from the table’s order
+screen.</p>
+<p><strong>A restaurant or hotel inside another business.</strong> Your
+POS mode is your main till. A fuel station, shop or supermarket that
+also runs a kitchen can switch on <strong>Restaurant &amp;
+kitchen</strong> under Settings, <em>Also run</em>, which adds Tables,
+bar tabs, happy hours, the waitlist and the Kitchen Display without
+changing the main till. <strong>Hotel &amp; rooms</strong> does the same
+for rooms, bookings, guest folios and housekeeping. Both are off by
+default, and these features are refused by the server (not just hidden)
+for a business that has not enabled them. A Hospitality till already
+includes both; Fast Food and Bar include the restaurant.</p>
 <p><strong>Modifiers.</strong> “No onions”, “extra shot”, “well done” —
 and they can carry a price.</p>
 <p><strong>Bar tabs.</strong> Open a tab against a customer or a name,
@@ -875,10 +967,26 @@ of time, and manage walk-ins waiting for a table.</p>
 <ul>
 <li><strong>Rooms</strong> — availability, rates, status</li>
 <li><strong>Bookings</strong> — check guests in and out</li>
+<li><strong>Deposits</strong> — take a deposit when booking, or later
+with <strong>Take a Deposit</strong>, in cash, M-Pesa, card or bank. It
+is used against the bill at check-out; if it is more than the bill, the
+rest is paid back the way it came in. Cancel a reservation and the
+deposit is paid back, or a manager can keep it</li>
 <li><strong>Guest folio</strong> — everything the guest charges during
 their stay, on one bill</li>
+<li><strong>Check-out invoice</strong> — when your business records
+hotel takings as sales (ask the owner to check), check-out produces a
+proper tax invoice with a receipt number and goes to KRA. For a company
+guest, enter their KRA PIN when booking so it prints on the invoice</li>
+<li><strong>Hotel levies</strong> — if your hotel charges a tourism or
+catering levy, the owner or manager adds it once in <strong>Settings
+&gt; Hotel levies</strong> and it is added to every guest bill. Leave it
+empty if you charge none</li>
 <li><strong>Room charge</strong> — the restaurant and bar can bill
-straight to a room</li>
+straight to a room. The sale appears on the guest’s folio as a “charged
+sale” and is paid at check-out with the rest of the bill; it is not
+billed a second time on the stay’s invoice. If it was a mistake, void
+the sale while the guest is still in the room</li>
 <li><strong>Housekeeping</strong> — a live queue of rooms needing
 service</li>
 <li><strong>Channel manager</strong> — keeps availability in step with
@@ -888,6 +996,21 @@ booking sites</li>
 <ul>
 <li><strong>Prescriptions</strong> captured at the till against the
 patient</li>
+<li><strong>Dispensing and payment</strong> — when your business records
+pharmacy takings as sales (ask the owner to check), pressing
+<strong>Dispense</strong> (or <strong>Process Refill</strong>) shows the
+price of the medicines, takes the patient’s payment and prints a receipt
+that goes to KRA. Every medicine on the prescription must be linked to a
+catalogue item with a price, otherwise the screen names the one to fix.
+Set each medicine’s tax class in the catalogue (many are exempt) so the
+receipt shows the right VAT</li>
+<li><strong>Insurance</strong> — tick <em>Insurance covers part of
+this</em>, choose the insurer, enter the member number and the
+percentage the patient pays. The patient pays only their share; the rest
+is recorded as a claim to that insurer. When the insurer pays, open
+<strong>Claims</strong>, mark it <strong>Approved</strong> then
+<strong>Paid</strong> and enter the amount received: any shortfall is
+written off and the books are updated</li>
 <li><strong>Batch and expiry tracking</strong> enforced — see <a
 href="#16-expiry-dates-and-batches">section 16</a></li>
 <li>Controlled items flagged and recorded</li>
@@ -896,11 +1019,28 @@ href="#16-expiry-dates-and-batches">section 16</a></li>
 cyber café and other trades</h2>
 <ul>
 <li><strong>Fuel station</strong> — authorise a pump, sell the fuel it
-dispensed, close the pump</li>
+dispensed, close the pump. A manager can void a sale from the Sales
+list</li>
 <li><strong>Cyber café</strong> — start and stop timed sessions per
-station, bill the time. Stations are counter-managed on the web app</li>
+station, bill the time. Stations are counter-managed on the web app.
+When your business records cyber takings as sales (ask the owner to
+check), ending a session gives a proper receipt that goes to KRA, with
+the time (or package), printing and other services on separate lines.
+<strong>Credit is only for registered customers</strong>: pick the
+customer when you end the session. For a company customer enter their
+KRA PIN. To undo an ended session, void its sale from the sales
+list</li>
 <li><strong>Salon / clinic</strong> — an appointment diary with bookings
-against staff</li>
+against staff. Choose the <strong>service</strong> when booking so it is
+priced. When your business records these takings as sales (ask the owner
+to check): a <strong>deposit</strong> is recorded as money taken (say
+how it was paid; <strong>Deposit</strong> adds more);
+<strong>Complete</strong> takes the payment (the deposit is used first,
+anything left over is paid back) and gives a receipt that goes to KRA;
+<strong>Cancel</strong> or <strong>No-Show</strong> pays the deposit
+back, or a manager can keep it. Only a manager can change a service’s
+price. To undo a completed appointment, void its sale from the sales
+list</li>
 <li><strong>Supermarket</strong> — a denser, faster scan-first layout
 built for queues</li>
 </ul>

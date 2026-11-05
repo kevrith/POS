@@ -82,6 +82,25 @@ Login paths:
 - **Affiliate JWT** (`src/affiliate/affiliate-jwt.guard.ts`) — separate audience
 - **Super admin** — `POST /api/v1/super-admin/login`, own guard
 
+**Who approved a void.** `POST /sales/:id/void` does not believe a `managerId` in the
+body. The approver is either a `managerPin` that the server verifies against the
+business's owners and managers, or the caller's own session when the caller is an
+owner, admin or manager (`SalesService.resolveVoidApprover`). Anyone else gets 403.
+Refunds (`POST /sales/:id/return`) record `processedBy` from the login, not the body.
+
+**Vertical modules in the role policy.** Fuel, cyber cafe, pharmacy and prescriptions,
+hotel folio and room list, and appointments each have rules in `access-policy.ts`:
+the front line runs the till-side work (pump sales, sessions, dispensing, bookings)
+and management owns prices, credit limits, tank levels, rate cards, clinical reference
+data, cancellations and deletions. Waiters get no pharmacy or prescription access
+because those records hold patient details.
+
+**Channel-manager webhook** (`POST /integrations/channel/webhook/:channel?storeId=`)
+is public to JWT but not open: send an API key in `x-api-key` that was issued with the
+`bookings:write` scope (Settings, API keys). The booking is created in the key's own
+business; a `businessId` in the query is ignored and the store must belong to that
+business.
+
 `POST /auth/refresh` requires a token that is **still valid**. Clients refresh
 proactively; a 401 means log out, not retry.
 
@@ -182,6 +201,117 @@ Trust boundaries in `hospitality` (the global `TenantGuard` already rejects a fo
 
 **Verticals** — `pharmacy` `prescriptions` `fuel-pump` `cybercafe`
 
+Rules these modules enforce on the server (the web and mobile screens are not trusted to):
+
+- **Fuel pump.** The price of a sale is the grade's `pricePerLitreCents`; a price in the request is
+  ignored. Litres must be above zero and at most 5,000. The tank draw, the fleet charge, the sale and
+  the pump reset are one transaction, and the tank and fleet balance move through conditional updates,
+  so two sales at once cannot spend the same litres or the same credit. A fleet sale that would pass
+  the credit limit (`creditLimitCents` above 0; 0 means no limit) is refused whole, tank draw included.
+  A delivery larger than the room on the books is refused (record a dipping first); a shift can be
+  closed once; only one shift is open per store. A fleet account's balance and a tank's level are never
+  editable directly. Cashier, recorded-by and business always come from the login.
+- **Cyber cafe.** A session is claimed with a conditional station update (no double starts). The hourly
+  rate is the station's; a different rate for one session needs an owner, admin or manager. A package
+  covers its own duration at its price, and every billable minute beyond it (an extension, or simply
+  staying on) is billed at the package's hourly equivalent. Print and extras must be whole, non-negative
+  amounts. Only a running session can be voided; an ended one is a closed sale.
+  **Credit needs a registered customer** (the session's, or `customerId` sent at the end), pipeline or not.
+  **On the sales pipeline** (`Business.verticalSalesFrom` set) `POST sessions/:id/end` also makes ONE `Sale` in the same
+  transaction (`CybercafeService.endSession`, `source: 'CYBER'`, cashier = the caller so the drawer and Z-report count it):
+  a package line (or computer time), the overrun beyond a package, printing and scanning, and other services are separate
+  lines, each under an inactive `Cyber cafe` catalogue item made on first use (`sales/vertical-items.ts`
+  `ensureServiceItem`, class B until classified). Credit is an on-account invoice within the customer's limit (a refusal
+  leaves the session running). `buyerKraPin` is accepted. The response carries `receiptNumber`, `invoice` and `etims` (5 s
+  wait for KRA). Voiding that sale marks the session `VOIDED`. A free session makes no invoice.
+- **Prescriptions.** Numbers are `RX-<business tag>-<YYYYMMDD>-<n>`, continuing from the highest number
+  issued that Nairobi day for that business, with a retry on a collision. The business tag matters:
+  `prescriptionNumber` is unique across the whole table.
+
+- **Pharmacy and prescriptions.** A prescription is `PENDING`, then `DISPENSED` (and refilled while it
+  stays `DISPENSED`), or `CANCELLED` / `REFERRED_EXTERNAL`; each fill is claimed with a conditional update
+  on the status and fill count, so a double click or two pharmacists cannot fill it twice. `refillsUsed`
+  counts fills including the first, so `refillsAllowed = 2` allows three fills. A fill is one
+  transaction: claim, stock out (first-expiry-first-out; the item's or the business's BLOCK policy
+  refuses short stock) and, for an item whose `scheduleClass` is II to V, a controlled-substance
+  register entry. If any part fails nothing is dispensed. Who dispensed it is the login. Counter staff
+  cannot fill a refill early; a manager can. Cancelling stops the remaining refills but undoes nothing.
+  Interaction checks ignore strengths, pack words and case, and treat a catalogue brand as its generic.
+  **On the sales pipeline** (`Business.verticalSalesFrom` set) each fill is also ONE real `Sale`, created first inside the
+  same transaction (`PrescriptionsService.fill`): every line is priced from its catalogue item (retail price, tax class),
+  so a medicine with no `itemId` or no price refuses the fill with its name (`GET prescriptions/:id/quote` lists them
+  first). `PATCH :id/dispense|refill` then takes `{ payments, insurance?: { providerId, memberNumber?, patientPct 0-99 },
+  buyerKraPin? }`: the patient's payments cover their share, the insurer's share is an `INSURANCE` payment (Dr 1200
+  Accounts Receivable, never the drawer) and an `InsuranceClaim` (`saleId` set, `billedCents` = the insurer's share) is
+  raised in the same transaction. Stock leaves under the sale's id and the controlled-substance register notes the
+  receipt number. The response carries `receiptNumber`, `invoice`, `etims` (5 s wait for KRA) and the shares. Closing a
+  claim raised this way (`PATCH pharmacy/claims/:id`, conditional so it posts once) clears the receivable: PAID is Dr 1030
+  bank, with any shortfall written off to 6900, and REJECTED writes the whole claim off; a hand-raised claim posts
+  nothing. The claim endpoints only move status, number, approved/paid amounts and rejection reason, and are scoped to the
+  caller's business. A fill is not undone by voiding its sale: the stock and register entry stay (no pharmacy return flow
+  yet). Off the pipeline none of this runs and dispensing behaves as before.
+- **Hotel.** The dates decide the nights (a `nightCount` that disagrees is ignored). A room cannot be
+  booked for overlapping nights: bookings, check-in, cancel and check-out all take a row lock on the
+  room first, and a guest still checked in past their date keeps holding it. A booking due today shows
+  the room as RESERVED; a later one leaves it bookable. A guest can be checked in at most a day early,
+  into a room no one else is in. Check-out requires the balance (room nights, charges and late nights,
+  less the deposit) to be paid in full, records the payments on the folio as zero-total `PAYMENT` lines,
+  and bills a night for every Nairobi calendar day past the booked departure. `GET
+  room-bookings/:id/checkout-quote` gives the desk the figure. A folio `DISCOUNT` is manager-only and
+  cannot exceed the bill. Only `FOOD_BEVERAGE`, `MINIBAR`, `LAUNDRY`, `TRANSPORT`, `OTHER` and `DISCOUNT` can be hand-posted
+  to a folio; room nights, `LEVY` and `PAYMENT` lines are written by check-out alone.
+  **On the sales pipeline** (`Business.verticalSalesFrom` set) check-out makes ONE invoice (a real `Sale`) in the same
+  transaction: a line per room-night line and folio charge under its tax class (catalogue items in category `Hotel`, made
+  on first use, inactive, standard-rated except the levy, which is class D), the folio `DISCOUNT`s as the sale discount,
+  the guest as customer with `RoomBooking.guestKraPin` as buyer, and the deposit as a `DEPOSIT` payment (ledger 2300, Guest
+  Deposits) alongside what the guest tenders; change comes off the cash. The folio lines and the booking are linked to it
+  (`saleId`). The response carries `receiptNumber`, `invoice`, `etims` (waited for 5 seconds at most). A deposit larger than
+  the bill is applied up to the bill and the rest paid back out of the register by the method it came in by
+  (`refundMethod`). Optional levies are a per-business list in `Business.hotelLevies`
+  (`PATCH /business/:id/settings`, `[{name, ratePct, base: ROOM|ALL}]`, up to 5, rate above 0 up to 30): each is worked out
+  on the VAT-exclusive value of the room nights (or everything), after the discount, and charged on top as its own non-VAT
+  line (`common/hotel-levies.ts`). The default is none. The deposit register is `CashMovement` (`PAY_IN`/`PAY_OUT`/`FORFEIT`,
+  reasons `HOTEL_DEPOSIT*`), written by `createRoomBooking`, `POST room-bookings/:id/deposit`, check-out and cancel, with a
+  `HOTEL_DEPOSIT` ledger entry each (`DEP-<movement id>`); the cash ones feed the cash drawer's expected cash. Cancelling a
+  reservation pays the deposit back, or (`{forfeit: true}`, manager only) keeps it as income (4300). Off the pipeline none of
+  this runs and check-out behaves as before (levies excepted: a configured levy is billed either way).
+  **Room charges.** A till sale paid with `ROOM_CHARGE` (the payment names `roomNumber`) is written to the folio of the
+  guest checked in to that room, inside the sale's own transaction (`SalesService.chargeToRoom`): no checked-in guest,
+  more than one room, or more than the sale comes to, and the sale is refused. It is a `POS_SALE` folio line tied to the
+  sale by `saleId`. The sale itself posts Dr 1200 Accounts Receivable (not bank receipts). Voiding it takes the line off the
+  folio while the guest is in (a line void reduces it); after check-out the void is refused. At check-out the line is
+  collected but never invoiced twice: the stay's invoice carries the nights, charges and levies only, and the guest's money
+  is spent on the charged sales first (`splitTenders`). That cash is a `HOTEL_ROOM_CHARGE_PAID` register pay-in (so the
+  drawer counts it) with a `ROOMSET-<booking>-<n>` ledger entry (Dr cash/M-Pesa/card, or Dr 2300 when a deposit pays it,
+  Cr 1200); this ledger entry is posted off the pipeline too, since the sale's receivable was. A levy and a stay discount
+  never apply to charged sales. Opening a room-service order with `roomBookingId` no longer posts a KES 0 folio line; it
+  only fills in the order's room number.
+- **Appointments.** Status moves follow the screen's buttons (`BOOKED` to `CONFIRMED` to `IN_PROGRESS` to
+  `COMPLETED` or `NO_SHOW`; `CANCELLED` from the first two); one staff member cannot hold two
+  overlapping appointments (an advisory lock per staff member serialises booking); finished and
+  running appointments are not deleted; a day filter is the Nairobi day. A no-show is possible before the
+  appointment starts (from `BOOKED` or `CONFIRMED`) as well as from `IN_PROGRESS`.
+  **On the sales pipeline** (`Business.verticalSalesFrom` set):
+  - *Deposits* are money taken: booking with one needs `depositMethod`, `POST appointments/:id/deposit` adds more, and each
+    is a `CashMovement` (`APPOINTMENT_DEPOSIT`, `bookingId` = the appointment) with a `DEP-<id>` journal into 2300 (cash
+    ones reach the drawer). The amount cannot then be edited by hand. Deposits already held at switch-on come in through
+    the opening balances (`APPOINTMENT_DEPOSIT_OPENING`).
+  - *Completing* (`PATCH appointments/:id` with `status: COMPLETED`, `payments`, optional `amountCents` and `buyerKraPin`) is ONE
+    `Sale` in the same transaction (`AppointmentsService.complete`, `source: 'APPOINTMENT'`, `Appointment.saleId`): the line
+    is the appointment's catalogue service at its price (only a manager changes a listed price; a service with no list
+    price takes the price entered; none at all falls back to an inactive `Appointments` item). The deposit held pays first
+    (a `DEPOSIT` payment, Dr 2300), the rest is paid now, and a deposit above the bill is paid back (`refundMethod` when the way it came in
+    is not on record). The response carries `receiptNumber`, `invoice`, `etims` (5 s wait), `changeDueCents`, `refundDueCents`.
+  - *Cancelling or a no-show with a deposit held* pays it back the way it came in, or (`keepDeposit`, manager only) keeps it
+    as income (4300, a `FORFEIT` row); an unrecorded way of paying needs `refundMethod`. `sales/deposit-register.ts` is the
+    shared rule with the hotel. Voiding the invoice marks the appointment cancelled; a deposit it had used is not paid back
+    automatically (refund it by hand).
+- **Days are Nairobi days.** `common/dates.ts` draws day boundaries at +03:00. A UTC server using
+  `setHours(0,0,0,0)` or `new Date('2026-11-05T23:59:59')` is three hours off. Use these helpers for
+  anything new that filters by day.
+
+Request validation helpers (`intInRange`, `numberInRange`, `oneOf`, `text`) are in `common/validate.ts`.
+
 **Money** — `expense` `budget` `ledger` `cheque` `layaway` `gift-cards` `loyalty`
 `promotions` `payment-links` `subscription` `cash-drawer`
 
@@ -213,6 +343,91 @@ Non-negotiable data rules:
 
 - **Money in integer cents.** Never a float, never a Decimal-as-string round trip.
 - **Stock is a ledger.** Write an `InventoryMovement`; never mutate a stock column.
+- **Quantities are doubles, kept to 3 decimals.** Loose goods are sold, stocked and counted in
+  fractions (0.5 kg), so the quantity columns on the sell / stock / receive / write-off path
+  (`SaleItem`, `InventoryMovement`, `Batch`, `DamagedGoodsRecord`, `TransferItem`, `GRNItem`,
+  `POItem`, `SupplierReturnItem`) are `Float`. They were `Int`, and Postgres rounded what it was
+  given: a 0.5 kg sale stored 0, so stock never fell and voiding the line refunded nothing.
+  Round with `roundQty` (`common/quantity.ts`) whenever you sum movements, so a shelf that is
+  empty reads as empty (`0.1 + 0.2 - 0.3` is not 0 in a double). A sale quantity finer than a gram
+  is refused. Still `Int`: order lines, bundle components, delivery and field-sales lines.
+- **Tax is per line, from tax classes.** Every item has a `taxClass`: A exempt, B standard 16%, C
+  zero-rated, D not subject to VAT (eTIMS's letters). `computeTaxes` in `packages/shared` extracts VAT
+  (16/116, prices are VAT-inclusive) from the B lines only, after each line's share of the sale discount
+  (largest-remainder, so the shares add up to the cent), and a business that is not VAT-registered charges
+  none and sells every line as D. The web tills call the same function, so the receipt printed at the till
+  is the figure that is stored and sent to KRA. Each `SaleItem` snapshots `taxClass`, `vatCents` and
+  `discountCents`, so changing an item later never rewrites a past invoice; `Sale.taxClassified` marks sales
+  taxed this way. eTIMS invoices and credit notes build their lines and per-class totals from that snapshot
+  (`etims/etims-tax.ts`); a line with no class (made before classes existed) is described as standard-rated,
+  as it always was. Reports repair only unclassified sales (`recalcVat`), and the VAT return gains
+  `outputVat.salesByTaxClass`. Refunds and partial voids use what the customer paid for the line, after its
+  discount share. **The old `vatApplicable` flag is not read** (the create form defaulted it to unchecked, so
+  `false` rarely meant "exempt"); only an explicit `taxClass` classifies an item. Not yet classified-aware,
+  and still flat 16/116: proforma invoices and their conversion, and field-sales proformas. Service charge
+  and tip are outside the VAT base, as before.
+- **Vertical takings become real Sales.** Fuel (and, as they arrive, hotel, pharmacy, cyber and appointments) record
+  their takings through `DirectSaleService` (`sales/direct-sale.service.ts`): `createInTx` runs inside the vertical's OWN
+  transaction (receipt number from the atomic store sequence, per-line tax, payments with the change taken off the cash,
+  on-account sales within a customer's credit limit), so the invoice commits or rolls back with the tank draw and the
+  fleet charge; `afterCommit` then does the audit entry, the ledger journal (`sales/sale-ledger.ts`, shared with the
+  till), the broadcast and the eTIMS submission, none of which can fail the sale. The server owns the eTIMS submission
+  (the till's `/etims/submit` is idempotent only when not racing a second submit), and `afterCommit` returns the KRA answer
+  so a screen can print the QR; a slow KRA is waited for 5 seconds at most. It is gated per business by
+  `Business.verticalSalesFrom`: null (every business that existed before) means off, so a shop that already rings these
+  takings through the till is not counted twice; only an owner can switch it (`PATCH /business/:id/settings`
+  `verticalSalesEnabled`, which stamps the date; nothing earlier is back-filled); a business registered from now on starts
+  on. A grade is invoiced as a catalogue item made on first use (inactive, standard-rated until classified in Inventory)
+  and its price follows the grade. A fleet sale is an on-account invoice to the company with its KRA PIN as buyer
+  (`Sale.buyerKraPin`); a fleet company paying posts money-in and clears the receivable. Credit needs a registered customer.
+  **Trap:** inside an interactive transaction, `update`/`delete` by id on a row created earlier in the SAME transaction
+  throws "not found", because the tenant middleware reads the ownership check outside the transaction. Use `updateMany`.
+- **Taking a sale back, and settling one.**
+  - *Void* is `SalesService.voidInTx` (inside a caller's own transaction) plus `afterVoid` (audit, KRA credit note, books).
+    It works on PAID and CREDIT sales (a credit sale gives the customer's balance back; a part-paid one is refused), and
+    the books take the sale back: a `VOID-<receipt>` entry mirrors the sale's journal (`VOIDLINE-<void id>` for a line void,
+    scaled by the share refunded; `reverseJournalLines` keeps it balanced). Before this a void left revenue in the books.
+  - *Pump sale void* (`POST fuel-pump/sales/:id/void`, manager): the litres return to the tank they came from
+    (`FuelSale.tankId`), a fleet account is credited (`FleetTransaction` type VOID), and an invoiced sale is voided in the
+    same transaction.
+  - *Prescription fill return* is a void of the fill's sale (`PrescriptionFill` ties them): the prescription goes back to the
+    fill before it (a first fill returns to PENDING), the insurer's claim becomes VOIDED, and the controlled-drug register
+    gets a negative return line (nothing in the register is deleted). A fill is returned whole, and not after the insurer paid.
+  - *Credit settlement* (`PATCH sales/:id/mark-credit-paid`, body `{amountCents?, method}`): a part payment leaves the sale
+    CREDIT with the balance named; the rest closes it. The payment clears the receivable (`SETTLE-<receipt>-<id>`), cash
+    is a `CREDIT_SETTLEMENT` drawer pay-in (the drawer does not also count it as the sale's cash), and it posts once.
+  - *Opening balances* (`sales/opening-balances.ts`, run every time the owner switches the pipeline on, booking only the
+    DIFFERENCE from what the books already believe, against 3900 Opening Balance Equity): a booking's deposit not yet in
+    the register is added as an `OPENING` row (never cash; a top-up taken while off is picked up next time, Dr 3900 / Cr
+    2300); each fleet account keeps `ledgerOwedCents` (moved by fleet sales, payments and voids while on) and the gap from its
+    real balance is booked either way (Dr/Cr 1200); open hand-raised insurance claims are brought into receivables once
+    (`receivableBooked`). A hand-raised claim that never reached receivables, when paid, is income (Cr 4450), and a rejection
+    of one posts nothing.
+  - *A deposit taken before the register existed* has no record of how it was paid, so refunding it (check-out or cancel)
+    needs `refundMethod` in the request; cash is no longer assumed. The check-out quote returns `depositMethod` (null when unknown).
+  - *Part of a prescription fill can be returned* (void the sale with `voidedItemQuantities`/`voidedItemIds`): the prescription
+    stays dispensed, the insurer's claim falls by its share of what came back, the register gets a return for just those
+    drugs and the books take back that share. One partial return per fill: the sale is then AMENDED and cannot be voided again.
+  - *Insurer overpayment* is kept: Cr 4400 Claim Overpayments for the excess.
+  - *eTIMS payment type* (`etims/etims-payment.ts`) is one code per invoice: cash 01, credit 02 (credit sales, an insurer's share,
+    a room charge), cash and credit 03, bank 04, card 05, mobile money 06, other 07 (deposit, gift card, loyalty). **These are
+    KRA's published codes; the earlier table sent M-Pesa as 04 and bank as 03. Confirm in the KRA sandbox before production.**
+  - *eTIMS retry sweep* (`etims/etims-retry.service.ts`): every ten minutes, sales of production businesses not yet accepted
+    by KRA (older than 5 minutes, newer than 7 days, PAID or CREDIT) are submitted again, oldest first, stopping a pass after
+    five failures in a row.
+  - `GET sales/:id` for a sale that is not the caller's is a 404. **Ledger entry numbers** are now `JE-<business tag>-<n>`,
+    continuing from the highest used and retried on a clash: the bare per-business count collided across businesses
+    (the column is unique across all of them), so a second business's entries were refused and silently lost.
+- **Batches move with the ledger.** Stock-out and stock-back go through `batch/batch-allocation.ts`
+  (`drawStock`, `restoreStock`), never a bare `inventoryMovement.create`, for anything that sells or
+  returns stock. For an item with `trackBatches` it draws first-expiry-first-out from in-date batches
+  with a conditional update (two sales cannot take the same units), records the `batchId` on each
+  movement, and refuses a sale that could only be met from an expired batch. Voids and returns put
+  units back into the batches they came from. A batch that is written off or recalled does not take
+  units back; they return unbatched. Items without `trackBatches` still get one plain movement.
+  Stock received without batch records still sells (the part batches cannot cover is unbatched).
+  Because batch counts now fall on sale, the nightly expiry job writes off only units that are really
+  left; before, it wrote off units already sold and pushed stock negative.
 - **`offlineId` (UUID)** on every offline-creatable record. The service layer
   deduplicates on it, so a replayed mobile/desktop request is a no-op instead of a
   duplicate sale, order or payment.

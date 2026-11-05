@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+import { roundQty } from '../common/quantity';
 @Injectable()
 export class TransfersService {
   constructor(private prisma: PrismaService) {}
@@ -183,7 +184,7 @@ export class TransfersService {
     return movements.map(m => ({
       itemId: m.itemId,
       storeId: m.storeId,
-      quantity: m._sum.quantity || 0,
+      quantity: roundQty(m._sum.quantity || 0),
     }));
   }
 }

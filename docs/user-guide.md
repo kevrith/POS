@@ -203,7 +203,7 @@ Click **Charge**. The payment window offers:
 | **Bank Transfer** | Records bank, account name, branch and reference |
 | **Credit Sale** | Puts it on the customer's account. Needs a customer, and respects their credit limit |
 | **Gift Card** | Scan or type the card code; shows the remaining balance |
-| **Room Charge** | Hotel mode — bills it to a guest's room folio |
+| **Room Charge** | Hotel mode — type the room number; the sale is added to the folio of the guest checked in to that room and paid at check-out. A room with no checked-in guest is refused |
 | **Split Pay** | Any combination of the above |
 
 **Split payments** are the common real-world case: KES 1,000 in cash and the rest on
@@ -304,6 +304,15 @@ The receipt exists, so undoing it is a formal act.
 
 Use a void when the sale should never have happened — wrong item rung up, duplicate
 charge, customer changed their mind at the counter.
+
+- The **books are corrected too**: the sale's revenue, tax and payment are taken back
+- A **credit sale** can be voided (what the customer owed is cancelled), unless part of it has been paid
+- A **prescription** that was dispensed is returned by voiding its sale: stock comes back, the prescription is waiting
+  again (or goes back to its previous fill), the insurer's claim is cancelled and the controlled-drug register gets a
+  return line. To take back only some of the medicines, void just those lines (or part of a quantity): the patient keeps the
+  rest and the insurer's claim comes down by its share. You can do this once per fill. Not possible once the insurer has paid that claim
+- A **pump sale** is voided from the fuel screen's **Sales** list (managers): the litres go back into the tank and a
+  fleet account is credited
 
 ### Later — refund / return
 
@@ -428,23 +437,46 @@ waiting for a table.
 
 - **Rooms** — availability, rates, status
 - **Bookings** — check guests in and out
+- **Deposits** — take a deposit when booking, or later with **Take a Deposit**, in cash, M-Pesa, card or bank. It
+  is used against the bill at check-out; if it is more than the bill, the rest is paid back the way it came in. Cancel a
+  reservation and the deposit is paid back, or a manager can keep it
 - **Guest folio** — everything the guest charges during their stay, on one bill
-- **Room charge** — the restaurant and bar can bill straight to a room
+- **Check-out invoice** — when your business records hotel takings as sales (ask the owner to check), check-out
+  produces a proper tax invoice with a receipt number and goes to KRA. For a company guest, enter their KRA PIN when
+  booking so it prints on the invoice
+- **Hotel levies** — if your hotel charges a tourism or catering levy, the owner or manager adds it once in
+  **Settings > Hotel levies** and it is added to every guest bill. Leave it empty if you charge none
+- **Room charge** — the restaurant and bar can bill straight to a room. The sale appears on the guest's folio as a "charged sale" and is paid at check-out with the rest of the bill; it is not billed a second time on the stay's invoice. If it was a mistake, void the sale while the guest is still in the room
 - **Housekeeping** — a live queue of rooms needing service
 - **Channel manager** — keeps availability in step with booking sites
 
 ## 13. Pharmacy
 
 - **Prescriptions** captured at the till against the patient
+- **Dispensing and payment** — when your business records pharmacy takings as sales (ask the owner to check), pressing
+  **Dispense** (or **Process Refill**) shows the price of the medicines, takes the patient's payment and prints a receipt that
+  goes to KRA. Every medicine on the prescription must be linked to a catalogue item with a price, otherwise the screen
+  names the one to fix. Set each medicine's tax class in the catalogue (many are exempt) so the receipt shows the right VAT
+- **Insurance** — tick *Insurance covers part of this*, choose the insurer, enter the member number and the percentage the
+  patient pays. The patient pays only their share; the rest is recorded as a claim to that insurer. When the insurer pays,
+  open **Claims**, mark it **Approved** then **Paid** and enter the amount received: any shortfall is written off and the
+  books are updated
 - **Batch and expiry tracking** enforced — see [section 16](#16-expiry-dates-and-batches)
 - Controlled items flagged and recorded
 
 ## 14. Fuel station, cyber café and other trades
 
-- **Fuel station** — authorise a pump, sell the fuel it dispensed, close the pump
+- **Fuel station** — authorise a pump, sell the fuel it dispensed, close the pump. A manager can void a sale from the Sales list
 - **Cyber café** — start and stop timed sessions per station, bill the time. Stations
-  are counter-managed on the web app
-- **Salon / clinic** — an appointment diary with bookings against staff
+  are counter-managed on the web app. When your business records cyber takings as sales (ask the owner to check), ending a
+  session gives a proper receipt that goes to KRA, with the time (or package), printing and other services on separate
+  lines. **Credit is only for registered customers**: pick the customer when you end the session. For a company customer
+  enter their KRA PIN. To undo an ended session, void its sale from the sales list
+- **Salon / clinic** — an appointment diary with bookings against staff. Choose the **service** when booking so it is priced.
+  When your business records these takings as sales (ask the owner to check): a **deposit** is recorded as money taken (say how it
+  was paid; **Deposit** adds more); **Complete** takes the payment (the deposit is used first, anything left over is paid back) and
+  gives a receipt that goes to KRA; **Cancel** or **No-Show** pays the deposit back, or a manager can keep it. Only a manager can
+  change a service's price. To undo a completed appointment, void its sale from the sales list
 - **Supermarket** — a denser, faster scan-first layout built for queues
 
 ---

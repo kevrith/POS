@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { SalesService } from './sales.service';
+import { DirectSaleService } from './direct-sale.service';
 import { SalesController } from './sales.controller';
 import { InventoryModule } from '../inventory/inventory.module';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -15,8 +16,8 @@ import { LedgerModule } from '../ledger/ledger.module';
 
 @Module({
   imports: [PrismaModule, InventoryModule, AuditModule, AuthModule, WebhooksModule, EtimsModule, NotificationsModule, EventsModule, LoyaltyModule, SubscriptionModule, LedgerModule],
-  providers: [SalesService],
+  providers: [SalesService, DirectSaleService],
   controllers: [SalesController],
-  exports: [SalesService],
+  exports: [SalesService, DirectSaleService],
 })
 export class SalesModule {}

@@ -311,7 +311,7 @@ function AddBatchModal({ businessId, storeId, onClose, onSuccess }: AddBatchModa
         itemId: form.itemId,
         storeId,
         lotNumber: form.lotNumber,
-        quantityReceived: parseInt(form.quantityReceived),
+        quantityReceived: Math.round(parseFloat(form.quantityReceived) * 1000) / 1000,
         expiryDate: form.expiryDate ? new Date(form.expiryDate).toISOString() : undefined,
         manufacturingDate: form.manufacturingDate ? new Date(form.manufacturingDate).toISOString() : undefined,
       }),
@@ -389,7 +389,8 @@ function AddBatchModal({ businessId, storeId, onClose, onSuccess }: AddBatchModa
             <label className="block text-sm font-medium text-gray-700 mb-1">Quantity Received *</label>
             <input
               type="number"
-              min={1}
+              min={0.001}
+              step="any"
               value={form.quantityReceived}
               onChange={(e) => setForm({ ...form, quantityReceived: e.target.value })}
               className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"

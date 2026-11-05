@@ -18,6 +18,8 @@ export interface CachedItem {
   vipPriceCents?: number;
   costPriceCents?: number;
   vatApplicable: boolean;
+  /** KRA tax class (A/B/C/D); absent on items cached before classes existed. */
+  taxClass?: string;
   totApplicable: boolean;
   trackStock: boolean;
   currentStock: number;

@@ -46,6 +46,8 @@ import {
 } from 'lucide-react';
 import { UserRole, OPTIONAL_MODULES, OPTIONAL_MODULE_LABELS, moduleIncludedByMode, parseEnabledModules, type OptionalModule } from '@pos/shared';
 import { hasFeature } from '../lib/featureGates';
+import SalesPipelineCard from '../components/SalesPipelineCard';
+import HotelLeviesCard from '../components/HotelLeviesCard';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1936,6 +1938,18 @@ export default function SettingsPage() {
             ))}
           </div>
 
+          {settings && ['OWNER', 'MANAGER'].includes(String(user?.role)) && (settings.posMode === 'HOSPITALITY' || (settings as { hotelLevies?: string }).hotelLevies !== '[]') && (
+            <HotelLeviesCard businessId={businessId} stored={(settings as { hotelLevies?: string }).hotelLevies} />
+          )}
+
+          {settings && user?.role === 'OWNER' && (
+            <SalesPipelineCard
+              businessId={businessId}
+              enabled={!!(settings as { verticalSalesEnabled?: boolean }).verticalSalesEnabled}
+              since={(settings as { verticalSalesFrom?: string | null }).verticalSalesFrom}
+            />
+          )}
+
           <div className="flex items-center gap-3 pt-2">
             <button
               onClick={() => updateMutation.mutate(form)}
@@ -3608,7 +3622,7 @@ export default function SettingsPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Scopes</label>
               <div className="flex flex-wrap gap-2">
-                {['sales:read', 'sales:write', 'inventory:read', 'inventory:write', 'reports:read'].map((scope) => (
+                {['sales:read', 'sales:write', 'inventory:read', 'inventory:write', 'reports:read', 'bookings:write'].map((scope) => (
                   <label key={scope} className="flex items-center gap-1.5 cursor-pointer">
                     <input
                       type="checkbox"

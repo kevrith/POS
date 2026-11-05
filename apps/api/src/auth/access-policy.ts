@@ -203,6 +203,54 @@ export const ACCESS_RULES: readonly AccessRule[] = [
   r('POST', '/field-sales/orders/:id/generate-invoice', DISPATCH),
   r('POST', '/field-sales/orders/:id/generate-partial-invoice', DISPATCH),
   r('POST', '/field-sales/orders/bulk-generate-invoices', DISPATCH),
+
+  // ── Fuel station ──────────────────────────────────────────────────────────
+  // Attendants (cashiers) run the forecourt: authorise pumps, record sales, open and close shifts. Prices,
+  // credit limits, tank levels and fleet money are management's: a pump attendant who can edit the price
+  // per litre or a fleet account's credit limit can sell fuel for nothing.
+  r('POST', '/fuel-pump/sales', FLOOR),
+  r('POST', '/fuel-pump/pumps/:id/authorize', FLOOR),
+  r('POST', '/fuel-pump/pumps/:id/stop', FLOOR),
+  r('POST', '/fuel-pump/shifts/open', FLOOR),
+  r('POST', '/fuel-pump/shifts/:id/close', FLOOR),
+  r('GET', '/fuel-pump/fleet/:id/transactions', FIN),
+  r('POST', '/fuel-pump/fleet/:id/payment', FIN),
+  r('GET', '/fuel-pump/variance', FIN),
+  r(WRITE, '/fuel-pump/**', MGMT),
+
+  // ── Cyber cafe ────────────────────────────────────────────────────────────
+  // Running sessions is front-desk work. Voiding one (it can erase a paid session), the rate card, packages
+  // and stations are management's. The kiosk routes are public and carry their own @Public().
+  r('POST', '/cybercafe/stations/:id/start', FLOOR),
+  r('POST', '/cybercafe/sessions/:id/pause', FLOOR),
+  r('POST', '/cybercafe/sessions/:id/resume', FLOOR),
+  r('POST', '/cybercafe/sessions/:id/end', FLOOR),
+  r('POST', '/cybercafe/sessions/:id/extend', FLOOR),
+  r('GET', '/cybercafe/stats', FIN),
+  r(WRITE, '/cybercafe/**', MGMT),
+
+  // ── Pharmacy ──────────────────────────────────────────────────────────────
+  // Patient names, ID numbers and diagnoses are in these records, so waiters get no access at all. There is
+  // no pharmacist role yet: dispensing sits with cashiers and above, and everything that edits clinical
+  // reference data or cancels a prescription with management.
+  r('GET', '/prescriptions/controlled-log', MGMT),
+  r('POST', '/prescriptions/controlled-log', DISPATCH),
+  r('PATCH', '/prescriptions/:id/cancel', MGMT),
+  r('*', '/prescriptions/**', DISPATCH),
+  r('GET', '/pharmacy/claims', FIN),
+  r('GET', '/pharmacy/claims/stats', FIN),
+  r(['POST', 'PATCH'], '/pharmacy/claims/**', FIN),
+  r('GET', '/pharmacy/**', DISPATCH),
+  r(WRITE, '/pharmacy/**', MGMT),
+
+  // ── Hotel ─────────────────────────────────────────────────────────────────
+  // Reception works bookings and the folio; removing a guest's charge or changing the room list is not theirs.
+  r('DELETE', '/hospitality/folio-charges/:id', MGMT),
+  r(['POST', 'PATCH', 'DELETE'], '/hospitality/hotel-rooms', MGMT),
+  r(['PATCH', 'DELETE'], '/hospitality/hotel-rooms/:id', MGMT),
+
+  // ── Appointments ──────────────────────────────────────────────────────────
+  r('DELETE', '/appointments/:id', MGMT),
 ];
 
 /**

@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
   ConflictException,
@@ -7,6 +8,8 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SubscriptionLimitsService } from '../subscription/subscription-limits.service';
+import { LedgerService } from '../ledger/ledger.service';
+import { postVerticalOpeningBalances } from '../sales/opening-balances';
 import * as bcrypt from 'bcrypt';
 import { assertPinAvailable } from '../auth/pin.util';
 import { assertCanManageUser } from '../auth/access-policy';
@@ -14,6 +17,7 @@ import { createCipheriv, randomBytes } from 'crypto';
 import { UserRole, parseEnabledModules } from '@pos/shared';
 
 import { requireString } from '../common/validate';
+import { validateLevies } from '../common/hotel-levies';
 
 interface UpdateBusinessDto {
   name?: string;
@@ -43,6 +47,10 @@ interface UpdateBusinessDto {
   enableCashDrawer?: boolean;
   enableBarcodeScanner?: boolean;
   enablePoleDisplay?: boolean;
+  /** Owner only: on = fuel, hotel, pharmacy and cyber takings become real sales from now. */
+  verticalSalesEnabled?: boolean;
+  /** Levies a hotel adds to a stay: [{ name, ratePct, base: "ROOM" | "ALL" }], as a list or JSON. Empty = none. */
+  hotelLevies?: unknown;
 }
 
 interface CreateStoreDto {
@@ -73,9 +81,12 @@ interface UpdateUserDto {
 
 @Injectable()
 export class BusinessService {
+  private readonly logger = new Logger(BusinessService.name);
+
   constructor(
     private prisma: PrismaService,
     private subscriptionLimits: SubscriptionLimitsService,
+    private ledger: LedgerService,
   ) {}
 
   private encrypt(data: object): string {
@@ -109,6 +120,8 @@ export class BusinessService {
       hasEtimsCredentials: !!etimsCredentialsEncrypted,
       hasMpesaCredentials: !!mpesaCredentialsEncrypted,
       hasAtCredentials: !!atCredentialsEncrypted,
+      // Whether fuel, hotel, pharmacy, cyber and appointment takings are becoming real sales yet, and since when.
+      verticalSalesEnabled: !!business.verticalSalesFrom && business.verticalSalesFrom.getTime() <= Date.now(),
     };
   }
 
@@ -132,7 +145,7 @@ export class BusinessService {
     'enableCashDrawer', 'enableBarcodeScanner', 'enablePoleDisplay',
   ] as const;
 
-  async updateSettings(businessId: string, dto: UpdateBusinessDto) {
+  async updateSettings(businessId: string, dto: UpdateBusinessDto, actorRole?: string) {
     const business = await this.prisma.business.findUnique({
       where: { id: businessId },
     });
@@ -158,9 +171,31 @@ export class BusinessService {
       data.enabledModules = JSON.stringify(parseEnabledModules(dto.enabledModules));
     }
 
+    // Checked strictly here, so a bad rate can never reach a guest's bill.
+    if (dto.hotelLevies !== undefined) {
+      data.hotelLevies = JSON.stringify(validateLevies(dto.hotelLevies));
+    }
+
+    // Switching the sales pipeline on or off changes what the books and KRA are told, so only an owner may.
+    // Turning it on stamps the moment; no earlier takings are back-filled. Turning it off clears it, and from then
+    // on those takings are recorded as before. Asking for the state it is already in changes nothing.
+    if (dto.verticalSalesEnabled !== undefined) {
+      if (!['OWNER', 'ADMIN'].includes(String(actorRole))) {
+        throw new ForbiddenException('Only the owner can change how fuel, hotel, pharmacy and cyber takings are recorded');
+      }
+      const isOn = !!business.verticalSalesFrom;
+      if (dto.verticalSalesEnabled && !isOn) data.verticalSalesFrom = new Date();
+      if (!dto.verticalSalesEnabled && isOn) data.verticalSalesFrom = null;
+    }
+
     if (Object.keys(data).length === 0) return business;
 
-    return this.prisma.business.update({ where: { id: businessId }, data });
+    const updated = await this.prisma.business.update({ where: { id: businessId }, data });
+    // Switching on: bring in what was already owed (deposits held, fleet balances), so the books do not start at zero.
+    if (data.verticalSalesFrom) {
+      await postVerticalOpeningBalances(this.prisma, this.ledger, businessId).catch((e: unknown) => this.logger.warn(`Opening balances for ${businessId} failed: ${String(e)}`));
+    }
+    return updated;
   }
 
   async getStores(businessId: string) {

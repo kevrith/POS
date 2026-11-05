@@ -1,10 +1,14 @@
-import { Injectable, BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, ConflictException, ForbiddenException, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EventsGateway } from '../events/events.gateway';
 import {
   OPEN_KOT_STATUSES,
+  allocateByValue,
   canTransitionKot,
+  computeTaxes,
+  taxClassOf,
+  type TaxClass,
   isKotStatus,
   normalizeStation,
   stationForItem,
@@ -14,7 +18,43 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import { randomUUID } from 'crypto';
 
-import { requireArray } from '../common/validate';
+import { intInRange, oneOf, optionalKraPin, optionalText, requireArray, text } from '../common/validate';
+import { LedgerService } from '../ledger/ledger.service';
+import { DirectSaleService, type DirectSaleInput, type DirectSaleLine, type DirectSaleResult, type EtimsOutcome } from '../sales/direct-sale.service';
+import { postDepositJournal, postSettlementJournal } from '../sales/sale-ledger';
+import { ROOM_CHARGE_FOLIO_TYPE, mergeByMethod, splitTenders } from '../common/folio';
+import { knownDepositMethod, refundMethodFor } from '../sales/deposit-register';
+import { computeLevies, parseStoredLevies, type HotelLevy, type LevyAmount } from '../common/hotel-levies';
+import { nairobiDay, nairobiDayEnd, nairobiDayStart, nairobiDaysBetween } from '../common/dates';
+
+const DAY_MS = 86_400_000;
+/** How a guest may settle their folio at check-out. */
+const FOLIO_TENDER_METHODS = ['CASH', 'MPESA', 'CARD', 'BANK'] as const;
+const ACTIVE_BOOKING_STATUSES = ['RESERVED', 'CHECKED_IN'];
+/** How a guest may leave or settle a deposit. */
+const DEPOSIT_METHODS = ['CASH', 'MPESA', 'CARD', 'BANK'] as const;
+/** Charges a person may post to a folio by hand. ROOM_RATE, LEVY and PAYMENT are written by check-out alone. */
+const MANUAL_FOLIO_TYPES = ['FOOD_BEVERAGE', 'MINIBAR', 'LAUNDRY', 'TRANSPORT', 'OTHER', 'DISCOUNT'] as const;
+const DEPOSIT_REASONS = ['HOTEL_DEPOSIT', 'HOTEL_DEPOSIT_REFUND', 'HOTEL_DEPOSIT_FORFEIT'];
+/** How long a check-out waits for KRA so the invoice can carry the QR code. */
+const ETIMS_WAIT_MS = 5000;
+
+/** The catalogue item a folio line is invoiced as (eTIMS needs an item and a class per line). */
+const HOTEL_ITEM_NAMES: Record<string, string> = {
+  ROOM_RATE: 'Hotel room nights',
+  FOOD_BEVERAGE: 'Hotel food & beverage',
+  MINIBAR: 'Hotel minibar',
+  LAUNDRY: 'Hotel laundry',
+  TRANSPORT: 'Hotel transport',
+  OTHER: 'Hotel other charges',
+  LEVY: 'Hotel levy',
+};
+
+/** When a booking ends. A guest still checked in past their date keeps holding the room until they leave. */
+function bookingEnd(b: { checkInDate: Date; checkOutDate: Date | null; nightCount: number; status: string }, now: Date): Date {
+  const planned = b.checkOutDate ?? new Date(b.checkInDate.getTime() + b.nightCount * DAY_MS);
+  return b.status === 'CHECKED_IN' && planned < now ? now : planned;
+}
 
 const TABLE_STATUSES = ['AVAILABLE', 'OCCUPIED', 'BILL_REQUESTED', 'RESERVED'];
 const HOUSEKEEPING_STATUSES = ['CLEAN', 'DIRTY', 'INSPECTED', 'OUT_OF_ORDER'];
@@ -65,10 +105,14 @@ function cleanModifiers(raw: unknown): Array<string | { name: string; priceCents
 
 @Injectable()
 export class HospitalityService {
+  private readonly logger = new Logger(HospitalityService.name);
+
   constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
     private events: EventsGateway,
+    private directSales: DirectSaleService,
+    private ledger: LedgerService,
   ) {}
 
   // ── Tenant scoping ─────────────────────────────────────────────────────────
@@ -277,7 +321,13 @@ export class HospitalityService {
     const { roomBookingId, ...orderData } = data;
     await this.assertStoreAccess(data.storeId, data.businessId);
     if (data.tableId) await this.assertTableAccess(data.tableId, data.businessId);
-    if (roomBookingId) await this.assertBookingAccess(roomBookingId, data.businessId);
+    // A room-service order is charged to the room when it is paid, with ROOM_CHARGE at the till (see SalesService).
+    // It used to post a KES 0 line to the folio here, before the order had any items.
+    if (roomBookingId) {
+      const booking = await this.assertBookingAccess(roomBookingId, data.businessId);
+      const room = await this.prisma.hotelRoom.findFirst({ where: { id: booking.roomId, businessId: data.businessId }, select: { number: true } });
+      if (room && !orderData.roomNumber) orderData.roomNumber = room.number;
+    }
     const waiter = await this.prisma.user.findFirst({ where: { id: data.waiterId, businessId: data.businessId }, select: { id: true } });
     if (!waiter) throw new BadRequestException('The waiter is not a member of this business');
 
@@ -289,35 +339,7 @@ export class HospitalityService {
       await this.updateTableStatus(data.tableId, 'OCCUPIED');
     }
 
-    // Auto-link to room booking folio if explicitly provided
-    if (roomBookingId) {
-      await this.linkOrderToFolio(order.id, roomBookingId).catch(() => null);
-    }
-
     return order;
-  }
-
-  async linkOrderToFolio(orderId: string, roomBookingId: string) {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      include: { items: true },
-    });
-    if (!order) throw new NotFoundException('Order not found');
-    // The booking must be the same business's as the order, or a request could post charges to someone else's guest.
-    const booking = await this.assertBookingAccess(roomBookingId, order.businessId);
-    const totalCents = order.items.reduce((s, i) => s + i.totalCents, 0);
-    return this.prisma.guestFolioCharge.create({
-      data: {
-        bookingId: roomBookingId,
-        businessId: booking.businessId,
-        description: `Room service order #${orderId.slice(-8).toUpperCase()}`,
-        amountCents: totalCents > 0 ? totalCents : 0,
-        totalCents: totalCents > 0 ? totalCents : 0,
-        quantity: 1,
-        type: 'FOOD_BEVERAGE',
-        date: new Date(),
-      },
-    });
   }
 
   async addOrderItems(orderId: string, items: Array<{
@@ -910,6 +932,19 @@ export class HospitalityService {
       throw new BadRequestException(`Payments (${paid}) do not cover the tab (${totalCents})`);
     }
 
+    // VAT per line from each item's class, and none at all for a business that is not VAT-registered. It used to
+    // be 16/116 of the whole tab for every business.
+    const [tabItems, business] = await Promise.all([
+      this.prisma.item.findMany({ where: { id: { in: order.items.map((i) => i.itemId).filter(Boolean) as string[] }, businessId }, select: { id: true, taxClass: true, vatApplicable: true } }),
+      this.prisma.business.findUnique({ where: { id: businessId }, select: { taxType: true } }),
+    ]);
+    const classOf = new Map(tabItems.map((i) => [i.id, taxClassOf(i)]));
+    const taxes = computeTaxes(
+      order.items.map((i) => ({ totalCents: i.totalCents, taxClass: classOf.get(i.itemId as string) ?? 'B' })),
+      0,
+      { vatRegistered: business?.taxType === 'VAT' },
+    );
+
     const sale = await this.prisma.$transaction(async (tx) => {
       // Claim the tab first. Two settle requests (a double tap, or two tills) used
       // to each write a sale for the same tab; now only one can win.
@@ -936,16 +971,20 @@ export class HospitalityService {
           type: 'NORMAL',
           status: 'PAID',
           subtotalCents: totalCents,
-          vatCents: Math.round(totalCents * 16 / 116),
+          vatCents: taxes.vatCents,
           totCents: 0,
           totalCents,
+          taxClassified: true,
           items: {
-            create: order.items.map(i => ({
+            create: order.items.map((i, idx) => ({
               itemId: i.itemId,
               name: i.name,
               quantity: i.quantity,
               unitPriceCents: i.unitPriceCents,
               totalCents: i.totalCents,
+              taxClass: taxes.lines[idx].taxClass,
+              vatCents: taxes.lines[idx].vatCents,
+              discountCents: taxes.lines[idx].discountCents,
             })),
           },
           payments: {
@@ -980,27 +1019,49 @@ export class HospitalityService {
 
   // ── Hotel Rooms ────────────────────────────────────────────────────────────
 
+  /**
+   * The room grid. `status` is what the desk should see today, derived from the bookings: a room is RESERVED
+   * only once a reserved guest is due today (or is overdue), so a booking for next month no longer blocks the
+   * room now. `bookings` carries the booking the room card acts on first: the guest in the room if there is
+   * one, else the soonest arrival. It used to return only CHECKED_IN bookings, so a RESERVED room's card had
+   * no booking to check in or cancel.
+   */
   async getHotelRooms(businessId: string, storeId: string, status?: string) {
-    return this.prisma.hotelRoom.findMany({
-      where: { businessId, storeId, ...(status && { status }) },
+    const rooms = await this.prisma.hotelRoom.findMany({
+      where: { businessId, storeId },
       include: {
         bookings: {
-          where: { status: 'CHECKED_IN' },
+          where: { status: { in: ACTIVE_BOOKING_STATUSES } },
           select: {
             id: true,
+            status: true,
             guestName: true,
             guestPhone: true,
+            checkInDate: true,
             actualCheckIn: true,
             checkOutDate: true,
             nightCount: true,
             totalAmountCents: true,
             depositCents: true,
           },
-          take: 1,
+          orderBy: { checkInDate: 'asc' },
+          take: 6,
         },
       },
       orderBy: [{ floor: 'asc' }, { number: 'asc' }],
     });
+    const arrivalCutoff = nairobiDayEnd(nairobiDay(new Date()));
+    const grid = rooms.map((room) => {
+      const bookings = [...room.bookings].sort(
+        (x, y) => Number(y.status === 'CHECKED_IN') - Number(x.status === 'CHECKED_IN') || x.checkInDate.getTime() - y.checkInDate.getTime(),
+      );
+      let derived = room.status;
+      if (derived !== 'OCCUPIED' && derived !== 'MAINTENANCE') {
+        derived = bookings.some((b) => b.status === 'RESERVED' && b.checkInDate <= arrivalCutoff) ? 'RESERVED' : 'AVAILABLE';
+      }
+      return { ...room, status: derived, bookings };
+    });
+    return status ? grid.filter((r) => r.status === status) : grid;
   }
 
   async createHotelRoom(data: {
@@ -1078,135 +1139,604 @@ export class HospitalityService {
     });
   }
 
+  /** Serialise everything that books, checks in or cancels one room, so two desks cannot both win it. */
+  private async lockRoom(tx: Pick<import('@prisma/client').Prisma.TransactionClient, '$queryRaw'>, roomId: string) {
+    await tx.$queryRaw`SELECT "id" FROM "HotelRoom" WHERE "id" = ${roomId} FOR UPDATE`;
+  }
+
+  private bookingDate(value: unknown, label: string): Date {
+    const d = value instanceof Date ? value : new Date(String(value ?? ''));
+    if (Number.isNaN(d.getTime())) throw new BadRequestException(`${label} is not a valid date`);
+    return d;
+  }
+
+  /** A desk user, as the invoice and the deposit register record them. */
+  private actorOf(actor?: { id?: string; name?: string; role?: string }) {
+    return { id: actor?.id, name: actor?.name ?? 'system', role: actor?.role ?? 'CASHIER' };
+  }
+
+  /** The tax class each kind of folio line is invoiced under: the catalogue item's class once it exists, standard rate until then. */
+  private async hotelClasses(db: any, businessId: string, storeId: string): Promise<Record<string, TaxClass>> {
+    const items: Array<{ name: string; taxClass: string | null; vatApplicable: boolean }> = await db.item.findMany({
+      where: { businessId, storeId, category: 'Hotel' },
+      select: { name: true, taxClass: true, vatApplicable: true },
+    });
+    const byName = new Map(items.map((i) => [i.name, taxClassOf(i)]));
+    const out: Record<string, TaxClass> = {};
+    for (const [type, name] of Object.entries(HOTEL_ITEM_NAMES)) out[type] = byName.get(name) ?? (type === 'LEVY' ? 'D' : 'B');
+    return out;
+  }
+
+  /** The catalogue items a hotel invoice is made of. Eager creation would clutter the catalogue; they are inactive so no till sells them. */
+  private async ensureHotelItems(tx: any, businessId: string, storeId: string, types: string[]) {
+    const out: Record<string, { id: string; taxClass: string | null; vatApplicable: boolean }> = {};
+    for (const type of new Set(types)) {
+      const name = HOTEL_ITEM_NAMES[type] ?? HOTEL_ITEM_NAMES.OTHER;
+      let item = await tx.item.findFirst({ where: { businessId, storeId, category: 'Hotel', name } });
+      if (!item) {
+        item = await tx.item.create({
+          data: {
+            offlineId: uuidv4(),
+            businessId,
+            storeId,
+            name,
+            category: 'Hotel',
+            type: 'SERVICE',
+            retailPriceCents: 0,
+            trackStock: false,
+            isActive: false,
+            taxClass: type === 'LEVY' ? 'D' : 'B',
+            vatApplicable: type !== 'LEVY',
+          },
+        });
+      }
+      out[type] = item;
+    }
+    return out;
+  }
+
+  /** How a deposit was paid in (null when not on record), and how it is being paid back: see sales/deposit-register.ts. */
+  private depositMethodOf(db: any, bookingId: string, businessId: string): Promise<string | null> {
+    return knownDepositMethod(db, bookingId, businessId, 'HOTEL_DEPOSIT');
+  }
+
+  private refundMethodFor(db: any, bookingId: string, businessId: string, chosen?: string): Promise<string> {
+    return refundMethodFor(db, bookingId, businessId, 'HOTEL_DEPOSIT', chosen);
+  }
+
+  /** Write a deposit movement into the register. Cash ones reach the drawer. */
+  private async recordDeposit(
+    tx: any,
+    m: { businessId: string; storeId: string; cashierId?: string; kind: 'PAY_IN' | 'PAY_OUT' | 'FORFEIT'; method: string; amountCents: number; reason: string; bookingId: string; reference?: string },
+  ) {
+    return tx.cashMovement.create({ data: m });
+  }
+
+  private postDepositLedger(
+    move: 'RECEIVED' | 'REFUNDED' | 'FORFEITED',
+    m: { id: string; businessId: string; storeId: string; method: string; amountCents: number; guestName: string },
+  ) {
+    const label = { RECEIVED: 'Hotel deposit received', REFUNDED: 'Hotel deposit refunded', FORFEITED: 'Hotel deposit forfeited' }[move];
+    void postDepositJournal(this.ledger, {
+      businessId: m.businessId,
+      storeId: m.storeId,
+      description: `${label}: ${m.guestName}`,
+      reference: `DEP-${m.id}`,
+      move,
+      method: m.method,
+      amountCents: m.amountCents,
+    }).catch((e: unknown) => this.logger.warn(`Ledger posting for deposit ${m.id} failed: ${String(e)}`));
+  }
+
   async createRoomBooking(data: {
     storeId: string;
     roomId: string;
     guestName: string;
     guestPhone?: string;
     guestIdNumber?: string;
+    guestKraPin?: string;
     checkInDate: Date;
     checkOutDate?: Date;
     nightCount: number;
     depositCents?: number;
+    depositMethod?: string;
     notes?: string;
-  }, businessId: string) {
+  }, businessId: string, actor?: { id?: string; name?: string; role?: string }) {
     // The room decides the store; the client's storeId is not trusted.
     const room = await this.assertRoomAccess(data.roomId, businessId);
-    if (room.status === 'OCCUPIED' || room.status === 'MAINTENANCE') {
-      throw new BadRequestException(`Room is currently ${room.status}`);
-    }
-    const nightCount = positiveInt(data.nightCount, 'Nights', 365);
-    const depositCents = nonNegativeInt(data.depositCents, 'Deposit');
-    const pricePerNight = room.pricePerNightCents;
-    const totalAmountCents = pricePerNight * nightCount;
+    if (room.status === 'MAINTENANCE') throw new BadRequestException('Room is under maintenance');
 
-    const [booking] = await this.prisma.$transaction([
-      this.prisma.roomBooking.create({
+    const guestName = text(data.guestName, 'Guest name', 120);
+    const guestKraPin = optionalKraPin(data.guestKraPin, 'Guest KRA PIN');
+    const checkIn = this.bookingDate(data.checkInDate, 'Check-in date');
+    // The desk may enter yesterday's date after midnight; anything older is a mistake.
+    if (checkIn < nairobiDayStart(nairobiDay(new Date(Date.now() - DAY_MS)))) throw new BadRequestException('Check-in date is in the past');
+
+    // The dates decide the stay. A nightCount that disagrees with them used to be believed, so a guest could be
+    // billed for fewer nights than they were booked for.
+    let nightCount: number;
+    let checkOut: Date;
+    if (data.checkOutDate) {
+      checkOut = this.bookingDate(data.checkOutDate, 'Check-out date');
+      nightCount = Math.round((checkOut.getTime() - checkIn.getTime()) / DAY_MS);
+      if (nightCount < 1) throw new BadRequestException('Check-out must be at least one night after check-in');
+      if (nightCount > 365) throw new BadRequestException('A stay can be at most 365 nights');
+    } else {
+      nightCount = positiveInt(data.nightCount, 'Nights', 365);
+      checkOut = new Date(checkIn.getTime() + nightCount * DAY_MS);
+    }
+    const totalAmountCents = room.pricePerNightCents * nightCount;
+    const depositCents = nonNegativeInt(data.depositCents, 'Deposit');
+    if (depositCents > totalAmountCents) throw new BadRequestException('The deposit is more than the cost of the stay');
+    const depositMethod = depositCents > 0 ? oneOf(String(data.depositMethod ?? 'CASH').toUpperCase(), 'Deposit method', DEPOSIT_METHODS) : 'CASH';
+    const register = depositCents > 0 && (await this.directSales.isEnabled(businessId));
+    const by = this.actorOf(actor);
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      await this.lockRoom(tx, room.id);
+      const fresh = await tx.hotelRoom.findFirst({ where: { id: room.id, businessId } });
+      if (!fresh) throw new NotFoundException('Room not found');
+      if (fresh.status === 'MAINTENANCE') throw new BadRequestException('Room is under maintenance');
+
+      const now = new Date();
+      const existing = await tx.roomBooking.findMany({ where: { roomId: room.id, status: { in: ACTIVE_BOOKING_STATUSES } } });
+      const clash = existing.find((b) => b.checkInDate < checkOut && bookingEnd(b, now) > checkIn);
+      if (clash) {
+        const until = bookingEnd(clash, now);
+        throw new ConflictException(
+          `Room ${room.number} is already taken from ${nairobiDay(clash.checkInDate)} to ${nairobiDay(until)} (${clash.guestName}).`,
+        );
+      }
+
+      const booking = await tx.roomBooking.create({
         data: {
           businessId,
           storeId: room.storeId,
-          roomId: data.roomId,
-          guestName: data.guestName,
-          guestPhone: data.guestPhone,
-          guestIdNumber: data.guestIdNumber,
-          checkInDate: data.checkInDate,
-          checkOutDate: data.checkOutDate,
+          roomId: room.id,
+          guestName,
+          guestPhone: optionalText(data.guestPhone, 'Guest phone', 30),
+          guestIdNumber: optionalText(data.guestIdNumber, 'Guest ID number', 30),
+          guestKraPin,
+          checkInDate: checkIn,
+          checkOutDate: checkOut,
           nightCount,
-          pricePerNightCents: pricePerNight,
+          pricePerNightCents: room.pricePerNightCents,
           totalAmountCents,
           depositCents,
           status: 'RESERVED',
-          notes: data.notes,
+          notes: optionalText(data.notes, 'Notes', 500),
         },
-      }),
-      this.prisma.hotelRoom.update({
-        where: { id: data.roomId },
-        data: { status: 'RESERVED' },
-      }),
-    ]);
-    return booking;
+      });
+      // The deposit register: the money is in the till (or the bank) now, and is owed to the guest until the stay is billed.
+      const movement = register
+        ? await this.recordDeposit(tx, {
+            businessId, storeId: room.storeId, cashierId: by.id, kind: 'PAY_IN', method: depositMethod,
+            amountCents: depositCents, reason: 'HOTEL_DEPOSIT', bookingId: booking.id,
+          })
+        : null;
+      // Only a guest due today takes the room off the board. A booking for next month leaves it bookable.
+      if (fresh.status === 'AVAILABLE' && checkIn <= nairobiDayEnd(nairobiDay(now))) {
+        await tx.hotelRoom.update({ where: { id: room.id }, data: { status: 'RESERVED' } });
+      }
+      return { booking, movement };
+    });
+    if (created.movement) {
+      this.postDepositLedger('RECEIVED', { id: created.movement.id, businessId, storeId: room.storeId, method: depositMethod, amountCents: depositCents, guestName });
+    }
+    return created.booking;
+  }
+
+  /**
+   * Take a further deposit against a booking (a guest who pays part of the stay up front, or tops up). It is
+   * credited to the stay and used against the bill at check-out.
+   */
+  async addDeposit(
+    bookingId: string,
+    data: { amountCents: number; method?: string },
+    businessId: string,
+    actor?: { id?: string; name?: string; role?: string },
+  ) {
+    const found = await this.assertBookingAccess(bookingId, businessId);
+    if (!ACTIVE_BOOKING_STATUSES.includes(found.status)) throw new BadRequestException('A deposit can only be taken on a reserved or checked-in booking');
+    const amountCents = intInRange(data.amountCents, 'Deposit', 1, 1_000_000_000);
+    const method = oneOf(String(data.method ?? 'CASH').toUpperCase(), 'Deposit method', DEPOSIT_METHODS);
+    const register = await this.directSales.isEnabled(businessId);
+    const by = this.actorOf(actor);
+
+    const movement = await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.roomBooking.updateMany({
+        where: { id: bookingId, businessId, status: { in: ACTIVE_BOOKING_STATUSES } },
+        data: { depositCents: { increment: amountCents } },
+      });
+      if (claimed.count !== 1) throw new BadRequestException('This booking was just changed by someone else. Reload it.');
+      return register
+        ? this.recordDeposit(tx, {
+            businessId, storeId: found.storeId, cashierId: by.id, kind: 'PAY_IN', method,
+            amountCents, reason: 'HOTEL_DEPOSIT', bookingId,
+          })
+        : null;
+    });
+    if (movement) this.postDepositLedger('RECEIVED', { id: movement.id, businessId, storeId: found.storeId, method, amountCents, guestName: found.guestName });
+    return this.prisma.roomBooking.findFirst({ where: { id: bookingId, businessId } });
   }
 
   async checkInGuest(bookingId: string, businessId: string) {
-    const booking = await this.assertBookingAccess(bookingId, businessId);
-    if (booking.status !== 'RESERVED' && booking.status !== 'CHECKED_IN') {
-      throw new BadRequestException('Booking cannot be checked in');
+    const found = await this.assertBookingAccess(bookingId, businessId);
+    if (found.status === 'CHECKED_IN') throw new BadRequestException('Guest is already checked in');
+    if (found.status !== 'RESERVED') throw new BadRequestException(`A ${found.status.toLowerCase().replace(/_/g, ' ')} booking cannot be checked in`);
+    // A guest can come a day early, not a week: checking next week's booking in now would lock out whoever is due today.
+    const daysEarly = nairobiDaysBetween(new Date(), found.checkInDate);
+    if (daysEarly > 1) {
+      throw new BadRequestException(`This guest is booked to arrive on ${nairobiDay(found.checkInDate)}. It is too early to check them in.`);
     }
 
-    const [updated] = await this.prisma.$transaction([
-      this.prisma.roomBooking.update({
-        where: { id: bookingId },
+    return this.prisma.$transaction(async (tx) => {
+      await this.lockRoom(tx, found.roomId);
+      const room = await tx.hotelRoom.findFirst({ where: { id: found.roomId, businessId } });
+      if (!room) throw new NotFoundException('Room not found');
+      if (room.status === 'MAINTENANCE') throw new BadRequestException('Room is under maintenance');
+      // Two reserved guests for one room can both arrive; only one can be put in it.
+      const inRoom = await tx.roomBooking.findFirst({ where: { roomId: room.id, status: 'CHECKED_IN', id: { not: bookingId } } });
+      if (inRoom) throw new ConflictException(`Room ${room.number} is still occupied by ${inRoom.guestName}.`);
+
+      const claimed = await tx.roomBooking.updateMany({
+        where: { id: bookingId, businessId, status: 'RESERVED' },
         data: { status: 'CHECKED_IN', actualCheckIn: new Date() },
-        include: { room: { select: { number: true, type: true } } },
-      }),
-      this.prisma.hotelRoom.update({
-        where: { id: booking.roomId },
-        data: { status: 'OCCUPIED' },
-      }),
-    ]);
-    return updated;
+      });
+      if (claimed.count !== 1) throw new BadRequestException('This booking was just changed by someone else. Reload it.');
+      await tx.hotelRoom.update({ where: { id: room.id }, data: { status: 'OCCUPIED' } });
+      return tx.roomBooking.findFirst({ where: { id: bookingId, businessId }, include: { room: { select: { number: true, type: true } } } });
+    });
   }
 
-  async checkOutGuest(bookingId: string, payments: Array<{ method: string; amountCents: number }>, businessId: string) {
+  /**
+   * What a stay costs right now, room nights included. The booked nights are billed whatever the guest does
+   * (leaving early is not a refund), plus one night for every Nairobi calendar day past the booked departure
+   * day. Room nights (and any levies the hotel charges) are posted to the folio at check-out, so they are added
+   * here as "still to post".
+   */
+  private stayBill(
+    booking: { checkInDate: Date; checkOutDate: Date | null; nightCount: number; pricePerNightCents: number; depositCents: number | null },
+    charges: Array<{ type: string; quantity: number; totalCents: number }>,
+    now: Date,
+    ctx: { levies: HotelLevy[]; vatRegistered: boolean; classes: Record<string, TaxClass> } = { levies: [], vatRegistered: false, classes: {} },
+  ) {
+    const plannedOut = booking.checkOutDate ?? new Date(booking.checkInDate.getTime() + booking.nightCount * DAY_MS);
+    const lateNights = Math.max(0, nairobiDaysBetween(plannedOut, now));
+    const postedNights = charges.filter((c) => c.type === 'ROOM_RATE').reduce((sum, c) => sum + c.quantity, 0);
+    const nightsToAdd = Math.max(0, (booking.nightCount || 1) + lateNights - postedNights);
+    const roomToAddCents = nightsToAdd * booking.pricePerNightCents;
+
+    // Levies are worked out on what the guest is actually charged: every charge, less any discount shared across them.
+    const chargeable = charges.filter((c) => c.type !== 'PAYMENT' && c.type !== 'LEVY' && c.type !== 'DISCOUNT' && c.type !== ROOM_CHARGE_FOLIO_TYPE && c.totalCents > 0);
+    const base = [
+      ...chargeable.map((c) => ({ type: c.type, totalCents: c.totalCents })),
+      ...(roomToAddCents > 0 ? [{ type: 'ROOM_RATE', totalCents: roomToAddCents }] : []),
+    ];
+    const discountCents = -charges.filter((c) => c.type === 'DISCOUNT').reduce((s, c) => s + c.totalCents, 0);
+    const shares = allocateByValue(base.map((l) => l.totalCents), discountCents);
+    const levies: LevyAmount[] = computeLevies(
+      ctx.levies,
+      base.map((l, i) => ({ totalCents: l.totalCents - shares[i], taxClass: ctx.classes[l.type] ?? 'B', isRoom: l.type === 'ROOM_RATE' })),
+      ctx.vatRegistered,
+    );
+    const levyCents = levies.reduce((s, l) => s + l.amountCents, 0);
+
+    const folioTotal = charges.reduce((sum, c) => sum + c.totalCents, 0) + roomToAddCents + levyCents;
+    const depositCents = booking.depositCents ?? 0;
+    // Sales charged to the room: part of what the guest pays, but invoiced already, so not part of the stay's invoice.
+    const roomChargesCents = charges.filter((c) => c.type === ROOM_CHARGE_FOLIO_TYPE).reduce((sum, c) => sum + c.totalCents, 0);
+    return {
+      lateNights,
+      roomChargesCents,
+      nightsToAdd,
+      roomToAddCents,
+      levies,
+      levyCents,
+      folioTotal,
+      depositCents,
+      balanceDue: Math.max(0, folioTotal - depositCents),
+      refundDueCents: Math.max(0, depositCents - folioTotal),
+    };
+  }
+
+  private async billingContext(db: any, businessId: string, storeId: string) {
+    const business = await db.business.findUnique({ where: { id: businessId }, select: { taxType: true, hotelLevies: true } });
+    return {
+      levies: parseStoredLevies(business?.hotelLevies),
+      vatRegistered: business?.taxType === 'VAT',
+      classes: await this.hotelClasses(db, businessId, storeId),
+    };
+  }
+
+  /** The bill for checking this guest out now, for the desk to collect against. Changes nothing. */
+  async getCheckoutQuote(bookingId: string, businessId: string) {
     await this.assertBookingAccess(bookingId, businessId);
-    const booking = await this.prisma.roomBooking.findUnique({
-      where: { id: bookingId },
-      include: { room: true, folioCharges: true },
+    const booking = await this.prisma.roomBooking.findFirst({
+      where: { id: bookingId, businessId },
+      include: { room: { select: { number: true } }, folioCharges: true },
     });
     if (!booking) throw new NotFoundException('Booking not found');
-    if (booking.status !== 'CHECKED_IN') {
-      throw new BadRequestException('Guest is not checked in');
-    }
-
-    // Auto-add room rate charges for each night if not already posted
-    const existingRoomRateNights = booking.folioCharges
-      .filter(c => c.type === 'ROOM_RATE')
-      .reduce((sum, c) => sum + c.quantity, 0);
-    const nightsToAdd = (booking.nightCount || 1) - existingRoomRateNights;
-    if (nightsToAdd > 0) {
-      await this.prisma.guestFolioCharge.create({
-        data: {
-          bookingId,
-          businessId: booking.businessId,
-          type: 'ROOM_RATE',
-          description: `Room ${booking.room.number} — ${nightsToAdd} night${nightsToAdd !== 1 ? 's' : ''} × KES ${(booking.pricePerNightCents / 100).toFixed(0)}/night`,
-          amountCents: booking.pricePerNightCents,
-          quantity: nightsToAdd,
-          totalCents: booking.pricePerNightCents * nightsToAdd,
-        },
-      });
-    }
-
-    // Reload folio after auto-adding room rate
-    const allCharges = await this.prisma.guestFolioCharge.findMany({ where: { bookingId } });
-    const folioTotal = allCharges.reduce((sum, c) => sum + c.totalCents, 0);
-    const balanceDue = Math.max(0, folioTotal - (booking.depositCents ?? 0));
-
-    const checkOut = new Date();
-    const [updated] = await this.prisma.$transaction([
-      this.prisma.roomBooking.update({
-        where: { id: bookingId },
-        data: { status: 'CHECKED_OUT', actualCheckOut: checkOut, totalAmountCents: folioTotal },
-        include: { folioCharges: true, room: { select: { number: true, type: true } } },
-      }),
-      this.prisma.hotelRoom.update({
-        where: { id: booking.roomId },
-        data: { status: 'AVAILABLE', housekeepingStatus: 'DIRTY' },
-      }),
-    ]);
-    return { ...updated, folioTotal, balanceDue, payments };
+    if (booking.status !== 'CHECKED_IN') throw new BadRequestException('Guest is not checked in');
+    const ctx = await this.billingContext(this.prisma, businessId, booking.storeId);
+    const bill = this.stayBill(booking, booking.folioCharges, new Date(), ctx);
+    // Whether the way a deposit was paid is on record, so the desk knows to ask when something is to be paid back.
+    const depositMethod = bill.depositCents > 0 ? await this.depositMethodOf(this.prisma, bookingId, businessId) : null;
+    return { guestName: booking.guestName, roomNumber: booking.room.number, ...bill, depositMethod };
   }
 
-  async cancelRoomBooking(bookingId: string, businessId: string) {
-    const booking = await this.assertBookingAccess(bookingId, businessId);
-    if (booking.status === 'CHECKED_IN') {
-      throw new BadRequestException('Cannot cancel a checked-in booking — use check-out instead');
+  /**
+   * Check a guest out. The folio is settled here: the balance (room nights plus charges, less the deposit) must
+   * be covered by the payments sent, which are kept on the folio. A stay that runs past the booked departure day
+   * is billed for the extra nights (Nairobi calendar days), where it used to cost the booked nights however long
+   * the guest stayed. What was overpaid is returned as change, and a deposit larger than the bill as a refund.
+   *
+   * For a business on the sales pipeline the stay becomes one invoice (a real Sale) in the same transaction: each
+   * night and charge is a line under its tax class, the deposit is one of its payments, and a deposit larger than the
+   * bill is paid back out of the drawer. Then it reaches the receipt, eTIMS, Z-report, cash drawer and ledger.
+   */
+  async checkOutGuest(
+    bookingId: string,
+    payments: Array<{ method: string; amountCents: number }>,
+    businessId: string,
+    actor: { id?: string; name?: string; role?: string } = { name: 'system' },
+    opts: { refundMethod?: string } = {},
+  ) {
+    const found = await this.assertBookingAccess(bookingId, businessId);
+    if (found.status !== 'CHECKED_IN') throw new BadRequestException('Guest is not checked in');
+    const by = this.actorOf(actor);
+
+    const tenders = requireArray<{ method: string; amountCents: number }>(payments ?? [], 'payments').map((p) => ({
+      method: oneOf(String(p?.method ?? '').toUpperCase(), 'Payment method', FOLIO_TENDER_METHODS),
+      amountCents: intInRange(p?.amountCents, 'Payment amount', 1, 1_000_000_000),
+    }));
+    const tendered = tenders.reduce((s, p) => s + p.amountCents, 0);
+    const now = new Date();
+    const invoice = await this.directSales.isEnabled(businessId);
+
+    const outcome = await this.prisma.$transaction(async (tx) => {
+      await this.lockRoom(tx, found.roomId);
+      // Claim the check-out first: a second desk (or a double click) finds the guest already gone.
+      const claimed = await tx.roomBooking.updateMany({
+        where: { id: bookingId, businessId, status: 'CHECKED_IN' },
+        data: { status: 'CHECKED_OUT', actualCheckOut: now },
+      });
+      if (claimed.count !== 1) throw new BadRequestException('Guest is not checked in');
+
+      const booking = await tx.roomBooking.findFirst({ where: { id: bookingId, businessId }, include: { room: true, folioCharges: true } });
+      if (!booking) throw new NotFoundException('Booking not found');
+
+      const ctx = await this.billingContext(tx, businessId, booking.storeId);
+      const bill = this.stayBill(booking, booking.folioCharges, now, ctx);
+      const posted: Array<{ type: string; description: string; amountCents: number; quantity: number; totalCents: number }> = [];
+      if (bill.nightsToAdd > 0) {
+        posted.push({
+          type: 'ROOM_RATE',
+          description:
+            `Room ${booking.room.number} — ${bill.nightsToAdd} night${bill.nightsToAdd !== 1 ? 's' : ''} × KES ${(booking.pricePerNightCents / 100).toFixed(0)}/night` +
+            (bill.lateNights > 0 ? ` (includes ${bill.lateNights} late night${bill.lateNights !== 1 ? 's' : ''})` : ''),
+          amountCents: booking.pricePerNightCents,
+          quantity: bill.nightsToAdd,
+          totalCents: bill.roomToAddCents,
+        });
+      }
+      for (const l of bill.levies) {
+        posted.push({ type: 'LEVY', description: `${l.name} (${l.ratePct}%)`, amountCents: l.amountCents, quantity: 1, totalCents: l.amountCents });
+      }
+      for (const c of posted) {
+        await tx.guestFolioCharge.create({ data: { bookingId, businessId: booking.businessId, ...c, postedBy: by.name } });
+      }
+
+      const { folioTotal, balanceDue, refundDueCents, lateNights, roomChargesCents } = bill;
+      if (tendered < balanceDue) {
+        // Rolls the whole check-out back, so an unpaid guest stays checked in.
+        throw new BadRequestException(
+          `The balance is KES ${(balanceDue / 100).toFixed(2)} but only KES ${(tendered / 100).toFixed(2)} was received. Take the full payment to check out.`,
+        );
+      }
+
+      // Keep the payments on the folio. They are not charges, so they add nothing to the total.
+      for (const p of tenders) {
+        await tx.guestFolioCharge.create({
+          data: {
+            bookingId,
+            businessId: booking.businessId,
+            type: 'PAYMENT',
+            description: `Payment received (${p.method}) KES ${(p.amountCents / 100).toFixed(2)}`,
+            amountCents: p.amountCents,
+            quantity: 1,
+            totalCents: 0,
+            postedBy: by.name,
+          },
+        });
+      }
+
+      await tx.roomBooking.updateMany({ where: { id: bookingId, businessId }, data: { totalAmountCents: folioTotal } });
+      await tx.hotelRoom.update({ where: { id: booking.roomId }, data: { status: 'AVAILABLE', housekeepingStatus: 'DIRTY' } });
+
+      // What the guest hands over is spent first on sales charged to their room (money against the receivable),
+      // then on the stay's own invoice. The deposit is money the hotel already holds, spent the same way.
+      const invoiceCents = folioTotal - roomChargesCents;
+      const applied = Math.min(bill.depositCents, folioTotal);
+      const spent = splitTenders(
+        invoice ? [...(applied > 0 ? [{ method: 'DEPOSIT', amountCents: applied }] : []), ...tenders] : [...tenders, ...(applied > 0 ? [{ method: 'DEPOSIT', amountCents: applied }] : [])],
+        roomChargesCents,
+        invoiceCents,
+      );
+
+      let direct: { result: DirectSaleResult; input: DirectSaleInput } | null = null;
+      let refund: { id: string; method: string; amountCents: number } | null = null;
+      const collected: Array<{ id: string | null; method: string; amountCents: number }> = [];
+      if (invoice) {
+        const all = [...booking.folioCharges, ...posted];
+        // Sales charged to the room were invoiced when they were rung up; only the stay itself is billed here.
+        const lineCharges = all.filter((c) => c.type !== 'PAYMENT' && c.type !== 'DISCOUNT' && c.type !== ROOM_CHARGE_FOLIO_TYPE && c.totalCents > 0);
+        if (lineCharges.length > 0) {
+          const items = await this.ensureHotelItems(tx, businessId, booking.storeId, lineCharges.map((c) => (HOTEL_ITEM_NAMES[c.type] ? c.type : 'OTHER')));
+          const lines: DirectSaleLine[] = lineCharges.map((c) => {
+            const item = items[HOTEL_ITEM_NAMES[c.type] ? c.type : 'OTHER'];
+            return { itemId: item.id, name: c.description.slice(0, 120), quantity: c.quantity, unitPriceCents: c.amountCents, totalCents: c.totalCents, taxClass: taxClassOf(item) };
+          });
+          const discountCents = -all.filter((c) => c.type === 'DISCOUNT').reduce((s, c) => s + c.totalCents, 0);
+          const input: DirectSaleInput = {
+            businessId,
+            storeId: booking.storeId,
+            cashierId: by.id,
+            source: 'HOTEL',
+            lines,
+            discountCents,
+            // Change goes with the invoice's payments, where it is taken back off the cash.
+            payments: mergeByMethod([...spent.invoice, ...spent.change]),
+            customerName: booking.guestName,
+            customerPhone: booking.guestPhone ?? undefined,
+            buyerKraPin: booking.guestKraPin ?? undefined,
+            notes: `Room ${booking.room.number}, ${nairobiDay(booking.checkInDate)} to ${nairobiDay(now)}`,
+          };
+          const result = await this.directSales.createInTx(tx, input);
+          // updateMany, not update: the tenant middleware checks an `update` by id against rows outside this transaction.
+          await tx.roomBooking.updateMany({ where: { id: bookingId, businessId }, data: { saleId: result.sale.id } });
+          // The charges the stay invoice covers carry its id; sales charged to the room keep their own.
+          await tx.guestFolioCharge.updateMany({ where: { bookingId, businessId, type: { not: ROOM_CHARGE_FOLIO_TYPE } }, data: { saleId: result.sale.id } });
+          direct = { result, input };
+        }
+
+        if (refundDueCents > 0) {
+          const method = await this.refundMethodFor(tx, bookingId, businessId, opts.refundMethod);
+          const movement = await this.recordDeposit(tx, {
+            businessId, storeId: booking.storeId, cashierId: by.id, kind: 'PAY_OUT', method,
+            amountCents: refundDueCents, reason: 'HOTEL_DEPOSIT_REFUND', bookingId, reference: direct?.result.sale.receiptNumber ?? undefined,
+          });
+          refund = { id: movement.id, method, amountCents: refundDueCents };
+        }
+      }
+
+      // The guest paying for sales charged to their room is money into the till that no sale carries.
+      for (const r of spent.receivable) {
+        if (invoice && r.method !== 'DEPOSIT') {
+          const movement = await this.recordDeposit(tx, {
+            businessId, storeId: booking.storeId, cashierId: by.id, kind: 'PAY_IN', method: r.method,
+            amountCents: r.amountCents, reason: 'HOTEL_ROOM_CHARGE_PAID', bookingId, reference: direct?.result.sale.receiptNumber ?? undefined,
+          });
+          collected.push({ id: movement.id, ...r });
+        } else {
+          collected.push({ id: null, ...r });
+        }
+      }
+
+      return {
+        direct,
+        refund,
+        collected,
+        guestName: booking.guestName,
+        summary: { folioTotal, balanceDue, changeDueCents: Math.max(0, tendered - balanceDue), refundDueCents, lateNights, levies: bill.levies, roomChargesCents },
+      };
+    });
+
+    // Books, KRA and the broadcast follow the commit, and cannot undo it. The desk wants the KRA QR code for the
+    // invoice, so wait for it briefly; if KRA is slow the stay is already billed and the invoice prints without it.
+    let etims: EtimsOutcome | null = null;
+    if (outcome.direct) {
+      const after = this.directSales.afterCommit(outcome.direct.result, outcome.direct.input);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      etims = await Promise.race([after.etims, new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), ETIMS_WAIT_MS); })]);
+      clearTimeout(timer);
     }
-    await this.prisma.$transaction([
-      this.prisma.roomBooking.update({ where: { id: bookingId }, data: { status: 'CANCELLED' } }),
-      this.prisma.hotelRoom.update({ where: { id: booking.roomId }, data: { status: 'AVAILABLE' } }),
-    ]);
-    return { success: true };
+    this.postRoomChargeSettlement(outcome.collected, invoice, { businessId, storeId: found.storeId, bookingId, guestName: outcome.guestName });
+    if (outcome.refund) {
+      this.postDepositLedger('REFUNDED', { ...outcome.refund, businessId, storeId: found.storeId, guestName: outcome.guestName });
+    }
+
+    const closed = await this.prisma.roomBooking.findFirst({
+      where: { id: bookingId, businessId },
+      include: { folioCharges: true, room: { select: { number: true, type: true } } },
+    });
+    return {
+      ...closed,
+      ...outcome.summary,
+      payments: tenders,
+      ...(outcome.direct && {
+        saleId: outcome.direct.result.sale.id,
+        receiptNumber: outcome.direct.result.sale.receiptNumber,
+        invoice: outcome.direct.result.sale,
+        etims,
+      }),
+      ...(outcome.refund && { refundMethod: outcome.refund.method }),
+    };
+  }
+
+  /** What the guest paid against sales charged to their room clears what they owed: money in, receivable out. */
+  private postRoomChargeSettlement(
+    collected: Array<{ id: string | null; method: string; amountCents: number }>,
+    invoiced: boolean,
+    m: { businessId: string; storeId: string; bookingId: string; guestName: string },
+  ) {
+    for (const [i, c] of collected.entries()) {
+      // A deposit spent here was never booked as a liability by a business still off the sales pipeline.
+      if (c.method === 'DEPOSIT' && !invoiced) continue;
+      void postSettlementJournal(this.ledger, {
+        businessId: m.businessId,
+        storeId: m.storeId,
+        description: `Room charges settled: ${m.guestName}`,
+        reference: `ROOMSET-${m.bookingId}-${i}`,
+        sourceType: 'HOTEL_ROOM_CHARGE',
+        method: c.method,
+        amountCents: c.amountCents,
+      }).catch((e: unknown) => this.logger.warn(`Ledger posting for room charges on ${m.bookingId} failed: ${String(e)}`));
+    }
+  }
+
+  /**
+   * Only a reservation that has not arrived can be cancelled. A guest in the room is checked out, not cancelled.
+   * What happens to the deposit is the desk's call: it is paid back (out of the drawer, for a cash deposit), or kept
+   * by the hotel when the booking is cancelled late. Keeping it is a manager's decision.
+   */
+  async cancelRoomBooking(
+    bookingId: string,
+    businessId: string,
+    actor?: { id?: string; name?: string; role?: string },
+    opts: { forfeit?: boolean; refundMethod?: string } = {},
+  ) {
+    const found = await this.assertBookingAccess(bookingId, businessId);
+    if (found.status === 'CHECKED_IN') throw new BadRequestException('Cannot cancel a checked-in booking — use check-out instead');
+    if (found.status !== 'RESERVED') throw new BadRequestException(`A ${found.status.toLowerCase().replace(/_/g, ' ')} booking cannot be cancelled`);
+    const by = this.actorOf(actor);
+    const forfeit = opts.forfeit === true && (found.depositCents ?? 0) > 0;
+    if (forfeit && !MANAGER_ROLES.includes(by.role)) throw new ForbiddenException('Only a manager can keep a guest\'s deposit');
+    const register = (found.depositCents ?? 0) > 0 && (await this.directSales.isEnabled(businessId));
+
+    const movement = await this.prisma.$transaction(async (tx) => {
+      await this.lockRoom(tx, found.roomId);
+      const claimed = await tx.roomBooking.updateMany({ where: { id: bookingId, businessId, status: 'RESERVED' }, data: { status: 'CANCELLED' } });
+      if (claimed.count !== 1) throw new BadRequestException('This booking was just changed by someone else. Reload it.');
+
+      // The room goes back on sale only if nothing else is holding it. It used to be freed unconditionally,
+      // including when another guest was in it.
+      const room = await tx.hotelRoom.findFirst({ where: { id: found.roomId, businessId } });
+      if (room && room.status === 'RESERVED') {
+        const stillDue = await tx.roomBooking.findFirst({
+          where: { roomId: room.id, status: 'RESERVED', checkInDate: { lte: nairobiDayEnd(nairobiDay(new Date())) } },
+        });
+        if (!stillDue) await tx.hotelRoom.update({ where: { id: room.id }, data: { status: 'AVAILABLE' } });
+      }
+
+      if (!register) return null;
+      // Keeping a deposit moves no money, so how it came in does not matter then; paying it back does.
+      const method = forfeit ? (await this.depositMethodOf(tx, bookingId, businessId)) ?? 'OPENING' : await this.refundMethodFor(tx, bookingId, businessId, opts.refundMethod);
+      return {
+        method,
+        row: await this.recordDeposit(tx, {
+          businessId, storeId: found.storeId, cashierId: by.id, kind: forfeit ? 'FORFEIT' : 'PAY_OUT', method,
+          amountCents: found.depositCents, reason: forfeit ? 'HOTEL_DEPOSIT_FORFEIT' : 'HOTEL_DEPOSIT_REFUND', bookingId,
+        }),
+      };
+    });
+    if (movement) {
+      this.postDepositLedger(forfeit ? 'FORFEITED' : 'REFUNDED', {
+        id: movement.row.id, businessId, storeId: found.storeId, method: movement.method, amountCents: found.depositCents, guestName: found.guestName,
+      });
+    }
+    // Without the register the system does not move the money: the desk hands the deposit back, so say how much.
+    return { success: true, depositToRefundCents: forfeit ? 0 : found.depositCents ?? 0, depositForfeitedCents: forfeit ? found.depositCents : 0 };
   }
 
   // ── Guest Folio ─────────────────────────────────────────────────────────────
@@ -1232,22 +1762,36 @@ export class HospitalityService {
     description: string;
     amountCents: number;
     quantity?: number;
-  }, businessId: string, postedBy: string) {
+  }, businessId: string, postedBy: string, actorRole = 'CASHIER') {
     const booking = await this.assertBookingAccess(bookingId, businessId);
     if (['CHECKED_OUT', 'CANCELLED'].includes(booking.status)) throw new BadRequestException('This booking is closed');
+    // Room nights, levies and payments are written by check-out; a hand-posted one would be billed twice.
+    const type = oneOf(String(data.type ?? ''), 'Charge type', MANUAL_FOLIO_TYPES);
     const amountCents = positiveInt(data.amountCents, 'Amount');
     const qty = positiveInt(data.quantity ?? 1, 'Quantity', 999);
     const description = String(data.description ?? '').trim().slice(0, 200);
     if (!description) throw new BadRequestException('A charge needs a description');
+
+    // A DISCOUNT comes off the bill. The amount is sent as a positive figure like any other charge and stored
+    // negative. Only a manager can waive part of a guest's bill, and never more than the bill is.
+    let sign = 1;
+    if (type === 'DISCOUNT') {
+      if (!MANAGER_ROLES.includes(actorRole)) throw new ForbiddenException('Only a manager can discount a guest folio');
+            // Sales already charged to the room were invoiced as sales; a stay discount cannot reach them.
+      const existing = await this.prisma.guestFolioCharge.findMany({ where: { bookingId, type: { not: ROOM_CHARGE_FOLIO_TYPE } }, select: { totalCents: true } });
+      const current = existing.reduce((sum, c) => sum + c.totalCents, 0);
+      if (amountCents * qty > current) throw new BadRequestException('The discount is larger than the folio total');
+      sign = -1;
+    }
     return this.prisma.guestFolioCharge.create({
       data: {
         bookingId,
         businessId,
-        type: data.type,
+        type,
         description,
-        amountCents,
+        amountCents: sign * amountCents,
         quantity: qty,
-        totalCents: amountCents * qty,
+        totalCents: sign * amountCents * qty,
         // Who posted it comes from the login, so a charge can't be blamed on someone else.
         postedBy,
         date: new Date(),
@@ -1261,6 +1805,7 @@ export class HospitalityService {
       include: { booking: { select: { status: true } } },
     });
     if (!charge || charge.businessId !== businessId) throw new NotFoundException('Charge not found');
+    if (charge.type === ROOM_CHARGE_FOLIO_TYPE) throw new BadRequestException('This is a sale charged to the room. Void the sale to take it off.');
     // After check-out the folio is the record of what the guest paid; it is not edited.
     if (['CHECKED_OUT', 'CANCELLED'].includes(charge.booking.status)) {
       throw new BadRequestException('This booking is closed, so its charges can no longer be removed');

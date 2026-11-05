@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { computeTaxes } from '@pos/shared';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -69,6 +70,12 @@ interface Category {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
+
+/** The quantity typed before a scan ("3" then scan; "0.5" for half a kilo). Anything unusable means one. */
+function scanQty(typed: string | undefined | null): number {
+  const n = typed ? Math.round(parseFloat(typed) * 1000) / 1000 : 1;
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
 
 function fmt(cents: number): string {
   return (cents / 100).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -189,12 +196,12 @@ export default function SupermarketPOSPage() {
     staleTime: 60_000,
   });
 
-  const { data: businessSettings } = useQuery<{ name?: string; serviceChargeRate?: number }>({
+  const { data: businessSettings } = useQuery<{ name?: string; serviceChargeRate?: number; taxType?: string }>({
     queryKey: ['biz-settings', businessId],
     queryFn: () => api.get(`/business/${businessId}/settings`),
     enabled: !!businessId,
     staleTime: 5 * 60_000,
-    select: (d: any) => ({ name: d.name, serviceChargeRate: d.serviceChargeRate ?? 10 }),
+    select: (d: any) => ({ name: d.name, serviceChargeRate: d.serviceChargeRate ?? 10, taxType: d.taxType ?? 'VAT' }),
   });
 
   const { data: loyaltyData } = useQuery<{ loyaltyPoints: number; balanceCents: number; program?: { redemptionRate: number; minRedemption: number } } | null>({
@@ -235,9 +242,13 @@ export default function SupermarketPOSPage() {
   })();
   const totalDiscountCents = promoDiscountCents + (loyaltyDiscountApplied ? loyaltyDiscountCents : 0) + manualDiscountCents;
   const taxBase = subtotalCents - totalDiscountCents;
-  const vatApplicableTotal = cart.filter((i) => i.vatApplicable).reduce((s, i) => s + i.totalCents, 0);
-  const vatApplicableAfterDiscount = vatApplicableTotal * (Math.max(taxBase, 0) / Math.max(subtotalCents, 1));
-  const vatCents = Math.round(vatApplicableAfterDiscount * 16 / 116);
+  // VAT line by line from each item's tax class (flour is exempt, milk standard-rated), the discount shared across
+  // the lines: the same function the server uses, so the receipt matches what is recorded and sent to KRA.
+  const vatCents = computeTaxes(
+    cart.map((i) => ({ totalCents: i.totalCents, taxClass: i.taxClass })),
+    Math.max(0, totalDiscountCents),
+    { vatRegistered: (businessSettings?.taxType ?? 'VAT') === 'VAT' },
+  ).vatCents;
   const totalCents = Math.max(0, taxBase);
   const totalItems = cart.reduce((s, i) => s + i.quantity, 0);
 
@@ -278,7 +289,7 @@ export default function SupermarketPOSPage() {
     // Barcode exact match first
     const byBarcode = items.find((i) => i.barcode?.toLowerCase() === scan.trim().toLowerCase());
     if (byBarcode) {
-      const qty = qtyMultiplier ? parseInt(qtyMultiplier, 10) : 1;
+      const qty = scanQty(qtyMultiplier);
       addItemById(byBarcode, qty);
       return;
     }
@@ -286,7 +297,7 @@ export default function SupermarketPOSPage() {
     // SKU exact match (ApiItem may not have sku, use barcode fallback)
     const bySku = items.find((i) => (i as any).sku?.toLowerCase() === scan.trim().toLowerCase());
     if (bySku) {
-      const qty = qtyMultiplier ? parseInt(qtyMultiplier, 10) : 1;
+      const qty = scanQty(qtyMultiplier);
       addItemById(bySku, qty);
       return;
     }
@@ -294,7 +305,7 @@ export default function SupermarketPOSPage() {
     // Partial name match (first result)
     const byName = items.find((i) => i.name.toLowerCase().includes(scan.toLowerCase()));
     if (byName) {
-      const qty = qtyMultiplier ? parseInt(qtyMultiplier, 10) : 1;
+      const qty = scanQty(qtyMultiplier);
       addItemById(byName, qty);
     }
   }, [scan, items, qtyMultiplier, addItemById]);
@@ -755,7 +766,7 @@ export default function SupermarketPOSPage() {
                     key={item.id}
                     onClick={() => {
                       if (outOfStock) return;
-                      const qty = qtyMultiplier ? parseInt(qtyMultiplier, 10) : 1;
+                      const qty = scanQty(qtyMultiplier);
                       addItemById(item, qty);
                     }}
                     disabled={outOfStock}

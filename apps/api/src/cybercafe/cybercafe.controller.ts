@@ -1,8 +1,13 @@
 import { Feature } from '@pos/shared';
 import { RequiresFeature } from '../auth/subscription.guard';
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, Req, UseGuards } from '@nestjs/common';
+import type { Request } from 'express';
+import type { AuthUser } from '../auth/auth.service';
 import { JwtAuthGuard, Public } from '../auth/jwt-auth.guard';
 import { CybercafeService } from './cybercafe.service';
+
+type Authed = Request & { user: AuthUser };
+const RATE_SETTERS = ['OWNER', 'ADMIN', 'MANAGER'];
 
 @UseGuards(JwtAuthGuard)
 @Controller('cybercafe')
@@ -31,51 +36,54 @@ export class CybercafeController {
 
   @RequiresFeature(Feature.CYBERCAFE)
   @Post('stations')
-  createStation(@Body() dto: any) {
-    return this.svc.createStation(dto);
+  createStation(@Body() dto: any, @Req() req: Authed) {
+    return this.svc.createStation({ ...dto, businessId: req.user.businessId });
   }
 
   @RequiresFeature(Feature.CYBERCAFE)
   @Patch('stations/:id')
-  updateStation(@Param('id') id: string, @Body() dto: any) {
-    return this.svc.updateStation(id, dto);
+  updateStation(@Param('id') id: string, @Body() dto: any, @Req() req: Authed) {
+    return this.svc.updateStation(id, req.user.businessId, dto);
   }
 
   // ── Sessions ──────────────────────────────────────────────────────────────
   @RequiresFeature(Feature.CYBERCAFE)
   @Post('stations/:id/start')
-  startSession(@Param('id') stationId: string, @Body() dto: any) {
-    return this.svc.startSession({ ...dto, stationId });
+  startSession(@Param('id') stationId: string, @Body() dto: any, @Req() req: Authed) {
+    return this.svc.startSession(
+      { ...dto, stationId, businessId: req.user.businessId },
+      { canSetRate: RATE_SETTERS.includes(req.user.role) },
+    );
   }
 
   @RequiresFeature(Feature.CYBERCAFE)
   @Post('sessions/:id/pause')
-  pauseSession(@Param('id') id: string) {
-    return this.svc.pauseSession(id);
+  pauseSession(@Param('id') id: string, @Req() req: Authed) {
+    return this.svc.pauseSession(id, req.user.businessId);
   }
 
   @RequiresFeature(Feature.CYBERCAFE)
   @Post('sessions/:id/resume')
-  resumeSession(@Param('id') id: string) {
-    return this.svc.resumeSession(id);
+  resumeSession(@Param('id') id: string, @Req() req: Authed) {
+    return this.svc.resumeSession(id, req.user.businessId);
   }
 
   @RequiresFeature(Feature.CYBERCAFE)
   @Post('sessions/:id/end')
-  endSession(@Param('id') id: string, @Body() dto: any) {
-    return this.svc.endSession(id, dto);
+  endSession(@Param('id') id: string, @Body() dto: any, @Req() req: Authed) {
+    return this.svc.endSession(id, req.user.businessId, dto, { id: req.user.id });
   }
 
   @RequiresFeature(Feature.CYBERCAFE)
   @Post('sessions/:id/void')
-  voidSession(@Param('id') id: string) {
-    return this.svc.voidSession(id);
+  voidSession(@Param('id') id: string, @Body('reason') reason: string | undefined, @Req() req: Authed) {
+    return this.svc.voidSession(id, req.user.businessId, reason);
   }
 
   @RequiresFeature(Feature.CYBERCAFE)
   @Post('sessions/:id/extend')
-  extendSession(@Param('id') id: string, @Body() body: { extraMinutes: number }) {
-    return this.svc.extendSession(id, body.extraMinutes);
+  extendSession(@Param('id') id: string, @Body() body: { extraMinutes: number }, @Req() req: Authed) {
+    return this.svc.extendSession(id, req.user.businessId, body?.extraMinutes);
   }
 
   @RequiresFeature(Feature.CYBERCAFE)
@@ -106,14 +114,14 @@ export class CybercafeController {
 
   @RequiresFeature(Feature.CYBERCAFE)
   @Post('packages')
-  createPackage(@Body() dto: any) {
-    return this.svc.createPackage(dto);
+  createPackage(@Body() dto: any, @Req() req: Authed) {
+    return this.svc.createPackage({ ...dto, businessId: req.user.businessId });
   }
 
   @RequiresFeature(Feature.CYBERCAFE)
   @Patch('packages/:id')
-  updatePackage(@Param('id') id: string, @Body() dto: any) {
-    return this.svc.updatePackage(id, dto);
+  updatePackage(@Param('id') id: string, @Body() dto: any, @Req() req: Authed) {
+    return this.svc.updatePackage(id, req.user.businessId, dto);
   }
 
   // ── Rates ──────────────────────────────────────────────────────────────────
@@ -125,20 +133,20 @@ export class CybercafeController {
 
   @RequiresFeature(Feature.CYBERCAFE)
   @Post('rates')
-  createRate(@Body() dto: any) {
-    return this.svc.createRate(dto);
+  createRate(@Body() dto: any, @Req() req: Authed) {
+    return this.svc.createRate({ ...dto, businessId: req.user.businessId });
   }
 
   @RequiresFeature(Feature.CYBERCAFE)
   @Patch('rates/:id')
-  updateRate(@Param('id') id: string, @Body() dto: any) {
-    return this.svc.updateRate(id, dto);
+  updateRate(@Param('id') id: string, @Body() dto: any, @Req() req: Authed) {
+    return this.svc.updateRate(id, req.user.businessId, dto);
   }
 
   @RequiresFeature(Feature.CYBERCAFE)
   @Delete('rates/:id')
-  deleteRate(@Param('id') id: string) {
-    return this.svc.deleteRate(id);
+  deleteRate(@Param('id') id: string, @Req() req: Authed) {
+    return this.svc.deleteRate(id, req.user.businessId);
   }
 
   // ── Statistics ────────────────────────────────────────────────────────────

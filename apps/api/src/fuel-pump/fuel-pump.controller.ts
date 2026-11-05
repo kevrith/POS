@@ -1,9 +1,13 @@
 import { Feature } from '@pos/shared';
 import { RequiresFeature } from '../auth/subscription.guard';
-import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, Req, UseGuards } from '@nestjs/common';
+import type { Request } from 'express';
+import type { AuthUser } from '../auth/auth.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FuelPumpService } from './fuel-pump.service';
 import { FuelPumpGateway } from './fuel-pump.gateway';
+
+type Authed = Request & { user: AuthUser };
 
 @UseGuards(JwtAuthGuard)
 @RequiresFeature(Feature.FUEL_PUMP)
@@ -24,13 +28,13 @@ export class FuelPumpController {
   }
 
   @Post('grades')
-  createGrade(@Body() dto: any) {
-    return this.svc.createGrade(dto);
+  createGrade(@Body() dto: any, @Req() req: Authed) {
+    return this.svc.createGrade({ ...dto, businessId: req.user.businessId });
   }
 
   @Patch('grades/:id')
-  updateGrade(@Param('id') id: string, @Body() dto: any) {
-    return this.svc.updateGrade(id, dto);
+  updateGrade(@Param('id') id: string, @Body() dto: any, @Req() req: Authed) {
+    return this.svc.updateGrade(id, req.user.businessId, dto);
   }
 
   // ── Pumps ─────────────────────────────────────────────────────────────────
@@ -40,23 +44,23 @@ export class FuelPumpController {
   }
 
   @Post('pumps')
-  createPump(@Body() dto: any) {
-    return this.svc.createPump(dto);
+  createPump(@Body() dto: any, @Req() req: Authed) {
+    return this.svc.createPump({ ...dto, businessId: req.user.businessId });
   }
 
   @Patch('pumps/:id')
-  updatePump(@Param('id') id: string, @Body() dto: any) {
-    return this.svc.updatePump(id, dto);
+  updatePump(@Param('id') id: string, @Body() dto: any, @Req() req: Authed) {
+    return this.svc.updatePump(id, req.user.businessId, dto);
   }
 
   @Post('pumps/:id/authorize')
-  authorizePump(@Param('id') id: string) {
-    return this.svc.authorizePump(id);
+  authorizePump(@Param('id') id: string, @Req() req: Authed) {
+    return this.svc.authorizePump(id, req.user.businessId);
   }
 
   @Post('pumps/:id/stop')
-  stopPump(@Param('id') id: string) {
-    return this.svc.stopPump(id);
+  stopPump(@Param('id') id: string, @Req() req: Authed) {
+    return this.svc.stopPump(id, req.user.businessId);
   }
 
   // ── Sales ─────────────────────────────────────────────────────────────────
@@ -71,9 +75,16 @@ export class FuelPumpController {
     return this.svc.getSales(businessId, storeId, { pumpId, startDate, endDate });
   }
 
+  /** The price is the grade's, set by the server, and the cashier is whoever is signed in. */
   @Post('sales')
-  recordSale(@Body() dto: any) {
-    return this.svc.recordSale(dto);
+  recordSale(@Body() dto: any, @Req() req: Authed) {
+    return this.svc.recordSale({ ...dto, businessId: req.user.businessId, cashierId: req.user.id });
+  }
+
+  /** A manager takes a pump sale back: the litres return to the tank and a fleet account is credited. */
+  @Post('sales/:id/void')
+  voidSale(@Param('id') id: string, @Body('reason') reason: string, @Req() req: Authed) {
+    return this.svc.voidSale(id, req.user.businessId, { id: req.user.id, name: req.user.name, role: String(req.user.role) }, reason);
   }
 
   @Get('stats')
@@ -93,28 +104,29 @@ export class FuelPumpController {
   }
 
   @Post('tanks')
-  createTank(@Body() dto: any) {
-    return this.svc.createTank(dto);
+  createTank(@Body() dto: any, @Req() req: Authed) {
+    return this.svc.createTank({ ...dto, businessId: req.user.businessId });
   }
 
   @Patch('tanks/:id')
-  updateTank(@Param('id') id: string, @Body() dto: any) {
-    return this.svc.updateTank(id, dto);
+  updateTank(@Param('id') id: string, @Body() dto: any, @Req() req: Authed) {
+    return this.svc.updateTank(id, req.user.businessId, dto);
   }
 
   @Get('tanks/:id/dippings')
-  getDippings(@Param('id') tankId: string) {
-    return this.svc.getDippings(tankId);
+  getDippings(@Param('id') tankId: string, @Req() req: Authed) {
+    return this.svc.getDippings(req.user.businessId, tankId);
   }
 
+  /** Who took the reading is the signed-in user, not a name typed into the request. */
   @Post('tanks/dipping')
-  recordDipping(@Body() dto: any) {
-    return this.svc.recordDipping(dto);
+  recordDipping(@Body() dto: any, @Req() req: Authed) {
+    return this.svc.recordDipping({ ...dto, businessId: req.user.businessId, recordedBy: req.user.name });
   }
 
   @Post('tanks/delivery')
-  recordDelivery(@Body() dto: any) {
-    return this.svc.recordDelivery(dto);
+  recordDelivery(@Body() dto: any, @Req() req: Authed) {
+    return this.svc.recordDelivery({ ...dto, businessId: req.user.businessId });
   }
 
   @Get('deliveries')
@@ -149,18 +161,18 @@ export class FuelPumpController {
   }
 
   @Post('shifts/open')
-  openShift(@Body() dto: any) {
-    return this.svc.openShift(dto);
+  openShift(@Body() dto: any, @Req() req: Authed) {
+    return this.svc.openShift({ ...dto, businessId: req.user.businessId, cashierId: req.user.id, cashierName: dto?.cashierName || req.user.name });
   }
 
   @Post('shifts/:id/close')
-  closeShift(@Param('id') id: string, @Body('readings') readings: any[]) {
-    return this.svc.closeShift(id, readings ?? []);
+  closeShift(@Param('id') id: string, @Body('readings') readings: any[], @Req() req: Authed) {
+    return this.svc.closeShift(id, req.user.businessId, readings ?? []);
   }
 
   @Get('shifts/:id/summary')
-  getShiftSummary(@Param('id') id: string) {
-    return this.svc.getShiftSummary(id);
+  getShiftSummary(@Param('id') id: string, @Req() req: Authed) {
+    return this.svc.getShiftSummary(id, req.user.businessId);
   }
 
   // ── Fleet ─────────────────────────────────────────────────────────────────
@@ -170,23 +182,23 @@ export class FuelPumpController {
   }
 
   @Post('fleet')
-  createFleetAccount(@Body() dto: any) {
-    return this.svc.createFleetAccount(dto);
+  createFleetAccount(@Body() dto: any, @Req() req: Authed) {
+    return this.svc.createFleetAccount({ ...dto, businessId: req.user.businessId });
   }
 
   @Patch('fleet/:id')
-  updateFleetAccount(@Param('id') id: string, @Body() dto: any) {
-    return this.svc.updateFleetAccount(id, dto);
+  updateFleetAccount(@Param('id') id: string, @Body() dto: any, @Req() req: Authed) {
+    return this.svc.updateFleetAccount(id, req.user.businessId, dto);
   }
 
   @Get('fleet/:id/transactions')
-  getFleetTransactions(@Param('id') id: string) {
-    return this.svc.getFleetTransactions(id);
+  getFleetTransactions(@Param('id') id: string, @Req() req: Authed) {
+    return this.svc.getFleetTransactions(req.user.businessId, id);
   }
 
   @Post('fleet/:id/payment')
-  recordFleetPayment(@Param('id') id: string, @Body() dto: any) {
-    return this.svc.recordFleetPayment({ ...dto, fleetAccountId: id });
+  recordFleetPayment(@Param('id') id: string, @Body() dto: any, @Req() req: Authed) {
+    return this.svc.recordFleetPayment({ ...dto, businessId: req.user.businessId, fleetAccountId: id });
   }
 
   // ── Maintenance Log ────────────────────────────────────────────────────────
@@ -199,12 +211,12 @@ export class FuelPumpController {
   }
 
   @Post('maintenance')
-  createMaintenanceLog(@Body() dto: any) {
-    return this.svc.createMaintenanceLog(dto);
+  createMaintenanceLog(@Body() dto: any, @Req() req: Authed) {
+    return this.svc.createMaintenanceLog({ ...dto, businessId: req.user.businessId });
   }
 
   @Patch('maintenance/:id')
-  updateMaintenanceLog(@Param('id') id: string, @Body() dto: any) {
-    return this.svc.updateMaintenanceLog(id, dto);
+  updateMaintenanceLog(@Param('id') id: string, @Body() dto: any, @Req() req: Authed) {
+    return this.svc.updateMaintenanceLog(id, req.user.businessId, dto);
   }
 }

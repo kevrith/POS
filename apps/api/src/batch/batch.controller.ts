@@ -45,8 +45,8 @@ export class BatchController {
 
   @Get('fefo/:itemId')
   @RequirePermission('inventory.read')
-  async getFEFO(@Param('itemId') itemId: string) {
-    return this.batchService.getBatchesFEFO(itemId);
+  async getFEFO(@Param('businessId') businessId: string, @Param('itemId') itemId: string) {
+    return this.batchService.getBatchesFEFO(itemId, businessId);
   }
 
   @Get(':id/history')

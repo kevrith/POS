@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { taxClassOf, type TaxClass } from '@pos/shared';
 
 export type PriceLevel = 'RETAIL' | 'WHOLESALE' | 'VIP';
 export type ItemType = 'PRODUCT' | 'SERVICE' | 'WEIGHTED' | 'BUNDLE' | 'RECIPE';
@@ -25,6 +26,8 @@ export interface CartItem {
   currentStock?: number;
   itemType: ItemType;
   vatApplicable: boolean;
+  /** KRA tax class the line is sold under (A exempt, B 16%, C zero-rated, D not VAT). */
+  taxClass: TaxClass;
   totApplicable: boolean;
   weightGrams?: number;
   tareGrams?: number;
@@ -47,6 +50,7 @@ export interface ApiItem {
   trackExpiry?: boolean;
   defaultExpiryDays?: number | null;
   vatApplicable: boolean;
+  taxClass?: TaxClass | null;
   totApplicable: boolean;
   category?: { id: string; name: string; color?: string } | string | null;
   ageRestricted?: boolean;
@@ -134,6 +138,7 @@ export const usePOSStore = create<POSState>()((set, _get) => ({
         currentStock: item.currentStock,
         itemType: item.type,
         vatApplicable: item.vatApplicable,
+        taxClass: taxClassOf(item),
         totApplicable: item.totApplicable,
         selectedUOM: uom ?? null,
         stockDeductionPerUnit: deduction,
@@ -158,6 +163,7 @@ export const usePOSStore = create<POSState>()((set, _get) => ({
         currentStock: item.currentStock,
         itemType: item.type,
         vatApplicable: item.vatApplicable,
+        taxClass: taxClassOf(item),
         totApplicable: item.totApplicable,
         weightGrams,
       };

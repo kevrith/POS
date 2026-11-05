@@ -4,6 +4,7 @@ import { InventoryMovementType, NegativeStockPolicy } from '@pos/shared';
 import { v4 as uuidv4 } from 'uuid';
 import type { Prisma } from '@prisma/client';
 
+import { roundQty } from '../common/quantity';
 type PrismaTx = Omit<PrismaService, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>;
 
 @Injectable()
@@ -16,7 +17,7 @@ export class InventoryService {
       where: { itemId, storeId, ...(businessId ? { businessId } : {}) },
       _sum: { quantity: true },
     });
-    return result._sum.quantity ?? 0;
+    return roundQty(result._sum.quantity ?? 0);
   }
 
   async getStockLevels(
@@ -31,7 +32,7 @@ export class InventoryService {
     });
     const map = new Map<string, number>();
     for (const m of movements) {
-      map.set(m.itemId, m._sum.quantity ?? 0);
+      map.set(m.itemId, roundQty(m._sum.quantity ?? 0));
     }
     return map;
   }
@@ -49,7 +50,7 @@ export class InventoryService {
     });
     const map = new Map<string, number>();
     for (const m of movements) {
-      map.set(m.itemId, m._sum.quantity ?? 0);
+      map.set(m.itemId, roundQty(m._sum.quantity ?? 0));
     }
     return map;
   }
@@ -129,7 +130,7 @@ export class InventoryService {
     const movements = await this.prisma.inventoryMovement.findMany({
       where: { variantId, storeId },
     });
-    const stock = movements.reduce((s, m) => s + m.quantity, 0);
+    const stock = roundQty(movements.reduce((s, m) => s + m.quantity, 0));
     return { variantId, storeId, stock };
   }
 

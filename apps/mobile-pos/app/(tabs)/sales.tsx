@@ -97,10 +97,9 @@ export default function SalesScreen() {
   const voidMut = useMutation({
     mutationFn: async () => {
       if (!selectedSale) return;
-      // Manager PIN gate → resolve managerId → void.
-      const mgr = await mobileApi.post<{ userId: string; name: string }>('/sales/verify-manager-pin', { pin: voidPin, businessId });
+      // The server verifies the manager PIN itself; a user id sent from here is not trusted.
       return mobileApi.post(`/sales/${selectedSale.id}/void?businessId=${businessId}`, {
-        managerId: mgr.userId,
+        managerPin: voidPin,
         reason: voidReason.trim() || 'Voided at POS',
       });
     },

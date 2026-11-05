@@ -16,7 +16,7 @@ import PaymentModal from '../components/PaymentModal';
 import { printKOT, printBill, printKOTWithRouting } from '../lib/printer';
 import { reportKotPrint } from '../lib/kotPrintFeedback';
 import type { KOTData } from '../lib/printer';
-import { calculateVAT, calculateTOT } from '@pos/shared';
+import { calculateTOT, computeTaxes, taxClassOf } from '@pos/shared';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -71,6 +71,9 @@ interface MenuItem {
   allergens?: string; // JSON array string
   /** KITCHEN / BAR / DESSERT, set on the item; empty means "guess from name". */
   station?: string | null;
+  /** KRA tax class (A exempt, B 16%, C zero-rated, D not VAT). */
+  taxClass?: string | null;
+  vatApplicable?: boolean;
 }
 
 function categoryName(c: MenuItem['category']): string | undefined {
@@ -139,6 +142,7 @@ interface RoomBooking {
   guestName: string;
   guestPhone?: string;
   guestIdNumber?: string;
+  guestKraPin?: string;
   checkInDate: string;
   checkOutDate?: string;
   actualCheckIn?: string;
@@ -169,6 +173,12 @@ interface GuestFolio extends RoomBooking {
   balanceDue: number;
   roomRateTotal: number;
   room: { number: string; type: string; floor?: string };
+  /** Set when the stay was billed as a real sale (a business on the sales pipeline). */
+  receiptNumber?: string;
+  etims?: { success?: boolean; controlNumber?: string; qrUrl?: string; intrlData?: string; testMode?: boolean } | null;
+  refundDueCents?: number;
+  refundMethod?: string;
+  changeDueCents?: number;
 }
 
 interface HotelDashboard {
@@ -1309,6 +1319,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
     staleTime: 5 * 60_000,
   });
   const allergenLookup = new Map(menuItemsForAllergens.map(i => [i.id, i.allergens ?? '[]']));
+  const menuItemsById = new Map(menuItemsForAllergens.map((i) => [i.id, i]));
   // Which station makes each item, so drinks go to the bar printer and not the kitchen's.
   const routingLookup = new Map(menuItemsForAllergens.map(i => [i.id, { category: categoryName(i.category), station: i.station ?? undefined }]));
 
@@ -1337,8 +1348,16 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
    * SalesService derives it at checkout. Returns zeroes for taxType NONE so a
    * business with tax turned off never sees a tax line.
    */
-  const billTax = (subtotalCents: number) => ({
-    vatCents: bizSettings?.taxType === 'VAT' ? calculateVAT(subtotalCents) : 0,
+  const billTax = (subtotalCents: number, lines: Array<{ itemId?: string; totalCents: number }> = []) => ({
+    // Line by line from each menu item's tax class, as the server does at checkout. A line whose item is not in the
+    // menu list (or a bill with no lines) is taken as standard-rated.
+    vatCents: computeTaxes(
+      lines.length > 0
+        ? lines.map((l) => ({ totalCents: l.totalCents, taxClass: taxClassOf(menuItemsById.get(l.itemId ?? '') ?? {}) }))
+        : [{ totalCents: subtotalCents, taxClass: 'B' as const }],
+      0,
+      { vatRegistered: bizSettings?.taxType === 'VAT' },
+    ).vatCents,
     totCents: bizSettings?.taxType === 'TOT' ? calculateTOT(subtotalCents, bizSettings?.totRate ?? 3) : 0,
   });
 
@@ -1429,7 +1448,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
           items: billItems,
           subtotalCents: subtotal,
           totalCents: subtotal,
-          ...billTax(subtotal),
+          ...billTax(subtotal, activeOrder.items.map((i) => ({ itemId: i.itemId, totalCents: lineTotal(i) }))),
           date: new Date().toISOString(),
           footer: bizSettings?.receiptFooter || undefined,
         });
@@ -1927,7 +1946,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
                   })),
                   subtotalCents: subtotal,
                   totalCents: subtotal,
-                  ...billTax(subtotal),
+                  ...billTax(subtotal, activeOrder.items.map((i) => ({ itemId: i.itemId, totalCents: lineTotal(i) }))),
                   date: new Date().toISOString(),
                   footer: bizSettings?.receiptFooter || undefined,
                 });
@@ -2193,7 +2212,6 @@ export default function HospitalityPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
-  const { confirm } = useDialog();
   const [view, setView] = useState<'tables' | 'bar-tabs' | 'rooms'>('tables');
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [showReservations, setShowReservations] = useState(false);
@@ -2210,6 +2228,15 @@ export default function HospitalityPage() {
   const [showBookingsListModal, setShowBookingsListModal] = useState(false);
   const [showFolioModal, setShowFolioModal] = useState<string | null>(null); // bookingId
   const [showCheckoutInvoice, setShowCheckoutInvoice] = useState<GuestFolio | null>(null);
+  const [checkoutFor, setCheckoutFor] = useState<string | null>(null); // bookingId being settled
+  const [checkoutMethod, setCheckoutMethod] = useState<'CASH' | 'MPESA' | 'CARD' | 'BANK'>('CASH');
+  const [checkoutTendered, setCheckoutTendered] = useState('');
+  const [cancelFor, setCancelFor] = useState<{ id: string; guestName: string; depositCents: number } | null>(null);
+  const [cancelKeep, setCancelKeep] = useState(false);
+  // How a deposit is paid back when the way it came in is not on record (taken before deposits were recorded).
+  const [refundMethod, setRefundMethod] = useState('CASH');
+  const [depositFor, setDepositFor] = useState<{ id: string; guestName: string } | null>(null);
+  const [depositForm, setDepositForm] = useState({ amount: '', method: 'CASH' });
   const [showHousekeepingModal, setShowHousekeepingModal] = useState(false);
   const [roomDetailTab, setRoomDetailTab] = useState<'info' | 'folio'>('info');
   const [folioAddForm, setFolioAddForm] = useState({ type: 'OTHER', description: '', amountCents: 0, quantity: 1 });
@@ -2321,6 +2348,19 @@ export default function HospitalityPage() {
     enabled: !!businessId && view === 'rooms' && roomsSubTab === 'analytics',
   });
 
+  // What the guest owes if they leave now (room nights, late nights and charges, less the deposit).
+  const { data: checkoutQuote, isError: checkoutQuoteFailed } = useQuery<{
+    guestName: string; roomNumber: string; lateNights: number; nightsToAdd: number; roomToAddCents: number;
+    folioTotal: number; depositCents: number; balanceDue: number; refundDueCents: number;
+    depositMethod?: string | null;
+    levies?: Array<{ name: string; ratePct: number; amountCents: number }>;
+    roomChargesCents?: number;
+  }>({
+    queryKey: ['checkout-quote', checkoutFor],
+    queryFn: () => api.get(`/hospitality/room-bookings/${checkoutFor}/checkout-quote`),
+    enabled: !!checkoutFor,
+  });
+
   // ── Happy Hours ──────────────────────────────────────────────────────────────
 
   interface HappyHour {
@@ -2375,11 +2415,12 @@ export default function HospitalityPage() {
   });
 
   const [bookingForm, setBookingForm] = useState({
-    guestName: '', guestPhone: '', guestIdNumber: '',
+    guestName: '', guestPhone: '', guestIdNumber: '', guestKraPin: '',
     checkInDate: new Date().toISOString().split('T')[0],
     checkOutDate: '',
     nightCount: 1,
     depositCents: 0,
+    depositMethod: 'CASH',
     notes: '',
   });
 
@@ -2410,15 +2451,21 @@ export default function HospitalityPage() {
   });
 
   const createBookingMutation = useMutation({
-    mutationFn: (roomId: string) =>
-      api.post('/hospitality/room-bookings', {
+    mutationFn: async (roomId: string) => {
+      const booking = await api.post<{ id: string }>('/hospitality/room-bookings', {
         ...bookingForm,
         roomId,
         businessId,
         storeId,
         depositCents: Math.round(bookingForm.depositCents * 100),
-      }),
-    onSuccess: () => { void refetchRooms(); setShowBookingModal(null); setBookingForm({ guestName: '', guestPhone: '', guestIdNumber: '', checkInDate: new Date().toISOString().split('T')[0], checkOutDate: '', nightCount: 1, depositCents: 0, notes: '' }); },
+      });
+      // A guest arriving today is put in the room now; a later arrival stays a reservation.
+      if (bookingForm.checkInDate <= new Date().toLocaleDateString('en-CA')) {
+        await api.post(`/hospitality/room-bookings/${booking.id}/check-in`, {});
+      }
+      return booking;
+    },
+    onSuccess: () => { void refetchRooms(); setShowBookingModal(null); setBookingForm({ guestName: '', guestPhone: '', guestIdNumber: '', guestKraPin: '', checkInDate: new Date().toISOString().split('T')[0], checkOutDate: '', nightCount: 1, depositCents: 0, depositMethod: 'CASH', notes: '' }); },
   });
 
   const checkInMutation = useMutation({
@@ -2427,19 +2474,28 @@ export default function HospitalityPage() {
   });
 
   const cancelBookingMutation = useMutation({
-    mutationFn: (bookingId: string) => api.post(`/hospitality/room-bookings/${bookingId}/cancel`, {}),
-    onSuccess: () => { void refetchRooms(); setSelectedRoom(null); },
+    mutationFn: ({ bookingId, forfeit }: { bookingId: string; forfeit: boolean }) => api.post(`/hospitality/room-bookings/${bookingId}/cancel`, { forfeit, refundMethod }),
+    onSuccess: () => { void refetchRooms(); setSelectedRoom(null); setCancelFor(null); setCancelKeep(false); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const addDepositMutation = useMutation({
+    mutationFn: ({ bookingId, amountCents, method }: { bookingId: string; amountCents: number; method: string }) =>
+      api.post(`/hospitality/room-bookings/${bookingId}/deposit`, { amountCents, method }),
+    onSuccess: () => { void refetchRooms(); setSelectedRoom(null); setDepositFor(null); setDepositForm({ amount: '', method: 'CASH' }); toast.success('Deposit recorded'); },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const checkOutWithFolioMutation = useMutation({
-    mutationFn: async (bookingId: string) => {
-      const result = await api.post<GuestFolio>(`/hospitality/room-bookings/${bookingId}/check-out`, { payments: [] });
+    mutationFn: async ({ bookingId, payments }: { bookingId: string; payments: Array<{ method: string; amountCents: number }> }) => {
+      const result = await api.post<GuestFolio>(`/hospitality/room-bookings/${bookingId}/check-out`, { payments, refundMethod });
       return result;
     },
     onSuccess: (data) => {
       void refetchRooms();
       setSelectedRoom(null);
       setShowFolioModal(null);
+      setCheckoutFor(null);
       setShowCheckoutInvoice(data);
     },
   });
@@ -3339,8 +3395,9 @@ export default function HospitalityPage() {
                                   charge.type === 'FOOD_BEVERAGE' ? 'bg-green-50 text-green-600' :
                                   charge.type === 'MINIBAR' ? 'bg-purple-50 text-purple-600' :
                                   charge.type === 'LAUNDRY' ? 'bg-cyan-50 text-cyan-600' :
+                                  charge.type === 'POS_SALE' ? 'bg-indigo-50 text-indigo-600' :
                                   'bg-gray-100 text-gray-600'
-                                }`}>{charge.type.replace('_', ' ')}</span>
+                                }`}>{charge.type === 'POS_SALE' ? 'CHARGED SALE' : charge.type.replace('_', ' ')}</span>
                                 <span className="text-xs text-gray-400">{new Date(charge.date).toLocaleDateString('en-KE')}</span>
                               </div>
                               <p className="text-sm text-gray-700 truncate">{charge.description}</p>
@@ -3348,7 +3405,7 @@ export default function HospitalityPage() {
                             </div>
                             <div className="flex items-center gap-2 ml-3">
                               <span className="font-semibold text-sm text-gray-800">{fmt(charge.totalCents)}</span>
-                              {charge.type !== 'ROOM_RATE' && (
+                              {charge.type !== 'ROOM_RATE' && charge.type !== 'POS_SALE' && (
                                 <button
                                   onClick={() => removeFolioChargeMutation.mutate(charge.id)}
                                   className="text-red-400 hover:text-red-600 p-1"
@@ -3372,7 +3429,7 @@ export default function HospitalityPage() {
                         onChange={e => setFolioAddForm(f => ({ ...f, type: e.target.value }))}
                         className="border rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-gray-700 dark:border-gray-600"
                       >
-                        {['FOOD_BEVERAGE', 'MINIBAR', 'LAUNDRY', 'TRANSPORT', 'OTHER'].map(t => (
+                        {['FOOD_BEVERAGE', 'MINIBAR', 'LAUNDRY', 'TRANSPORT', 'OTHER', 'DISCOUNT'].map(t => (
                           <option key={t} value={t}>{t.replace('_', ' ')}</option>
                         ))}
                       </select>
@@ -3433,9 +3490,10 @@ export default function HospitalityPage() {
                     Confirm Check-In
                   </button>
                   <button
-                    onClick={async () => {
-                      const ok = await confirm({ title: 'Cancel Reservation', message: 'Cancel this reservation?', variant: 'warning', confirmLabel: 'Cancel' });
-                      if (ok) cancelBookingMutation.mutate(selectedRoom.bookings[0].id);
+                    onClick={() => {
+                      const b = selectedRoom.bookings[0];
+                      setCancelKeep(false);
+                      setCancelFor({ id: b.id, guestName: b.guestName, depositCents: b.depositCents });
                     }}
                     disabled={cancelBookingMutation.isPending}
                     className="w-full py-2.5 border border-red-200 text-red-600 hover:bg-red-50 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
@@ -3444,18 +3502,25 @@ export default function HospitalityPage() {
                   </button>
                 </>
               )}
+              {(selectedRoom.status === 'OCCUPIED' || selectedRoom.status === 'RESERVED') && selectedRoom.bookings[0] && (
+                <button
+                  onClick={() => setDepositFor({ id: selectedRoom.bookings[0].id, guestName: selectedRoom.bookings[0].guestName })}
+                  className="w-full py-2.5 border border-teal-200 text-teal-700 hover:bg-teal-50 rounded-xl font-semibold text-sm"
+                >
+                  Take a Deposit
+                </button>
+              )}
               {selectedRoom.status === 'OCCUPIED' && selectedRoom.bookings[0] && (
                 <button
                   onClick={() => {
-                    setShowFolioModal(selectedRoom.bookings[0].id);
-                    setRoomDetailTab('folio');
-                    checkOutWithFolioMutation.mutate(selectedRoom.bookings[0].id);
+                    setCheckoutMethod('CASH');
+                    setCheckoutTendered('');
+                    setCheckoutFor(selectedRoom.bookings[0].id);
                   }}
-                  disabled={checkOutWithFolioMutation.isPending}
-                  className="w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold flex items-center justify-center gap-2"
                 >
-                  {checkOutWithFolioMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogOut className="w-5 h-5" />}
-                  Check Out & Generate Invoice
+                  <LogOut className="w-5 h-5" />
+                  Check Out & Take Payment
                 </button>
               )}
               <div className="grid grid-cols-2 gap-2">
@@ -3576,6 +3641,28 @@ export default function HospitalityPage() {
                 </div>
               </div>
 
+              {(showCheckoutInvoice.refundDueCents ?? 0) > 0 && (
+                <div className="rounded-xl bg-green-50 text-green-800 p-3 text-sm flex justify-between">
+                  <span>Deposit to hand back{showCheckoutInvoice.refundMethod ? ` (${showCheckoutInvoice.refundMethod})` : ''}</span>
+                  <span className="font-bold">{fmt(showCheckoutInvoice.refundDueCents ?? 0)}</span>
+                </div>
+              )}
+              {(showCheckoutInvoice.changeDueCents ?? 0) > 0 && (
+                <div className="rounded-xl bg-gray-50 p-3 text-sm flex justify-between">
+                  <span className="text-gray-500">Change given</span>
+                  <span className="font-semibold">{fmt(showCheckoutInvoice.changeDueCents ?? 0)}</span>
+                </div>
+              )}
+              {showCheckoutInvoice.receiptNumber && (
+                <div className="text-center text-xs text-gray-500 space-y-0.5">
+                  <p>Invoice {showCheckoutInvoice.receiptNumber}</p>
+                  <p className={showCheckoutInvoice.etims?.success ? 'text-green-700' : 'text-amber-700'}>
+                    {showCheckoutInvoice.etims?.success
+                      ? (showCheckoutInvoice.etims.testMode ? 'eTIMS: test mode, not registered with KRA' : `eTIMS: submitted${showCheckoutInvoice.etims.controlNumber ? ` (${showCheckoutInvoice.etims.controlNumber})` : ''}`)
+                      : 'eTIMS: pending, will be sent when KRA is reachable'}
+                  </p>
+                </div>
+              )}
               <p className="text-center text-xs text-gray-400">Thank you for your stay. Please visit us again!</p>
             </div>
             <div className="p-4 border-t dark:border-gray-700 grid grid-cols-2 gap-3">
@@ -3686,6 +3773,7 @@ export default function HospitalityPage() {
                 { label: 'Guest Name *', key: 'guestName', type: 'text', placeholder: 'Full name' },
                 { label: 'Phone Number', key: 'guestPhone', type: 'tel', placeholder: '+254...' },
                 { label: 'ID / Passport', key: 'guestIdNumber', type: 'text', placeholder: 'National ID or passport' },
+                { label: 'KRA PIN (company guest, for the invoice)', key: 'guestKraPin', type: 'text', placeholder: 'A123456789Z' },
               ].map(({ label, key, type, placeholder }) => (
                 <div key={key}>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>
@@ -3745,6 +3833,23 @@ export default function HospitalityPage() {
                   />
                 </div>
               </div>
+              {bookingForm.depositCents > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Deposit paid by</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {(['CASH', 'MPESA', 'CARD', 'BANK'] as const).map(m => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setBookingForm(f => ({ ...f, depositMethod: m }))}
+                        className={`py-2 rounded-lg text-xs font-semibold border ${bookingForm.depositMethod === m ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-300 text-gray-700 dark:text-gray-200'}`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-500">Room total ({bookingForm.nightCount} night{bookingForm.nightCount !== 1 ? 's' : ''})</span>
@@ -3770,12 +3875,216 @@ export default function HospitalityPage() {
                 className="py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {createBookingMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
-                Check In
+                {bookingForm.checkInDate <= new Date().toLocaleDateString('en-CA') ? 'Check In' : 'Reserve'}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* ── Check-out: settle the folio ─────────────────────────────────────── */}
+      {checkoutFor && (() => {
+        const kes = (c: number) => (c / 100).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const owed = checkoutQuote?.balanceDue ?? 0;
+        const tenderedCents = Math.round((parseFloat(checkoutTendered || (owed / 100).toString()) || 0) * 100);
+        const short = tenderedCents < owed;
+        return (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-sm shadow-2xl">
+              <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
+                <h2 className="text-lg font-bold text-gray-800 dark:text-white">Check Out</h2>
+                <button onClick={() => setCheckoutFor(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                {checkoutQuoteFailed && <p className="text-sm text-red-600">Could not work out the bill. Close this and try again.</p>}
+                {!checkoutQuote && !checkoutQuoteFailed && <div className="flex justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-teal-600" /></div>}
+                {checkoutQuote && (
+                  <>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                      {checkoutQuote.guestName} · Room {checkoutQuote.roomNumber}
+                    </p>
+                    <div className="rounded-xl bg-gray-50 dark:bg-gray-700/50 p-4 text-sm space-y-1.5">
+                      <div className="flex justify-between"><span className="text-gray-500">Folio total</span><span className="font-medium">KES {kes(checkoutQuote.folioTotal)}</span></div>
+                      {checkoutQuote.lateNights > 0 && (
+                        <div className="flex justify-between text-amber-700"><span>Includes late nights</span><span>{checkoutQuote.lateNights}</span></div>
+                      )}
+                      {(checkoutQuote.levies ?? []).map(l => (
+                        <div key={l.name} className="flex justify-between text-gray-600 dark:text-gray-300"><span>Includes {l.name} ({l.ratePct}%)</span><span>KES {kes(l.amountCents)}</span></div>
+                      ))}
+                      {(checkoutQuote.roomChargesCents ?? 0) > 0 && (
+                        <div className="flex justify-between text-gray-600 dark:text-gray-300"><span>Includes sales charged to the room</span><span>KES {kes(checkoutQuote.roomChargesCents ?? 0)}</span></div>
+                      )}
+                      <div className="flex justify-between"><span className="text-gray-500">Deposit paid</span><span>- KES {kes(checkoutQuote.depositCents)}</span></div>
+                      <div className="flex justify-between border-t pt-1.5 text-base font-bold"><span>Balance due</span><span>KES {kes(checkoutQuote.balanceDue)}</span></div>
+                      {checkoutQuote.refundDueCents > 0 && (
+                        <div className="flex justify-between text-green-700"><span>Refund due to guest</span><span>KES {kes(checkoutQuote.refundDueCents)}</span></div>
+                      )}
+                      {checkoutQuote.refundDueCents > 0 && !checkoutQuote.depositMethod && (
+                        <div className="pt-1">
+                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">This deposit was taken before deposits were recorded. Pay it back by:</label>
+                          <div className="grid grid-cols-4 gap-2">
+                            {(['CASH', 'MPESA', 'CARD', 'BANK'] as const).map(m => (
+                              <button key={m} onClick={() => setRefundMethod(m)}
+                                className={`py-1.5 rounded-lg text-xs font-semibold border ${refundMethod === m ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-300 text-gray-700 dark:text-gray-200'}`}>{m}</button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {owed > 0 && (
+                      <>
+                        <div className="grid grid-cols-4 gap-2">
+                          {(['CASH', 'MPESA', 'CARD', 'BANK'] as const).map(m => (
+                            <button
+                              key={m}
+                              onClick={() => setCheckoutMethod(m)}
+                              className={`py-2 rounded-lg text-xs font-semibold border ${checkoutMethod === m ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-300 text-gray-700 dark:text-gray-200'}`}
+                            >
+                              {m}
+                            </button>
+                          ))}
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Amount received (KES)</label>
+                          <input
+                            type="number" min={0} step="0.01"
+                            value={checkoutTendered}
+                            placeholder={(owed / 100).toString()}
+                            onChange={e => setCheckoutTendered(e.target.value)}
+                            className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                          />
+                          {short && <p className="text-xs text-red-600 mt-1">Less than the balance due. The guest cannot check out until it is paid in full.</p>}
+                          {!short && tenderedCents > owed && <p className="text-xs text-gray-500 mt-1">Change to give: KES {kes(tenderedCents - owed)}</p>}
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+              <div className="p-4 border-t dark:border-gray-700 grid grid-cols-2 gap-3">
+                <button onClick={() => setCheckoutFor(null)} className="py-2.5 border border-gray-300 text-gray-700 rounded-xl font-semibold text-sm">Back</button>
+                <button
+                  onClick={() => checkOutWithFolioMutation.mutate({
+                    bookingId: checkoutFor,
+                    payments: owed > 0 ? [{ method: checkoutMethod, amountCents: tenderedCents }] : [],
+                  })}
+                  disabled={!checkoutQuote || short || checkOutWithFolioMutation.isPending}
+                  className="py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {checkOutWithFolioMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogOut className="w-4 h-4" />}
+                  Check Out
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Cancel a reservation: what happens to the deposit ───────────────── */}
+      {cancelFor && (() => {
+        const canKeep = ['OWNER', 'MANAGER', 'ADMIN'].includes(String(user?.role));
+        const hasDeposit = cancelFor.depositCents > 0;
+        return (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-sm shadow-2xl">
+              <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
+                <h2 className="text-lg font-bold text-gray-800 dark:text-white">Cancel Reservation</h2>
+                <button onClick={() => setCancelFor(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+              <div className="p-6 space-y-4 text-sm">
+                <p className="text-gray-600 dark:text-gray-300">Cancel the reservation for {cancelFor.guestName}?</p>
+                {hasDeposit && (
+                  <div className="space-y-2">
+                    <p className="font-medium text-gray-700 dark:text-gray-200">Deposit paid: {fmt(cancelFor.depositCents)}</p>
+                    <label className="flex items-center gap-2">
+                      <input type="radio" checked={!cancelKeep} onChange={() => setCancelKeep(false)} /> Pay the deposit back to the guest
+                    </label>
+                    {!cancelKeep && (
+                      <div className="flex items-center gap-2 pl-6 text-xs text-gray-500">
+                        <span>If the way it was paid is not on record, pay back by</span>
+                        <select value={refundMethod} onChange={(e) => setRefundMethod(e.target.value)} className="border rounded px-1.5 py-1 dark:bg-gray-700 dark:border-gray-600">
+                          {['CASH', 'MPESA', 'CARD', 'BANK'].map((m) => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                      </div>
+                    )}
+                    {canKeep && (
+                      <label className="flex items-center gap-2">
+                        <input type="radio" checked={cancelKeep} onChange={() => setCancelKeep(true)} /> Keep the deposit (cancelled late)
+                      </label>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="p-4 border-t dark:border-gray-700 grid grid-cols-2 gap-3">
+                <button onClick={() => setCancelFor(null)} className="py-2.5 border border-gray-300 text-gray-700 rounded-xl font-semibold text-sm">Back</button>
+                <button
+                  onClick={() => cancelBookingMutation.mutate({ bookingId: cancelFor.id, forfeit: hasDeposit && cancelKeep })}
+                  disabled={cancelBookingMutation.isPending}
+                  className="py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {cancelBookingMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Cancel Reservation
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Take a deposit ───────────────────────────────────────────────────── */}
+      {depositFor && (() => {
+        const amountCents = Math.round((parseFloat(depositForm.amount) || 0) * 100);
+        return (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-sm shadow-2xl">
+              <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
+                <h2 className="text-lg font-bold text-gray-800 dark:text-white">Take a Deposit</h2>
+                <button onClick={() => setDepositFor(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                <p className="text-sm text-gray-600 dark:text-gray-300">{depositFor.guestName}. The deposit is used against the bill at check-out.</p>
+                <div className="grid grid-cols-4 gap-2">
+                  {(['CASH', 'MPESA', 'CARD', 'BANK'] as const).map(m => (
+                    <button
+                      key={m}
+                      onClick={() => setDepositForm(f => ({ ...f, method: m }))}
+                      className={`py-2 rounded-lg text-xs font-semibold border ${depositForm.method === m ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-300 text-gray-700 dark:text-gray-200'}`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Amount received (KES)</label>
+                  <input
+                    type="number" min={0} step="0.01"
+                    value={depositForm.amount}
+                    onChange={e => setDepositForm(f => ({ ...f, amount: e.target.value }))}
+                    className="w-full border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  />
+                </div>
+              </div>
+              <div className="p-4 border-t dark:border-gray-700 grid grid-cols-2 gap-3">
+                <button onClick={() => setDepositFor(null)} className="py-2.5 border border-gray-300 text-gray-700 rounded-xl font-semibold text-sm">Back</button>
+                <button
+                  onClick={() => addDepositMutation.mutate({ bookingId: depositFor.id, amountCents, method: depositForm.method })}
+                  disabled={amountCents <= 0 || addDepositMutation.isPending}
+                  className="py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {addDepositMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Record Deposit
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Add Room Modal ───────────────────────────────────────────────────── */}
       {showAddRoomModal && (

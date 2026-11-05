@@ -30,7 +30,10 @@ interface CheckoutDto {
 }
 
 interface VoidDto {
-  managerId: string;
+  /** Only honoured when it is the caller's own id and the caller is an owner or manager. */
+  managerId?: string;
+  /** A manager PIN, verified on the server, for tills signed in as someone who cannot void alone. */
+  managerPin?: string;
   reason: string;
   voidedItemIds?: string[];
   voidedItemQuantities?: Array<{ itemId: string; quantity: number }>;
@@ -125,8 +128,10 @@ export class SalesController {
     @Param('id') id: string,
     @Query('businessId') businessId: string,
     @Body() dto: VoidDto,
+    @Req() req: Request & { user: AuthUser },
   ) {
-    return this.salesService.voidSale(id, businessId, dto.managerId, dto.reason, dto.voidedItemIds, dto.voidedItemQuantities);
+    const approverId = await this.salesService.resolveVoidApprover(req.user, businessId, dto);
+    return this.salesService.voidSale(id, businessId, approverId, dto.reason, dto.voidedItemIds, dto.voidedItemQuantities);
   }
 
   @Post('verify-manager-pin')
@@ -173,9 +178,10 @@ export class SalesController {
   async markCreditPaid(
     @Param('id') id: string,
     @Query('businessId') businessId: string,
-    @Body('amountCents') amountCents?: number,
+    @Body() body: { amountCents?: number; method?: string } | undefined,
+    @Req() req: Request & { user: AuthUser },
   ) {
-    return this.salesService.markCreditPaid(id, businessId, amountCents);
+    return this.salesService.markCreditPaid(id, businessId, body?.amountCents, body?.method, { id: req.user.id });
   }
 
   @Post(':id/return')
@@ -183,7 +189,9 @@ export class SalesController {
     @Param('id') id: string,
     @Query('businessId') businessId: string,
     @Body() dto: { returnedItemIds?: string[]; reason: string; refundMethod: 'CASH' | 'STORE_CREDIT'; processedBy?: string },
+    @Req() req: Request & { user: AuthUser },
   ) {
-    return this.salesService.returnSale(id, businessId, dto);
+    // Who processed the refund comes from the login, so it cannot be blamed on someone else.
+    return this.salesService.returnSale(id, businessId, { ...dto, processedBy: req.user.id });
   }
 }

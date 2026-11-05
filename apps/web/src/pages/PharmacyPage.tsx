@@ -10,6 +10,7 @@ import {
 import { formatKES } from '@pos/shared';
 import { printBarcodeLabel } from '../lib/printer';
 import { printHtml } from '../lib/printHtml';
+import DispenseModal from '../components/DispenseModal';
 
 type Tab = 'drugs' | 'interactions' | 'refill-queue' | 'controlled-log' | 'providers' | 'claims' | 'labels' | 'formulary';
 
@@ -25,6 +26,7 @@ const CLAIM_COLOR: Record<string, string> = {
   APPROVED: 'bg-green-100 text-green-700',
   PAID: 'bg-emerald-100 text-emerald-700',
   REJECTED: 'bg-red-100 text-red-700',
+  VOIDED: 'bg-gray-100 text-gray-500',
 };
 
 export default function PharmacyPage() {
@@ -80,11 +82,7 @@ export default function PharmacyPage() {
     enabled: tab === 'refill-queue',
     refetchInterval: 60000,
   });
-  const refillMut = useMutation({
-    mutationFn: ({ id, dispensedBy }: { id: string; dispensedBy: string }) =>
-      api.patch(`/prescriptions/${id}/refill`, { dispensedBy }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['pharmacy-refill-queue'] }),
-  });
+  const [refilling, setRefilling] = useState<{ id: string; prescriptionNumber: string; patientName: string } | null>(null);
 
   // ── Controlled Substance Log ──
   const [logStart, setLogStart] = useState('');
@@ -418,7 +416,7 @@ export default function PharmacyPage() {
                     <td className="px-4 py-2 text-gray-600">{rx.doctorName}</td>
                     <td className="px-4 py-2">
                       <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs">
-                        {rx.refillsAllowed - rx.refillsUsed} remaining
+                        {Math.max(0, rx.refillsAllowed + 1 - rx.refillsUsed)} remaining
                       </span>
                     </td>
                     <td className="px-4 py-2 text-gray-600">
@@ -426,9 +424,8 @@ export default function PharmacyPage() {
                     </td>
                     <td className="px-4 py-2">
                       <button
-                        onClick={() => refillMut.mutate({ id: rx.id, dispensedBy: user?.name ?? 'Pharmacist' })}
-                        disabled={refillMut.isPending}
-                        className="bg-green-600 text-white px-3 py-1 rounded text-xs font-medium disabled:opacity-50"
+                        onClick={() => setRefilling(rx)}
+                        className="bg-green-600 text-white px-3 py-1 rounded text-xs font-medium"
                       >
                         <RefreshCw className="w-3 h-3 inline mr-1" />Process Refill
                       </button>
@@ -674,6 +671,7 @@ export default function PharmacyPage() {
       {tab === 'formulary' && (
         <FormularyTab businessId={businessId} />
       )}
+      {refilling && <DispenseModal rx={refilling} mode="refill" onClose={() => setRefilling(null)} />}
     </div>
   );
 }

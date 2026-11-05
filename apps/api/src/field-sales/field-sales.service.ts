@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { requireArray } from '../common/validate';
 
+import { roundQty } from '../common/quantity';
 interface CreateRouteDto {
   name: string;
   branchId?: string;
@@ -309,7 +310,7 @@ export class FieldSalesService {
           where: { itemId: item.itemId, businessId },
           _sum: { quantity: true },
         });
-        const available = inv._sum.quantity ?? 0;
+        const available = roundQty(inv._sum.quantity ?? 0);
         if (available < item.quantity) {
           throw new BadRequestException({
             code: 'INSUFFICIENT_STOCK',

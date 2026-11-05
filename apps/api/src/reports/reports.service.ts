@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CashDrawerService } from '../cash-drawer/cash-drawer.service';
 
+import { roundQty } from '../common/quantity';
 /**
  * Repair the magnitude of historically mis-stored tax WITHOUT inventing tax
  * that was never charged.
@@ -15,8 +16,11 @@ import { CashDrawerService } from '../cash-drawer/cash-drawer.service';
  * Gating on the stored value keeps the repair and drops the fabrication: a sale
  * that genuinely carried no VAT stored 0, and stays 0.
  */
-function recalcVat(storedVatCents: number | null | undefined, subtotalCents: number, discountCents = 0): number {
+export function recalcVat(storedVatCents: number | null | undefined, subtotalCents: number, discountCents = 0, taxClassified = false): number {
   if (!storedVatCents || storedVatCents <= 0) return 0;
+  // A sale taxed line by line already stores the right figure (exempt and zero-rated lines carry none).
+  // Re-deriving it as 16/116 of the whole sale would put the VAT back on them. Only older sales need the repair.
+  if (taxClassified) return storedVatCents;
   const taxBase = Math.max(0, subtotalCents - discountCents);
   return Math.round(taxBase * 16 / 116);
 }
@@ -59,7 +63,7 @@ export class ReportsService {
     // Recalculate tax using inclusive formula (fixes historical data stored with exclusive formula)
     const sales = rawSales.map(s => ({
       ...s,
-      vatCents: recalcVat(s.vatCents, s.subtotalCents, s.discountCents),
+      vatCents: recalcVat(s.vatCents, s.subtotalCents, s.discountCents, s.taxClassified),
       totCents: recalcTot(s.totCents, s.subtotalCents, s.discountCents),
     }));
 
@@ -112,6 +116,7 @@ export class ReportsService {
         subtotalCents: true,
         discountCents: true,
         vatCents: true,
+        taxClassified: true,
         totalCents: true,
       },
     });
@@ -119,8 +124,8 @@ export class ReportsService {
     // Recalculate using inclusive formula
     const sales = rawSales.map(s => ({
       ...s,
-      vatCents: recalcVat(s.vatCents, s.subtotalCents, s.discountCents),
-      netCents: Math.max(0, s.subtotalCents - s.discountCents) - recalcVat(s.vatCents, s.subtotalCents, s.discountCents),
+      vatCents: recalcVat(s.vatCents, s.subtotalCents, s.discountCents, s.taxClassified),
+      netCents: Math.max(0, s.subtotalCents - s.discountCents) - recalcVat(s.vatCents, s.subtotalCents, s.discountCents, s.taxClassified),
     }));
 
     const totalVat = sales.reduce((sum, s) => sum + s.vatCents, 0);
@@ -178,6 +183,7 @@ export class ReportsService {
           totalCents: true,
           // Needed to tell a sale that carried VAT from one made with tax off.
           vatCents: true,
+          taxClassified: true,
         },
       }),
       this.prisma.expense.findMany({
@@ -199,7 +205,7 @@ export class ReportsService {
 
     // Output VAT from sales (extracted inclusive 16/116)
     const salesWithVat = rawSales.map(s => {
-      const vatCents = recalcVat(s.vatCents, s.subtotalCents, s.discountCents);
+      const vatCents = recalcVat(s.vatCents, s.subtotalCents, s.discountCents, s.taxClassified);
       return { ...s, vatCents };
     });
 
@@ -214,6 +220,33 @@ export class ReportsService {
     const inputVatCents = expensesWithVat.reduce((sum, e) => sum + e.vatCents, 0);
     const netVatPayableCents = outputVatCents - inputVatCents;
 
+    // The return asks how much was sold at each rate. Sales made since tax classes arrived are split by the class
+    // each line was sold under; earlier ones were all taxed as standard-rated and are reported as such.
+    const classRows = await this.prisma.saleItem.groupBy({
+      by: ['taxClass'],
+      where: {
+        sale: {
+          businessId,
+          ...(storeId && { storeId }),
+          status: { in: ['PAID', 'AMENDED'] },
+          createdAt: { gte: startDate, lte: endDate },
+        },
+      },
+      _sum: { totalCents: true, discountCents: true, vatCents: true },
+    });
+    const bucket = () => ({ netCents: 0, vatCents: 0 });
+    const salesByTaxClass = { standardRated: bucket(), zeroRated: bucket(), exempt: bucket(), notSubjectToVat: bucket(), unclassified: bucket() };
+    for (const r of classRows) {
+      const net = (r._sum.totalCents ?? 0) - (r._sum.discountCents ?? 0);
+      const into = r.taxClass === 'A' ? salesByTaxClass.exempt
+        : r.taxClass === 'B' ? salesByTaxClass.standardRated
+        : r.taxClass === 'C' ? salesByTaxClass.zeroRated
+        : r.taxClass === 'D' ? salesByTaxClass.notSubjectToVat
+        : salesByTaxClass.unclassified;
+      into.netCents += net;
+      into.vatCents += r._sum.vatCents ?? 0;
+    }
+
     return {
       period: { startDate: startDate.toISOString(), endDate: endDate.toISOString() },
       outputVat: {
@@ -221,6 +254,7 @@ export class ReportsService {
         totalSalesCents,
         salesCount: rawSales.length,
         sales: salesWithVat,
+        salesByTaxClass,
       },
       inputVat: {
         totalCents: inputVatCents,
@@ -1112,13 +1146,13 @@ export class ReportsService {
       summary: {
         totalTransactions: sales.length,
         totalRevenueCents: sales.reduce((s, sale) => s + sale.totalCents, 0),
-        totalVatCents: sales.reduce((s, sale) => s + recalcVat(sale.vatCents, sale.subtotalCents, sale.discountCents), 0),
+        totalVatCents: sales.reduce((s, sale) => s + recalcVat(sale.vatCents, sale.subtotalCents, sale.discountCents, sale.taxClassified), 0),
         totalTotCents: sales.reduce((s, sale) => s + recalcTot(sale.totCents, sale.subtotalCents, sale.discountCents), 0),
         etimsSubmittedCount: sales.filter((s) => s.etimsSubmitted).length,
         etimsPendingCount: sales.filter((s) => !s.etimsSubmitted).length,
       },
       transactions: sales.map((sale) => {
-        const vatCents = recalcVat(sale.vatCents, sale.subtotalCents, sale.discountCents);
+        const vatCents = recalcVat(sale.vatCents, sale.subtotalCents, sale.discountCents, sale.taxClassified);
         const totCents = recalcTot(sale.totCents, sale.subtotalCents, sale.discountCents);
         return {
         receiptNumber: sale.receiptNumber,
@@ -1315,6 +1349,7 @@ export class ReportsService {
         select: {
           id: true, receiptNumber: true, createdAt: true,
           subtotalCents: true, vatCents: true, totCents: true, totalCents: true,
+          taxClassified: true,
           etimsSubmitted: true, etimsControlNumber: true,
         },
         orderBy: { createdAt: 'desc' },
@@ -1399,10 +1434,10 @@ export class ReportsService {
           topItems: topItems.map((i) => ({
             itemId: i.itemId,
             name: i.name,
-            qtySold: i._sum.quantity || 0,
+            qtySold: roundQty(i._sum.quantity || 0),
             revenueCents: i._sum.totalCents || 0,
           })),
-          totalStockLines: stockValue.filter((s) => (s._sum.quantity || 0) > 0).length,
+          totalStockLines: stockValue.filter((s) => roundQty(s._sum.quantity || 0) > 0).length,
         };
       }),
     );
@@ -1772,7 +1807,7 @@ export class ReportsService {
         where: { itemId: item.id, ...(storeId ? { storeId } : {}) },
         _sum: { quantity: true },
       });
-      const stock = stockAgg._sum.quantity ?? 0;
+      const stock = roundQty(stockAgg._sum.quantity ?? 0);
       if (stock <= 0) continue; // no stock at this store, nothing to report
 
       // Last movement date at this store
@@ -2371,7 +2406,7 @@ export class ReportsService {
       _sum: { quantity: true },
     });
 
-    const stockMap = new Map(stockLevels.map(s => [s.itemId, s._sum.quantity || 0]));
+    const stockMap = new Map(stockLevels.map(s => [s.itemId, roundQty(s._sum.quantity || 0)]));
 
     // Add reorder recommendations
     const recommendations = sortedForecasts.map(forecast => {
@@ -2425,6 +2460,7 @@ export class ReportsService {
       select: {
         totalCents: true,
         vatCents: true,
+        taxClassified: true,
         totCents: true,
         subtotalCents: true,
         discountCents: true,
@@ -2438,9 +2474,9 @@ export class ReportsService {
     // every sale from a business with tax turned off (both fields 0) and then
     // recomputed 16/116 on it — overstating output VAT on a statutory return.
     const vatSales = sales.filter(s => s.vatCents > 0);
-    const totalOutputVAT = vatSales.reduce((s, sale) => s + recalcVat(sale.vatCents, sale.subtotalCents, sale.discountCents), 0);
+    const totalOutputVAT = vatSales.reduce((s, sale) => s + recalcVat(sale.vatCents, sale.subtotalCents, sale.discountCents, sale.taxClassified), 0);
     const vatableValue = vatSales.reduce((s, sale) => {
-      const vat = recalcVat(sale.vatCents, sale.subtotalCents, sale.discountCents);
+      const vat = recalcVat(sale.vatCents, sale.subtotalCents, sale.discountCents, sale.taxClassified);
       return s + (sale.totalCents - vat);
     }, 0);
 

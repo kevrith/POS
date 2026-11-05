@@ -1,13 +1,41 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+
+const MAX_NUMBER_ATTEMPTS = 8;
 
 @Injectable()
 export class LedgerService {
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * JE-<business tag>-<n>. `entryNumber` is unique across the whole table, so the number has to carry the business:
+   * a bare per-business count gave every business's first entry the same number, and the second business's entries
+   * were refused (and, being posted in the background, silently lost). The sequence continues from the highest number
+   * the business has used, not from a count, which a deletion or a second entry at the same moment would repeat.
+   */
   private async nextEntryNumber(businessId: string): Promise<string> {
-    const count = await this.prisma.journalEntry.count({ where: { businessId } });
-    return `JE-${String(count + 1).padStart(6, '0')}`;
+    const prefix = `JE-${createHash('sha256').update(businessId).digest('hex').slice(0, 5).toUpperCase()}-`;
+    const last = await this.prisma.journalEntry.findFirst({
+      where: { businessId, entryNumber: { startsWith: prefix } },
+      orderBy: { entryNumber: 'desc' },
+      select: { entryNumber: true },
+    });
+    const lastSeq = last ? parseInt(last.entryNumber.slice(prefix.length), 10) : 0;
+    return `${prefix}${String((Number.isFinite(lastSeq) ? lastSeq : 0) + 1).padStart(6, '0')}`;
+  }
+
+  /** Write an entry under the next number. Two entries at the same moment read the same "last number"; the unique index stops the second, which takes the next one. */
+  private async createNumbered<T>(businessId: string, write: (entryNumber: string) => Promise<T>): Promise<T> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await write(await this.nextEntryNumber(businessId));
+      } catch (err) {
+        const clash = (err as { code?: string })?.code === 'P2002';
+        if (!clash || attempt >= MAX_NUMBER_ATTEMPTS) throw err;
+        await new Promise((r) => setTimeout(r, Math.floor(Math.random() * 25 * attempt)));
+      }
+    }
   }
 
   async list(businessId: string, startDate?: string, endDate?: string, status?: string) {
@@ -36,8 +64,7 @@ export class LedgerService {
     sourceType?: string;
     lines: Array<{ accountCode: string; accountName: string; debitCents: number; creditCents: number; description?: string }>;
   }) {
-    const entryNumber = await this.nextEntryNumber(dto.businessId);
-    return this.prisma.journalEntry.create({
+    return this.createNumbered(dto.businessId, (entryNumber) => this.prisma.journalEntry.create({
       data: {
         entryNumber,
         businessId: dto.businessId,
@@ -49,7 +76,7 @@ export class LedgerService {
         lines: { create: dto.lines },
       },
       include: { lines: true },
-    });
+    }));
   }
 
   async post(id: string, postedBy: string) {
@@ -67,8 +94,7 @@ export class LedgerService {
   async reverse(id: string, reversedBy: string) {
     const entry = await this.prisma.journalEntry.findUnique({ where: { id }, include: { lines: true } });
     if (!entry) throw new BadRequestException('Entry not found');
-    const entryNumber = await this.nextEntryNumber(entry.businessId);
-    const reversal = await this.prisma.journalEntry.create({
+    const reversal = await this.createNumbered(entry.businessId, (entryNumber) => this.prisma.journalEntry.create({
       data: {
         entryNumber,
         businessId: entry.businessId,
@@ -91,7 +117,7 @@ export class LedgerService {
         },
       },
       include: { lines: true },
-    });
+    }));
     await this.prisma.journalEntry.update({ where: { id }, data: { status: 'REVERSED' } });
     return reversal;
   }
@@ -126,8 +152,7 @@ export class LedgerService {
     lines: Array<{ accountCode: string; accountName: string; debitCents: number; creditCents: number }>;
   }) {
     try {
-      const entryNumber = await this.nextEntryNumber(dto.businessId);
-      await this.prisma.journalEntry.create({
+      await this.createNumbered(dto.businessId, (entryNumber) => this.prisma.journalEntry.create({
         data: {
           entryNumber,
           businessId: dto.businessId,
@@ -140,7 +165,7 @@ export class LedgerService {
           postedAt: new Date(),
           lines: { create: dto.lines },
         },
-      });
+      }));
     } catch (e) {
       // fire-and-forget, don't break parent operation
       console.error('AutoPost journal error:', (e as Error).message);

@@ -150,6 +150,10 @@ npx ts-node src/seed.ts
 npx ts-node ../../prisma/seed.ts
 ```
 
+After `20261105100000_fractional_quantities` has been applied to a database that already holds sales of loose
+goods, review and repair the rows the old integer columns rounded:
+`prisma/repairs/20261105_fractional_quantities.sql` (the report runs first; the UPDATE is commented out).
+
 ### 5. Run
 
 ```bash
@@ -288,11 +292,12 @@ Floor-grouped table layouts · per-station kitchen tickets (kitchen / bar / dess
 numbering, duplicate-send protection) · live KDS on web and phone · voids reach the kitchen ·
 optional Restaurant module for non-restaurant businesses ·
 bar tabs · room charge · priced modifiers · reservations, merge, transfer ·
-hotel rooms, guest folios, housekeeping queue · channel manager · QR menu ·
+hotel rooms, guest folios, deposit register, optional hotel levies, check-out invoice (eTIMS), housekeeping queue ·
+channel manager · QR menu ·
 waitlist · appointments.
 
 ### Verticals
-Pharmacy + prescriptions · fuel pump control · cyber café sessions and kiosk ·
+Pharmacy + prescriptions (dispensing is a real sale with insurer split and claims) · fuel pump control · cyber café sessions and kiosk ·
 supermarket POS · events.
 
 ### HR & payroll

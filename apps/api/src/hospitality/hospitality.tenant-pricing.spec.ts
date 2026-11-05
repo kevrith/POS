@@ -25,11 +25,12 @@ function build() {
     happyHour: { findFirst: jest.fn(), delete: jest.fn(), create: jest.fn().mockResolvedValue({}) },
     tableReservation: { findFirst: jest.fn() },
     user: { findFirst: jest.fn().mockResolvedValue({ id: 'u1' }) },
+    business: { findUnique: jest.fn().mockResolvedValue({ taxType: 'VAT' }) },
     sale: { create: jest.fn().mockResolvedValue({ id: 'sale1', receiptNumber: 'NRB-000007', totalCents: 70_000 }) },
     $transaction: jest.fn((arg: any) => (typeof arg === 'function' ? arg(prisma) : Promise.all(arg))),
   };
   const events: any = { emitKotCreated: jest.fn(), emitKotUpdated: jest.fn(), emitKotVoided: jest.fn() };
-  const service = new HospitalityService(prisma, { sendWhatsApp: jest.fn() } as any, events);
+  const service = new HospitalityService(prisma, { sendWhatsApp: jest.fn() } as any, events, { isEnabled: jest.fn().mockResolvedValue(false) } as any, {} as any);
   return { prisma, service };
 }
 
@@ -190,7 +191,11 @@ describe('room and folio rules', () => {
 
   it('a booking takes its store and price from the room', async () => {
     const { prisma, service } = build();
-    prisma.hotelRoom.findUnique.mockResolvedValue({ id: 'r1', businessId: BIZ, storeId: 'real-store', status: 'AVAILABLE', pricePerNightCents: 500_000 });
+    const room = { id: 'r1', businessId: BIZ, storeId: 'real-store', status: 'AVAILABLE', pricePerNightCents: 500_000 };
+    prisma.hotelRoom.findUnique.mockResolvedValue(room);
+    prisma.hotelRoom.findFirst = jest.fn().mockResolvedValue(room);
+    prisma.$queryRaw = jest.fn().mockResolvedValue([]);
+    prisma.roomBooking.findMany = jest.fn().mockResolvedValue([]);
     prisma.roomBooking.create = jest.fn().mockResolvedValue({ id: 'b1' });
     await service.createRoomBooking({ storeId: 'spoofed', roomId: 'r1', guestName: 'G', checkInDate: new Date(), nightCount: 2 }, BIZ);
     const data = prisma.roomBooking.create.mock.calls[0][0].data;
@@ -233,6 +238,35 @@ describe('settling a bar tab', () => {
     const res = await service.settleBarTab('o1', [{ method: 'CASH', amountCents: 70_000 }], BIZ);
     expect(res.receiptNumber).toBe('NRB-000007');
     expect(prisma.order.updateMany).toHaveBeenCalledWith({ where: { id: 'o1', status: { in: ['OPEN', 'BILL_REQUESTED'] } }, data: { status: 'PAID' } });
+  });
+
+  it('takes VAT only from the lines whose class carries it', async () => {
+    const { prisma, service } = build();
+    prisma.item.findMany.mockResolvedValue([
+      { id: 'i1', taxClass: 'B', vatApplicable: true },
+      { id: 'i2', taxClass: 'A', vatApplicable: false },
+    ]);
+    prisma.order.findUnique.mockResolvedValue(tab({
+      items: [
+        { itemId: 'i1', name: 'Beer', quantity: 2, unitPriceCents: 5_800, totalCents: 11_600 },
+        { itemId: 'i2', name: 'Maize flour', quantity: 1, unitPriceCents: 20_000, totalCents: 20_000 },
+      ],
+    }));
+    await service.settleBarTab('o1', [{ method: 'CASH', amountCents: 31_600 }], BIZ);
+    const data = prisma.sale.create.mock.calls[0][0].data;
+    expect(data.vatCents).toBe(1_600);
+    expect(data.taxClassified).toBe(true);
+    expect(data.items.create.map((l: any) => [l.taxClass, l.vatCents])).toEqual([['B', 1_600], ['A', 0]]);
+  });
+
+  it('charges no VAT at all when the business is not VAT-registered', async () => {
+    const { prisma, service } = build();
+    prisma.business.findUnique.mockResolvedValue({ taxType: 'NONE' });
+    prisma.order.findUnique.mockResolvedValue(tab());
+    await service.settleBarTab('o1', [{ method: 'CASH', amountCents: 70_000 }], BIZ);
+    const data = prisma.sale.create.mock.calls[0][0].data;
+    expect(data.vatCents).toBe(0);
+    expect(data.items.create[0].taxClass).toBe('D');
   });
 
   it('refuses payments that do not cover the tab, and non-positive amounts', async () => {

@@ -19,6 +19,11 @@ model Business {
   negativePolicyDefault         String                @default("WARN")
   posMode                       String                @default("RETAIL")
   enabledModules                String                @default("[]")
+  /// The moment fuel, hotel, pharmacy, cyber and appointment takings started becoming real Sales (receipt, eTIMS, Z-report,
+  /// drawer, ledger). Null = still off, so a shop that rings those takings through the till is not counted twice.
+  verticalSalesFrom   DateTime?
+  /// Optional levies a hotel adds to a stay (tourism, catering): JSON [{ name, ratePct, base: "ROOM" | "ALL" }]. Empty = none.
+  hotelLevies         String              @default("[]")
   expiredItemPolicy             String                @default("BLOCK")
   expenseApprovalThresholdCents Int?                  @default(500000)
   expiryAlertDays               Int                   @default(30)
@@ -230,6 +235,8 @@ model Item {
   reorderLevel        Int?                 @default(0)
   vatApplicable       Boolean              @default(true)
   totApplicable       Boolean              @default(false)
+  /// KRA tax class: A exempt, B standard 16%, C zero-rated, D not subject to VAT. vatApplicable is the older yes/no form of this.
+  taxClass            String               @default("B")
   barcode             String?
   category            String?
   ageRestricted       Boolean              @default(false)
@@ -277,6 +284,7 @@ model Item {
   saleItems           SaleItem[]
   serialRecords       SerialRecord[]
   supplierReturnItems SupplierReturnItem[]
+  fuelGrades          FuelGrade[]
 
   @@index([businessId, storeId])
   @@index([type])
@@ -315,8 +323,8 @@ model Batch {
   manufacturingDate DateTime?
   expiryDate        DateTime?
   supplierId        String?
-  quantityReceived  Int
-  quantityRemaining Int
+  quantityReceived  Float
+  quantityRemaining Float
   status            String              @default("ACTIVE")
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
@@ -339,6 +347,8 @@ model Sale {
   customerId         String?
   customerName       String?
   customerPhone      String?
+  /// Buyer KRA PIN for a buyer who is not a Customer record (a fleet company). The Customer's own PIN wins.
+  buyerKraPin        String?
   notes              String?
   proformaValidUntil DateTime?
   type               String              @default("NORMAL")
@@ -351,6 +361,8 @@ model Sale {
   promotionId        String?
   vatCents           Int                 @default(0)
   totCents           Int                 @default(0)
+  /// True when vatCents was computed line by line from tax classes; false for sales made before that.
+  taxClassified      Boolean             @default(false)
   totalCents         Int                 @default(0)
   etimsSubmitted     Boolean             @default(false)
   etimsControlNumber String?
@@ -520,9 +532,15 @@ model SaleItem {
   saleId         String
   itemId         String?
   name           String
-  quantity       Int
+  quantity       Float
   unitPriceCents Int
   totalCents     Int
+  /// The tax class the line was sold under (null on sales made before classes existed).
+  taxClass       String?
+  /// VAT extracted from this line, after its share of the sale discount.
+  vatCents       Int      @default(0)
+  /// This line's share of the sale-level discount.
+  discountCents  Int      @default(0)
   createdAt      DateTime @default(now())
   item           Item?    @relation(fields: [itemId], references: [id])
   sale           Sale     @relation(fields: [saleId], references: [id])
@@ -609,7 +627,7 @@ model InventoryMovement {
   itemId       String
   storeId      String
   type         String
-  quantity     Int
+  quantity     Float
   batchId      String?
   saleId       String?
   recipeItemId String?
@@ -729,7 +747,7 @@ model POItem {
   id               String        @id @default(uuid())
   poId             String
   itemId           String
-  quantityOrdered  Int
+  quantityOrdered  Float
   agreedPriceCents Int
   createdAt        DateTime      @default(now())
   po               PurchaseOrder @relation(fields: [poId], references: [id])
@@ -755,7 +773,7 @@ model GRNItem {
   id               String    @id @default(uuid())
   grnId            String
   poItemId         String
-  quantityReceived Int
+  quantityReceived Float
   batchLotNumber   String?
   expiryDate       DateTime?
   landedCostCents  Int       @default(0)
@@ -990,7 +1008,7 @@ model TransferItem {
   id         String        @id @default(uuid())
   transferId String
   itemId     String
-  quantity   Int
+  quantity   Float
   createdAt  DateTime      @default(now())
   transfer   StoreTransfer @relation(fields: [transferId], references: [id])
 
@@ -1429,7 +1447,7 @@ model SupplierReturnItem {
   id            String         @id @default(uuid())
   returnId      String
   itemId        String
-  quantity      Int
+  quantity      Float
   unitCostCents Int
   totalCents    Int
   reason        String?
@@ -1484,6 +1502,23 @@ model Prescription {
   @@index([businessId, storeId, status])
 }
 
+/// One dispense or refill that was invoiced as a sale. Voiding that sale takes the fill back through this row.
+model PrescriptionFill {
+  id                String    @id @default(uuid())
+  businessId        String
+  prescriptionId    String
+  saleId            String    @unique
+  /// FIRST or REFILL.
+  kind              String
+  /// The prescription's dates before this fill, put back if the fill is voided.
+  prevLastFillDate  DateTime?
+  prevNextFillDate  DateTime?
+  voidedAt          DateTime?
+  createdAt         DateTime  @default(now())
+
+  @@index([businessId, prescriptionId])
+}
+
 model Appointment {
   id            String    @id @default(uuid())
   businessId    String
@@ -1498,6 +1533,8 @@ model Appointment {
   status        String    @default("BOOKED")
   notes         String?
   depositCents  Int       @default(0)
+  /// The sale this appointment was invoiced as when it was completed (after the sales-pipeline cutover).
+  saleId        String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   business      Business  @relation(fields: [businessId], references: [id])
@@ -1686,6 +1723,7 @@ model RoomBooking {
   guestName          String
   guestPhone         String?
   guestIdNumber      String?
+  guestKraPin        String?
   checkInDate        DateTime
   checkOutDate       DateTime?
   actualCheckIn      DateTime?
@@ -1818,7 +1856,7 @@ model DamagedGoodsRecord {
   storeId      String
   itemId       String
   variantId    String?
-  quantity     Int
+  quantity     Float
   costCents    Int      @default(0)
   reason       String
   authorizedBy String?
@@ -2364,6 +2402,10 @@ model InsuranceClaim {
   rejectionReason    String?
   submittedAt        DateTime          @default(now())
   paidAt             DateTime?
+  /// The sale the insurer's share was invoiced on (null for a claim raised by hand, before the sales pipeline).
+  saleId             String?
+  /// A hand-raised claim whose amount was brought into Accounts Receivable by an opening balance, so paying it clears that.
+  receivableBooked   Boolean           @default(false)
   createdAt          DateTime          @default(now())
 
   provider InsuranceProvider @relation(fields: [providerId], references: [id])
@@ -2422,12 +2464,15 @@ model FuelGrade {
   name         String     // e.g. "Petrol 91", "Diesel", "Premium 95"
   code         String     // short code e.g. "P91"
   pricePerLitreCents Int
+  /// The catalogue item this grade is sold as on the invoice (made on the first sale after cutover).
+  itemId             String?
   isActive     Boolean    @default(true)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   pumps        FuelPump[]
   fuelSales    FuelSale[]
   tanks        FuelTank[]
+  item         Item?      @relation(fields: [itemId], references: [id], onDelete: SetNull)
 
   @@index([businessId, storeId])
 }
@@ -2466,6 +2511,11 @@ model FuelSale {
   paymentMethod   String    @default("CASH")
   paymentRef      String?
   saleId          String?   @unique
+  /// The tank the litres came from, so a void puts them back where they were drawn (null for a sale from before this was kept).
+  tankId          String?
+  voidedAt        DateTime?
+  voidedBy        String?
+  voidReason      String?
   status          String    @default("COMPLETED")  // AUTHORIZED | COMPLETED | VOIDED
   authorizedAt    DateTime?
   completedAt     DateTime?
@@ -2565,8 +2615,11 @@ model FleetAccount {
   contactName      String?
   contactPhone     String?
   contactEmail     String?
+  kraPin           String?
   creditLimitCents Int      @default(0)
   balanceCents     Int      @default(0)
+  /// What the books believe this account owes (kept in step while the sales pipeline is on, topped up when it is switched back on).
+  ledgerOwedCents  Int      @default(0)
   isActive         Boolean  @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -3035,4 +3088,27 @@ model PrintStation {
   createdAt   DateTime  @default(now())
 
   @@index([businessId, storeId])
+}
+
+/// Money that moved through a till or drawer outside a sale: a hotel deposit taken at booking, a deposit refunded.
+/// The cash drawer reads these, so expected cash is right when a deposit is taken or handed back.
+model CashMovement {
+  id          String   @id @default(uuid())
+  businessId  String
+  storeId     String
+  cashierId   String?
+  /// PAY_IN or PAY_OUT.
+  kind        String
+  /// CASH, MPESA, CARD or BANK. Only CASH touches the drawer.
+  method      String
+  amountCents Int
+  /// HOTEL_DEPOSIT, HOTEL_DEPOSIT_REFUND, HOTEL_DEPOSIT_FORFEIT, HOTEL_ROOM_CHARGE_PAID, APPOINTMENT_DEPOSIT, APPOINTMENT_DEPOSIT_REFUND, APPOINTMENT_DEPOSIT_FORFEIT.
+  reason      String
+  reference   String?
+  /// The room booking, or the appointment, a deposit belongs to.
+  bookingId   String?
+  createdAt   DateTime @default(now())
+
+  @@index([businessId, storeId, createdAt])
+  @@index([bookingId])
 }

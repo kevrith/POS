@@ -12,6 +12,7 @@ function makePrisma() {
     // mock has to model those relations rather than a bare aggregate.
     sale: { findMany: jest.fn().mockResolvedValue([]) },
     return: { findMany: jest.fn().mockResolvedValue([]) },
+    cashMovement: { findMany: jest.fn().mockResolvedValue([]) },
     expense: { aggregate: jest.fn().mockResolvedValue({ _sum: { amountCents: null } }) },
     // CashDrawerSession has no `cashier` relation, so getActiveSessions
     // resolves names with a separate User query.
@@ -228,6 +229,56 @@ describe('CashDrawerService', () => {
       expect(result.cashRefundsCents).toBe(20000);
       // Store credit never leaves the till, so only the cash refund is subtracted.
       expect(result.expectedClosingCents).toBe(100000 + 100000 - 20000);
+    });
+
+    it('adds cash taken in outside a sale (a hotel deposit) and takes off cash handed back', async () => {
+      const { svc, prisma } = makeService();
+      prisma.cashDrawerSession.findUnique.mockResolvedValue(makeSession());
+      prisma.sale.findMany.mockResolvedValue([
+        { id: 's1', totalCents: 100000, vatCents: 0, payments: [{ method: 'CASH', amountCents: 100000 }] },
+      ]);
+      prisma.cashMovement.findMany.mockResolvedValue([
+        { kind: 'PAY_IN', amountCents: 500000 },
+        { kind: 'PAY_IN', amountCents: 150000 },
+        { kind: 'PAY_OUT', amountCents: 200000 },
+      ]);
+
+      const result = await svc.getSessionSummary('sess-1');
+
+      expect(result.cashPayInsCents).toBe(650000);
+      expect(result.cashPayOutsCents).toBe(200000);
+      expect(result.expectedClosingCents).toBe(100000 + 100000 + 650000 - 200000);
+    });
+
+    it('cash paid against a credit sale made in this same session is counted once, as the pay-in', async () => {
+      const { svc, prisma } = makeService();
+      prisma.cashDrawerSession.findUnique.mockResolvedValue(makeSession());
+      prisma.sale.findMany.mockResolvedValue([
+        { id: 's1', totalCents: 100000, vatCents: 0, payments: [{ method: 'CASH', amountCents: 30000, reference: 'Credit settlement' }, { method: 'MPESA', amountCents: 70000, reference: 'Credit settlement' }] },
+      ]);
+      prisma.cashMovement.findMany.mockResolvedValue([{ kind: 'PAY_IN', amountCents: 30000 }]);
+      const result = await svc.getSessionSummary('sess-1');
+      expect(result.cashSalesCents).toBe(0);
+      expect(result.expectedClosingCents).toBe(100000 + 30000);
+    });
+
+    it('only this cashier\'s cash movements in this session\'s window count, and only cash', async () => {
+      const { svc, prisma } = makeService();
+      prisma.cashDrawerSession.findUnique.mockResolvedValue(makeSession());
+      await svc.getSessionSummary('sess-1');
+      const where = prisma.cashMovement.findMany.mock.calls[0][0].where;
+      expect(where).toEqual(expect.objectContaining({ businessId: 'biz-1', storeId: 'store-1', cashierId: 'user-1', method: { in: ['CASH'] } }));
+      expect(where.createdAt.gte).toBeInstanceOf(Date);
+      expect(where.createdAt.lte).toBeInstanceOf(Date);
+    });
+
+    it('is unchanged when there are no cash movements', async () => {
+      const { svc, prisma } = makeService();
+      prisma.cashDrawerSession.findUnique.mockResolvedValue(makeSession());
+      const result = await svc.getSessionSummary('sess-1');
+      expect(result.cashPayInsCents).toBe(0);
+      expect(result.cashPayOutsCents).toBe(0);
+      expect(result.expectedClosingCents).toBe(100000);
     });
 
     it('throws when the session does not exist', async () => {

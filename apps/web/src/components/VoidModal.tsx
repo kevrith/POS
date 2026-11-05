@@ -72,26 +72,18 @@ export default function VoidModal({
 
   const voidMutation = useMutation({
     mutationFn: async () => {
-      let managerId: string;
-
-      if (isSelfAuthorized && userId) {
-        managerId = userId;
-      } else {
-        const result = await api.post<{ userId: string; name: string }>(
-          '/sales/verify-manager-pin',
-          { pin: managerPin, businessId },
-        );
-        managerId = result.userId;
-      }
+      // The server decides who approved: a manager signed in as themselves, or the PIN it verifies itself.
+      // A user id sent from here counts for nothing unless it is the caller's own.
+      const approval = isSelfAuthorized && userId ? { managerId: userId } : { managerPin };
 
       if (voidType === 'FULL_VOID') {
-        return api.post(`/sales/${saleId}/void?businessId=${businessId}`, { managerId, reason });
+        return api.post(`/sales/${saleId}/void?businessId=${businessId}`, { ...approval, reason });
       }
 
       const voidedItemQuantities = selectedItems.map(i => ({ itemId: i.id, quantity: voidQuantities[i.id]! }));
       const voidedItemIds = selectedItems.map(i => i.id);
       return api.post(`/sales/${saleId}/void?businessId=${businessId}`, {
-        managerId, reason, voidedItemIds, voidedItemQuantities,
+        ...approval, reason, voidedItemIds, voidedItemQuantities,
       });
     },
     onSuccess: () => { onSuccess(); onClose(); },

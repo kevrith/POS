@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { computeTaxes, taxClassOf } from '@pos/shared';
 import {
   ShoppingCart, Plus, Minus, Trash2, CreditCard, Banknote,
   Phone, AlertCircle, CheckCircle2, Search, ScanLine,
@@ -16,6 +17,7 @@ interface KioskItem {
   category?: string;
   imageUrl?: string;
   vatApplicable: boolean;
+  taxClass?: string;
   barcode?: string;
 }
 
@@ -236,7 +238,11 @@ export default function KioskPage() {
 
   // Totals
   const subtotalCents = cart.reduce((s, e) => s + e.item.retailPriceCents * e.qty, 0);
-  const vatCents = cart.reduce((s, e) => e.item.vatApplicable ? s + Math.round(e.item.retailPriceCents * e.qty * 16 / 116) : s, 0);
+  const vatCents = computeTaxes(
+    cart.map((e) => ({ totalCents: e.item.retailPriceCents * e.qty, taxClass: taxClassOf(e.item) })),
+    0,
+    { vatRegistered: true },
+  ).vatCents;
   const totalCents = subtotalCents;
   const cartQty = cart.reduce((s, e) => s + e.qty, 0);
 

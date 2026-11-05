@@ -53,6 +53,7 @@ export async function refreshItemsCache(businessId: string, storeId: string): Pr
       vipPriceCents: item.vipPriceCents as number | undefined,
       costPriceCents: item.costPriceCents as number | undefined,
       vatApplicable: Boolean(item.vatApplicable),
+      taxClass: (item.taxClass as string | undefined) ?? undefined,
       totApplicable: Boolean(item.totApplicable),
       trackStock: Boolean(item.trackStock),
       currentStock: item.currentStock as number ?? 0,

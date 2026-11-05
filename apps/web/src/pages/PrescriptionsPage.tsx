@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { Plus, Pill, CheckCircle, XCircle, Clock, Search, Printer, History, AlertTriangle, ExternalLink } from 'lucide-react';
 import { printHtml } from '../lib/printHtml';
+import DispenseModal from '../components/DispenseModal';
 
 interface RxItem {
   itemId?: string;
@@ -118,12 +119,6 @@ export default function PrescriptionsPage() {
     },
   });
 
-  const dispenseMutation = useMutation({
-    mutationFn: ({ id, dispensedBy }: { id: string; dispensedBy: string }) =>
-      api.patch(`/prescriptions/${id}/dispense`, { dispensedBy }),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['prescriptions'] }); setSelected(null); },
-  });
-
   const cancelMutation = useMutation({
     mutationFn: (id: string) => api.patch(`/prescriptions/${id}/cancel`, {}),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['prescriptions'] }); setSelected(null); },
@@ -166,9 +161,7 @@ export default function PrescriptionsPage() {
     CANCELLED: prescriptions.filter((r) => r.status === 'CANCELLED').length,
   };
 
-  const handleDispense = (rx: Prescription) => {
-    dispenseMutation.mutate({ id: rx.id, dispensedBy: user?.name ?? 'Staff' });
-  };
+  const [dispensing, setDispensing] = useState<Prescription | null>(null);
 
   const handlePrintDispense = (rx: Prescription) => {
     const items: RxItem[] = (() => { try { return JSON.parse(rx.items || '[]'); } catch { return []; } })();
@@ -422,12 +415,9 @@ export default function PrescriptionsPage() {
                         className="flex items-center gap-1.5 px-4 py-2 text-sm border border-purple-300 text-purple-600 rounded-lg hover:bg-purple-50">
                         <ExternalLink className="w-4 h-4" /> Refer Out
                       </button>
-                      <button onClick={() => handleDispense(selected)} disabled={dispenseMutation.isPending}
-                        className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium disabled:opacity-50">
-                        {dispenseMutation.isPending ? 'Dispensing…' : (() => {
-                          const itemsParsed: RxItem[] = (() => { try { return JSON.parse(selected.items); } catch { return []; } })();
-                          return itemsParsed.some((i) => i.itemId) ? '✓ Dispense & Deduct Stock' : '✓ Dispense';
-                        })()}
+                      <button onClick={() => setDispensing(selected)}
+                        className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">
+                        Dispense
                       </button>
                     </>
                   )}
@@ -440,6 +430,14 @@ export default function PrescriptionsPage() {
           </div>
         );
       })()}
+
+      {dispensing && (
+        <DispenseModal
+          rx={dispensing}
+          mode="dispense"
+          onClose={() => { setDispensing(null); setSelected(null); }}
+        />
+      )}
 
       {/* Patient History Modal */}
       {showHistory && selected && (

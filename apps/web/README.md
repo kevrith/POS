@@ -27,6 +27,43 @@ npm run preview
 
 ---
 
+## Tax classes
+
+Each item has a KRA tax class (A exempt, B standard 16%, C zero-rated, D not VAT), chosen in the item form and
+shown in the **Tax** column of Inventory. To classify many items at once (the flour shelf, exempt medicines),
+tick them in the list, choose a class in the bar that appears, and Apply; the **All tax classes** filter shows
+what is already marked. The CSV import takes a `taxClass` column (A to D, or exempt / standard / zero-rated /
+non-VAT; blank means standard). Items are standard-rated until classified, which is how every sale has always
+been taxed. The tills compute VAT with `computeTaxes` from `@pos/shared`, the same function the server uses.
+
+## Fuel receipts and the sales switch
+
+Settings has an owner-only card, **Fuel, hotel, pharmacy and cyber takings**. Off (the default for a business that existed
+before it) leaves those takings as they were; On makes each one a real sale with a receipt number, an eTIMS invoice, and
+entries in Z-reports, the cash drawer and the books, from that moment (nothing earlier changes). Turn it on only after you stop ringing
+those takings through the normal till. With it on, completing a pump sale opens a receipt window (print, eTIMS status) and
+prints automatically if the terminal is set to. Credit on the pump screen asks for a registered customer; fleet accounts take a
+KRA PIN (printed as the buyer) and fleet payments take a method.
+
+For a hotel, the same switch makes check-out one invoice: the booking form takes a KRA PIN for a company guest and the
+method the deposit was paid by, **Take a Deposit** adds to it, cancelling a reservation asks whether to pay the deposit back or
+(manager) keep it, and the check-out window lists any levies. The checkout invoice shows the receipt number, the eTIMS
+status, and any deposit to hand back. The owner or a manager can list the hotel's levies (if it charges any) in Settings, in
+the **Hotel levies** card, which saves on its own.
+
+For appointments, the booking form picks the service from the catalogue and (on the switch) the way the deposit was paid; **Deposit**
+adds more; **Complete** opens a payment window (price, deposit applied, amount received, optional company KRA PIN) and ends in the
+fiscal receipt; **Cancel** and **No-Show** with a deposit held ask how to pay it back, or a manager can keep it.
+
+For a cyber cafe, ending a session shows the buyer KRA PIN field, a customer picker when it is paid on credit (credit is only for a
+registered customer), and then the fiscal receipt (number, KRA status, Print) instead of the plain one.
+
+For a pharmacy, Dispense and Process Refill open one window (`DispenseModal`): it prices the fill from the catalogue, lets the
+pharmacist tick that an insurer covers part (insurer, member number, the percentage the patient pays), takes the patient's
+payment (cash change shown) and an optional company KRA PIN, then ends in the same receipt window as fuel
+(`DirectSaleReceiptModal`, built from `lib/directSaleReceipt.ts`). A medicine not linked to a priced catalogue item blocks the
+button with its name. Off the switch the window just confirms the dispense, as before.
+
 ## API access
 
 `src/lib/api.ts` has base `/api/v1` — relative on purpose, so the app adapts to

@@ -212,3 +212,111 @@ describe('assertCanManageUser', () => {
     expect(() => assertCanManageUser('OWNER', undefined, 'ADMIN')).toThrow(BadRequestException);
   });
 });
+
+describe('vertical modules: fuel, cyber cafe, pharmacy, hotel, appointments', () => {
+  describe('fuel station', () => {
+    it.each(['CASHIER', 'WAITER'])('%s cannot change prices, credit limits, tank levels or fleet money', (role) => {
+      expect(can(role, 'PATCH', '/fuel-pump/grades/g1')).toBe(false);
+      expect(can(role, 'POST', '/fuel-pump/grades')).toBe(false);
+      expect(can(role, 'PATCH', '/fuel-pump/fleet/f1')).toBe(false);
+      expect(can(role, 'POST', '/fuel-pump/fleet')).toBe(false);
+      expect(can(role, 'POST', '/fuel-pump/tanks/dipping')).toBe(false);
+      expect(can(role, 'POST', '/fuel-pump/tanks/delivery')).toBe(false);
+      expect(can(role, 'POST', '/fuel-pump/fleet/f1/payment')).toBe(false);
+      expect(can(role, 'GET', '/fuel-pump/variance')).toBe(false);
+      expect(can(role, 'GET', '/fuel-pump/fleet/f1/transactions')).toBe(false);
+    });
+
+    it('the forecourt attendant can still run pumps, sales and shifts', () => {
+      for (const [m, p] of [
+        ['POST', '/fuel-pump/sales'],
+        ['POST', '/fuel-pump/pumps/p1/authorize'],
+        ['POST', '/fuel-pump/pumps/p1/stop'],
+        ['POST', '/fuel-pump/shifts/open'],
+        ['POST', '/fuel-pump/shifts/s1/close'],
+        ['GET', '/fuel-pump/pumps'],
+        ['GET', '/fuel-pump/fleet'],
+      ] as const) {
+        expect({ p, ok: can('CASHIER', m, p) }).toEqual({ p, ok: true });
+      }
+    });
+
+    it('managers, owners and accountants keep what is theirs', () => {
+      expect(can('MANAGER', 'PATCH', '/fuel-pump/grades/g1')).toBe(true);
+      expect(can('OWNER', 'POST', '/fuel-pump/tanks/delivery')).toBe(true);
+      expect(can('ACCOUNTANT', 'POST', '/fuel-pump/fleet/f1/payment')).toBe(true);
+      expect(can('ACCOUNTANT', 'GET', '/fuel-pump/variance')).toBe(true);
+    });
+  });
+
+  describe('cyber cafe', () => {
+    it('front desk runs sessions but cannot void one or touch the rate card', () => {
+      expect(can('CASHIER', 'POST', '/cybercafe/stations/s1/start')).toBe(true);
+      expect(can('CASHIER', 'POST', '/cybercafe/sessions/x/end')).toBe(true);
+      expect(can('CASHIER', 'POST', '/cybercafe/sessions/x/extend')).toBe(true);
+      expect(can('CASHIER', 'POST', '/cybercafe/sessions/x/void')).toBe(false);
+      expect(can('WAITER', 'POST', '/cybercafe/sessions/x/void')).toBe(false);
+      expect(can('CASHIER', 'POST', '/cybercafe/packages')).toBe(false);
+      expect(can('CASHIER', 'PATCH', '/cybercafe/stations/s1')).toBe(false);
+      expect(can('CASHIER', 'DELETE', '/cybercafe/rates/r1')).toBe(false);
+      expect(can('CASHIER', 'GET', '/cybercafe/stats')).toBe(false);
+      expect(can('MANAGER', 'POST', '/cybercafe/sessions/x/void')).toBe(true);
+    });
+  });
+
+  describe('pharmacy', () => {
+    it('waiters see no patient data and edit no clinical reference data', () => {
+      expect(can('WAITER', 'GET', '/prescriptions')).toBe(false);
+      expect(can('WAITER', 'GET', '/prescriptions/rx1')).toBe(false);
+      expect(can('WAITER', 'PATCH', '/prescriptions/rx1/dispense')).toBe(false);
+      expect(can('WAITER', 'POST', '/pharmacy/interactions')).toBe(false);
+      expect(can('WAITER', 'GET', '/pharmacy/drugs')).toBe(false);
+    });
+
+    it('counter staff dispense but cannot cancel, edit reference data or work claims', () => {
+      expect(can('CASHIER', 'POST', '/prescriptions')).toBe(true);
+      expect(can('CASHIER', 'PATCH', '/prescriptions/rx1/dispense')).toBe(true);
+      expect(can('CASHIER', 'PATCH', '/prescriptions/rx1/refill')).toBe(true);
+      expect(can('CASHIER', 'POST', '/prescriptions/check-interactions')).toBe(true);
+      expect(can('CASHIER', 'GET', '/pharmacy/drugs')).toBe(true);
+      expect(can('CASHIER', 'PATCH', '/prescriptions/rx1/cancel')).toBe(false);
+      expect(can('CASHIER', 'GET', '/prescriptions/controlled-log')).toBe(false);
+      expect(can('CASHIER', 'DELETE', '/pharmacy/interactions/i1')).toBe(false);
+      expect(can('CASHIER', 'POST', '/pharmacy/drugs')).toBe(false);
+      expect(can('CASHIER', 'PATCH', '/pharmacy/claims/c1')).toBe(false);
+      expect(can('CASHIER', 'GET', '/pharmacy/claims')).toBe(false);
+    });
+
+    it('management and accounts keep claims, the controlled log and cancellations', () => {
+      expect(can('MANAGER', 'GET', '/prescriptions/controlled-log')).toBe(true);
+      expect(can('MANAGER', 'PATCH', '/prescriptions/rx1/cancel')).toBe(true);
+      expect(can('ACCOUNTANT', 'PATCH', '/pharmacy/claims/c1')).toBe(true);
+      expect(can('OWNER', 'POST', '/pharmacy/interactions')).toBe(true);
+    });
+  });
+
+  describe('hotel and appointments', () => {
+    it('reception works bookings and the folio, but cannot delete charges or rooms', () => {
+      expect(can('CASHIER', 'POST', '/hospitality/room-bookings')).toBe(true);
+      expect(can('CASHIER', 'POST', '/hospitality/room-bookings/b1/folio')).toBe(true);
+      expect(can('CASHIER', 'POST', '/hospitality/room-bookings/b1/check-out')).toBe(true);
+      expect(can('CASHIER', 'DELETE', '/hospitality/folio-charges/c1')).toBe(false);
+      expect(can('WAITER', 'DELETE', '/hospitality/folio-charges/c1')).toBe(false);
+      expect(can('CASHIER', 'POST', '/hospitality/hotel-rooms')).toBe(false);
+      expect(can('CASHIER', 'PATCH', '/hospitality/hotel-rooms/r1')).toBe(false);
+      expect(can('CASHIER', 'DELETE', '/hospitality/hotel-rooms/r1')).toBe(false);
+      expect(can('MANAGER', 'DELETE', '/hospitality/folio-charges/c1')).toBe(true);
+    });
+
+    it('housekeeping can still update a room status', () => {
+      expect(can('CASHIER', 'PATCH', '/hospitality/hotel-rooms/r1/housekeeping')).toBe(true);
+    });
+
+    it('anyone on the floor books appointments, only management deletes them', () => {
+      expect(can('CASHIER', 'POST', '/appointments')).toBe(true);
+      expect(can('WAITER', 'PATCH', '/appointments/a1')).toBe(true);
+      expect(can('WAITER', 'DELETE', '/appointments/a1')).toBe(false);
+      expect(can('MANAGER', 'DELETE', '/appointments/a1')).toBe(true);
+    });
+  });
+});

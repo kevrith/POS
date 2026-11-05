@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
-import { ItemType, InventoryMovementType, normalizeStation } from '@pos/shared';
+import { ItemType, InventoryMovementType, normalizeStation, isTaxClass, parseTaxClass, TAX_CLASSES, type TaxClass } from '@pos/shared';
 import { v4 as uuidv4 } from 'uuid';
 
 interface CreateItemDto {
@@ -19,6 +19,9 @@ interface CreateItemDto {
   trackBatches?: boolean;
   trackExpiry?: boolean;
   defaultExpiryDays?: number;
+  /** KRA tax class: A exempt, B standard 16%, C zero-rated, D not subject to VAT. */
+  taxClass?: string;
+  /** Legacy yes/no flag, kept in step with taxClass for older readers. A request's value is ignored. */
   vatApplicable?: boolean;
   totApplicable?: boolean;
   storeId: string;
@@ -30,6 +33,17 @@ interface CreateItemDto {
   /** KITCHEN / BAR / DESSERT, or empty to let the system guess from the name. */
   station?: string | null;
   prepTimeMinutes?: number;
+}
+
+/**
+ * The class a request asks for, or undefined when it says nothing about tax. Only an explicit `taxClass` counts.
+ * The older `vatApplicable` flag is ignored: the create form defaulted it to false, so an older client sending
+ * `false` was not choosing "exempt", and acting on it would quietly stop charging VAT on the item.
+ */
+function requestedTaxClass(dto: { taxClass?: unknown }): TaxClass | undefined {
+  if (dto.taxClass === undefined || dto.taxClass === null || dto.taxClass === '') return undefined;
+  if (!isTaxClass(dto.taxClass)) throw new BadRequestException(`Tax class must be one of ${TAX_CLASSES.join(', ')}`);
+  return dto.taxClass;
 }
 
 /** Clamp a client-supplied prep time to something a kitchen could mean. */
@@ -451,7 +465,8 @@ export class ItemsService {
         trackBatches: dto.trackBatches ?? false,
         trackExpiry: dto.trackExpiry ?? false,
         defaultExpiryDays: dto.defaultExpiryDays,
-        vatApplicable: dto.vatApplicable ?? true,
+        taxClass: requestedTaxClass(dto) ?? 'B',
+        vatApplicable: (requestedTaxClass(dto) ?? 'B') === 'B',
         totApplicable: dto.totApplicable ?? false,
         negativeStockPolicy: (dto as any).negativeStockPolicy ?? 'ALLOW',
         station: normalizeStation(dto.station),
@@ -520,7 +535,7 @@ export class ItemsService {
         vipPriceCents: dto.vipPriceCents,
         costPriceCents: dto.costPriceCents,
         trackStock: dto.trackStock,
-        vatApplicable: dto.vatApplicable,
+        ...(requestedTaxClass(dto) !== undefined && { taxClass: requestedTaxClass(dto), vatApplicable: requestedTaxClass(dto) === 'B' }),
         totApplicable: dto.totApplicable,
         ...(dto.imageUrl !== undefined && { imageUrl: dto.imageUrl }),
         ...(dto.allergens !== undefined && { allergens: JSON.stringify(dto.allergens) }),
@@ -729,6 +744,19 @@ export class ItemsService {
     await this.prisma.itemVariant.delete({ where: { id: variantId } });
   }
 
+  /** Classify many items at once (the supermarket's flour and the pharmacy's exempt medicines). */
+  async setTaxClass(businessId: string, itemIds: unknown, taxClass: unknown) {
+    if (!isTaxClass(taxClass)) throw new BadRequestException(`Tax class must be one of ${TAX_CLASSES.join(', ')}`);
+    if (!Array.isArray(itemIds) || itemIds.length === 0) throw new BadRequestException('Choose at least one item');
+    if (itemIds.length > 2000) throw new BadRequestException('Change at most 2,000 items at a time');
+    if (!itemIds.every((i) => typeof i === 'string' && i)) throw new BadRequestException('itemIds must be ids');
+    const done = await this.prisma.item.updateMany({
+      where: { id: { in: itemIds as string[] }, businessId, deletedAt: null },
+      data: { taxClass, vatApplicable: taxClass === 'B' },
+    });
+    return { updated: done.count, taxClass };
+  }
+
   async importBulk(businessId: string, storeId: string, rows: CreateItemDto[]) {
     if (!Array.isArray(rows)) throw new BadRequestException('items must be an array');
     const created: string[] = [];
@@ -750,6 +778,8 @@ export class ItemsService {
     currentStock?: number;
     expiryDate?: string;
     lotNumber?: string;
+    /** A, B, C or D, or exempt / standard / zero-rated / non-VAT. Blank means standard. */
+    taxClass?: string;
   }>) {
     if (!Array.isArray(rows)) throw new BadRequestException('rows must be an array');
     const results: Array<{ success: boolean; name: string; id?: string; error?: string }> = [];
@@ -772,12 +802,17 @@ export class ItemsService {
           }
         }
 
+        const csvClass = parseTaxClass(row.taxClass);
+        if (csvClass === null) throw new Error(`Tax class "${row.taxClass}" is not one of A/exempt, B/standard, C/zero-rated, D/non-VAT`);
+
         const item = await this.prisma.item.create({
           data: {
             offlineId: uuidv4(),
             businessId,
             storeId,
             name: row.name,
+            taxClass: csvClass ?? 'B',
+            vatApplicable: (csvClass ?? 'B') === 'B',
             category: row.category,
             retailPriceCents: Math.round((row.retailPrice ?? 0) * 100),
             wholesalePriceCents: row.wholesalePrice ? Math.round(row.wholesalePrice * 100) : undefined,

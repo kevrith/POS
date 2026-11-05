@@ -49,10 +49,15 @@ export class BusinessController {
       receiptFormatInvoice?: 'THERMAL' | 'A4' | 'A5';
       receiptFormatDelivery?: 'THERMAL' | 'A4' | 'A5';
       receiptFormatEmail?: 'THERMAL' | 'A4' | 'A5';
+      /** Owner only. On: fuel, hotel, pharmacy and cyber takings become real sales from now. */
+      verticalSalesEnabled?: boolean;
+      /** Levies a hotel adds to a stay: [{ name, ratePct, base: "ROOM" | "ALL" }]. Empty = none. */
+      hotelLevies?: unknown;
       [key: string]: unknown;
     },
+    @Req() req: Request & { user: AuthUser },
   ) {
-    return this.businessService.updateSettings(businessId, dto);
+    return this.businessService.updateSettings(businessId, dto, req.user.role);
   }
 
   @SkipSubscriptionCheck()

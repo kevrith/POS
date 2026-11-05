@@ -1,9 +1,18 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { LedgerService } from '../ledger/ledger.service';
+import { buildClaimJournalLines, buildUnmatchedClaimReceiptLines } from '../sales/sale-ledger';
+import { intInRange, oneOf, optionalText } from '../common/validate';
+
+/** Claim statuses after which the money is settled (or written off) and the claim no longer moves. */
+const CLOSED_CLAIM_STATUSES = ['PAID', 'REJECTED', 'VOIDED'];
+const CLAIM_STATUSES = ['SUBMITTED', 'APPROVED', 'PAID', 'REJECTED'] as const;
 
 @Injectable()
 export class PharmacyService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(PharmacyService.name);
+
+  constructor(private prisma: PrismaService, private ledger: LedgerService) {}
 
   // ---------- Drug Interactions ----------
   async getInteractions(businessId: string) {
@@ -66,21 +75,72 @@ export class PharmacyService {
     billedCents: number;
     copayPct?: number;
   }) {
-    return this.prisma.insuranceClaim.create({ data: { ...dto, status: 'SUBMITTED' } });
+    // A claim raised by hand has no sale behind it: `saleId` is only ever set when a fill is invoiced.
+    const { businessId, prescriptionId, providerId, patientInsuranceId, billedCents, copayPct } = dto;
+    return this.prisma.insuranceClaim.create({ data: { businessId, prescriptionId, providerId, patientInsuranceId, billedCents, copayPct, status: 'SUBMITTED' } });
   }
 
+  /**
+   * Move a claim along. A claim raised from a dispensed fill (it carries `saleId`) is an amount the insurer owes the
+   * pharmacy, held in Accounts Receivable since the sale, so paying it clears that receivable into the bank, and a
+   * shortfall or a rejection is written off. A claim raised by hand has a receivable only once an opening balance brought
+   * it in; otherwise what the insurer pays is income.
+   * A paid or rejected claim is settled and does not move again, so a double click cannot post it twice.
+   */
   async updateClaim(
     id: string,
+    businessId: string,
     dto: {
       status?: string;
       claimNumber?: string;
       approvedCents?: number;
       paidCents?: number;
       rejectionReason?: string;
-      paidAt?: Date;
+      paidAt?: Date | string;
     },
   ) {
-    return this.prisma.insuranceClaim.update({ where: { id }, data: dto });
+    const claim = await this.prisma.insuranceClaim.findFirst({ where: { id, businessId } });
+    if (!claim) throw new NotFoundException('Claim not found');
+    if (CLOSED_CLAIM_STATUSES.includes(claim.status)) throw new BadRequestException(`A ${claim.status.toLowerCase()} claim cannot be changed`);
+
+    // Only these fields move; anything else in the body (the amount billed, the business) is not the screen's to set.
+    const data: Record<string, unknown> = {};
+    if (dto.status !== undefined) data.status = oneOf(String(dto.status), 'Claim status', CLAIM_STATUSES);
+    if (dto.claimNumber !== undefined) data.claimNumber = optionalText(dto.claimNumber, 'Claim number', 60) ?? null;
+    if (dto.approvedCents !== undefined) data.approvedCents = intInRange(dto.approvedCents, 'Amount approved', 0, 1_000_000_000);
+    if (dto.rejectionReason !== undefined) data.rejectionReason = optionalText(dto.rejectionReason, 'Rejection reason', 300) ?? null;
+    let paidCents = 0;
+    const closing = data.status === 'PAID' || data.status === 'REJECTED';
+    if (data.status === 'PAID') {
+      paidCents = intInRange(dto.paidCents ?? claim.approvedCents, 'Amount paid', 0, 1_000_000_000);
+      data.paidCents = paidCents;
+      data.paidAt = new Date();
+    }
+    // Conditional on the claim still being open, so two clicks cannot both close it.
+    const claimed = await this.prisma.insuranceClaim.updateMany({
+      where: { id, businessId, status: { notIn: CLOSED_CLAIM_STATUSES } },
+      data,
+    });
+    if (claimed.count !== 1) throw new BadRequestException('This claim was just changed by someone else. Reload it.');
+
+    // A claim from a fill (or one an opening balance brought into receivables) clears that receivable. A hand-raised one
+    // that never reached receivables has nothing to clear: what the insurer pays is income, and a rejection posts nothing.
+    if (closing) {
+      const inReceivables = !!claim.saleId || claim.receivableBooked;
+      const lines = inReceivables
+        ? buildClaimJournalLines(data.status === 'PAID' ? 'PAID' : 'REJECTED', claim.billedCents, paidCents)
+        : data.status === 'PAID' ? buildUnmatchedClaimReceiptLines(paidCents) : [];
+      if (lines.length > 0) {
+        void this.ledger.autoPost({
+          businessId,
+          description: `Insurance claim ${claim.claimNumber ?? claim.id} ${data.status === 'PAID' ? 'paid' : 'rejected'}`,
+          reference: `CLAIM-${claim.id}`,
+          sourceType: 'INSURANCE_CLAIM',
+          lines,
+        }).catch((e: unknown) => this.logger.warn(`Ledger posting for claim ${claim.id} failed: ${String(e)}`));
+      }
+    }
+    return this.prisma.insuranceClaim.findFirst({ where: { id, businessId }, include: { provider: true } });
   }
 
   // ---------- Drug Catalogue ----------

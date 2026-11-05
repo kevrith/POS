@@ -22,6 +22,7 @@ function setup() {
     prescription: { findFirst: jest.fn(), create: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 1 }), update: jest.fn(), findMany: jest.fn() },
     item: { count: jest.fn().mockResolvedValue(1), findFirst: jest.fn().mockResolvedValue(makeItem()) },
     business: { findUnique: jest.fn().mockResolvedValue({ negativePolicyDefault: 'WARN' }) },
+    $queryRaw: jest.fn().mockResolvedValue([]),
     inventoryMovement: { create: jest.fn(), aggregate: jest.fn().mockResolvedValue({ _sum: { quantity: 100 } }) },
     batch: { findMany: jest.fn().mockResolvedValue([]), updateMany: jest.fn(), findFirst: jest.fn() },
     controlledSubstanceLog: { create: jest.fn(), findMany: jest.fn() },
@@ -177,6 +178,21 @@ describe('PrescriptionsService.dispense', () => {
 
   it('follows the business default when the item has no policy of its own', async () => {
     const { svc, prisma } = setup();
+    prisma.business.findUnique.mockResolvedValue({ negativePolicyDefault: 'BLOCK' });
+    prisma.inventoryMovement.aggregate.mockResolvedValue({ _sum: { quantity: 0 } });
+    await expect(svc.dispense('rx-1', 'biz-1', PHARMACIST)).rejects.toThrow(/Insufficient stock/);
+  });
+
+  it('locks the medicine rows before reading stock, so a second pharmacist cannot take the same last box', async () => {
+    const { svc, prisma } = setup();
+    prisma.item.findFirst.mockResolvedValue(makeItem({ negativeStockPolicy: 'BLOCK' }));
+    await svc.dispense('rx-1', 'biz-1', PHARMACIST);
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it('a business-wide BLOCK holds even for an item saved with ALLOW', async () => {
+    const { svc, prisma } = setup();
+    prisma.item.findFirst.mockResolvedValue(makeItem({ negativeStockPolicy: 'ALLOW' }));
     prisma.business.findUnique.mockResolvedValue({ negativePolicyDefault: 'BLOCK' });
     prisma.inventoryMovement.aggregate.mockResolvedValue({ _sum: { quantity: 0 } });
     await expect(svc.dispense('rx-1', 'biz-1', PHARMACIST)).rejects.toThrow(/Insufficient stock/);

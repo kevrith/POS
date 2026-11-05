@@ -190,6 +190,13 @@ Trust boundaries in `hospitality` (the global `TenantGuard` already rejects a fo
 - a tab settles once (claimed inside the transaction) and only when payments cover it;
 - checkout looks items up within the business, rejects non-positive quantities and
   out-of-range discount/tip/service charge, and requires a `NORMAL` sale's payments to cover its total;
+- stock that must not go negative is enforced on the server, not the till screen: an item with
+  `negativeStockPolicy = BLOCK` (Inventory, "block oversell") or any item when the business policy is `BLOCK` is locked
+  (`SELECT ... FOR UPDATE` on the item rows, in id order) and re-read inside the sale's transaction
+  (`sales/stock-guard.ts`), so two tills cannot both take the last units. Prescription fills use the same guard.
+  Whole-unit items (`PRODUCT`, `BUNDLE`, `RECIPE` not marked fractional or weighed) refuse a part-unit quantity;
+- a `CREDIT` payment makes the sale a credit sale whatever `type` the client sent, and a credit sale needs a
+  `customerId` from the same business (so a credit limit is always checked and there is always someone to collect from);
 - when a checkout names an `orderId`, `SalesService.createSale` ignores the client's cart and builds the
   sale from the order's own lines (price plus priced modifiers, times quantity), links `Sale.orderId`
   (unique, so an order has at most one sale) and claims the order `OPEN`/`BILL_REQUESTED` -> `PAID`
@@ -452,6 +459,10 @@ disables its feature when blank — see the table in the [root README](../../REA
 npm test                # unit
 npm run test:e2e        # e2e (--forceExit)
 ```
+
+`src/common/client-contract.spec.ts` reads every controller route and every API call in the web app and the four
+mobile apps, and fails when a client calls a route the server does not have (the unit tests and the type-checker
+cannot see that). Add the server route, or fix the client call, when it fails.
 
 To exercise real endpoints without touching a shared database, run a throwaway
 Postgres (`initdb` in a temp dir, `listen_addresses=127.0.0.1`), `prisma migrate

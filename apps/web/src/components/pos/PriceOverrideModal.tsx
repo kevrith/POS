@@ -28,7 +28,7 @@ export default function PriceOverrideModal({ item, userRole, businessId, onApply
       if (!pin) { setError('Manager PIN required'); return; }
       setPending(true);
       try {
-        await api.post('/auth/verify-pin', { businessId, pin, role: 'MANAGER' });
+        await api.post('/sales/verify-manager-pin', { businessId, pin });
       } catch {
         setError('Invalid manager PIN');
         setPending(false);

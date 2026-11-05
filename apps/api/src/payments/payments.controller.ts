@@ -1,4 +1,7 @@
-import { Controller, Post, Get, Patch, Delete, Body, Param, Query, UseGuards, UploadedFile, UseInterceptors, Logger, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Body, Param, Query, Req, UseGuards, UploadedFile, UseInterceptors, Logger, BadRequestException, ServiceUnavailableException } from '@nestjs/common';
+import type { Request } from 'express';
+import type { AuthUser } from '../auth/auth.service';
+import { intInRange } from '../common/validate';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { MpesaService } from './mpesa.service';
 import { ReconciliationService } from './reconciliation.service';
@@ -133,6 +136,46 @@ export class PaymentsController {
       `pos-${(biz?.shortCode ?? businessId).toLowerCase()}@kastrapos.co.ke`;
 
     return { publicKey: biz?.paystackPublicKey ?? null, payerEmail };
+  }
+
+  /**
+   * Start a Paystack payment: returns the page the payer pays on and the reference to check afterwards with
+   * `paystack/verify`. The reconciliation screen calls this, and the route did not exist, so the button always failed.
+   * The business is the signed-in user's, not whatever the request names. With no secret key it refuses outright.
+   */
+  @Post('paystack/initiate')
+  @UseGuards(JwtAuthGuard)
+  async initiatePaystack(@Body() body: { amountCents: number; email: string }, @Req() req: Request & { user: AuthUser }) {
+    const amountCents = intInRange(body?.amountCents, 'Amount', 100, 1_000_000_000);
+    const email = typeof body?.email === 'string' ? body.email.trim() : '';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 120) throw new BadRequestException('Enter a valid email address for the payer');
+
+    const secretKey = process.env.PAYSTACK_SECRET_KEY;
+    if (!secretKey) {
+      this.logger.error('Paystack initiate attempted with no PAYSTACK_SECRET_KEY');
+      throw new ServiceUnavailableException('Card payments are not configured. Set PAYSTACK_SECRET_KEY.');
+    }
+
+    const businessId = req.user.businessId;
+    const reference = `RECON-${businessId.slice(0, 12)}-${Date.now()}`;
+    try {
+      const res = await fetch('https://api.paystack.co/transaction/initialize', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${secretKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, amount: amountCents, currency: 'KES', reference, metadata: { businessId, source: 'reconciliation' } }),
+        signal: AbortSignal.timeout(15000),
+      });
+      const data = (await res.json().catch(() => ({}))) as { status?: boolean; message?: string; data?: { authorization_url?: string; reference?: string } };
+      if (!res.ok || !data.status || !data.data?.authorization_url) {
+        this.logger.warn(`Paystack initiate HTTP ${res.status}: ${data.message ?? 'no message'}`);
+        throw new BadRequestException(data.message ?? 'Paystack could not start the payment');
+      }
+      return { authorizationUrl: data.data.authorization_url, reference: data.data.reference ?? reference };
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      this.logger.error(`Paystack initiate failed: ${err instanceof Error ? err.message : err}`);
+      throw new ServiceUnavailableException('Could not reach Paystack. Try again in a moment.');
+    }
   }
 
   /** Verify a Paystack Inline transaction reference */

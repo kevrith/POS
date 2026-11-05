@@ -320,3 +320,18 @@ describe('vertical modules: fuel, cyber cafe, pharmacy, hotel, appointments', ()
     });
   });
 });
+
+describe('routes the web screens call', () => {
+  it('a cashier can check a manager PIN at the till (price override) but cannot start a Paystack payment', () => {
+    expect(can('CASHIER', 'POST', '/sales/verify-manager-pin')).toBe(true);
+    expect(can('CASHIER', 'POST', '/payments/paystack/initiate')).toBe(false);
+  });
+
+  it('finance and owner roles can start a Paystack payment from reconciliation', () => {
+    for (const role of ['OWNER', 'ACCOUNTANT']) expect(can(role, 'POST', '/payments/paystack/initiate')).toBe(true);
+  });
+
+  it('a waiter can remove an item from an order', () => {
+    expect(can('WAITER', 'POST', '/hospitality/orders/o1/items/remove')).toBe(true);
+  });
+});

@@ -170,7 +170,7 @@ export default function ReconciliationPage() {
         reference: paystackRef,
         businessId,
       });
-      setPaystackResult(data.verified ? `✅ Payment verified! Status: ${data.status}` : `❌ Not verified. Status: ${data.status}`);
+      setPaystackResult(data.verified ? `Payment verified. Status: ${data.status}` : `Not verified. Status: ${data.status}`);
     } catch (e: any) { setPaystackResult(`Error: ${e.message}`); }
   };
 
@@ -376,7 +376,7 @@ export default function ReconciliationPage() {
               {Math.abs(summary.varianceCents) > 0 && (
                 <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-3">
                   <p className="text-sm text-amber-700 dark:text-amber-300">
-                    ⚠ Variance of {formatKES(Math.abs(summary.varianceCents))} detected. Check for unmatched bank entries or missing sale records.
+                    Variance of {formatKES(Math.abs(summary.varianceCents))} detected. Check for unmatched bank entries or missing sale records.
                   </p>
                 </div>
               )}

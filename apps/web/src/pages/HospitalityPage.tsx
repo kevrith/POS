@@ -1390,7 +1390,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
 
   const removeItem = useMutation({
     mutationFn: (vars: { orderId: string; itemId: string }) =>
-      api.delete(`/hospitality/orders/${vars.orderId}/items?itemIds=${vars.itemId}`),
+      api.post(`/hospitality/orders/${vars.orderId}/items/remove`, { itemIds: [vars.itemId] }),
     onSuccess: () => void refetchOrder(),
   });
 

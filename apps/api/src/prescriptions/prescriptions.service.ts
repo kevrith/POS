@@ -5,6 +5,7 @@ import { intInRange, numberInRange, oneOf, optionalKraPin, optionalText, require
 import { hasTooManyDecimals, roundQty } from '../common/quantity';
 import { parseFilterDate } from '../common/dates';
 import { drawStock } from '../batch/batch-allocation';
+import { assertStockAvailable, blocksOversell } from '../sales/stock-guard';
 import { taxClassOf } from '@pos/shared';
 import { DirectSaleService, type DirectSaleInput, type DirectSaleLine, type DirectSaleResult, type EtimsOutcome } from '../sales/direct-sale.service';
 
@@ -329,21 +330,22 @@ export class PrescriptionsService {
       const receipt = direct?.result.sale.receiptNumber;
 
       const business = await tx.business.findUnique({ where: { id: businessId }, select: { negativePolicyDefault: true } });
+      // Medicines that must not go below zero (the item's own switch or the business policy) are locked and checked
+      // together, in one go, before any is drawn: two pharmacists filling the last box cannot both succeed.
+      const guarded: Array<{ itemId: string; name: string; quantity: number }> = [];
+      for (const line of lines) {
+        if (!line.itemId) continue;
+        const item = await tx.item.findFirst({ where: { id: line.itemId, businessId } });
+        if (item?.trackStock && blocksOversell(item, business?.negativePolicyDefault)) guarded.push({ itemId: item.id, name: item.name, quantity: line.qty });
+      }
+      if (guarded.length > 0) await assertStockAvailable(tx, { businessId, storeId: rx.storeId, lines: guarded });
+
       for (const line of lines) {
         if (!line.itemId) continue;
         const item = await tx.item.findFirst({ where: { id: line.itemId, businessId } });
         if (!item) throw new BadRequestException(`${line.name}: this item is no longer in the catalogue`);
 
         if (item.trackStock) {
-          const policy = item.negativeStockPolicy ?? business?.negativePolicyDefault ?? 'ALLOW';
-          if (policy === 'BLOCK') {
-            const agg = await tx.inventoryMovement.aggregate({
-              where: { itemId: item.id, storeId: rx.storeId, businessId },
-              _sum: { quantity: true },
-            });
-            const onHand = roundQty(agg._sum.quantity ?? 0);
-            if (onHand < line.qty) throw new BadRequestException(`Insufficient stock for ${item.name}. Available: ${onHand}, needed: ${line.qty}`);
-          }
           await drawStock(tx, {
             businessId,
             storeId: rx.storeId,

@@ -39,7 +39,7 @@ export default function EtimsSettingsPage() {
   // Fetch business info
   const { data: business } = useQuery<Business>({
     queryKey: ['business', businessId],
-    queryFn: () => api.get<Business>(`/business/${businessId}`),
+    queryFn: () => api.get<Business>(`/business/${businessId}/settings`),
     enabled: !!businessId,
   });
 

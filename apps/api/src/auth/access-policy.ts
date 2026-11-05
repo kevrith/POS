@@ -145,6 +145,7 @@ export const ACCESS_RULES: readonly AccessRule[] = [
   r('POST', '/payments/mpesa/c2b/register', OWN),
   r('*', '/payments/mpesa/c2b/**', FIN),
   r('*', '/payments/reconciliation/**', FIN),
+  r('POST', '/payments/paystack/initiate', FIN),
   r('*', '/payments/cheques/**', FIN),
   r('*', '/accounting/journal/**', FIN),
   r('GET', '/cash-drawer/active-sessions', FIN),

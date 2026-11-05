@@ -40,7 +40,7 @@ function makePrisma() {
     inventoryMovement: { create: jest.fn() },
     order: { update: jest.fn() },
     table: { update: jest.fn() },
-    customer: { update: jest.fn() },
+    customer: { update: jest.fn(), findFirst: jest.fn() },
     $transaction: jest.fn(),
   };
 }
@@ -359,9 +359,27 @@ describe('SalesService.createSale input guards', () => {
 
   it('still sells a fractional quantity, as weighed goods need', async () => {
     const { deps, svc } = ready();
+    deps.prisma.item.findMany.mockResolvedValue([makeItem({ isFractional: true })]);
     deps.prisma.$transaction.mockRejectedValue(new Error('reached the transaction'));
     await expect(svc.createSale('biz-001', { ...BASE_DTO, items: [{ itemId: 'item-001', quantity: 0.35 }], serviceChargeCents: 0 }))
       .rejects.toThrow('reached the transaction');
+  });
+
+  it('sells a WEIGHTED or isWeighed item by the fraction too', async () => {
+    for (const flags of [{ type: 'WEIGHTED' }, { isWeighed: true }]) {
+      const { deps, svc } = ready();
+      deps.prisma.item.findMany.mockResolvedValue([makeItem(flags)]);
+      deps.prisma.$transaction.mockRejectedValue(new Error('reached the transaction'));
+      await expect(svc.createSale('biz-001', { ...BASE_DTO, items: [{ itemId: 'item-001', quantity: 1.5 }], serviceChargeCents: 0 }))
+        .rejects.toThrow('reached the transaction');
+    }
+  });
+
+  it('refuses a part of a unit for an item sold by the piece', async () => {
+    const { deps, svc } = ready();
+    deps.prisma.item.findMany.mockResolvedValue([makeItem({ type: 'PRODUCT' })]);
+    await expect(svc.createSale('biz-001', { ...BASE_DTO, items: [{ itemId: 'item-001', quantity: 1.5 }], serviceChargeCents: 0 }))
+      .rejects.toThrow('sold in whole units');
   });
 
   it('refuses a negative discount, a discount larger than the sale, and a negative tip', async () => {
@@ -515,7 +533,13 @@ describe('SalesService.createSale payments on ordinary sales', () => {
 
   it('lets a credit sale go through without full payment', async () => {
     const credit = ready(SaleType.CREDIT, []);
-    await expect(credit.svc.createSale('biz-001', credit.dto)).resolves.toBeDefined();
+    credit.deps.prisma.customer.findFirst.mockResolvedValue({ id: 'c1', creditLimitCents: 0, balanceCents: 0 });
+    await expect(credit.svc.createSale('biz-001', { ...credit.dto, customerId: 'c1' })).resolves.toBeDefined();
+  });
+
+  it('will not let a credit sale through with nobody to owe it', async () => {
+    const credit = ready(SaleType.CREDIT, []);
+    await expect(credit.svc.createSale('biz-001', credit.dto)).rejects.toThrow('needs a registered customer');
   });
 });
 
@@ -738,5 +762,72 @@ describe('SalesService.createSale tax classes', () => {
     const data = await sell({ items: [milk()], cart: [{ itemId: 'milk', quantity: 1 }], taxType: 'TOT' });
     expect(data.vatCents).toBe(0);
     expect(data.totCents).toBe(Math.round((11_600 * 3) / 103));
+  });
+});
+
+
+describe('SalesService.createSale credit sales', () => {
+  function ready() {
+    const deps = makeDeps();
+    deps.prisma.store.findUnique.mockResolvedValue(makeStore({ business: { taxType: 'VAT', serviceChargeRate: 0, negativePolicyDefault: 'ALLOW' } }));
+    deps.prisma.item.findMany.mockResolvedValue([makeItem()]);
+    return { deps, svc: makeService(deps as any) as any };
+  }
+  const credit = { ...BASE_DTO, serviceChargeCents: 0, payments: [{ method: 'CREDIT', amountCents: 100000 }] };
+
+  it('refuses a credit sale with no customer', async () => {
+    const { svc } = ready();
+    await expect(svc.createSale('biz-001', { ...credit, type: SaleType.CREDIT })).rejects.toThrow('needs a registered customer');
+  });
+
+  it('treats a CREDIT tender on a sale labelled NORMAL as a credit sale, so it cannot skip the customer rule', async () => {
+    const { svc } = ready();
+    await expect(svc.createSale('biz-001', { ...credit, type: SaleType.NORMAL })).rejects.toThrow('needs a registered customer');
+  });
+
+  it('refuses a customer from another business', async () => {
+    const { deps, svc } = ready();
+    deps.prisma.customer.findFirst.mockResolvedValue(null);
+    await expect(svc.createSale('biz-001', { ...credit, type: SaleType.NORMAL, customerId: 'c-other' })).rejects.toThrow('Customer not found');
+    expect(deps.prisma.customer.findFirst).toHaveBeenCalledWith({ where: { id: 'c-other', businessId: 'biz-001' } });
+  });
+
+  it('applies the credit limit even when the sale was labelled NORMAL', async () => {
+    const { deps, svc } = ready();
+    deps.prisma.customer.findFirst.mockResolvedValue({ id: 'c1', creditLimitCents: 50000, balanceCents: 0 });
+    await expect(svc.createSale('biz-001', { ...credit, type: SaleType.NORMAL, customerId: 'c1' })).rejects.toThrow('Credit limit exceeded');
+  });
+});
+
+describe('SalesService.createSale stock that must not go below zero', () => {
+  function ready(itemOver: Record<string, any>, businessPolicy = 'ALLOW') {
+    const deps = makeDeps();
+    deps.prisma.store.findUnique.mockResolvedValue(makeStore({ business: { taxType: 'VAT', serviceChargeRate: 0, negativePolicyDefault: businessPolicy } }));
+    deps.prisma.item.findMany.mockResolvedValue([makeItem({ type: 'PRODUCT', ...itemOver })]);
+    const queryRaw = jest.fn().mockResolvedValue([]);
+    const aggregate = jest.fn().mockResolvedValue({ _sum: { quantity: 100 } });
+    deps.prisma.$transaction.mockImplementation(async (fn: any) => fn({ $queryRaw: queryRaw, inventoryMovement: { aggregate } }));
+    return { deps, svc: makeService(deps as any) as any, queryRaw, aggregate };
+  }
+  const dto = { ...BASE_DTO, serviceChargeCents: 0, payments: [{ method: 'CASH', amountCents: 200000 }] };
+
+  it("honours the item's own block-oversell switch, not only the business setting", async () => {
+    const { deps, svc } = ready({ negativeStockPolicy: 'BLOCK' });
+    deps.inventory.getStockLevel.mockResolvedValue(1);
+    await expect(svc.createSale('biz-001', dto)).rejects.toThrow('Insufficient stock');
+  });
+
+  it('re-checks the stock under a lock inside the write transaction, so a second till cannot slip past the first look', async () => {
+    const { deps, svc, queryRaw, aggregate } = ready({ negativeStockPolicy: 'BLOCK' });
+    deps.inventory.getStockLevel.mockResolvedValue(5); // the quick look sees enough...
+    aggregate.mockResolvedValue({ _sum: { quantity: 1 } }); // ...but another sale has since taken it
+    await expect(svc.createSale('biz-001', dto)).rejects.toThrow('Insufficient stock for Cappuccino. Available: 1, needed: 2');
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not lock or re-check an item that may go negative', async () => {
+    const { svc, queryRaw } = ready({ negativeStockPolicy: 'ALLOW' });
+    await svc.createSale('biz-001', dto).catch(() => undefined);
+    expect(queryRaw).not.toHaveBeenCalled();
   });
 });

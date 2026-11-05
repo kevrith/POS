@@ -17,6 +17,7 @@ import { hasTooManyDecimals, roundQty } from '../common/quantity';
 import { intInRange, oneOf } from '../common/validate';
 import { postSaleJournal, postSettlementJournal, reverseJournalLines, type SaleJournalInput } from './sale-ledger';
 import { drawStock, restoreStock } from '../batch/batch-allocation';
+import { assertStockAvailable, blocksOversell, sellsInFractions, type StockLine } from './stock-guard';
 import { ROOM_CHARGE_FOLIO_TYPE } from '../common/folio';
 
 /** How a customer may settle a credit sale. */
@@ -176,6 +177,15 @@ export class SalesService {
     if (!dto?.orderId && (!Array.isArray(dto?.items) || dto.items.length === 0)) {
       throw new BadRequestException('A sale needs at least one item');
     }
+    // A credit tender makes this a credit sale, whatever type the client labelled it. The client used to decide, so a
+    // CREDIT payment on a NORMAL sale was booked as paid, with no debt and no credit-limit check. A credit sale also
+    // needs someone to owe the money.
+    const paysOnCredit = Array.isArray(dto.payments) && dto.payments.some((p) => String(p?.method ?? '').toUpperCase() === 'CREDIT');
+    if (paysOnCredit && dto.type !== SaleType.CREDIT) dto = { ...dto, type: SaleType.CREDIT };
+    if (dto.type === SaleType.CREDIT && !dto.customerId) {
+      throw new BadRequestException('A credit sale needs a registered customer, so there is someone to collect from');
+    }
+
     // ── Check transaction limit (FREE tier only) ──
     const txLimitCheck = await this.subscriptionLimits.checkMonthlyTransactionLimit(businessId);
     if (!txLimitCheck.allowed) {
@@ -255,6 +265,8 @@ export class SalesService {
     const saleItems = [];
     // Each line's tax class, parallel to saleItems. The class is the item's at the moment of the sale.
     const lineClasses: TaxClass[] = [];
+    // Lines whose item must not go below zero, re-checked under a lock inside the write transaction.
+    const blockedLines: StockLine[] = [];
 
     for (const cartItem of cart) {
       const item = items.find(i => i.id === cartItem.itemId);
@@ -267,6 +279,10 @@ export class SalesService {
       }
       if (hasTooManyDecimals(cartItem.quantity)) {
         throw new BadRequestException(`Quantity of ${item.name} can have at most 3 decimal places`);
+      }
+      // A thing sold by the piece goes by whole pieces. Only items set up as weighed or fractional take a part of one.
+      if (!Number.isInteger(cartItem.quantity) && !sellsInFractions(item)) {
+        throw new BadRequestException(`${item.name} is sold in whole units, so the quantity cannot be ${cartItem.quantity}`);
       }
 
       const priceKey = `${dto.priceLevel.toLowerCase()}PriceCents` as keyof typeof item;
@@ -284,18 +300,22 @@ export class SalesService {
       });
       lineClasses.push(taxClassOf(item));
 
-      if (item.trackStock) {
+      if (item.trackStock && blocksOversell(item, store.business.negativePolicyDefault)) {
+        // A quick look so the till gets an answer without opening a transaction. The check that counts is the
+        // locked one inside the write transaction below; this one alone could be beaten by a second till.
         const stock = await this.inventory.getStockLevel(item.id, dto.storeId);
-        if (stock < cartItem.quantity && store.business.negativePolicyDefault === 'BLOCK') {
+        if (stock < cartItem.quantity) {
           throw new BadRequestException(`Insufficient stock for ${item.name}`);
         }
+        blockedLines.push({ itemId: item.id, name: item.name, quantity: cartItem.quantity });
       }
     }
 
     // ── Credit limit check ──────────────────────────────────────────────────
     if (dto.type === SaleType.CREDIT && dto.customerId) {
-      const customer = await this.prisma.customer.findUnique({ where: { id: dto.customerId } });
-      if (customer && customer.creditLimitCents > 0) {
+      const customer = await this.prisma.customer.findFirst({ where: { id: dto.customerId, businessId } });
+      if (!customer) throw new BadRequestException('Customer not found');
+      if (customer.creditLimitCents > 0) {
         const outstanding = Math.max(0, -customer.balanceCents);
         if (outstanding + subtotalCents > customer.creditLimitCents) {
           throw new BadRequestException(
@@ -365,6 +385,9 @@ export class SalesService {
 
     // ── Write transaction (kept minimal: sale + sequence + stock movements) ──
     const sale = await this.prisma.$transaction(async (tx) => {
+      // Stock that must not go below zero is locked and re-read here, so two sales cannot both take the last units.
+      if (blockedLines.length > 0) await assertStockAvailable(tx, { businessId, storeId: dto.storeId, lines: blockedLines });
+
       // Close the order in the same transaction as the sale. It used to be closed
       // afterwards with any failure swallowed, so a sale could commit while its
       // order stayed open and be paid a second time. Claiming it here means two

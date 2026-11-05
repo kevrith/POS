@@ -90,7 +90,7 @@ export function DateRangePicker({
         <View style={s.sheet}>
           <View style={s.sheetHeader}>
             <Text style={s.sheetTitle}>Select date range</Text>
-            <TouchableOpacity onPress={onCancel} hitSlop={10}>
+            <TouchableOpacity onPress={onCancel} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
               <Ionicons name="close" size={22} color={Colors.textSecondary} />
             </TouchableOpacity>
           </View>
@@ -114,13 +114,13 @@ export function DateRangePicker({
           </View>
 
           <View style={s.monthNav}>
-            <TouchableOpacity onPress={() => shiftMonth(-1)} hitSlop={10} style={s.navBtn}>
+            <TouchableOpacity onPress={() => shiftMonth(-1)} hitSlop={10} style={s.navBtn} accessibilityRole="button" accessibilityLabel="Back">
               <Ionicons name="chevron-back" size={20} color={Colors.text} />
             </TouchableOpacity>
             <Text style={s.monthLabel}>
               {MONTHS[cursor.getMonth()]} {cursor.getFullYear()}
             </Text>
-            <TouchableOpacity onPress={() => shiftMonth(1)} hitSlop={10} style={s.navBtn}>
+            <TouchableOpacity onPress={() => shiftMonth(1)} hitSlop={10} style={s.navBtn} accessibilityRole="button" accessibilityLabel="Open">
               <Ionicons name="chevron-forward" size={20} color={Colors.text} />
             </TouchableOpacity>
           </View>

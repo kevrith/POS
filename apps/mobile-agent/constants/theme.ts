@@ -1,17 +1,10 @@
+import { BaseColors, Brand, Neutral } from './tokens';
+export { Brand, Neutral, Radius, Space, FontSize, TOUCH_TARGET } from './tokens';
+
+/** KASTRA's shared palette: Signal Violet on Mist Gray (design/tokens.json). */
 export const Colors = {
-  primary: '#EA580C',       // orange-600 — distinguishes the Agent app
-  primaryLight: '#FB923C',
-  primaryDark: '#9A3412',
-  success: '#16A34A',
-  warning: '#F59E0B',
-  error: '#DC2626',
-  info: '#2563EB',
-  indigo: '#4F46E5',
-  text: '#1C1917',
-  textSecondary: '#78716C',
-  background: '#FFF7ED',     // orange-50
-  card: '#FFFFFF',
-  border: '#FED7AA',         // orange-200
+  ...BaseColors,
+  indigo: Brand[700],
 };
 
 export const ORDER_STATUS_COLORS: Record<string, string> = {

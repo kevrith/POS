@@ -94,7 +94,7 @@ export default function ReturnModal({
             <Ionicons name="return-down-back" size={20} color={Colors.warning} />
             <Text style={styles.title}>Return Sale</Text>
           </View>
-          <TouchableOpacity onPress={handleClose}>
+          <TouchableOpacity onPress={handleClose} accessibilityRole="button" accessibilityLabel="Close" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Ionicons name="close" size={24} color={Colors.text} />
           </TouchableOpacity>
         </View>

@@ -397,7 +397,7 @@ export default function LoginScreen() {
             void SecureStore.deleteItemAsync(BUSINESS_ID_KEY);
             void SecureStore.deleteItemAsync(BUSINESS_NM_KEY);
             setBusinessId(''); setBusinessName(''); setScreen('BUSINESS');
-          }}>
+          }} accessibilityRole="button" accessibilityLabel="Back" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Ionicons name="arrow-back" size={22} color={Colors.text} />
           </TouchableOpacity>
           <View style={{ flex: 1, marginLeft: 12 }}>
@@ -534,7 +534,7 @@ export default function LoginScreen() {
                   secureTextEntry={!showPw}
                   placeholderTextColor={Colors.textSecondary}
                 />
-                <TouchableOpacity onPress={() => setShowPw(v => !v)} style={{ padding: 4 }}>
+                <TouchableOpacity onPress={() => setShowPw(v => !v)} style={{ padding: 4 }} accessibilityRole="button" accessibilityLabel={showPw ? 'Hide password' : 'Show password'} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                   <Ionicons name={showPw ? 'eye-off-outline' : 'eye-outline'} size={18} color={Colors.textSecondary} />
                 </TouchableOpacity>
               </View>

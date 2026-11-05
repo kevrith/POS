@@ -64,11 +64,11 @@ export default function ManageStockScreen() {
     <SafeAreaView edges={['top']} style={styles.safe}>
       <View style={styles.header}>
         <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Back" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Ionicons name="arrow-back" size={22} color={Colors.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Stock</Text>
-          <TouchableOpacity onPress={() => router.push('/manage-item-form')} style={styles.iconBtn}>
+          <TouchableOpacity onPress={() => router.push('/manage-item-form')} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Add" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Ionicons name="add-circle" size={26} color={Colors.primary} />
           </TouchableOpacity>
         </View>
@@ -83,12 +83,12 @@ export default function ManageStockScreen() {
               placeholderTextColor={Colors.textSecondary}
             />
             {search ? (
-              <TouchableOpacity onPress={() => setSearch('')}>
+              <TouchableOpacity onPress={() => setSearch('')} accessibilityRole="button" accessibilityLabel="Clear" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                 <Ionicons name="close-circle" size={16} color={Colors.textSecondary} />
               </TouchableOpacity>
             ) : null}
           </View>
-          <TouchableOpacity style={styles.scanBtn} onPress={() => router.push('/manage-scan')}>
+          <TouchableOpacity style={styles.scanBtn} onPress={() => router.push('/manage-scan')} accessibilityRole="button" accessibilityLabel="Scan barcode" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Ionicons name="barcode-outline" size={20} color={Colors.primary} />
           </TouchableOpacity>
         </View>

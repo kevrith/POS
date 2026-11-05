@@ -87,7 +87,7 @@ export default function ManageTransferNewScreen() {
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Back" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="arrow-back" size={22} color={Colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>New Transfer</Text>
@@ -129,7 +129,7 @@ export default function ManageTransferNewScreen() {
               onChangeText={(v) => setQty(l.itemId, v)}
               keyboardType="numeric"
             />
-            <TouchableOpacity onPress={() => removeLine(l.itemId)}>
+            <TouchableOpacity onPress={() => removeLine(l.itemId)} accessibilityRole="button" accessibilityLabel="Delete" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
               <Ionicons name="trash-outline" size={20} color={Colors.error} />
             </TouchableOpacity>
           </View>
@@ -157,7 +157,7 @@ export default function ManageTransferNewScreen() {
         <SafeAreaView edges={['top']} style={styles.safe}>
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Add Item</Text>
-            <TouchableOpacity onPress={() => setPickerOpen(false)}><Ionicons name="close" size={24} color={Colors.text} /></TouchableOpacity>
+            <TouchableOpacity onPress={() => setPickerOpen(false)} accessibilityRole="button" accessibilityLabel="Close" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}><Ionicons name="close" size={24} color={Colors.text} /></TouchableOpacity>
           </View>
           <View style={{ padding: 12 }}>
             <View style={styles.searchBox}>

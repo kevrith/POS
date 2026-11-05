@@ -230,7 +230,7 @@ export default function RollupScreen() {
 function Header({ onBack }: { onBack: () => void }) {
   return (
     <View style={s.header}>
-      <TouchableOpacity onPress={onBack} style={s.backBtn}>
+      <TouchableOpacity onPress={onBack} style={s.backBtn} accessibilityRole="button" accessibilityLabel="Back" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
         <Ionicons name="arrow-back" size={22} color={Colors.text} />
       </TouchableOpacity>
       <Text style={s.headerTitle}>All Stores</Text>

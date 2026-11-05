@@ -130,7 +130,7 @@ export default function BarcodeScanScreen() {
     return (
       <SafeAreaView edges={['top']} style={styles.safe}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Back" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Ionicons name="arrow-back" size={22} color={Colors.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Barcode Scanner</Text>
@@ -170,7 +170,7 @@ export default function BarcodeScanScreen() {
         {/* Header */}
         <SafeAreaView edges={['top']}>
           <View style={styles.scanHeader}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.scanBackBtn}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.scanBackBtn} accessibilityRole="button" accessibilityLabel="Back" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
               <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
             </TouchableOpacity>
             <Text style={styles.scanHeaderTitle}>Scan Barcode</Text>

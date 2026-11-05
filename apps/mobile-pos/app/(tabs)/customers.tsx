@@ -123,7 +123,7 @@ export default function CustomersScreen() {
             placeholderTextColor={Colors.textSecondary}
           />
           {search ? (
-            <TouchableOpacity onPress={() => setSearch('')}>
+            <TouchableOpacity onPress={() => setSearch('')} accessibilityRole="button" accessibilityLabel="Clear" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
               <Ionicons name="close-circle" size={16} color={Colors.textSecondary} />
             </TouchableOpacity>
           ) : null}
@@ -178,7 +178,7 @@ export default function CustomersScreen() {
           <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: Colors.background }}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Customer Details</Text>
-              <TouchableOpacity onPress={() => setSelectedCustomer(null)}>
+              <TouchableOpacity onPress={() => setSelectedCustomer(null)} accessibilityRole="button" accessibilityLabel="Close" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                 <Ionicons name="close" size={24} color={Colors.text} />
               </TouchableOpacity>
             </View>
@@ -234,7 +234,7 @@ export default function CustomersScreen() {
         <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: Colors.background }}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>New Customer</Text>
-            <TouchableOpacity onPress={() => setShowAddModal(false)}>
+            <TouchableOpacity onPress={() => setShowAddModal(false)} accessibilityRole="button" accessibilityLabel="Close" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
               <Ionicons name="close" size={24} color={Colors.text} />
             </TouchableOpacity>
           </View>

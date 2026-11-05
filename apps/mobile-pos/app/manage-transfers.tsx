@@ -75,11 +75,11 @@ export default function ManageTransfersScreen() {
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Back" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="arrow-back" size={22} color={Colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Stock Transfers</Text>
-        <TouchableOpacity onPress={() => router.push('/manage-transfer-new')} style={styles.iconBtn}>
+        <TouchableOpacity onPress={() => router.push('/manage-transfer-new')} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Add" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="add-circle" size={26} color={Colors.primary} />
         </TouchableOpacity>
       </View>

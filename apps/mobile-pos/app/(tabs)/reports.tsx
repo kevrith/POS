@@ -331,7 +331,7 @@ export default function ReportsScreen() {
     <SafeAreaView edges={['top']} style={styles.safe}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Reports</Text>
-        <TouchableOpacity onPress={shareSummary} hitSlop={10} style={styles.shareBtn}>
+        <TouchableOpacity onPress={shareSummary} hitSlop={10} style={styles.shareBtn} accessibilityRole="button" accessibilityLabel="Share">
           <Ionicons name="share-outline" size={20} color={Colors.primary} />
         </TouchableOpacity>
       </View>

@@ -175,7 +175,7 @@ export default function SalesScreen() {
             placeholderTextColor={Colors.textSecondary}
           />
           {search ? (
-            <TouchableOpacity onPress={() => setSearch('')}>
+            <TouchableOpacity onPress={() => setSearch('')} accessibilityRole="button" accessibilityLabel="Clear" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
               <Ionicons name="close-circle" size={16} color={Colors.textSecondary} />
             </TouchableOpacity>
           ) : null}
@@ -235,8 +235,7 @@ export default function SalesScreen() {
                 <TouchableOpacity
                   style={[styles.pageBtn, page <= 1 && styles.pageBtnDisabled]}
                   onPress={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page <= 1}
-                >
+                  disabled={page <= 1} accessibilityRole="button" accessibilityLabel="Back" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                   <Ionicons name="chevron-back" size={18} color={page <= 1 ? Colors.border : Colors.primary} />
                 </TouchableOpacity>
                 <Text style={styles.pageText}>
@@ -261,7 +260,7 @@ export default function SalesScreen() {
           <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: Colors.background }}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Receipt #{selectedSale.receiptNumber}</Text>
-              <TouchableOpacity onPress={() => setSelectedSale(null)}>
+              <TouchableOpacity onPress={() => setSelectedSale(null)} accessibilityRole="button" accessibilityLabel="Close" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                 <Ionicons name="close" size={24} color={Colors.text} />
               </TouchableOpacity>
             </View>

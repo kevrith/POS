@@ -203,7 +203,7 @@ export default function ApprovalsScreen() {
 function Header({ onBack, count }: { onBack: () => void; count: number }) {
   return (
     <View style={s.header}>
-      <TouchableOpacity onPress={onBack} style={s.backBtn}>
+      <TouchableOpacity onPress={onBack} style={s.backBtn} accessibilityRole="button" accessibilityLabel="Back" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
         <Ionicons name="arrow-back" size={22} color={Colors.text} />
       </TouchableOpacity>
       <View style={s.headerCenter}>

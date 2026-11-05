@@ -173,13 +173,13 @@ export default function TableOrderScreen() {
   return (
     <SafeAreaView edges={['top']} style={s.safe}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} accessibilityRole="button" accessibilityLabel="Back" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="arrow-back" size={22} color={Colors.text} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>
           {order?.table?.number ? `Table ${order.table.number}` : 'Order'}
         </Text>
-        <TouchableOpacity onPress={confirmCancel} style={s.backBtn}>
+        <TouchableOpacity onPress={confirmCancel} style={s.backBtn} accessibilityRole="button" accessibilityLabel="Delete" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="trash-outline" size={20} color={Colors.error} />
         </TouchableOpacity>
       </View>
@@ -296,7 +296,7 @@ export default function TableOrderScreen() {
       <Modal visible={picking} animationType="slide" onRequestClose={() => setPicking(false)}>
         <SafeAreaView edges={['top']} style={s.safe}>
           <View style={s.header}>
-            <TouchableOpacity onPress={() => { setPicking(false); setDraft({}); setSearch(''); }} style={s.backBtn}>
+            <TouchableOpacity onPress={() => { setPicking(false); setDraft({}); setSearch(''); }} style={s.backBtn} accessibilityRole="button" accessibilityLabel="Close" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
               <Ionicons name="close" size={24} color={Colors.text} />
             </TouchableOpacity>
             <Text style={s.headerTitle}>Add items</Text>
@@ -327,11 +327,11 @@ export default function TableOrderScreen() {
                       <Text style={s.menuPrice}>{formatKES(m.retailPriceCents)}</Text>
                     </View>
                     <View style={s.stepper}>
-                      <TouchableOpacity onPress={() => bump(m.id, -1)} style={s.stepBtn} disabled={qty === 0}>
+                      <TouchableOpacity onPress={() => bump(m.id, -1)} style={s.stepBtn} disabled={qty === 0} accessibilityRole="button" accessibilityLabel="Decrease" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                         <Ionicons name="remove" size={18} color={qty === 0 ? Colors.border : Colors.text} />
                       </TouchableOpacity>
                       <Text style={s.stepQty}>{qty}</Text>
-                      <TouchableOpacity onPress={() => bump(m.id, 1)} style={s.stepBtn}>
+                      <TouchableOpacity onPress={() => bump(m.id, 1)} style={s.stepBtn} accessibilityRole="button" accessibilityLabel="Add" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                         <Ionicons name="add" size={18} color={Colors.primary} />
                       </TouchableOpacity>
                     </View>

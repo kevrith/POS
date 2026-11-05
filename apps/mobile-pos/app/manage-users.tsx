@@ -142,7 +142,7 @@ export default function ManageUsersScreen() {
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Back" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="arrow-back" size={22} color={Colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Staff</Text>
@@ -175,7 +175,7 @@ export default function ManageUsersScreen() {
                   <Text style={[styles.roleText, { color: ROLE_COLOR[u.role] ?? Colors.primary }]}>{u.role}</Text>
                 </View>
                 {!isOwner && !isSelf && (
-                  <TouchableOpacity onPress={() => confirmDelete(u)} style={{ paddingLeft: 4 }}>
+                  <TouchableOpacity onPress={() => confirmDelete(u)} style={{ paddingLeft: 4 }} accessibilityRole="button" accessibilityLabel="Delete" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                     <Ionicons name="trash-outline" size={18} color={Colors.error} />
                   </TouchableOpacity>
                 )}
@@ -190,7 +190,7 @@ export default function ManageUsersScreen() {
         <SafeAreaView edges={['top']} style={styles.safe}>
           <View style={styles.header}>
             <Text style={styles.headerTitle}>{editing ? 'Edit Staff' : 'New Staff'}</Text>
-            <TouchableOpacity onPress={() => setShowForm(false)}><Ionicons name="close" size={24} color={Colors.text} /></TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowForm(false)} accessibilityRole="button" accessibilityLabel="Close" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}><Ionicons name="close" size={24} color={Colors.text} /></TouchableOpacity>
           </View>
           <ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
             <Field label="Name *">

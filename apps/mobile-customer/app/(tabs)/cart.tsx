@@ -70,15 +70,13 @@ export default function CartScreen() {
               <View style={styles.qtyRow}>
                 <TouchableOpacity
                   style={styles.qtyBtn}
-                  onPress={() => updateQty(item.id, item.quantity - 1)}
-                >
+                  onPress={() => updateQty(item.id, item.quantity - 1)} accessibilityRole="button" accessibilityLabel="Decrease" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                   <Ionicons name="remove" size={16} color={Colors.primary} />
                 </TouchableOpacity>
                 <Text style={styles.qtyText}>{item.quantity}</Text>
                 <TouchableOpacity
                   style={styles.qtyBtn}
-                  onPress={() => updateQty(item.id, item.quantity + 1)}
-                >
+                  onPress={() => updateQty(item.id, item.quantity + 1)} accessibilityRole="button" accessibilityLabel="Add" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                   <Ionicons name="add" size={16} color={Colors.primary} />
                 </TouchableOpacity>
               </View>
@@ -87,8 +85,7 @@ export default function CartScreen() {
               </Text>
               <TouchableOpacity
                 onPress={() => removeItem(item.id)}
-                style={styles.deleteBtn}
-              >
+                style={styles.deleteBtn} accessibilityRole="button" accessibilityLabel="Delete" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                 <Ionicons name="trash-outline" size={18} color={Colors.error} />
               </TouchableOpacity>
             </View>

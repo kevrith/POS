@@ -250,7 +250,7 @@ export default function OrderScreen() {
                   <TouchableOpacity style={st.qtyBtn} onPress={() => {
                     const idx = cart.lines.findIndex((l) => l.itemId === item.id);
                     cart.updateQty(idx, line.quantity - 1);
-                  }}>
+                  }} accessibilityRole="button" accessibilityLabel="Decrease" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                     <Ionicons name="remove" size={18} color={Colors.primary} />
                   </TouchableOpacity>
                   <Text style={st.qtyText}>{line.quantity}</Text>
@@ -260,7 +260,7 @@ export default function OrderScreen() {
                     onPress={() => {
                       const idx = cart.lines.findIndex((l) => l.itemId === item.id);
                       cart.updateQty(idx, line.quantity + 1);
-                    }}>
+                    }} accessibilityRole="button" accessibilityLabel="Add" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                     <Ionicons name="add" size={18} color={Colors.primary} />
                   </TouchableOpacity>
                 </View>
@@ -268,8 +268,7 @@ export default function OrderScreen() {
                 <TouchableOpacity
                   style={[st.addItemBtn, outOfStock && !cart.isSampleOrder && { backgroundColor: Colors.textSecondary }]}
                   disabled={outOfStock && !cart.isSampleOrder}
-                  onPress={() => cart.addLine({ itemId: item.id, itemName: item.name, itemSku: item.sku ?? undefined, quantity: 1, unitPriceCents: item.retailPriceCents })}
-                >
+                  onPress={() => cart.addLine({ itemId: item.id, itemName: item.name, itemSku: item.sku ?? undefined, quantity: 1, unitPriceCents: item.retailPriceCents })} accessibilityRole="button" accessibilityLabel="Add" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                   <Ionicons name="add" size={18} color="#FFF" />
                 </TouchableOpacity>
               )}
@@ -297,7 +296,7 @@ export default function OrderScreen() {
           <View style={st.modalSheet}>
             <View style={st.modalHeader}>
               <Text style={st.modalTitle}>Select customer</Text>
-              <TouchableOpacity onPress={() => setPickerOpen(false)}><Ionicons name="close" size={24} color={Colors.text} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setPickerOpen(false)} accessibilityRole="button" accessibilityLabel="Close" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}><Ionicons name="close" size={24} color={Colors.text} /></TouchableOpacity>
             </View>
             <FlatList
               data={customers.data ?? []}

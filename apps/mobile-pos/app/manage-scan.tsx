@@ -56,7 +56,7 @@ export default function ManageScanScreen() {
     return (
       <SafeAreaView edges={['top']} style={styles.safe}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Back" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Ionicons name="arrow-back" size={22} color={Colors.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Scan</Text>
@@ -86,7 +86,7 @@ export default function ManageScanScreen() {
       <View style={styles.overlay}>
         <SafeAreaView edges={['top']}>
           <View style={styles.scanHeader}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Back" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
               <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
             </TouchableOpacity>
             <Text style={styles.scanHeaderTitle}>Scan to manage</Text>

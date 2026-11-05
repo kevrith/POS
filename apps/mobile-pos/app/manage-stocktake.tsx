@@ -75,11 +75,11 @@ export default function ManageStocktakeScreen() {
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Back" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="arrow-back" size={22} color={Colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Stock Take</Text>
-        <TouchableOpacity onPress={() => setShowNew(true)} style={styles.iconBtn}>
+        <TouchableOpacity onPress={() => setShowNew(true)} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Add" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="add-circle" size={26} color={Colors.primary} />
         </TouchableOpacity>
       </View>
@@ -129,7 +129,7 @@ export default function ManageStocktakeScreen() {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>New Stock Take</Text>
-              <TouchableOpacity onPress={() => setShowNew(false)}><Ionicons name="close" size={24} color={Colors.text} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowNew(false)} accessibilityRole="button" accessibilityLabel="Close" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}><Ionicons name="close" size={24} color={Colors.text} /></TouchableOpacity>
             </View>
             <Text style={styles.modalHint}>A count sheet is generated from current stock for every tracked item in this store.</Text>
             <Text style={styles.label}>Name</Text>

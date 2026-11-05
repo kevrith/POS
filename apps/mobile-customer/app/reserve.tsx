@@ -61,7 +61,7 @@ export default function ReserveScreen() {
         notes: notes.trim() || undefined,
       });
       Alert.alert(
-        'Table reserved! 🎉',
+        'Table reserved',
         `Table ${res.tableNumber} is booked for ${partySize} on ${new Date(res.reservationTime).toLocaleString('en-KE')}.`,
         [{ text: 'Done', onPress: () => router.back() }],
       );
@@ -75,7 +75,7 @@ export default function ReserveScreen() {
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.back}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.back} accessibilityRole="button" accessibilityLabel="Back" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="arrow-back" size={22} color={Colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Reserve a Table</Text>
@@ -92,11 +92,11 @@ export default function ReserveScreen() {
 
             <Text style={styles.label}>Party Size</Text>
             <View style={styles.partyRow}>
-              <TouchableOpacity style={styles.partyBtn} onPress={() => setPartySize((p) => Math.max(1, p - 1))}>
+              <TouchableOpacity style={styles.partyBtn} onPress={() => setPartySize((p) => Math.max(1, p - 1))} accessibilityRole="button" accessibilityLabel="Decrease" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                 <Ionicons name="remove" size={20} color={Colors.primary} />
               </TouchableOpacity>
               <Text style={styles.partyValue}>{partySize}</Text>
-              <TouchableOpacity style={styles.partyBtn} onPress={() => setPartySize((p) => Math.min(20, p + 1))}>
+              <TouchableOpacity style={styles.partyBtn} onPress={() => setPartySize((p) => Math.min(20, p + 1))} accessibilityRole="button" accessibilityLabel="Add" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                 <Ionicons name="add" size={20} color={Colors.primary} />
               </TouchableOpacity>
             </View>

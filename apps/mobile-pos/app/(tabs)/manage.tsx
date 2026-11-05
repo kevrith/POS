@@ -235,7 +235,7 @@ export default function ManageScreen() {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Switch Store</Text>
-              <TouchableOpacity onPress={() => setShowStorePicker(false)}>
+              <TouchableOpacity onPress={() => setShowStorePicker(false)} accessibilityRole="button" accessibilityLabel="Close" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                 <Ionicons name="close" size={24} color={Colors.text} />
               </TouchableOpacity>
             </View>

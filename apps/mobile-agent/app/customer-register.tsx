@@ -105,7 +105,7 @@ export default function CustomerRegisterScreen() {
   return (
     <SafeAreaView edges={['top']} style={st.safe}>
       <View style={st.header}>
-        <TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={Colors.text} /></TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}><Ionicons name="arrow-back" size={24} color={Colors.text} /></TouchableOpacity>
         <Text style={st.title}>New Customer</Text>
         <View style={{ width: 24 }} />
       </View>

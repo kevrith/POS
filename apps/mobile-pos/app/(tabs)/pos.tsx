@@ -284,12 +284,12 @@ export default function POSScreen() {
               returnKeyType="search"
             />
             {search ? (
-              <TouchableOpacity onPress={() => setSearch('')}>
+              <TouchableOpacity onPress={() => setSearch('')} accessibilityRole="button" accessibilityLabel="Clear" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                 <Ionicons name="close-circle" size={18} color={Colors.textSecondary} />
               </TouchableOpacity>
             ) : null}
           </View>
-          <TouchableOpacity style={styles.iconBtn} onPress={() => router.push('/barcode-scan' as any)}>
+          <TouchableOpacity style={styles.iconBtn} onPress={() => router.push('/barcode-scan' as any)} accessibilityRole="button" accessibilityLabel="Scan" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Ionicons name="scan" size={22} color="#FFFFFF" />
           </TouchableOpacity>
           <TouchableOpacity style={[styles.iconBtn, { backgroundColor: Colors.indigo }]} onPress={() => setShowCustomerPicker(true)}>
@@ -309,7 +309,7 @@ export default function POSScreen() {
           <View style={styles.customerChip}>
             <Ionicons name="person-circle" size={14} color={Colors.primary} />
             <Text style={styles.customerChipText} numberOfLines={1}>{customerName}</Text>
-            <TouchableOpacity onPress={() => setCustomer(null, null)}>
+            <TouchableOpacity onPress={() => setCustomer(null, null)} accessibilityRole="button" accessibilityLabel="Clear" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
               <Ionicons name="close-circle" size={14} color={Colors.textSecondary} />
             </TouchableOpacity>
           </View>
@@ -370,7 +370,7 @@ export default function POSScreen() {
           <Text style={styles.promoText} numberOfLines={1}>
             {appliedPromotion.name} — -{formatKES(appliedPromotion.discountCents)}
           </Text>
-          <TouchableOpacity onPress={() => setPromotion(null)}>
+          <TouchableOpacity onPress={() => setPromotion(null)} accessibilityRole="button" accessibilityLabel="Clear" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Ionicons name="close-circle" size={14} color="#065F46" />
           </TouchableOpacity>
         </View>
@@ -436,11 +436,11 @@ export default function POSScreen() {
                   </TouchableOpacity>
                 ) : (
                   <View style={styles.qtyRow}>
-                    <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.id, qty - 1)}>
+                    <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.id, qty - 1)} accessibilityRole="button" accessibilityLabel="Decrease" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                       <Ionicons name="remove" size={14} color={Colors.primary} />
                     </TouchableOpacity>
                     <Text style={styles.qtyText}>{qty}</Text>
-                    <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.id, qty + 1)}>
+                    <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.id, qty + 1)} accessibilityRole="button" accessibilityLabel="Add" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                       <Ionicons name="add" size={14} color={Colors.primary} />
                     </TouchableOpacity>
                   </View>
@@ -477,7 +477,7 @@ export default function POSScreen() {
                 <Text style={styles.modalSub}>{customerName}</Text>
               ) : null}
             </View>
-            <TouchableOpacity onPress={() => setShowCart(false)}>
+            <TouchableOpacity onPress={() => setShowCart(false)} accessibilityRole="button" accessibilityLabel="Close" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
               <Ionicons name="close" size={24} color={Colors.text} />
             </TouchableOpacity>
           </View>
@@ -507,7 +507,7 @@ export default function POSScreen() {
                 {/* Name + remove */}
                 <View style={styles.cartCardHeader}>
                   <Text style={styles.cartItemName} numberOfLines={2}>{item.name}</Text>
-                  <TouchableOpacity onPress={() => removeItem(item.id)}>
+                  <TouchableOpacity onPress={() => removeItem(item.id)} accessibilityRole="button" accessibilityLabel="Delete" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                     <Ionicons name="trash-outline" size={18} color={Colors.error} />
                   </TouchableOpacity>
                 </View>
@@ -525,11 +525,11 @@ export default function POSScreen() {
 
                 {/* Qty controls + line total */}
                 <View style={styles.cartControls}>
-                  <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.id, item.quantity - 1)}>
+                  <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.id, item.quantity - 1)} accessibilityRole="button" accessibilityLabel="Decrease" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                     <Ionicons name="remove" size={14} color={Colors.primary} />
                   </TouchableOpacity>
                   <Text style={styles.qtyText}>{item.quantity}</Text>
-                  <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.id, item.quantity + 1)}>
+                  <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.id, item.quantity + 1)} accessibilityRole="button" accessibilityLabel="Add" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                     <Ionicons name="add" size={14} color={Colors.primary} />
                   </TouchableOpacity>
                   <Text style={styles.cartLineTotal}>
@@ -551,10 +551,10 @@ export default function POSScreen() {
                         autoFocus
                       />
                       <Text style={styles.inlineInputSuffix}>%</Text>
-                      <TouchableOpacity style={styles.inlineConfirm} onPress={() => commitDiscountEdit(item.id)}>
+                      <TouchableOpacity style={styles.inlineConfirm} onPress={() => commitDiscountEdit(item.id)} accessibilityRole="button" accessibilityLabel="Confirm" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                         <Ionicons name="checkmark" size={14} color="#FFFFFF" />
                       </TouchableOpacity>
-                      <TouchableOpacity onPress={() => setEditingDiscountId(null)}>
+                      <TouchableOpacity onPress={() => setEditingDiscountId(null)} accessibilityRole="button" accessibilityLabel="Close" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                         <Ionicons name="close" size={16} color={Colors.textSecondary} />
                       </TouchableOpacity>
                     </View>
@@ -585,10 +585,10 @@ export default function POSScreen() {
                         autoFocus
                       />
                       <Text style={styles.inlineInputSuffix}>KES</Text>
-                      <TouchableOpacity style={styles.inlineConfirm} onPress={() => commitPriceOverride(item.id)}>
+                      <TouchableOpacity style={styles.inlineConfirm} onPress={() => commitPriceOverride(item.id)} accessibilityRole="button" accessibilityLabel="Confirm" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                         <Ionicons name="checkmark" size={14} color="#FFFFFF" />
                       </TouchableOpacity>
-                      <TouchableOpacity onPress={() => setShowPriceOverride(null)}>
+                      <TouchableOpacity onPress={() => setShowPriceOverride(null)} accessibilityRole="button" accessibilityLabel="Close" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                         <Ionicons name="close" size={16} color={Colors.textSecondary} />
                       </TouchableOpacity>
                     </View>
@@ -664,7 +664,7 @@ export default function POSScreen() {
         <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: Colors.background }}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Held Sales ({held.length}/10)</Text>
-            <TouchableOpacity onPress={() => setShowHeld(false)}>
+            <TouchableOpacity onPress={() => setShowHeld(false)} accessibilityRole="button" accessibilityLabel="Close" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
               <Ionicons name="close" size={24} color={Colors.text} />
             </TouchableOpacity>
           </View>
@@ -698,7 +698,7 @@ export default function POSScreen() {
                       <Ionicons name="play" size={14} color="#FFFFFF" />
                       <Text style={styles.resumeBtnText}>Resume</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.discardBtn} onPress={() => discard(h.id)}>
+                    <TouchableOpacity style={styles.discardBtn} onPress={() => discard(h.id)} accessibilityRole="button" accessibilityLabel="Delete" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                       <Ionicons name="trash" size={14} color={Colors.error} />
                     </TouchableOpacity>
                   </View>

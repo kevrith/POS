@@ -75,15 +75,13 @@ function ItemCard({ item }: { item: MenuItem }) {
         <View style={styles.qtyRow}>
           <TouchableOpacity
             style={styles.qtyBtn}
-            onPress={() => updateQty(item.id, qty - 1)}
-          >
+            onPress={() => updateQty(item.id, qty - 1)} accessibilityRole="button" accessibilityLabel="Decrease" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Ionicons name="remove" size={16} color={Colors.primary} />
           </TouchableOpacity>
           <Text style={styles.qtyText}>{qty}</Text>
           <TouchableOpacity
             style={styles.qtyBtn}
-            onPress={() => updateQty(item.id, qty + 1)}
-          >
+            onPress={() => updateQty(item.id, qty + 1)} accessibilityRole="button" accessibilityLabel="Add" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Ionicons name="add" size={16} color={Colors.primary} />
           </TouchableOpacity>
         </View>
@@ -135,7 +133,7 @@ export default function MenuScreen() {
             <Ionicons name="calendar-outline" size={16} color={Colors.primary} />
             <Text style={styles.reserveText}>Reserve</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => refetch()} style={styles.refreshBtn}>
+          <TouchableOpacity onPress={() => refetch()} style={styles.refreshBtn} accessibilityRole="button" accessibilityLabel="Refresh" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Ionicons name="refresh" size={22} color={Colors.primary} />
           </TouchableOpacity>
         </View>
@@ -155,7 +153,7 @@ export default function MenuScreen() {
             returnKeyType="search"
           />
           {search.length > 0 && (
-            <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel="Clear">
               <Ionicons name="close-circle" size={18} color={Colors.textSecondary} />
             </TouchableOpacity>
           )}

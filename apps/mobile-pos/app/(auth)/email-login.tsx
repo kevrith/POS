@@ -67,7 +67,7 @@ export default function EmailLoginScreen() {
       >
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Back" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
               <Ionicons name="arrow-back" size={22} color={Colors.text} />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Email Sign In</Text>
@@ -111,7 +111,7 @@ export default function EmailLoginScreen() {
                   secureTextEntry={!showPassword}
                   placeholderTextColor={Colors.textSecondary}
                 />
-                <TouchableOpacity onPress={() => setShowPassword((v) => !v)} style={styles.eyeBtn}>
+                <TouchableOpacity onPress={() => setShowPassword((v) => !v)} style={styles.eyeBtn} accessibilityRole="button" accessibilityLabel={showPassword ? 'Hide password' : 'Show password'} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                   <Ionicons
                     name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                     size={18}

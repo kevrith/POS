@@ -71,7 +71,7 @@ export default function DeliveriesScreen() {
             {deliveries.length === 1 ? 'delivery' : 'deliveries'}
           </Text>
         </View>
-        <TouchableOpacity onPress={() => refetch()} style={styles.refreshBtn}>
+        <TouchableOpacity onPress={() => refetch()} style={styles.refreshBtn} accessibilityRole="button" accessibilityLabel="Refresh" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="refresh" size={22} color={Colors.primary} />
         </TouchableOpacity>
       </View>

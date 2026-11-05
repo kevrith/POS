@@ -165,7 +165,7 @@ export default function CollectionsScreen() {
           <View style={st.modalSheet}>
             <View style={st.modalHeader}>
               <Text style={st.modalTitle}>Record Payment</Text>
-              <TouchableOpacity onPress={() => setPayTarget(null)}><Ionicons name="close" size={24} color={Colors.text} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setPayTarget(null)} accessibilityRole="button" accessibilityLabel="Close" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}><Ionicons name="close" size={24} color={Colors.text} /></TouchableOpacity>
             </View>
             {payTarget && (
               <>

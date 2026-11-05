@@ -159,11 +159,11 @@ export default function ExpensesScreen() {
   return (
     <SafeAreaView edges={['top']} style={s.safe}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} accessibilityRole="button" accessibilityLabel="Back" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="arrow-back" size={22} color={Colors.text} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Expenses</Text>
-        <TouchableOpacity onPress={() => setShowForm(true)} style={s.backBtn}>
+        <TouchableOpacity onPress={() => setShowForm(true)} style={s.backBtn} accessibilityRole="button" accessibilityLabel="Add" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="add" size={26} color={Colors.primary} />
         </TouchableOpacity>
       </View>
@@ -259,7 +259,7 @@ export default function ExpensesScreen() {
           <View style={s.modalSheet}>
             <View style={s.modalHeader}>
               <Text style={s.modalTitle}>Record Expense</Text>
-              <TouchableOpacity onPress={() => setShowForm(false)}>
+              <TouchableOpacity onPress={() => setShowForm(false)} accessibilityRole="button" accessibilityLabel="Close" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                 <Ionicons name="close" size={24} color={Colors.text} />
               </TouchableOpacity>
             </View>

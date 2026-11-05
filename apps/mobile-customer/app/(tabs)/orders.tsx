@@ -52,7 +52,7 @@ function TrackDriverModal({ orderNumber, onClose }: { orderNumber: string; onClo
       <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: Colors.background }}>
         <View style={s.modalHeader}>
           <Text style={s.modalTitle}>Track driver · {orderNumber}</Text>
-          <TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={Colors.text} /></TouchableOpacity>
+          <TouchableOpacity onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}><Ionicons name="close" size={24} color={Colors.text} /></TouchableOpacity>
         </View>
         {isLoading ? (
           <View style={s.center}><ActivityIndicator size="large" color={Colors.primary} /></View>

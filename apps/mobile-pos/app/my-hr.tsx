@@ -153,7 +153,7 @@ export default function MyHrScreen() {
   return (
     <SafeAreaView edges={['top']} style={s.safe}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} accessibilityRole="button" accessibilityLabel="Back" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="arrow-back" size={22} color={Colors.text} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>My HR</Text>
@@ -322,7 +322,7 @@ export default function MyHrScreen() {
           <View style={s.modalSheet}>
             <View style={s.modalHeader}>
               <Text style={s.modalTitle}>{sheet === 'leave' ? 'Request Leave' : 'Request Advance'}</Text>
-              <TouchableOpacity onPress={() => setSheet('none')}>
+              <TouchableOpacity onPress={() => setSheet('none')} accessibilityRole="button" accessibilityLabel="Close" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                 <Ionicons name="close" size={24} color={Colors.text} />
               </TouchableOpacity>
             </View>

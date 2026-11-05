@@ -144,11 +144,11 @@ export default function ManageItemScreen() {
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Back" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="arrow-back" size={22} color={Colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{item.name}</Text>
-        <TouchableOpacity onPress={() => router.push(`/manage-item-form?id=${item.id}`)} style={styles.iconBtn}>
+        <TouchableOpacity onPress={() => router.push(`/manage-item-form?id=${item.id}`)} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Edit" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="pencil" size={18} color={Colors.primary} />
         </TouchableOpacity>
       </View>
@@ -248,7 +248,7 @@ export default function ManageItemScreen() {
                 <View style={styles.modalHeader}>
                   <Ionicons name={MODE_LABELS[mode].icon} size={22} color={Colors.primary} />
                   <Text style={styles.modalTitle}>{MODE_LABELS[mode].title}</Text>
-                  <TouchableOpacity onPress={closeModal}>
+                  <TouchableOpacity onPress={closeModal} accessibilityRole="button" accessibilityLabel="Close" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                     <Ionicons name="close" size={24} color={Colors.text} />
                   </TouchableOpacity>
                 </View>

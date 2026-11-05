@@ -68,7 +68,7 @@ export default function CustomersScreen() {
           autoCapitalize="none"
         />
         {search.length > 0 && (
-          <TouchableOpacity onPress={() => setSearch('')}>
+          <TouchableOpacity onPress={() => setSearch('')} accessibilityRole="button" accessibilityLabel="Clear" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Ionicons name="close-circle" size={18} color={Colors.textSecondary} />
           </TouchableOpacity>
         )}
@@ -102,7 +102,7 @@ export default function CustomersScreen() {
                 <TouchableOpacity style={st.iconBtn} onPress={() => startOrder(item)}>
                   <Ionicons name="cart" size={18} color={Colors.primary} />
                 </TouchableOpacity>
-                <TouchableOpacity style={st.iconBtn} onPress={() => Linking.openURL(`tel:${item.phone}`)}>
+                <TouchableOpacity style={st.iconBtn} onPress={() => Linking.openURL(`tel:${item.phone}`)} accessibilityRole="button" accessibilityLabel="Call" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                   <Ionicons name="call" size={18} color={Colors.success} />
                 </TouchableOpacity>
               </View>

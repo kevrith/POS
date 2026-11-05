@@ -94,7 +94,7 @@ export default function CustomerPickerModal({ visible, businessId, onSelect, onC
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>Select Customer</Text>
-          <TouchableOpacity onPress={handleClose}>
+          <TouchableOpacity onPress={handleClose} accessibilityRole="button" accessibilityLabel="Close" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Ionicons name="close" size={24} color={Colors.text} />
           </TouchableOpacity>
         </View>
@@ -115,7 +115,7 @@ export default function CustomerPickerModal({ visible, businessId, onSelect, onC
             autoFocus
           />
           {search ? (
-            <TouchableOpacity onPress={() => setSearch('')}>
+            <TouchableOpacity onPress={() => setSearch('')} accessibilityRole="button" accessibilityLabel="Clear" hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
               <Ionicons name="close-circle" size={16} color={Colors.textSecondary} />
             </TouchableOpacity>
           ) : null}

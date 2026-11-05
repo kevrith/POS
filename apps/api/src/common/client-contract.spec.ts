@@ -92,7 +92,8 @@ function clientCalls(): ClientCall[] {
   ];
   const calls: ClientCall[] = [];
   for (const [app, dir] of apps) {
-    for (const f of walk(path.join(APPS, dir)).filter((x) => /\.(tsx?|jsx?)$/.test(x))) {
+    // tests make up their own paths (api.get('/a')); only real application code counts as a client call
+    for (const f of walk(path.join(APPS, dir)).filter((x) => /\.(tsx?|jsx?)$/.test(x) && !/__tests__|\.test\.|\.spec\./.test(x))) {
       const src = fs.readFileSync(f, 'utf8');
       for (const m of src.matchAll(CLIENT_CALL)) {
         const lit = readLiteral(src, (m.index ?? 0) + m[0].length);
@@ -129,5 +130,41 @@ describe('client calls match server routes', () => {
     const lit = readLiteral(src, (m.index ?? 0) + m[0].length)!;
     expect(toPattern(lit.value)).toBe('/businesses/:p/customers');
     expect(toPattern('/business/${}/settings?x=${}')).toBe('/business/:p/settings');
+  });
+});
+
+/**
+ * Every place the web app navigates to must be a route that exists. `navigate('/sales')` when the route is
+ * `/sales-list` sends the user to a blank page, and nothing else notices.
+ */
+describe('web navigation targets exist as routes', () => {
+  const webSrc = path.join(APPS, 'web/src');
+  const app = fs.readFileSync(path.join(webSrc, 'App.tsx'), 'utf8');
+  const routePatterns = [...app.matchAll(/<Route\s+path="([^"*]+)"/g)].map((m) => m[1]);
+  const matchesRoute = (target: string) =>
+    routePatterns.some((r) => {
+      const a = r.split('/').filter(Boolean);
+      const b = target.split('/').filter(Boolean);
+      return a.length === b.length && a.every((seg, i) => seg.startsWith(':') || b[i] === ':p' || seg === b[i]);
+    });
+
+  const targets: Array<{ path: string; file: string }> = [];
+  for (const f of walk(webSrc).filter((x) => /\.(tsx?)$/.test(x) && !x.includes('__tests__'))) {
+    const src = fs.readFileSync(f, 'utf8');
+    for (const m of src.matchAll(/(?:navigate\(\s*|<Link\s[^>]*?to=\{?|<Navigate\s[^>]*?to=\{?|\bto:\s*)(['"`])(\/[^'"`]*)\1/g)) {
+      const clean = m[2].split('?')[0].split('#')[0].replace(/\$\{[^}]*\}/g, ':p');
+      if (clean === '/' || clean.includes('://')) continue;
+      targets.push({ path: clean.replace(/\/+$/, ''), file: path.relative(APPS, f) });
+    }
+  }
+
+  it('finds the routes and the targets it is meant to check', () => {
+    expect(routePatterns.length).toBeGreaterThan(40);
+    expect(targets.length).toBeGreaterThan(20);
+  });
+
+  it('every navigate / Link / nav-item target is a route', () => {
+    const missing = targets.filter((t) => !matchesRoute(t.path)).map((t) => `${t.path}  (${t.file})`);
+    expect([...new Set(missing)]).toEqual([]);
   });
 });

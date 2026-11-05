@@ -37,10 +37,10 @@ DECLARE
   role_list text;
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
-    api_roles := api_roles || 'anon';
+    api_roles := array_append(api_roles, 'anon');
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
-    api_roles := api_roles || 'authenticated';
+    api_roles := array_append(api_roles, 'authenticated');
   END IF;
 
   IF cardinality(api_roles) = 0 THEN

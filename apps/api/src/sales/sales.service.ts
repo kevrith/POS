@@ -1068,7 +1068,7 @@ export class SalesService {
         entityId: saleId,
         after: { reason: dto.reason, refundAmount, refundMethod: dto.refundMethod, returnId: returnRecord.id },
         source: 'POS',
-      });
+      }, tx);
 
       return {
         success: true,
@@ -1409,7 +1409,7 @@ export class SalesService {
         entityId: proformaId,
         after: { receiptNumber, totalCents: sale.totalCents },
         source: 'POS',
-      });
+      }, tx);
 
       return sale;
     });

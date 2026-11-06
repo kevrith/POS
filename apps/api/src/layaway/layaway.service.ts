@@ -59,7 +59,7 @@ export class LayawayService {
         entityId: layaway.id,
         after: { totalCents, paidCents: dto.depositCents },
         source: 'POS',
-      });
+      }, tx);
 
       return layaway;
     });

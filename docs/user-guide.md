@@ -113,7 +113,7 @@ Owners may also enable:
 - **Google sign-in**
 - **Two-factor (TOTP)** — an authenticator app code on top of your password.
   Recommended for owners, and often required
-- **Fingerprint / face unlock** where the device supports it
+- **Fingerprint / face unlock** where the device supports it. It only works when the app is opened through its secure `https://` web address, not an IP address or plain `http://`. An owner or manager registers each person's device under Settings -> Users
 
 > **"No sales found" when you know there are sales?** Your session quietly expired.
 > Sign in again. If it keeps happening on a shared shop-floor device, ask the owner

@@ -7,11 +7,16 @@ import {
   Body,
   Param,
   UseGuards,
+  Headers,
+  Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
+import type { AuthUser } from './auth.service';
 import { WebAuthnService } from './webauthn.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { Public } from './jwt-auth.guard';
 import { SkipSubscriptionCheck } from './subscription.guard';
+import { pageOrigin, resolveRelyingParty } from './webauthn-origin';
 
 @Controller('auth/webauthn')
 export class WebAuthnController {
@@ -24,9 +29,13 @@ export class WebAuthnController {
   @Get('register/begin')
   async registrationBegin(
     @Query('userId') userId: string,
-    @Query('businessId') businessId: string,
+    @Query('businessId') _businessId: string,
+    @Req() req: Request & { user: AuthUser },
+    @Headers('origin') origin?: string,
+    @Headers('referer') referer?: string,
   ) {
-    return this.webauthn.registrationBegin(userId, businessId);
+    await this.webauthn.assertCanManageUser(req.user, userId);
+    return this.webauthn.registrationBegin(userId, req.user.businessId, resolveRelyingParty(pageOrigin(origin, referer)));
   }
 
   @UseGuards(JwtAuthGuard)
@@ -43,8 +52,10 @@ export class WebAuthnController {
       transports?: string[];
       deviceName?: string;
     },
+    @Req() req: Request & { user: AuthUser },
   ) {
-    return this.webauthn.registrationComplete(body);
+    await this.webauthn.assertCanManageUser(req.user, body.userId);
+    return this.webauthn.registrationComplete({ ...body, businessId: req.user.businessId });
   }
 
   // ─── Authentication (public — no JWT required) ─────────────────────────────
@@ -55,8 +66,10 @@ export class WebAuthnController {
   async authenticationBegin(
     @Query('businessId') businessId: string,
     @Query('userId') userId?: string,
+    @Headers('origin') origin?: string,
+    @Headers('referer') referer?: string,
   ) {
-    return this.webauthn.authenticationBegin(businessId, userId);
+    return this.webauthn.authenticationBegin(businessId, resolveRelyingParty(pageOrigin(origin, referer)), userId);
   }
 
   @Public()
@@ -82,7 +95,8 @@ export class WebAuthnController {
   @UseGuards(JwtAuthGuard)
   @SkipSubscriptionCheck()
   @Get('credentials')
-  async listCredentials(@Query('userId') userId: string) {
+  async listCredentials(@Query('userId') userId: string, @Req() req: Request & { user: AuthUser }) {
+    await this.webauthn.assertCanManageUser(req.user, userId);
     return this.webauthn.listCredentials(userId);
   }
 
@@ -92,7 +106,9 @@ export class WebAuthnController {
   async deleteCredential(
     @Param('id') id: string,
     @Query('userId') userId: string,
+    @Req() req: Request & { user: AuthUser },
   ) {
+    await this.webauthn.assertCanManageUser(req.user, userId);
     return this.webauthn.deleteCredential(id, userId);
   }
 }

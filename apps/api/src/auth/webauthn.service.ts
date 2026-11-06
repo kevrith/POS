@@ -1,9 +1,11 @@
-import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, BadRequestException, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import * as crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { UserRole } from '@pos/shared';
+import { RelyingParty } from './webauthn-origin';
+import type { AuthUser } from './auth.service';
 
 interface JwtPayload {
   sub: string;
@@ -16,6 +18,7 @@ interface JwtPayload {
 interface ChallengeEntry {
   challenge: string; // base64url
   expiresAt: number;
+  rp: RelyingParty;
 }
 
 @Injectable()
@@ -40,18 +43,23 @@ export class WebAuthnService {
     return crypto.randomBytes(32).toString('base64url');
   }
 
-  private getRpId(origin?: string): string {
-    if (!origin) return 'localhost';
-    try {
-      return new URL(origin).hostname;
-    } catch {
-      return 'localhost';
+  /**
+   * These routes used to trust whatever userId the caller sent, so any signed-in cashier could enrol their own
+   * fingerprint on the owner's account and then log in as the owner. A caller may manage their own credentials;
+   * only an owner or manager may manage a colleague's, and only within their own business.
+   */
+  async assertCanManageUser(caller: AuthUser, targetUserId: string): Promise<void> {
+    if (caller.id === targetUserId) return;
+    const target = await this.prisma.user.findUnique({ where: { id: targetUserId }, select: { businessId: true } });
+    const privileged = caller.role === UserRole.OWNER || caller.role === UserRole.MANAGER;
+    if (!target || target.businessId !== caller.businessId || !privileged) {
+      throw new ForbiddenException('You can only manage your own biometrics unless you are an owner or manager.');
     }
   }
 
   // ─── Registration ──────────────────────────────────────────────────────────
 
-  async registrationBegin(userId: string, businessId: string) {
+  async registrationBegin(userId: string, businessId: string, rp: RelyingParty) {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, businessId },
       select: { id: true, name: true, email: true },
@@ -62,11 +70,12 @@ export class WebAuthnService {
     this.challenges.set(`reg:${userId}`, {
       challenge,
       expiresAt: Date.now() + 60_000,
+      rp,
     });
 
     return {
       challenge,
-      rp: { id: 'localhost', name: 'KASTRA POS' },
+      rp: { id: rp.rpId, name: 'KASTRA POS' },
       user: {
         id: Buffer.from(user.id).toString('base64url'),
         name: user.email ?? user.name,
@@ -112,8 +121,8 @@ export class WebAuthnService {
     if (clientData.challenge !== entry.challenge) {
       throw new BadRequestException('Challenge mismatch');
     }
-    // Accept localhost or any origin during dev; in prod lock to your domain
-    if (!clientData.origin.includes('localhost') && !clientData.origin.includes('kastrapos')) {
+    // The browser stamps the real page origin into clientDataJSON; it must be the one we issued the challenge for.
+    if (clientData.origin !== entry.rp.origin) {
       throw new BadRequestException('Invalid origin');
     }
 
@@ -144,10 +153,10 @@ export class WebAuthnService {
 
   // ─── Authentication ────────────────────────────────────────────────────────
 
-  async authenticationBegin(businessId: string, userId?: string) {
+  async authenticationBegin(businessId: string, rp: RelyingParty, userId?: string) {
     const challenge = this.generateChallenge();
     const key = `auth:${businessId}:${Date.now()}`;
-    this.challenges.set(key, { challenge, expiresAt: Date.now() + 60_000 });
+    this.challenges.set(key, { challenge, expiresAt: Date.now() + 60_000, rp });
 
     let allowCredentials: { type: string; id: string; transports?: string[] }[] = [];
 
@@ -167,7 +176,7 @@ export class WebAuthnService {
       challenge,
       challengeKey: key, // frontend sends this back so we know which challenge to verify
       timeout: 60000,
-      rpId: 'localhost',
+      rpId: rp.rpId,
       allowCredentials,
       userVerification: 'required',
     };
@@ -199,6 +208,9 @@ export class WebAuthnService {
     if (clientData.challenge !== entry.challenge) {
       throw new UnauthorizedException('Challenge mismatch');
     }
+    if (clientData.origin !== entry.rp.origin) {
+      throw new UnauthorizedException('Invalid origin');
+    }
 
     // Find credential in DB
     const credential = await this.prisma.webAuthnCredential.findUnique({
@@ -216,6 +228,12 @@ export class WebAuthnService {
 
     // Verify signature using Node.js WebCrypto (Node 18+)
     const authDataBuf = Buffer.from(body.authenticatorData, 'base64url');
+    if (authDataBuf.length < 37) throw new UnauthorizedException('Malformed authenticator data');
+    // The authenticator signs a hash of the RP ID it used; it must be ours, and the user must have been verified.
+    const rpIdHash = crypto.createHash('sha256').update(entry.rp.rpId).digest();
+    if (!authDataBuf.subarray(0, 32).equals(rpIdHash)) throw new UnauthorizedException('Relying party mismatch');
+    const flags = authDataBuf[32];
+    if (!(flags & 0x01) || !(flags & 0x04)) throw new UnauthorizedException('Biometric verification was not performed');
     const clientDataHash = crypto
       .createHash('sha256')
       .update(Buffer.from(body.clientDataJSON, 'base64url'))

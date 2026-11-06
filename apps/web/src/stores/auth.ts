@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { setToken, clearToken, getApiUrl, getToken } from '../lib/api';
+import { api, setToken, clearToken, getApiUrl, getToken } from '../lib/api';
+import { signInWithBiometric } from '../lib/biometric';
 import { clearLastKnown } from '../lib/lastKnown';
 
 const API_V1 = getApiUrl();
@@ -30,6 +31,8 @@ interface AuthState {
   loginWithOAuth: (accessToken: string, user: AuthUser) => Promise<void>;
   // PIN login (Cashier / Waiter / Kitchen)
   loginWithPin: (pin: string, businessId: string, storeId?: string, userId?: string) => Promise<void>;
+  // Fingerprint / Face ID (WebAuthn). Resolves false if the person dismissed the prompt.
+  loginWithBiometric: (businessId: string, userId?: string) => Promise<boolean>;
   /** Re-read the plan fields from the API. Safe to call on every app load. */
   refreshUser: () => Promise<void>;
   logout: () => void;
@@ -114,6 +117,20 @@ export const useAuthStore = create<AuthState>()(
         const data = await res.json() as { accessToken: string; user: AuthUser };
         setToken(data.accessToken);
         set({ user: data.user, isAuthenticated: true });
+      },
+
+      loginWithBiometric: async (businessId, userId) => {
+        const data = await signInWithBiometric(
+          { get: (url) => api.get(url), post: (url, body) => api.post(url, body) },
+          businessId,
+          userId,
+        );
+        if (!data) return false;
+        setToken(data.accessToken);
+        set({ user: data.user as AuthUser, isAuthenticated: true });
+        // The biometric endpoint returns no plan fields; fill them in like any other login.
+        await useAuthStore.getState().refreshUser();
+        return true;
       },
 
       /**

@@ -43,6 +43,11 @@ build alive.
   Google OAuth popup polls `window.closed` on the opener).
 - CORS allows `FRONTEND_URL`, `ADMIN_URL`, anything in `EXTRA_ORIGINS`, any
   `*.vercel.app` preview, and origin-less requests (mobile apps, curl, health checks).
+- Fingerprint / Face ID is WebAuthn (`auth/webauthn.*`). The RP ID and expected origin are derived
+  from the request's `Origin` (or `Referer`) header by `webauthn-origin.ts`, checked against
+  `FRONTEND_URL` / `ADMIN_URL` / `EXTRA_ORIGINS`; `WEBAUTHN_RP_ID` optionally widens it to a parent
+  domain. Browsers require HTTPS (only `http://localhost` is exempt) and refuse IP addresses, so it
+  cannot work over a LAN IP. Managing credentials is limited to yourself, or owner/manager for staff.
 - Socket.IO adapter for WebSocket / LAN sync.
 - `AllExceptionsFilter` as a global filter. It keeps the status of `HttpException`s and
   maps Prisma request errors to client errors (`PrismaClientValidationError` -> 400,

@@ -165,3 +165,62 @@ function base64urlToBuffer(base64url: string): ArrayBuffer {
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes.buffer;
 }
+
+// ─── Sign in through the server (the flow Settings registers credentials for) ──
+
+export interface BiometricSignIn {
+  accessToken: string;
+  user: { id: string; name: string; role: string; businessId: string; storeId?: string };
+}
+
+/**
+ * Ask the server for a challenge (and the RP ID it registered the credentials under), have the device verify
+ * the fingerprint / face, and send the signed assertion back for a session token.
+ *
+ * Pass userId when the person has already picked their name on the login screen; without it the browser offers
+ * whichever passkeys it holds for this site.
+ */
+export async function signInWithBiometric(
+  api: { get: <T>(url: string) => Promise<T>; post: <T>(url: string, body: unknown) => Promise<T> },
+  businessId: string,
+  userId?: string,
+): Promise<BiometricSignIn | null> {
+  const options = await api.get<{
+    challenge: string;
+    challengeKey: string;
+    rpId: string;
+    allowCredentials: { type: string; id: string; transports?: AuthenticatorTransport[] }[];
+    userVerification: UserVerificationRequirement;
+    timeout: number;
+  }>(`/auth/webauthn/login/begin?businessId=${encodeURIComponent(businessId)}${userId ? `&userId=${encodeURIComponent(userId)}` : ''}`);
+
+  if (userId && options.allowCredentials.length === 0) {
+    throw new Error('No fingerprint or Face ID is registered for this account. Use your PIN, or ask a manager to register this device.');
+  }
+
+  const credential = (await navigator.credentials.get({
+    publicKey: {
+      challenge: base64urlToBuffer(options.challenge),
+      rpId: options.rpId,
+      allowCredentials: options.allowCredentials.map((c) => ({
+        type: 'public-key' as const,
+        id: base64urlToBuffer(c.id),
+        transports: c.transports,
+      })),
+      userVerification: options.userVerification,
+      timeout: options.timeout,
+    },
+  })) as PublicKeyCredential | null;
+  if (!credential) return null;
+
+  const response = credential.response as AuthenticatorAssertionResponse;
+  return api.post<BiometricSignIn>('/auth/webauthn/login/complete', {
+    businessId,
+    challengeKey: options.challengeKey,
+    credentialId: bufferToBase64url(credential.rawId),
+    clientDataJSON: bufferToBase64url(response.clientDataJSON),
+    authenticatorData: bufferToBase64url(response.authenticatorData),
+    signature: bufferToBase64url(response.signature),
+    userHandle: response.userHandle ? bufferToBase64url(response.userHandle) : undefined,
+  });
+}

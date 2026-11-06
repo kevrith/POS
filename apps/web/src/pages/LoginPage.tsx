@@ -5,7 +5,7 @@ import { isDesktopApp, getDesktopGoogleAccessToken } from '../lib/googleDesktop'
 import { useAuthStore } from '../stores/auth';
 import type { AuthUser } from '../stores/auth';
 import { Eye, EyeOff, Delete, ChevronLeft, Building2, Sparkles, Fingerprint, Settings } from 'lucide-react';
-import { isBiometricAvailable, authenticateBiometric } from '../lib/biometric';
+import { isBiometricAvailable } from '../lib/biometric';
 import { setToken } from '../lib/api';
 
 const PLAN_LABELS: Record<string, { label: string; color: string; price: string }> = {
@@ -118,7 +118,7 @@ export default function LoginPage() {
     }
   };
 
-  const { login, loginWithPin, loginWithOAuth } = useAuthStore();
+  const { login, loginWithPin, loginWithBiometric, loginWithOAuth } = useAuthStore();
   const API_URL = (() => {
     try {
       const stored = localStorage.getItem('kastra-server-url');
@@ -1041,20 +1041,13 @@ export default function LoginPage() {
                         setBiometricLoading(true);
                         setPinError('');
                         try {
-                          // Retrieve stored credential IDs for this user from localStorage
-                          const stored = localStorage.getItem(`biometric-creds-${selectedUser.id}`);
-                          const credentialIds: string[] = stored ? JSON.parse(stored) : [];
-                          if (credentialIds.length === 0) {
-                            setPinError('No biometric registered for this account. Use PIN instead.');
-                            return;
-                          }
-                          const assertion = await authenticateBiometric({ credentialIds });
-                          // Send assertion to backend for verification — use a special biometric PIN token
-                          // The assertion is passed as the pin value encoded as JSON
-                          const assertionPin = `__biometric__:${JSON.stringify(assertion)}`;
-                          await loginWithPin(assertionPin, savedBusinessId, undefined, selectedUser.id);
+                          // Challenge, fingerprint prompt and verification all go through the server, which
+                          // knows which credentials this person registered (nothing is kept in localStorage).
+                          await loginWithBiometric(savedBusinessId, selectedUser.id);
                         } catch (err) {
-                          setPinError(err instanceof Error ? err.message : 'Biometric failed');
+                          const msg = err instanceof Error ? err.message : 'Biometric failed';
+                          // Dismissing the system prompt is not an error worth showing.
+                          if (!/NotAllowedError|cancel|abort/i.test(msg)) setPinError(msg);
                         } finally {
                           setBiometricLoading(false);
                         }

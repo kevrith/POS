@@ -209,6 +209,7 @@ and your customers get `localhost` links.
 | `ETIMS_ENV` | `test` (default) or `production` |
 | `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD`, `SUPER_ADMIN_SECRET` | The admin console login |
 | `EXTRA_ORIGINS` | Additional allowed CORS origins, comma-separated |
+| `WEBAUTHN_RP_ID` | Optional. Domain fingerprint / Face ID credentials are tied to. Defaults to the site's own host; set it to a parent domain (e.g. `example.com`) to share them across subdomains |
 
 **`.env` is never committed to git.**
 

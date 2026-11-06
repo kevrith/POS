@@ -247,7 +247,10 @@ maybe('local server, end to end', () => {
 
     child.kill('SIGKILL'); // no chance to clean up, like a power cut taking the program but not the background processes
     await new Promise((r) => child.on('exit', r));
-    expect(await isPortFree(api)).toBe(false); // the API really is still there, orphaned
+    // On Linux the API keeps running with nobody to stop it (an orphan); on Windows it went down with its parent. Either way
+    // the next start must work, which is what this test is about. Say which happened, for whoever reads the log.
+    const orphaned = !(await isPortFree(api));
+    console.log(orphaned ? 'the API survived its parent (orphaned): the next start must reclaim it' : 'the API went down with its parent: nothing to reclaim');
 
     const again = new Supervisor({
       ...opts('1.0.0'), configFile: path.join(dir, 'server.json'), logDir: path.join(dir, 'logs'), pgDataDir: path.join(dir, 'pgdata'),

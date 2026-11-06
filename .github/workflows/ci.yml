@@ -43,15 +43,10 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      - name: Install root dependencies
-        run: npm ci
-
-      - name: Install shared package dependencies
-        working-directory: packages/shared
-        run: npm install
-
-      - name: Install API dependencies
-        working-directory: apps/api
+      # One install for the whole workspace. Do NOT add a second `npm ci` inside apps/api (or packages/shared): in a
+      # workspace folder it wipes node_modules and installs only that member's own dependencies, which dropped
+      # rxjs (and print-core's qrcode-generator) and failed 67 of 84 suites with "Cannot find module 'rxjs/operators'".
+      - name: Install dependencies (all workspaces)
         run: npm ci
 
       - name: Generate Prisma client
@@ -84,11 +79,9 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      - name: Install root dependencies
-        run: npm ci
-
-      - name: Install web dependencies
-        working-directory: apps/web
+      # One install for the whole workspace; a second `npm ci` inside apps/web would drop the packages the shared
+      # print-core needs (qrcode-generator) and fail the print tests.
+      - name: Install dependencies (all workspaces)
         run: npm ci
 
       - name: Unit tests
@@ -152,6 +145,12 @@ jobs:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: apps/${{ matrix.app }}/package-lock.json
+
+      # mobile-pos imports @pos/print-core (a linked package whose own dependency, qrcode-generator, is installed at the
+      # repo root) and its Jest run uses the root's ts-jest, so it needs the workspace install first.
+      - name: Install repo-root dependencies (print-core, ts-jest)
+        if: matrix.app == 'mobile-pos'
+        run: npm ci
 
       - name: Install app dependencies
         working-directory: apps/${{ matrix.app }}

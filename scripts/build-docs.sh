@@ -147,7 +147,7 @@ pandoc "$DOCS/user-guide.md" \
   --metadata subtitle="User Guide" \
   --metadata audience="owners, managers and shop-floor staff" \
   --metadata date="$DATE" \
-  --variable styles="$(cat "$TPL/manual.css")"
+  --variable styles="$(cat "$TPL/manual-tokens.css" "$TPL/manual.css")"
 
 # ── 3. Super-admin guide -> a TS module the admin console imports ────────────
 # Rendered to an HTML fragment at build time so the console needs no markdown

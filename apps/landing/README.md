@@ -20,6 +20,15 @@ no framework, no dependencies**.
 
 Assets (`favicon.png`, `posfav.png`, images) sit alongside the pages.
 
+## Look
+
+Light Mist Gray with Signal Violet, the same as the web app. Every page links `tokens.css`, which is
+**generated** from [`design/tokens.json`](../../design/tokens.json) by `npm run tokens` (never edit it, and do not
+put a `:root` colour block back in a page). Write colours as `var(--accent)`, `var(--text)`, `var(--green)`; the
+older names (`--bg2`, `--blue`, `--text2`...) are kept as aliases. The user manual gets the same variables from
+`docs/templates/manual-tokens.css` when `scripts/build-docs.sh` runs. Third-party brand colours (Shopify, Xero,
+Google...) in the download and integration tiles are deliberately left as they are.
+
 ## kastra-pos-manual.html is generated — do not edit it
 
 It is built from [`docs/user-guide.md`](../../docs/user-guide.md) by

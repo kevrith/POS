@@ -9,22 +9,16 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="tokens.css" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --bg: #030712; --bg2: #0a0f1e; --bg3: #0f172a;
-      --border: rgba(255,255,255,.07); --border2: rgba(255,255,255,.12);
-      --blue: #3b82f6; --blue2: #60a5fa; --blue-glow: rgba(59,130,246,.3);
-      --green: #10b981; --amber: #f59e0b; --cyan: #06b6d4; --purple: #8b5cf6;
-      --text: #f1f5f9; --text2: #94a3b8; --text3: #64748b;
-    }
     html { scroll-behavior: smooth; }
     body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
     a { color: var(--blue2); text-decoration: none; }
     a:hover { text-decoration: underline; }
     .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
     .container-md { max-width: 860px; margin: 0 auto; padding: 0 24px; }
-    nav { position: sticky; top: 0; z-index: 100; background: rgba(3,7,18,.85); backdrop-filter: blur(20px); border-bottom: 1px solid var(--border); }
+    nav { position: sticky; top: 0; z-index: 100; background: rgba(240,242,245,.85); backdrop-filter: blur(20px); border-bottom: 1px solid var(--border); }
     .nav-inner { height: 68px; display: flex; align-items: center; justify-content: space-between; }
     .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
     .nav-logo-text { font-size: 1.125rem; font-weight: 800; letter-spacing: -.3px; color: var(--text); }
@@ -34,19 +28,19 @@
     .nav-links a:hover { color: var(--text); }
     .btn { display: inline-flex; align-items: center; gap: 8px; padding: 9px 20px; border-radius: 9px; font-size: .875rem; font-weight: 600; cursor: pointer; transition: all .2s; border: none; text-decoration: none; }
     .btn-primary { background: var(--blue); color: #fff; }
-    .btn-primary:hover { background: #2563eb; text-decoration: none; }
-    .btn-ghost { background: rgba(255,255,255,.06); color: var(--text); border: 1px solid var(--border2); }
-    .btn-ghost:hover { background: rgba(255,255,255,.1); text-decoration: none; }
+    .btn-primary:hover { background: var(--accent); text-decoration: none; }
+    .btn-ghost { background: rgba(21,18,31,.06); color: var(--text); border: 1px solid var(--border2); }
+    .btn-ghost:hover { background: rgba(21,18,31,.1); text-decoration: none; }
     @media(max-width:768px) { .hide-mobile { display:none; } .grid-2,.grid-3 { grid-template-columns:1fr; } }
     .grid-2 { display: grid; grid-template-columns: repeat(2,1fr); gap: 24px; }
     .grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 24px; }
 
     /* Hero */
     .page-hero { padding: 120px 0 80px; text-align: center; position: relative; overflow: hidden; }
-    .page-hero::before { content:''; position:absolute; inset:0; background: radial-gradient(ellipse 80% 50% at 50% 0%, rgba(59,130,246,.14) 0%, transparent 65%); }
+    .page-hero::before { content:''; position:absolute; inset:0; background: radial-gradient(ellipse 80% 50% at 50% 0%, rgba(122,53,255,.14) 0%, transparent 65%); }
     .hero-grid { position:absolute; inset:0; background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px); background-size:64px 64px; mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, black 40%, transparent 100%); }
     .page-hero .content { position: relative; z-index: 1; }
-    .eyebrow { display: inline-flex; align-items: center; gap: 6px; background: rgba(59,130,246,.1); border: 1px solid rgba(59,130,246,.25); color: var(--blue2); font-size: .75rem; font-weight: 700; padding: 6px 14px; border-radius: 100px; margin-bottom: 24px; letter-spacing: .05em; text-transform: uppercase; }
+    .eyebrow { display: inline-flex; align-items: center; gap: 6px; background: rgba(122,53,255,.1); border: 1px solid rgba(122,53,255,.25); color: var(--blue2); font-size: .75rem; font-weight: 700; padding: 6px 14px; border-radius: 100px; margin-bottom: 24px; letter-spacing: .05em; text-transform: uppercase; }
     .page-hero h1 { font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 900; letter-spacing: -.04em; line-height: 1.1; margin-bottom: 20px; }
     .gradient-text { background: linear-gradient(135deg, var(--blue2), var(--cyan)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
     .page-hero p { font-size: 1.125rem; color: var(--text2); max-width: 580px; margin: 0 auto; line-height: 1.7; }
@@ -86,7 +80,7 @@
     .about-stat-label { font-size: .8125rem; color: var(--text3); margin-top: 4px; }
 
     /* CTA */
-    .cta-box { background: linear-gradient(135deg, rgba(59,130,246,.1), rgba(139,92,246,.07)); border: 1px solid rgba(59,130,246,.2); border-radius: 20px; padding: 56px 48px; text-align: center; }
+    .cta-box { background: linear-gradient(135deg, rgba(122,53,255,.1), rgba(101,34,224,.07)); border: 1px solid rgba(122,53,255,.2); border-radius: 20px; padding: 56px 48px; text-align: center; }
     .cta-box h2 { font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 900; letter-spacing: -.03em; margin-bottom: 12px; }
     .cta-box p { color: var(--text2); margin-bottom: 28px; font-size: 1.0625rem; max-width: 440px; margin-left: auto; margin-right: auto; }
     .cta-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
@@ -106,7 +100,7 @@
     .footer-bottom { border-top: 1px solid var(--border); padding-top: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
     .footer-copy { font-size: .8125rem; color: var(--text3); }
     .footer-badges { display: flex; gap: 8px; flex-wrap: wrap; }
-    .fbadge { background: rgba(255,255,255,.05); color: var(--text3); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: .6875rem; font-weight: 600; }
+    .fbadge { background: rgba(21,18,31,.05); color: var(--text3); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: .6875rem; font-weight: 600; }
 
     .reveal { opacity:0; transform:translateY(20px); transition: opacity .6s ease, transform .6s ease; }
     .reveal.visible { opacity:1; transform:translateY(0); }
@@ -253,7 +247,7 @@
     </div>
     <div class="grid-3">
       <div class="team-card reveal">
-        <div class="team-avatar" style="background:linear-gradient(135deg,#3b82f6,#1d4ed8);">
+        <div class="team-avatar" style="background:linear-gradient(135deg,var(--accent),var(--accent-dark));">
           <img src="/simon.jpeg" alt="Simon Karuga" onerror="this.classList.add('hidden')">
           <span class="initials">SK</span>
         </div>
@@ -262,7 +256,7 @@
         <p class="team-bio">Former retail chain operator with 12 years building Kenyan SMEs. Experienced the eTIMS compliance pain firsthand — built KASTRA to solve it. Based in Nairobi.</p>
       </div>
       <div class="team-card reveal" style="transition-delay:.1s">
-        <div class="team-avatar" style="background:linear-gradient(135deg,#10b981,#059669);">
+        <div class="team-avatar" style="background:linear-gradient(135deg,var(--green),var(--green));">
           <img src="/kev1.jpg" alt="Kelvin Johnson" onerror="this.classList.add('hidden')">
           <span class="initials">KJ</span>
         </div>
@@ -271,7 +265,7 @@
         <p class="team-bio">Full-stack engineer with deep expertise in offline-first PWAs, KRA API integrations, and Safaricom Daraja. Previously built fintech products serving 200K+ Kenyan users.</p>
       </div>
       <div class="team-card reveal" style="transition-delay:.2s">
-        <div class="team-avatar" style="background:linear-gradient(135deg,#8b5cf6,#6d28d9);">
+        <div class="team-avatar" style="background:linear-gradient(135deg,var(--accent),var(--accent-dark));">
           <img src="team/david-otieno.jpg" alt="David Otieno" onerror="this.classList.add('hidden')">
           <span class="initials">DO</span>
         </div>
@@ -307,7 +301,7 @@
             </div>
           </div>
           <div style="display:flex;gap:14px;align-items:flex-start;">
-            <div style="width:36px;height:36px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.25);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;">🏛️</div>
+            <div style="width:36px;height:36px;background:rgba(122,53,255,.12);border:1px solid rgba(122,53,255,.25);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;">🏛️</div>
             <div>
               <div style="font-size:.9375rem;font-weight:600;color:var(--text);margin-bottom:4px;">KRA Compliance by Default</div>
               <div style="font-size:.875rem;color:var(--text2);line-height:1.6;">Every sale auto-submits to KRA eTIMS. KDPA data rights are built in. Kenya PAYE, SHIF, NSSF payroll calculations are exact — because we verified them against the actual Act.</div>
@@ -320,28 +314,28 @@
           <p style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:20px;">Contact Us</p>
           <div style="display:flex;flex-direction:column;gap:16px;">
             <div style="display:flex;gap:12px;align-items:center;">
-              <div style="width:36px;height:36px;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.2);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.875rem;flex-shrink:0;">✉️</div>
+              <div style="width:36px;height:36px;background:rgba(122,53,255,.1);border:1px solid rgba(122,53,255,.2);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.875rem;flex-shrink:0;">✉️</div>
               <div>
                 <div style="font-size:.75rem;color:var(--text3);font-weight:600;margin-bottom:2px;">GENERAL ENQUIRIES</div>
                 <a href="mailto:hello@kastrapos.co.ke" style="color:var(--blue2);font-size:.9375rem;font-weight:500;">hello@kastrapos.co.ke</a>
               </div>
             </div>
             <div style="display:flex;gap:12px;align-items:center;">
-              <div style="width:36px;height:36px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.2);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.875rem;flex-shrink:0;">🛠️</div>
+              <div style="width:36px;height:36px;background:rgba(22,101,52,.1);border:1px solid rgba(22,101,52,.2);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.875rem;flex-shrink:0;">🛠️</div>
               <div>
                 <div style="font-size:.75rem;color:var(--text3);font-weight:600;margin-bottom:2px;">TECHNICAL SUPPORT</div>
                 <a href="mailto:support@kastrapos.co.ke" style="color:var(--blue2);font-size:.9375rem;font-weight:500;">support@kastrapos.co.ke</a>
               </div>
             </div>
             <div style="display:flex;gap:12px;align-items:center;">
-              <div style="width:36px;height:36px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.875rem;flex-shrink:0;">💼</div>
+              <div style="width:36px;height:36px;background:rgba(146,64,14,.1);border:1px solid rgba(146,64,14,.2);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.875rem;flex-shrink:0;">💼</div>
               <div>
                 <div style="font-size:.75rem;color:var(--text3);font-weight:600;margin-bottom:2px;">SALES &amp; ENTERPRISE</div>
                 <a href="mailto:sales@kastrapos.co.ke" style="color:var(--blue2);font-size:.9375rem;font-weight:500;">sales@kastrapos.co.ke</a>
               </div>
             </div>
             <div style="display:flex;gap:12px;align-items:center;">
-              <div style="width:36px;height:36px;background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.2);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.875rem;flex-shrink:0;">🔒</div>
+              <div style="width:36px;height:36px;background:rgba(101,34,224,.1);border:1px solid rgba(101,34,224,.2);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.875rem;flex-shrink:0;">🔒</div>
               <div>
                 <div style="font-size:.75rem;color:var(--text3);font-weight:600;margin-bottom:2px;">DATA PROTECTION OFFICER</div>
                 <a href="mailto:dpo@kastrapos.co.ke" style="color:var(--blue2);font-size:.9375rem;font-weight:500;">dpo@kastrapos.co.ke</a>

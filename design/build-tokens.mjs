@@ -100,15 +100,17 @@ export const C = ${JSON.stringify(semantic(), null, 2).replace(/"([A-Za-z0-9_]+)
 
 /** CSS variables for the apps that style with plain CSS (the landing site, and the admin console's global rules). */
 function landingCss() {
-  const s = semantic();
+  // Text on the landing pages uses var(--cyan) as a readable accent, so it takes the text-safe brand shade there.
+  const s = { ...semantic(), cyan: t.brandText.light };
   const kebab = (k) => k.replace(/[A-Z]/g, (m) => '-' + m.toLowerCase());
-  return `/* ${HEADER} */\n:root {\n${Object.entries(s).map(([k, v]) => `  --${kebab(k)}: ${v};`).join('\n')}\n  --brand-50: ${t.brand[50]};\n  --brand-100: ${t.brand[100]};\n  --brand-200: ${t.brand[200]};\n  --brand-300: ${t.brand[300]};\n  --brand-400: ${t.brand[400]};\n  --brand-500: ${t.brand[500]};\n  --brand-600: ${t.brand[600]};\n  --brand-700: ${t.brand[700]};\n  --brand-800: ${t.brand[800]};\n  --brand-900: ${t.brand[900]};\n  --brand-950: ${t.brand[950]};\n  --radius-sm: ${t.radius.sm}px;\n  --radius-md: ${t.radius.md}px;\n  --radius-lg: ${t.radius.lg}px;\n  --radius-xl: ${t.radius.xl}px;\n}\n`;
+  return `/* ${HEADER} */\n:root {\n${Object.entries(s).map(([k, v]) => `  --${kebab(k)}: ${v};`).join('\n')}\n  --brand-50: ${t.brand[50]};\n  --brand-100: ${t.brand[100]};\n  --brand-200: ${t.brand[200]};\n  --brand-300: ${t.brand[300]};\n  --brand-400: ${t.brand[400]};\n  --brand-500: ${t.brand[500]};\n  --brand-600: ${t.brand[600]};\n  --brand-700: ${t.brand[700]};\n  --brand-800: ${t.brand[800]};\n  --brand-900: ${t.brand[900]};\n  --brand-950: ${t.brand[950]};\n  --bg2: ${s.card};\n  --bg3: ${s.surface};\n  --bg4: ${s.bg};\n  --border2: ${s.cardBorder2};\n  --text2: ${s.textSecondary};\n  --text3: ${s.textMuted};\n  --blue-glow: ${t.brand[600]}47;\n  --blue-dim: ${t.brand[600]}1a;\n  --radius: ${t.radius.lg}px;\n  --radius-lg: ${t.radius.xl}px;\n  --radius-sm: ${t.radius.sm}px;\n  --radius-md: ${t.radius.md}px;\n  --radius-xl: ${t.radius.xl}px;\n}\n`;
 }
 
 const targets = [
   ['apps/admin/src/generated/tokens.ts', adminTs()],
   ['apps/landing/tokens.css', landingCss()],
   ['apps/admin/src/generated/tokens.css', landingCss()],
+  ['docs/templates/manual-tokens.css', landingCss()],
   ['apps/web/src/styles/tokens.css', webCss()],
   ...['mobile-pos', 'mobile-customer', 'mobile-driver', 'mobile-agent'].map((a) => [`apps/${a}/constants/tokens.ts`, mobileTs()]),
 ];

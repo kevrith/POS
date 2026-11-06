@@ -9,15 +9,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="tokens.css" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --bg: #030712; --bg2: #0a0f1e; --bg3: #0f172a;
-      --border: rgba(255,255,255,.07); --border2: rgba(255,255,255,.12);
-      --blue: #3b82f6; --blue2: #60a5fa; --blue-glow: rgba(59,130,246,.3);
-      --green: #10b981; --amber: #f59e0b; --cyan: #06b6d4; --purple: #8b5cf6;
-      --text: #f1f5f9; --text2: #94a3b8; --text3: #64748b;
-    }
     html { scroll-behavior: smooth; }
     body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
     a { color: var(--blue2); text-decoration: none; }
@@ -26,7 +20,7 @@
     .container-md { max-width: 900px; margin: 0 auto; padding: 0 24px; }
 
     /* Nav */
-    nav { position: sticky; top: 0; z-index: 100; background: rgba(3,7,18,.85); backdrop-filter: blur(20px); border-bottom: 1px solid var(--border); }
+    nav { position: sticky; top: 0; z-index: 100; background: rgba(240,242,245,.85); backdrop-filter: blur(20px); border-bottom: 1px solid var(--border); }
     .nav-inner { height: 68px; display: flex; align-items: center; justify-content: space-between; }
     .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
     .nav-logo-text { font-size: 1.125rem; font-weight: 800; letter-spacing: -.3px; color: var(--text); }
@@ -36,17 +30,17 @@
     .nav-links a:hover { color: var(--text); }
     .btn { display: inline-flex; align-items: center; gap: 8px; padding: 9px 20px; border-radius: 9px; font-size: .875rem; font-weight: 600; cursor: pointer; transition: all .2s; border: none; text-decoration: none; }
     .btn-primary { background: var(--blue); color: #fff; }
-    .btn-primary:hover { background: #2563eb; text-decoration: none; }
-    .btn-ghost { background: rgba(255,255,255,.06); color: var(--text); border: 1px solid var(--border2); }
-    .btn-ghost:hover { background: rgba(255,255,255,.1); text-decoration: none; }
+    .btn-primary:hover { background: var(--accent); text-decoration: none; }
+    .btn-ghost { background: rgba(21,18,31,.06); color: var(--text); border: 1px solid var(--border2); }
+    .btn-ghost:hover { background: rgba(21,18,31,.1); text-decoration: none; }
     @media(max-width:768px) { .hide-mobile { display:none; } .grid-2 { grid-template-columns:1fr !important; } }
 
     /* Hero */
     .page-hero { padding: 100px 0 72px; text-align: center; position: relative; overflow: hidden; }
-    .page-hero::before { content:''; position:absolute; inset:0; background: radial-gradient(ellipse 80% 50% at 50% 0%, rgba(59,130,246,.14) 0%, transparent 65%); }
+    .page-hero::before { content:''; position:absolute; inset:0; background: radial-gradient(ellipse 80% 50% at 50% 0%, rgba(122,53,255,.14) 0%, transparent 65%); }
     .hero-grid { position:absolute; inset:0; background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px); background-size:64px 64px; mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, black 40%, transparent 100%); }
     .page-hero .content { position: relative; z-index: 1; }
-    .eyebrow { display: inline-flex; align-items: center; gap: 6px; background: rgba(59,130,246,.1); border: 1px solid rgba(59,130,246,.25); color: var(--blue2); font-size: .75rem; font-weight: 700; padding: 6px 14px; border-radius: 100px; margin-bottom: 24px; letter-spacing: .05em; text-transform: uppercase; }
+    .eyebrow { display: inline-flex; align-items: center; gap: 6px; background: rgba(122,53,255,.1); border: 1px solid rgba(122,53,255,.25); color: var(--blue2); font-size: .75rem; font-weight: 700; padding: 6px 14px; border-radius: 100px; margin-bottom: 24px; letter-spacing: .05em; text-transform: uppercase; }
     .page-hero h1 { font-size: clamp(2rem, 5vw, 3.25rem); font-weight: 900; letter-spacing: -.04em; line-height: 1.1; margin-bottom: 20px; }
     .gradient-text { background: linear-gradient(135deg, var(--blue2), var(--cyan)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
     .page-hero p { font-size: 1.125rem; color: var(--text2); max-width: 540px; margin: 0 auto; line-height: 1.7; }
@@ -62,8 +56,8 @@
     .channel-card a.channel-link { display: inline-flex; align-items: center; gap: 6px; font-size: .9375rem; font-weight: 600; color: var(--blue2); text-decoration: none; margin-top: auto; padding-top: 4px; }
     .channel-card a.channel-link:hover { text-decoration: underline; }
     .channel-badge { font-size: .6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 3px 8px; border-radius: 5px; margin-left: 8px; }
-    .badge-green { background: rgba(16,185,129,.12); color: var(--green); border: 1px solid rgba(16,185,129,.2); }
-    .badge-blue { background: rgba(59,130,246,.12); color: var(--blue2); border: 1px solid rgba(59,130,246,.2); }
+    .badge-green { background: rgba(22,101,52,.12); color: var(--green); border: 1px solid rgba(22,101,52,.2); }
+    .badge-blue { background: rgba(122,53,255,.12); color: var(--blue2); border: 1px solid rgba(122,53,255,.2); }
 
     /* Form */
     .form-section { display: grid; grid-template-columns: 1fr 1.4fr; gap: 56px; align-items: start; }
@@ -78,7 +72,7 @@
     .form-group textarea { width: 100%; background: var(--bg3); border: 1px solid var(--border2); border-radius: 10px; padding: 11px 14px; font-size: .9375rem; color: var(--text); font-family: inherit; outline: none; transition: border-color .2s; }
     .form-group input:focus,
     .form-group select:focus,
-    .form-group textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(59,130,246,.12); }
+    .form-group textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(122,53,255,.12); }
     .form-group input::placeholder,
     .form-group textarea::placeholder { color: var(--text3); }
     .form-group select option { background: var(--bg3); }
@@ -86,7 +80,7 @@
     .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     @media(max-width: 480px) { .form-row { grid-template-columns: 1fr; } }
     .btn-submit { width: 100%; padding: 13px; font-size: 1rem; font-weight: 700; background: var(--blue); color: #fff; border: none; border-radius: 10px; cursor: pointer; transition: background .2s, transform .1s; letter-spacing: -.01em; }
-    .btn-submit:hover { background: #2563eb; }
+    .btn-submit:hover { background: var(--accent); }
     .btn-submit:active { transform: scale(.99); }
     .form-note { font-size: .8rem; color: var(--text3); margin-top: 12px; text-align: center; line-height: 1.5; }
 
@@ -109,7 +103,7 @@
     .hours-row .time { color: var(--text); font-weight: 500; }
     .hours-row .closed { color: var(--text3); }
 
-    .response-tag { display: inline-flex; align-items: center; gap: 5px; background: rgba(16,185,129,.08); border: 1px solid rgba(16,185,129,.18); color: var(--green); font-size: .75rem; font-weight: 700; padding: 4px 10px; border-radius: 100px; }
+    .response-tag { display: inline-flex; align-items: center; gap: 5px; background: rgba(22,101,52,.08); border: 1px solid rgba(22,101,52,.18); color: var(--green); font-size: .75rem; font-weight: 700; padding: 4px 10px; border-radius: 100px; }
 
     /* Success state */
     #form-success { display: none; text-align: center; padding: 48px 24px; }
@@ -123,14 +117,14 @@
     .faq-list { display: flex; flex-direction: column; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
     .faq-item { background: var(--bg2); }
     .faq-question { width: 100%; background: none; border: none; color: var(--text); font-family: inherit; font-size: .9375rem; font-weight: 600; padding: 20px 24px; text-align: left; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 16px; transition: background .15s; }
-    .faq-question:hover { background: rgba(255,255,255,.03); }
+    .faq-question:hover { background: rgba(21,18,31,.03); }
     .faq-question .chevron { font-size: .75rem; color: var(--text3); transition: transform .25s; flex-shrink: 0; }
     .faq-answer { max-height: 0; overflow: hidden; transition: max-height .3s ease, padding .3s ease; }
     .faq-answer.open { max-height: 200px; }
     .faq-answer p { padding: 0 24px 20px; font-size: .9rem; color: var(--text2); line-height: 1.7; }
 
     /* CTA */
-    .cta-box { background: linear-gradient(135deg, rgba(59,130,246,.1), rgba(139,92,246,.07)); border: 1px solid rgba(59,130,246,.2); border-radius: 20px; padding: 56px 48px; text-align: center; margin-top: 80px; }
+    .cta-box { background: linear-gradient(135deg, rgba(122,53,255,.1), rgba(101,34,224,.07)); border: 1px solid rgba(122,53,255,.2); border-radius: 20px; padding: 56px 48px; text-align: center; margin-top: 80px; }
     .cta-box h2 { font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 900; letter-spacing: -.03em; margin-bottom: 12px; }
     .cta-box p { color: var(--text2); margin-bottom: 28px; font-size: 1.0625rem; max-width: 440px; margin-left: auto; margin-right: auto; }
     .cta-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
@@ -150,7 +144,7 @@
     .footer-bottom { border-top: 1px solid var(--border); padding-top: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
     .footer-copy { font-size: .8125rem; color: var(--text3); }
     .footer-badges { display: flex; gap: 8px; flex-wrap: wrap; }
-    .fbadge { background: rgba(255,255,255,.05); color: var(--text3); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: .6875rem; font-weight: 600; }
+    .fbadge { background: rgba(21,18,31,.05); color: var(--text3); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: .6875rem; font-weight: 600; }
 
     .reveal { opacity:0; transform:translateY(20px); transition: opacity .6s ease, transform .6s ease; }
     .reveal.visible { opacity:1; transform:translateY(0); }
@@ -216,7 +210,7 @@
     <div class="channels-grid reveal">
 
       <div class="channel-card">
-        <div class="channel-icon" style="background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.2);">💼</div>
+        <div class="channel-icon" style="background:rgba(122,53,255,.1);border:1px solid rgba(122,53,255,.2);">💼</div>
         <h3>Sales &amp; Enterprise</h3>
         <p>Interested in a Pro or Enterprise plan? Want a custom demo for your team? Our sales team is ready to walk you through the platform and build the right plan for your business size.</p>
         <a href="mailto:sales@kastrapos.co.ke" class="channel-link">
@@ -225,7 +219,7 @@
       </div>
 
       <div class="channel-card">
-        <div class="channel-icon" style="background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.2);">🛠️</div>
+        <div class="channel-icon" style="background:rgba(22,101,52,.1);border:1px solid rgba(22,101,52,.2);">🛠️</div>
         <h3>Technical Support</h3>
         <p>Experiencing an issue with your POS, eTIMS submission errors, M-Pesa integration, or printer setup? Our support engineers are CPA-trained and understand KRA compliance deeply.</p>
         <a href="mailto:support@kastrapos.co.ke" class="channel-link">
@@ -234,7 +228,7 @@
       </div>
 
       <div class="channel-card">
-        <div class="channel-icon" style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2);">✉️</div>
+        <div class="channel-icon" style="background:rgba(146,64,14,.1);border:1px solid rgba(146,64,14,.2);">✉️</div>
         <h3>General Enquiries</h3>
         <p>Questions about pricing, features, integrations, or anything else? Reach our general inbox and we'll route your message to the right person on our team in Nairobi.</p>
         <a href="mailto:hello@kastrapos.co.ke" class="channel-link">
@@ -243,7 +237,7 @@
       </div>
 
       <div class="channel-card">
-        <div class="channel-icon" style="background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.2);">🔒</div>
+        <div class="channel-icon" style="background:rgba(101,34,224,.1);border:1px solid rgba(101,34,224,.2);">🔒</div>
         <h3>Data Protection (KDPA)</h3>
         <p>To submit a data access, correction, or deletion request under the Kenya Data Protection Act 2019, contact our Data Protection Officer directly. We respond within 7 business days as required by law.</p>
         <a href="mailto:dpo@kastrapos.co.ke" class="channel-link">
@@ -356,7 +350,7 @@
               <textarea id="message" placeholder="Describe your question or issue in as much detail as possible. For support requests, include any error messages you're seeing." required></textarea>
             </div>
 
-            <div id="form-error" style="display:none;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:#fca5a5;font-size:.875rem;padding:10px 14px;border-radius:8px;margin-bottom:16px;"></div>
+            <div id="form-error" style="display:none;background:rgba(185,28,28,.1);border:1px solid rgba(185,28,28,.25);color:var(--red);font-size:.875rem;padding:10px 14px;border-radius:8px;margin-bottom:16px;"></div>
 
             <button type="submit" class="btn-submit" id="submit-btn">Send Message →</button>
             <p class="form-note">By submitting this form you agree to our <a href="privacy.html">Privacy Policy</a>. We never share your data with third parties.</p>

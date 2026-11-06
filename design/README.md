@@ -22,7 +22,8 @@ Generated from `tokens.json`:
 
 - `apps/admin/src/generated/tokens.ts` - the admin console's `C` palette (inline styles, append two hex digits for
   transparency: `${C.blue}1f`); `apps/admin/src/generated/tokens.css` and `apps/landing/tokens.css` - the same colours as
-  CSS variables (`--bg`, `--card`, `--text`, `--accent`, `--brand-600` ...) for the admin's global rules and the landing site.
+  CSS variables (`--bg`, `--card`, `--text`, `--accent`, `--brand-600` ...) for the admin's global rules and the landing site;
+  `docs/templates/manual-tokens.css` is the same file, which `scripts/build-docs.sh` puts in front of the user manual's styles.
   Both are the light Mist and Signal Violet look. Blue, purple, cyan and indigo are all brand shades there; green, amber and
   red use the `statusText` shades so they stay readable on their own 12% tint.
 

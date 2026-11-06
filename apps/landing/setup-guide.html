@@ -9,22 +9,16 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="tokens.css" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --bg: #030712; --bg2: #0a0f1e; --bg3: #0f172a;
-      --border: rgba(255,255,255,.07); --border2: rgba(255,255,255,.12);
-      --blue: #3b82f6; --blue2: #60a5fa; --blue-glow: rgba(59,130,246,.3);
-      --green: #10b981; --amber: #f59e0b; --cyan: #06b6d4; --purple: #8b5cf6;
-      --text: #f1f5f9; --text2: #94a3b8; --text3: #64748b;
-    }
     html { scroll-behavior: smooth; }
     body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
     a { color: var(--blue2); text-decoration: none; }
     a:hover { text-decoration: underline; }
     .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
     .container-doc { max-width: 860px; margin: 0 auto; padding: 0 24px; }
-    nav { position: sticky; top: 0; z-index: 100; background: rgba(3,7,18,.85); backdrop-filter: blur(20px); border-bottom: 1px solid var(--border); }
+    nav { position: sticky; top: 0; z-index: 100; background: rgba(240,242,245,.85); backdrop-filter: blur(20px); border-bottom: 1px solid var(--border); }
     .nav-inner { height: 68px; display: flex; align-items: center; justify-content: space-between; }
     .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
     .nav-logo-text { font-size: 1.125rem; font-weight: 800; letter-spacing: -.3px; color: var(--text); }
@@ -34,13 +28,13 @@
     .nav-links a:hover { color: var(--text); }
     .btn { display: inline-flex; align-items: center; gap: 8px; padding: 9px 20px; border-radius: 9px; font-size: .875rem; font-weight: 600; cursor: pointer; transition: all .2s; border: none; text-decoration: none; }
     .btn-primary { background: var(--blue); color: #fff; }
-    .btn-primary:hover { background: #2563eb; text-decoration: none; }
-    .btn-ghost { background: rgba(255,255,255,.06); color: var(--text); border: 1px solid var(--border2); }
-    .btn-ghost:hover { background: rgba(255,255,255,.1); text-decoration: none; }
+    .btn-primary:hover { background: var(--accent); text-decoration: none; }
+    .btn-ghost { background: rgba(21,18,31,.06); color: var(--text); border: 1px solid var(--border2); }
+    .btn-ghost:hover { background: rgba(21,18,31,.1); text-decoration: none; }
     @media(max-width:768px) { .hide-mobile { display:none; } }
 
     /* Page hero */
-    .page-hero { padding: 100px 0 60px; background: radial-gradient(ellipse 70% 50% at 50% 0%, rgba(16,185,129,.1) 0%, transparent 70%); border-bottom: 1px solid var(--border); }
+    .page-hero { padding: 100px 0 60px; background: radial-gradient(ellipse 70% 50% at 50% 0%, rgba(22,101,52,.1) 0%, transparent 70%); border-bottom: 1px solid var(--border); }
     .breadcrumb { display: flex; align-items: center; gap: 8px; font-size: .8125rem; color: var(--text3); margin-bottom: 16px; }
     .breadcrumb a { color: var(--text3); text-decoration: none; }
     .breadcrumb a:hover { color: var(--text2); }
@@ -60,11 +54,12 @@
     .doc-toc ul { list-style: none; }
     .doc-toc li { margin-bottom: 2px; }
     .doc-toc a { font-size: .8125rem; color: var(--text3); text-decoration: none; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 7px; border-left: 2px solid transparent; transition: all .15s; }
-    .doc-toc a:hover { color: var(--text2); background: rgba(255,255,255,.04); }
-    .doc-toc a.active { color: var(--blue2); border-left-color: var(--blue); background: rgba(59,130,246,.06); }
+    .doc-toc a:hover { color: var(--text2); background: rgba(21,18,31,.04); }
+    .doc-toc a.active { color: var(--blue2); border-left-color: var(--blue); background: rgba(122,53,255,.06); }
     .doc-toc .toc-num { width: 20px; height: 20px; border-radius: 50%; background: var(--bg3); border: 1px solid var(--border2); display: flex; align-items: center; justify-content: center; font-size: .625rem; font-weight: 800; flex-shrink: 0; }
-    .toc-cta { margin-top: 28px; padding: 16px; background: rgba(59,130,246,.07); border: 1px solid rgba(59,130,246,.2); border-radius: 10px; }
+    .toc-cta { margin-top: 28px; padding: 16px; background: rgba(122,53,255,.07); border: 1px solid rgba(122,53,255,.2); border-radius: 10px; }
     .toc-cta p { font-size: .8125rem; color: var(--text2); margin-bottom: 10px; line-height: 1.5; }
+    .toc-cta .btn-primary, .toc-cta .btn-primary:hover { color: #fff; }
 
     /* Steps */
     .step { margin-bottom: 56px; scroll-margin-top: 90px; }
@@ -82,22 +77,22 @@
     .step-divider { height: 1px; background: var(--border); margin-bottom: 56px; }
 
     /* Info / tip boxes */
-    .tip-box { background: rgba(16,185,129,.06); border: 1px solid rgba(16,185,129,.2); border-radius: 10px; padding: 14px 18px; margin: 14px 0; display: flex; gap: 10px; }
+    .tip-box { background: rgba(22,101,52,.06); border: 1px solid rgba(22,101,52,.2); border-radius: 10px; padding: 14px 18px; margin: 14px 0; display: flex; gap: 10px; }
     .tip-box .tip-icon { flex-shrink: 0; font-size: 1rem; margin-top: 1px; }
     .tip-box p { margin: 0; font-size: .875rem; color: var(--text2); line-height: 1.6; }
     .tip-box strong { color: var(--green); }
-    .warn-box { background: rgba(245,158,11,.06); border: 1px solid rgba(245,158,11,.2); border-radius: 10px; padding: 14px 18px; margin: 14px 0; display: flex; gap: 10px; }
+    .warn-box { background: rgba(146,64,14,.06); border: 1px solid rgba(146,64,14,.2); border-radius: 10px; padding: 14px 18px; margin: 14px 0; display: flex; gap: 10px; }
     .warn-box .tip-icon { flex-shrink: 0; font-size: 1rem; margin-top: 1px; }
     .warn-box p { margin: 0; font-size: .875rem; color: var(--text2); line-height: 1.6; }
     .warn-box strong { color: var(--amber); }
-    .info-box { background: rgba(59,130,246,.06); border: 1px solid rgba(59,130,246,.2); border-radius: 10px; padding: 14px 18px; margin: 14px 0; }
+    .info-box { background: rgba(122,53,255,.06); border: 1px solid rgba(122,53,255,.2); border-radius: 10px; padding: 14px 18px; margin: 14px 0; }
     .info-box p { margin: 0; font-size: .875rem; color: var(--text2); line-height: 1.6; }
     .info-box strong { color: var(--blue2); }
 
     /* Keyboard shortcuts */
     .kbd-table { width: 100%; border-collapse: collapse; margin: 14px 0; }
     .kbd-table th { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text3); padding: 8px 12px; border-bottom: 1px solid var(--border); text-align: left; }
-    .kbd-table td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,.04); font-size: .875rem; color: var(--text2); vertical-align: middle; }
+    .kbd-table td { padding: 10px 12px; border-bottom: 1px solid rgba(21,18,31,.04); font-size: .875rem; color: var(--text2); vertical-align: middle; }
     .kbd-table tr:last-child td { border-bottom: none; }
     kbd { background: var(--bg3); border: 1px solid var(--border2); border-radius: 5px; padding: 3px 8px; font-size: .8125rem; font-family: monospace; color: var(--text); }
 
@@ -124,7 +119,7 @@
     .footer-bottom { border-top: 1px solid var(--border); padding-top: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
     .footer-copy { font-size: .8125rem; color: var(--text3); }
     .footer-badges { display: flex; gap: 8px; flex-wrap: wrap; }
-    .fbadge { background: rgba(255,255,255,.05); color: var(--text3); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: .6875rem; font-weight: 600; }
+    .fbadge { background: rgba(21,18,31,.05); color: var(--text3); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: .6875rem; font-weight: 600; }
   </style>
 <link rel="stylesheet" href="responsive.css"/>
 </head>
@@ -214,7 +209,7 @@
       <!-- Step 1 -->
       <div class="step" id="step-1">
         <div class="step-header">
-          <div class="step-num" style="background:linear-gradient(135deg,#3b82f6,#1d4ed8);">1</div>
+          <div class="step-num" style="background:linear-gradient(135deg,var(--accent),var(--accent-dark));">1</div>
           <div class="step-title-wrap">
             <div class="step-title">Create Your Account</div>
             <div class="step-subtitle">Sign up and register your business — takes 2 minutes</div>
@@ -240,7 +235,7 @@
       <!-- Step 2 -->
       <div class="step" id="step-2">
         <div class="step-header">
-          <div class="step-num" style="background:linear-gradient(135deg,#8b5cf6,#6d28d9);">2</div>
+          <div class="step-num" style="background:linear-gradient(135deg,var(--accent),var(--accent-dark));">2</div>
           <div class="step-title-wrap">
             <div class="step-title">Configure Business Details</div>
             <div class="step-subtitle">Settings → General — your business profile and tax settings</div>
@@ -300,7 +295,7 @@
       <!-- Step 4 -->
       <div class="step" id="step-4">
         <div class="step-header">
-          <div class="step-num" style="background:linear-gradient(135deg,#16a34a,#15803d);">4</div>
+          <div class="step-num" style="background:linear-gradient(135deg,var(--green),#15803d);">4</div>
           <div class="step-title-wrap">
             <div class="step-title">Configure M-Pesa</div>
             <div class="step-subtitle">Settings → M-Pesa — Safaricom Daraja API credentials</div>
@@ -324,7 +319,7 @@
       <!-- Step 5 -->
       <div class="step" id="step-5">
         <div class="step-header">
-          <div class="step-num" style="background:linear-gradient(135deg,#f59e0b,#d97706);">5</div>
+          <div class="step-num" style="background:linear-gradient(135deg,#f59e0b,var(--amber));">5</div>
           <div class="step-title-wrap">
             <div class="step-title">Add Your Inventory</div>
             <div class="step-subtitle">Inventory → Items — manual entry or bulk CSV import</div>
@@ -383,7 +378,7 @@
       <!-- Step 7 -->
       <div class="step" id="step-7">
         <div class="step-header">
-          <div class="step-num" style="background:linear-gradient(135deg,#10b981,#059669);">7</div>
+          <div class="step-num" style="background:linear-gradient(135deg,var(--green),var(--green));">7</div>
           <div class="step-title-wrap">
             <div class="step-title">Start Selling</div>
             <div class="step-subtitle">POS — the main sales screen</div>
@@ -447,7 +442,7 @@
             <span class="tip-icon">📅</span>
             <p><strong>Automate your reports:</strong> Go to <strong>Settings → Automation</strong> to schedule reports to be emailed to you automatically — daily, weekly, or monthly. Never forget your end-of-month KRA report again.</p>
           </div>
-          <div style="margin-top:28px;padding:24px;background:var(--bg2);border:1px solid rgba(16,185,129,.2);border-radius:12px;">
+          <div style="margin-top:28px;padding:24px;background:var(--bg2);border:1px solid rgba(22,101,52,.2);border-radius:12px;">
             <p style="font-size:1rem;font-weight:700;color:var(--green);margin-bottom:8px;">🎉 You're all set!</p>
             <p style="font-size:.9375rem;color:var(--text2);margin-bottom:16px;line-height:1.65;">Your KASTRA POS is now fully configured. You're accepting KRA-compliant sales, collecting M-Pesa payments, and tracking your inventory — all from one platform.</p>
             <div style="display:flex;gap:10px;flex-wrap:wrap;">

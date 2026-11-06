@@ -21,7 +21,7 @@
   --blue: #6B26E8;
   --blue2: #6B26E8;
   --purple: #6522E0;
-  --cyan: #9F6EFF;
+  --cyan: #6B26E8;
   --indigo: #531BB8;
   --green: #166534;
   --amber: #92400E;
@@ -44,8 +44,17 @@
   --brand-800: #531BB8;
   --brand-900: #3F1690;
   --brand-950: #2A0F66;
+  --bg2: #FFFFFF;
+  --bg3: #F8F8FB;
+  --bg4: #F0F2F5;
+  --border2: #CDD1DB;
+  --text2: #4F566A;
+  --text3: #626A7D;
+  --blue-glow: #7A35FF47;
+  --blue-dim: #7A35FF1a;
+  --radius: 14px;
+  --radius-lg: 20px;
   --radius-sm: 6px;
   --radius-md: 10px;
-  --radius-lg: 14px;
   --radius-xl: 20px;
 }

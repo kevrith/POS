@@ -77,6 +77,16 @@ Push notifications via the shared
 [`@pos/mobile-push`](../../packages/mobile-push/) package. Receipts/PODs can be
 produced through `expo-print`.
 
+## Check for updates
+
+Settings / Profile has a **Check for updates** button (`components/UpdateCheck.tsx`, logic in
+`lib/appUpdates.ts`). It asks the update server, downloads quietly if there is something new, then
+offers **Restart now**. It says "You have the latest version" otherwise, and "not available in a
+development build" in `expo start` / Expo Go. Updates are JavaScript only and reach phones on the
+**same app version** (`runtimeVersion` follows `expo.version`); native changes need a new APK. Publish
+one with `eas update --branch <channel>` (channels `preview` / `production` in `eas.json`).
+
+
 ---
 
 ## Release

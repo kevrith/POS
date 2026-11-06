@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/auth';
 import { buildLabel } from '../../lib/buildInfo';
+import UpdateCheck from '../../components/UpdateCheck';
 import { getBaseUrl } from '../../lib/api';
 import { clearPushToken } from '../../lib/push';
 import { Colors } from '../../constants/theme';
@@ -119,6 +120,7 @@ export default function ProfileScreen() {
             </View>
             <Text style={styles.infoValue} numberOfLines={1}>{serverUrl}</Text>
           </View>
+          <UpdateCheck />
         </View>
 
         {/* Logout */}

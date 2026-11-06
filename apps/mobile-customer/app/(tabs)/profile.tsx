@@ -9,6 +9,7 @@ import { apiGet, apiPatch, apiPost } from '../../lib/api';
 import { useSessionStore } from '../../stores/session';
 import { Colors } from '../../constants/theme';
 import { buildLabel } from '../../lib/buildInfo';
+import UpdateCheck from '../../components/UpdateCheck';
 
 interface Profile {
   id: string;
@@ -127,6 +128,7 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={18} color={Colors.textSecondary} />
           </TouchableOpacity>
           <Text style={s.buildLine}>KASTRA Order v{buildLabel()}</Text>
+          <UpdateCheck />
         </ScrollView>
       )}
     </SafeAreaView>

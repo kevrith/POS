@@ -25,6 +25,7 @@ import { processSyncQueue } from '../../lib/sync';
 import { requeueRejectedSale } from '../../lib/db';
 import { useSalesQueueStatus } from '../../lib/useOfflineSync';
 import { clearPushToken } from '../../lib/push';
+import UpdateCheck from '../../components/UpdateCheck';
 import PrinterSettingsCard from '../../components/PrinterSettingsCard';
 import {
   isBiometricReady, getBiometricEnrolment, enableBiometric, disableBiometric,
@@ -355,6 +356,7 @@ export default function SettingsScreen() {
             <Text style={styles.aboutLabel}>Store ID</Text>
             <Text style={styles.aboutValue} numberOfLines={1}>{user?.storeId ?? '—'}</Text>
           </View>
+          <UpdateCheck />
         </View>
 
         {bioReady && (

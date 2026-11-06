@@ -466,6 +466,11 @@ export default function POSPage() {
   const attemptKeys = useRef(createAttemptKeys());
 
   const checkoutMutation = useMutation<SaleResult, Error, Array<{ method: string; amountCents: number; reference?: string }>>({
+    // Run even with no connection. TanStack Query's default ('online') PAUSES a mutation while the browser is offline,
+    // so this function never started, the till sat on "Processing..." and the offline queue in submitSaleOrQueue was
+    // never reached. The sale then went out as a plain request after reconnect, with no OFF- receipt and nothing in
+    // the offline-sales panel. submitSaleOrQueue decides what to do with no connection, so it has to run.
+    networkMode: 'always',
     mutationFn: async (payments) => {
       const isCredit = payments.some((p) => p.method === 'CREDIT');
       const payload: SalePayload = {

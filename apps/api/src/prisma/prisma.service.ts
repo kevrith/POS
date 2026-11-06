@@ -53,11 +53,6 @@ const SINGLE_READ_OPS = new Map<string, string>([
  */
 const SINGLE_WRITE_OPS = new Set(['update', 'delete']);
 
-/** `Supplier` → `supplier`: model name to the client's delegate property. */
-function delegateOf(model: string): string {
-  return model.charAt(0).toLowerCase() + model.slice(1);
-}
-
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit {
   private readonly logger = new Logger(PrismaService.name);
@@ -99,12 +94,15 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
         const args = (params.args ?? {}) as { where?: Record<string, unknown> };
         const where = args.where ?? {};
         if (where['businessId'] === undefined && where['id'] !== undefined) {
-          const delegate = (this as unknown as Record<string, {
-            findFirst: (a: unknown) => Promise<unknown>;
-          }>)[delegateOf(model)];
-          const owned = await delegate.findFirst({
-            where: { id: where['id'], businessId: ctx.businessId },
-            select: { id: true },
+          // Run the check through `next`, not through `this.<model>.findFirst`. `next` stays on the caller's own
+          // connection, so inside an interactive transaction (a sale, for one) the check is part of that
+          // transaction. Going through `this` opened a SECOND connection while the transaction held the first;
+          // with a pool of one (`connection_limit=1`, as the pgbouncer setup uses) that waited for a connection
+          // that could never free up, timed out after 10s and failed the sale with a blank 500.
+          const owned = await next({
+            ...params,
+            action: 'findFirst',
+            args: { where: { id: where['id'], businessId: ctx.businessId }, select: { id: true } },
           });
           if (!owned) {
             throw new NotFoundException(`${model} not found`);

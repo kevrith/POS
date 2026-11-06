@@ -1,25 +1,8 @@
 import { useState, useEffect } from 'react';
 import { adminApi } from '../lib/api';
+import { C } from '../generated/tokens';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-const C = {
-  bg:             '#030712',
-  surface:        '#0a0f1e',
-  card:           '#0f172a',
-  cardBorder:     '#1e293b',
-  cardBorder2:    '#263347',
-  text:           '#f1f5f9',
-  textMuted:      '#64748b',
-  textSecondary:  '#94a3b8',
-  blue:           '#3b82f6',
-  blue2:          '#60a5fa',
-  green:          '#10b981',
-  amber:          '#f59e0b',
-  red:            '#ef4444',
-  purple:         '#8b5cf6',
-  cyan:           '#06b6d4',
-  indigo:         '#6366f1',
-};
 
 // ── SVG icon helper ───────────────────────────────────────────────────────────
 function Icon({ d, size = 16, color, fill }: { d: string; size?: number; color?: string; fill?: string }) {
@@ -72,7 +55,7 @@ function KPICard({ label, value, icon, color, sub, subColor, note }: KPICardProp
         flexDirection: 'column',
         gap: '0.625rem',
         transform: hovered ? 'translateY(-2px)' : 'translateY(0)',
-        boxShadow: hovered ? '0 8px 32px rgba(0,0,0,0.35)' : 'none',
+        boxShadow: hovered ? `0 8px 32px ${C.overlay}33` : 'none',
         transition: 'all 0.18s ease',
         cursor: 'default',
       }}>
@@ -114,10 +97,10 @@ function KPICard({ label, value, icon, color, sub, subColor, note }: KPICardProp
 // ── Status badge ──────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
   const m: Record<string, { bg: string; color: string }> = {
-    ACTIVE:    { bg: 'rgba(16,185,129,0.12)',  color: '#10b981' },
-    TRIAL:     { bg: 'rgba(245,158,11,0.12)',  color: '#f59e0b' },
-    EXPIRED:   { bg: 'rgba(239,68,68,0.12)',   color: '#ef4444' },
-    CANCELLED: { bg: 'rgba(100,116,139,0.12)', color: '#64748b' },
+    ACTIVE:    { bg: `${C.green}1f`,  color: C.green },
+    TRIAL:     { bg: `${C.amber}1f`,  color: C.amber },
+    EXPIRED:   { bg: `${C.red}1f`,   color: C.red },
+    CANCELLED: { bg: `${C.textMuted}1f`, color: C.textMuted },
   };
   const c = m[status] ?? m.CANCELLED;
   return (
@@ -131,9 +114,9 @@ function StatusBadge({ status }: { status: string }) {
 // ── Plan badge ────────────────────────────────────────────────────────────────
 function PlanBadge({ plan }: { plan: string }) {
   const m: Record<string, { bg: string; color: string }> = {
-    ENTERPRISE: { bg: 'rgba(139,92,246,0.12)', color: '#8b5cf6' },
-    PRO:        { bg: 'rgba(59,130,246,0.12)',  color: '#3b82f6' },
-    STARTER:    { bg: 'rgba(100,116,139,0.1)',  color: '#94a3b8' },
+    ENTERPRISE: { bg: `${C.purple}1f`, color: C.purple },
+    PRO:        { bg: `${C.blue}1f`,  color: C.blue },
+    STARTER:    { bg: `${C.textMuted}1a`,  color: C.textSecondary },
   };
   const c = m[plan] ?? m.STARTER;
   return (
@@ -221,9 +204,9 @@ export default function DashboardPage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', flexDirection: 'column', gap: '1.25rem' }}>
         <div style={{
           width: '48px', height: '48px', borderRadius: '14px',
-          background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+          background: `linear-gradient(135deg, ${C.blue}, ${C.purple})`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 8px 24px rgba(59,130,246,0.3)',
+          boxShadow: `0 8px 24px ${C.blue}4c`,
         }}>
           <Icon d={Icons.activity} size={22} color="#fff" />
         </div>
@@ -268,7 +251,7 @@ export default function DashboardPage() {
           <button onClick={handleExport} disabled={exporting} style={{
             display: 'flex', alignItems: 'center', gap: 5,
             padding: '0.375rem 0.875rem', borderRadius: 20, border: `1px solid ${C.green}40`,
-            background: 'rgba(16,185,129,0.08)', color: C.green, cursor: exporting ? 'not-allowed' : 'pointer',
+            background: `${C.green}14`, color: C.green, cursor: exporting ? 'not-allowed' : 'pointer',
             fontSize: '0.75rem', fontWeight: 700, opacity: exporting ? 0.6 : 1,
           }}>
             <Icon d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3' size={12} color={C.green} />
@@ -276,7 +259,7 @@ export default function DashboardPage() {
           </button>
           <div style={{
             padding: '0.375rem 0.875rem',
-            background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)',
+            background: `${C.green}1a`, border: `1px solid ${C.green}33`,
             borderRadius: '20px', fontSize: '0.75rem', color: C.green, fontWeight: 700,
             display: 'flex', alignItems: 'center', gap: '6px',
           }}>
@@ -346,7 +329,7 @@ export default function DashboardPage() {
           {[
             { label: 'Enterprise', count: entCount,    price: 1499900, color: C.purple },
             { label: 'Pro',        count: proCount,    price: 499900,  color: C.blue },
-            { label: 'Growth',     count: growthCount, price: 249900,  color: C.cyan },
+            { label: 'Growth',     count: growthCount, price: 249900,  color: C.accentText },
             { label: 'Starter',    count: starterCount, price: 99900,  color: C.textMuted },
             { label: 'Free',       count: freeCount,   price: 0,       color: C.green },
           ].map(p => {
@@ -390,11 +373,10 @@ export default function DashboardPage() {
                 const isDegraded  = !isIncident && (failRate > 0 || emailQ > 10 || webhookQ > 10 || etimsQ > 10);
                 const label  = isIncident ? 'INCIDENT'    : isDegraded ? 'DEGRADED'    : 'OPERATIONAL';
                 const color  = isIncident ? C.red         : isDegraded ? C.amber       : C.green;
-                const bgRgba = isIncident ? '239,68,68'   : isDegraded ? '245,158,11'  : '16,185,129';
                 return (
                   <span style={{
                     fontSize: '0.6875rem', color, fontWeight: 700,
-                    background: `rgba(${bgRgba},0.1)`, border: `1px solid rgba(${bgRgba},0.25)`,
+                    background: `${color}1a`, border: `1px solid ${color}40`,
                     padding: '2px 10px', borderRadius: '20px',
                     display: 'flex', alignItems: 'center', gap: '5px',
                   }}>
@@ -453,7 +435,7 @@ export default function DashboardPage() {
 
       {/* ── Trials Expiring Soon ── */}
       {trials.length > 0 && (
-        <div style={{ background: C.card, border: `1px solid rgba(245,158,11,0.3)`, borderRadius: '14px', overflow: 'hidden' }}>
+        <div style={{ background: C.card, border: `1px solid ${C.amber}4c`, borderRadius: '14px', overflow: 'hidden' }}>
           <div style={{ padding: '1rem 1.5rem', borderBottom: `1px solid ${C.cardBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
               <Icon d={Icons.clock} size={16} color={C.amber} />
@@ -462,7 +444,7 @@ export default function DashboardPage() {
                 <div style={{ fontSize: '0.75rem', color: C.textMuted, marginTop: '1px' }}>Intervention window — extend or convert</div>
               </div>
             </div>
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: C.amber, background: 'rgba(245,158,11,0.1)', padding: '4px 12px', borderRadius: '20px', border: '1px solid rgba(245,158,11,0.25)' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: C.amber, background: `${C.amber}1a`, padding: '4px 12px', borderRadius: '20px', border: `1px solid ${C.amber}40` }}>
               {trials.length} accounts
             </span>
           </div>
@@ -488,7 +470,7 @@ export default function DashboardPage() {
                     disabled={extendingId === b.id}
                     style={{
                       padding: '5px 14px', borderRadius: '8px', border: `1px solid ${C.amber}`,
-                      background: 'rgba(245,158,11,0.1)', color: C.amber,
+                      background: `${C.amber}1a`, color: C.amber,
                       fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', opacity: extendingId === b.id ? 0.5 : 1,
                     }}
                   >
@@ -503,7 +485,7 @@ export default function DashboardPage() {
 
       {/* ── Dunning / Expired Accounts ── */}
       {dunning && dunning.totalAtRisk > 0 && (
-        <div style={{ background: C.card, border: `1px solid rgba(239,68,68,0.25)`, borderRadius: '14px', overflow: 'hidden' }}>
+        <div style={{ background: C.card, border: `1px solid ${C.red}40`, borderRadius: '14px', overflow: 'hidden' }}>
           <div style={{ padding: '1rem 1.5rem', borderBottom: `1px solid ${C.cardBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
               <Icon d={Icons.alert} size={16} color={C.red} />
@@ -512,7 +494,7 @@ export default function DashboardPage() {
                 <div style={{ fontSize: '0.75rem', color: C.textMuted, marginTop: '1px' }}>Expired and overdue trials needing follow-up</div>
               </div>
             </div>
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: C.red, background: 'rgba(239,68,68,0.1)', padding: '4px 12px', borderRadius: '20px', border: '1px solid rgba(239,68,68,0.2)' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: C.red, background: `${C.red}1a`, padding: '4px 12px', borderRadius: '20px', border: `1px solid ${C.red}33` }}>
               {dunning.totalAtRisk} at risk
             </span>
           </div>
@@ -603,7 +585,7 @@ export default function DashboardPage() {
                     transition: 'background 0.12s',
                     cursor: 'default',
                   }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'rgba(59,130,246,0.04)'; }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = `${C.blue}0a`; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'; }}>
                   <td style={{ padding: '0.875rem 1.25rem' }}>
                     <div style={{ fontWeight: 600, color: C.text, fontSize: '0.875rem' }}>{b.name}</div>

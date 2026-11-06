@@ -11,6 +11,8 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { C } from '../generated/tokens';
+import { Gift } from 'lucide-react';
 
 const TIERS = ['FREE', 'STARTER', 'GROWTH', 'PRO', 'ENTERPRISE'] as const;
 
@@ -30,44 +32,44 @@ const S = {
   overlay: {
     position: 'fixed' as const, inset: 0, zIndex: 9999, display: 'flex',
     alignItems: 'center', justifyContent: 'center', padding: '1rem',
-    background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)',
+    background: `${C.overlay}99`, backdropFilter: 'blur(3px)',
   },
   card: {
-    background: '#0f172a', border: '1px solid #1e293b', borderRadius: '16px',
-    boxShadow: '0 24px 64px rgba(0,0,0,0.6)', width: '100%', maxWidth: '460px',
+    background: C.card, border: `1px solid ${C.cardBorder}`, borderRadius: '16px',
+    boxShadow: `0 24px 64px ${C.overlay}40`, width: '100%', maxWidth: '460px',
   },
   header: { display: 'flex', alignItems: 'flex-start', gap: '1rem', padding: '1.5rem 1.5rem 1rem' },
   iconWrap: {
     flexShrink: 0, width: 40, height: 40, borderRadius: '50%', display: 'flex',
-    alignItems: 'center', justifyContent: 'center', background: 'rgba(139,92,246,0.15)',
+    alignItems: 'center', justifyContent: 'center', background: `${C.purple}26`,
     fontSize: '1.125rem',
   },
-  title: { fontSize: '0.9375rem', fontWeight: 700, color: '#f1f5f9', margin: 0, lineHeight: 1.3 },
-  subtitle: { marginTop: '0.375rem', fontSize: '0.875rem', color: '#94a3b8', lineHeight: 1.6 },
+  title: { fontSize: '0.9375rem', fontWeight: 700, color: C.text, margin: 0, lineHeight: 1.3 },
+  subtitle: { marginTop: '0.375rem', fontSize: '0.875rem', color: C.textSecondary, lineHeight: 1.6 },
   body: { padding: '0 1.5rem', display: 'flex', flexDirection: 'column' as const, gap: '1rem' },
-  label: { display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '0.375rem' },
+  label: { display: 'block', fontSize: '0.75rem', fontWeight: 600, color: C.textSecondary, marginBottom: '0.375rem' },
   field: {
-    width: '100%', padding: '0.5rem 0.75rem', fontSize: '0.875rem', color: '#e2e8f0',
-    background: '#0b1220', border: '1px solid #1e293b', borderRadius: '10px', outline: 'none',
+    width: '100%', padding: '0.5rem 0.75rem', fontSize: '0.875rem', color: C.text,
+    background: C.input, border: `1px solid ${C.cardBorder}`, borderRadius: '10px', outline: 'none',
     boxSizing: 'border-box' as const,
   },
   note: {
     display: 'flex', gap: '0.625rem', padding: '0.75rem', borderRadius: '10px',
-    background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.25)',
-    fontSize: '0.75rem', color: '#c4b5fd', lineHeight: 1.6,
+    background: `${C.purple}14`, border: `1px solid ${C.purple}40`,
+    fontSize: '0.75rem', color: C.accentText, lineHeight: 1.6,
   },
   error: {
     padding: '0.625rem 0.75rem', borderRadius: '10px', fontSize: '0.8125rem',
-    background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)', color: '#fca5a5',
+    background: `${C.red}1f`, border: `1px solid ${C.red}59`, color: C.red,
   },
   actions: { display: 'flex', gap: '0.75rem', padding: '1.25rem 1.5rem 1.5rem', justifyContent: 'flex-end' },
   btnCancel: {
-    padding: '0.5rem 1rem', fontSize: '0.875rem', fontWeight: 500, color: '#94a3b8',
-    background: 'rgba(255,255,255,0.05)', border: '1px solid #1e293b', borderRadius: '10px', cursor: 'pointer',
+    padding: '0.5rem 1rem', fontSize: '0.875rem', fontWeight: 500, color: C.textSecondary,
+    background: `${C.text}0d`, border: `1px solid ${C.cardBorder}`, borderRadius: '10px', cursor: 'pointer',
   },
   btnConfirm: (busy: boolean) => ({
     padding: '0.5rem 1.125rem', fontSize: '0.875rem', fontWeight: 700, color: '#fff',
-    background: '#7C3AED', border: 'none', borderRadius: '10px',
+    background: C.accent, border: 'none', borderRadius: '10px',
     cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1,
   }),
 };
@@ -111,12 +113,12 @@ export default function GiftPlanModal({ business, initialTier, onCancel, onConfi
     <div style={S.overlay} onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onCancel(); }}>
       <div style={S.card} role="dialog" aria-modal="true" aria-label="Gift a plan">
         <div style={S.header}>
-          <div style={S.iconWrap}>🎁</div>
+          <div style={S.iconWrap}><Gift size={20} aria-hidden /></div>
           <div>
             <h3 style={S.title}>Gift a plan — {business.name}</h3>
             <p style={S.subtitle}>
               Grants full access without payment. Currently on{' '}
-              <strong style={{ color: '#cbd5e1' }}>{business.subscriptionTier ?? 'FREE'}</strong>.
+              <strong style={{ color: C.textSecondary }}>{business.subscriptionTier ?? 'FREE'}</strong>.
             </p>
           </div>
         </div>

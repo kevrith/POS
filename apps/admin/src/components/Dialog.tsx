@@ -17,6 +17,7 @@
  */
 
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
+import { C } from '../generated/tokens';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -69,15 +70,15 @@ const S = {
     alignItems: 'center',
     justifyContent: 'center',
     padding: '1rem',
-    background: 'rgba(0,0,0,0.65)',
+    background: `${C.overlay}99`,
     backdropFilter: 'blur(3px)',
   },
   card: {
     position: 'relative' as const,
-    background: '#0f172a',
-    border: '1px solid #1e293b',
+    background: C.card,
+    border: `1px solid ${C.cardBorder}`,
     borderRadius: '16px',
-    boxShadow: '0 24px 64px rgba(0,0,0,0.6)',
+    boxShadow: `0 24px 64px ${C.overlay}40`,
     width: '100%',
     maxWidth: '440px',
     animation: 'dialogIn 0.15s ease-out',
@@ -96,26 +97,26 @@ const S = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: variant === 'danger' ? 'rgba(239,68,68,0.15)' : variant === 'warning' ? 'rgba(245,158,11,0.15)' : 'rgba(59,130,246,0.15)',
+    background: variant === 'danger' ? `${C.red}26` : variant === 'warning' ? `${C.amber}26` : `${C.blue}26`,
   }),
   title: {
     fontSize: '0.9375rem',
     fontWeight: 700,
-    color: '#f1f5f9',
+    color: C.text,
     margin: 0,
     lineHeight: 1.3,
   },
   message: {
     marginTop: '0.375rem',
     fontSize: '0.875rem',
-    color: '#94a3b8',
+    color: C.textSecondary,
     lineHeight: 1.6,
   },
   closeBtn: {
     flexShrink: 0,
     background: 'none',
     border: 'none',
-    color: '#475569',
+    color: C.textMuted,
     cursor: 'pointer',
     padding: '4px',
     borderRadius: '6px',
@@ -133,9 +134,9 @@ const S = {
     padding: '0.5rem 1rem',
     fontSize: '0.875rem',
     fontWeight: 500,
-    color: '#94a3b8',
-    background: 'rgba(255,255,255,0.05)',
-    border: '1px solid #1e293b',
+    color: C.textSecondary,
+    background: `${C.text}0d`,
+    border: `1px solid ${C.cardBorder}`,
     borderRadius: '10px',
     cursor: 'pointer',
   },
@@ -144,13 +145,13 @@ const S = {
     fontSize: '0.875rem',
     fontWeight: 600,
     color: '#fff',
-    background: variant === 'danger' ? '#dc2626' : variant === 'warning' ? '#d97706' : '#2563eb',
+    background: variant === 'danger' ? C.danger : variant === 'warning' ? C.warning : C.accent,
     border: 'none',
     borderRadius: '10px',
     cursor: 'pointer',
   }),
   divider: {
-    borderTop: '1px solid #1e293b',
+    borderTop: `1px solid ${C.cardBorder}`,
     margin: '0 1.5rem 1rem',
   },
   input: {
@@ -158,10 +159,10 @@ const S = {
     boxSizing: 'border-box' as const,
     padding: '0.625rem 0.75rem',
     fontSize: '0.875rem',
-    background: '#060c1a',
-    border: '1px solid #1e293b',
+    background: C.input,
+    border: `1px solid ${C.cardBorder}`,
     borderRadius: '8px',
-    color: '#f1f5f9',
+    color: C.text,
     outline: 'none',
   },
   inputWrap: {
@@ -172,21 +173,21 @@ const S = {
 // SVG icons (inline, no lucide dependency needed here)
 function IconTrash() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.red} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4h6v2" />
     </svg>
   );
 }
 function IconWarn() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.amber} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
     </svg>
   );
 }
 function IconInfo() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.blue} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
     </svg>
   );

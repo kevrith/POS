@@ -13,25 +13,10 @@ import AnalyticsPage from './pages/AnalyticsPage';
 import WebhooksPage from './pages/WebhooksPage';
 import PlatformSettingsPage from './pages/PlatformSettingsPage';
 import HelpPage from './pages/HelpPage';
+import { C } from './generated/tokens';
 
 type Page = 'dashboard' | 'businesses' | 'users' | 'license-keys' | 'support' | 'referrals' | 'affiliates' | 'analytics' | 'webhooks' | 'platform-settings' | 'help';
 
-const C = {
-  bg: '#0a0f1e',
-  sidebar: '#0f172a',
-  sidebarBorder: '#1e293b',
-  card: '#111827',
-  cardBorder: '#1e293b',
-  text: '#f1f5f9',
-  textMuted: '#64748b',
-  textSecondary: '#94a3b8',
-  accent: '#3b82f6',
-  accentDark: '#1d4ed8',
-  success: '#10b981',
-  warning: '#f59e0b',
-  danger: '#ef4444',
-  purple: '#8b5cf6',
-} as const;
 
 // Simple SVG icon components (no external dep required)
 function Icon({ d, size = 16, color }: { d: string; size?: number; color?: string }) {
@@ -65,15 +50,15 @@ const MoreIcons = {
 const NAV: Array<{ id: Page; label: string; icon: string; color: string; group?: string }> = [
   { id: 'dashboard',         label: 'Dashboard',        icon: Icons.dashboard,     color: C.accent },
   { id: 'businesses',        label: 'Businesses',       icon: Icons.businesses,    color: C.purple },
-  { id: 'users',             label: 'Users',            icon: MoreIcons.users,     color: '#06b6d4' },
-  { id: 'analytics',         label: 'Analytics',        icon: MoreIcons.analytics, color: '#10b981' },
+  { id: 'users',             label: 'Users',            icon: MoreIcons.users,     color: C.accentText },
+  { id: 'analytics',         label: 'Analytics',        icon: MoreIcons.analytics, color: C.green },
   { id: 'license-keys',      label: 'License Keys',     icon: Icons.license,       color: C.success },
-  { id: 'referrals',         label: 'Referrals',        icon: MoreIcons.referral,  color: '#f472b6' },
-  { id: 'affiliates',        label: 'Affiliates',       icon: MoreIcons.referral,  color: '#8b5cf6' },
-  { id: 'webhooks',          label: 'Webhooks',         icon: MoreIcons.webhooks,  color: '#f59e0b' },
+  { id: 'referrals',         label: 'Referrals',        icon: MoreIcons.referral,  color: C.purple },
+  { id: 'affiliates',        label: 'Affiliates',       icon: MoreIcons.referral,  color: C.purple },
+  { id: 'webhooks',          label: 'Webhooks',         icon: MoreIcons.webhooks,  color: C.amber },
   { id: 'support',           label: 'Support Tools',    icon: Icons.support,       color: C.warning },
-  { id: 'platform-settings', label: 'Platform Settings',icon: MoreIcons.settings,  color: '#8b5cf6' },
-  { id: 'help',              label: 'Guide',            icon: MoreIcons.help,      color: '#06b6d4' },
+  { id: 'platform-settings', label: 'Platform Settings',icon: MoreIcons.settings,  color: C.purple },
+  { id: 'help',              label: 'Guide',            icon: MoreIcons.help,      color: C.accentText },
 ];
 
 export default function App() {
@@ -119,7 +104,7 @@ export default function App() {
   const isIncident  = failRate > 20 || emailQ > 50 || webhookQ > 50 || etimsQ > 50;
   const isDegraded  = !isIncident && (failRate > 0 || emailQ > 10 || webhookQ > 10 || etimsQ > 10);
   const sysStatus   = isIncident ? 'INCIDENT' : isDegraded ? 'DEGRADED' : 'OPERATIONAL';
-  const sysColor    = isIncident ? '#ef4444'  : isDegraded ? '#f59e0b'  : '#10b981';
+  const sysColor    = isIncident ? C.red  : isDegraded ? C.amber  : C.green;
 
   const unseenAlerts = alerts.length - alertSeen;
   const criticalAlerts = alerts.filter(a => a.severity === 'critical').length;
@@ -141,7 +126,7 @@ export default function App() {
           onClick={() => setSidebarOpen(false)}
           style={{
             position: 'fixed', inset: 0, zIndex: 40,
-            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(2px)',
+            background: `${C.overlay}99`, backdropFilter: 'blur(2px)',
           }}
         />
       )}
@@ -164,10 +149,10 @@ export default function App() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', marginBottom: '0.5rem' }}>
             <div style={{
               width: '36px', height: '36px',
-              background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+              background: `linear-gradient(135deg, ${C.blue} 0%, ${C.accentDark} 100%)`,
               borderRadius: '10px',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(59,130,246,0.35)',
+              boxShadow: `0 4px 12px ${C.blue}59`,
               flexShrink: 0,
             }}>
               <Icon d={Icons.bolt} size={18} color="#fff" />
@@ -205,8 +190,8 @@ export default function App() {
                   textAlign: 'left',
                   padding: '0.625rem 0.75rem',
                   marginBottom: '2px',
-                  background: active ? 'rgba(59,130,246,0.12)' : 'transparent',
-                  color: active ? '#93c5fd' : C.textSecondary,
+                  background: active ? `${C.blue}1f` : 'transparent',
+                  color: active ? C.accentText : C.textSecondary,
                   border: 'none',
                   borderRadius: '8px',
                   cursor: 'pointer',
@@ -216,7 +201,7 @@ export default function App() {
                 }}
                 onMouseEnter={(e) => {
                   if (!active) {
-                    (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.04)';
+                    (e.currentTarget as HTMLButtonElement).style.background = `${C.text}0a`;
                     (e.currentTarget as HTMLButtonElement).style.color = C.text;
                   }
                 }}
@@ -230,7 +215,7 @@ export default function App() {
                 <div style={{
                   width: '30px', height: '30px',
                   borderRadius: '8px',
-                  background: active ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.05)',
+                  background: active ? `${C.blue}33` : `${C.text}0d`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   flexShrink: 0,
                   color: active ? item.color : C.textMuted,
@@ -262,7 +247,7 @@ export default function App() {
           }}>
             <div style={{
               width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0,
-              background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+              background: `linear-gradient(135deg, ${C.blue}, ${C.purple})`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: '0.6875rem', color: '#fff', fontWeight: 800,
             }}>
@@ -284,7 +269,7 @@ export default function App() {
               width: '100%',
               padding: '0.5rem 0.75rem',
               background: 'transparent',
-              color: '#ef4444',
+              color: C.red,
               border: 'none',
               borderRadius: '8px',
               cursor: 'pointer',
@@ -293,7 +278,7 @@ export default function App() {
               transition: 'all 0.12s',
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.background = 'rgba(239,68,68,0.1)';
+              (e.currentTarget as HTMLButtonElement).style.background = `${C.red}1a`;
             }}
             onMouseLeave={(e) => {
               (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
@@ -302,11 +287,11 @@ export default function App() {
             <div style={{
               width: '28px', height: '28px',
               borderRadius: '8px',
-              background: 'rgba(239,68,68,0.1)',
+              background: `${C.red}1a`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               flexShrink: 0,
             }}>
-              <Icon d={Icons.logout} size={13} color="#ef4444" />
+              <Icon d={Icons.logout} size={13} color={C.red} />
             </div>
             Sign Out
           </button>
@@ -337,9 +322,10 @@ export default function App() {
             {/* Sidebar toggle */}
             <button
               onClick={() => setSidebarOpen(o => !o)}
+              aria-label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
               title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
               style={{
-                background: 'rgba(255,255,255,0.05)',
+                background: `${C.text}0d`,
                 border: `1px solid ${C.sidebarBorder}`,
                 borderRadius: '10px', width: '36px', height: '36px',
                 cursor: 'pointer', display: 'flex', alignItems: 'center',
@@ -357,21 +343,22 @@ export default function App() {
             <div ref={alertRef} style={{ position: 'relative' }}>
               <button
                 onClick={() => { setAlertOpen(o => !o); setAlertSeen(alerts.length); }}
+                aria-label={unseenAlerts > 0 ? `Alerts, ${unseenAlerts} new` : 'Alerts'}
                 style={{
-                  position: 'relative', background: unseenAlerts > 0 ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.05)',
-                  border: `1px solid ${unseenAlerts > 0 ? 'rgba(239,68,68,0.3)' : C.sidebarBorder}`,
+                  position: 'relative', background: unseenAlerts > 0 ? `${C.red}1a` : `${C.text}0d`,
+                  border: `1px solid ${unseenAlerts > 0 ? `${C.red}4c` : C.sidebarBorder}`,
                   borderRadius: '10px', width: '36px', height: '36px', cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   transition: 'all 0.15s',
                 }}
               >
-                <Icon d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9 M13.73 21a2 2 0 0 1-3.46 0" size={15} color={unseenAlerts > 0 ? '#ef4444' : C.textMuted} />
+                <Icon d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9 M13.73 21a2 2 0 0 1-3.46 0" size={15} color={unseenAlerts > 0 ? C.red : C.textMuted} />
                 {unseenAlerts > 0 && (
                   <span style={{
                     position: 'absolute', top: '4px', right: '4px',
                     width: '8px', height: '8px', borderRadius: '50%',
-                    background: criticalAlerts > 0 ? '#ef4444' : '#f59e0b',
-                    boxShadow: `0 0 5px ${criticalAlerts > 0 ? '#ef4444' : '#f59e0b'}`,
+                    background: criticalAlerts > 0 ? C.red : C.amber,
+                    boxShadow: `0 0 5px ${criticalAlerts > 0 ? C.red : C.amber}`,
                   }} />
                 )}
               </button>
@@ -380,7 +367,7 @@ export default function App() {
                 <div style={{
                   position: 'absolute', top: '44px', right: 0, width: '340px',
                   background: C.sidebar, border: `1px solid ${C.sidebarBorder}`,
-                  borderRadius: '14px', boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
+                  borderRadius: '14px', boxShadow: `0 12px 40px ${C.overlay}33`,
                   zIndex: 100, overflow: 'hidden',
                 }}>
                   <div style={{ padding: '0.875rem 1rem', borderBottom: `1px solid ${C.sidebarBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -391,7 +378,7 @@ export default function App() {
                     {alerts.length === 0 ? (
                       <div style={{ padding: '2rem', textAlign: 'center', color: C.textMuted, fontSize: '0.875rem' }}>No alerts — all clear</div>
                     ) : alerts.map((a, i) => {
-                      const severityColor = a.severity === 'critical' ? '#ef4444' : a.severity === 'warning' ? '#f59e0b' : '#06b6d4';
+                      const severityColor = a.severity === 'critical' ? C.red : a.severity === 'warning' ? C.amber : C.cyan;
                       return (
                         <div key={i} style={{
                           padding: '0.75rem 1rem', borderBottom: `1px solid ${C.sidebarBorder}`,
@@ -407,7 +394,7 @@ export default function App() {
                           {a.businessName && (
                             <button
                               onClick={() => { setPage('businesses'); setAlertOpen(false); }}
-                              style={{ fontSize: '0.6875rem', color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', marginTop: '2px' }}
+                              style={{ fontSize: '0.6875rem', color: C.blue, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', marginTop: '2px' }}
                             >
                               → {a.businessName}
                             </button>
@@ -422,8 +409,8 @@ export default function App() {
 
             <div style={{
               padding: '0.375rem 0.75rem',
-              background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)',
-              borderRadius: '20px', fontSize: '0.75rem', color: C.success, fontWeight: 600,
+              background: `${C.green}1a`, border: `1px solid ${C.green}33`,
+              borderRadius: '20px', fontSize: '0.75rem', color: C.green, fontWeight: 600,
             }}>
               LIVE
             </div>

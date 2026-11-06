@@ -1,19 +1,14 @@
 import { useState, useEffect } from 'react';
 import { adminApi } from '../lib/api';
+import { C } from '../generated/tokens';
+import { Link2 } from 'lucide-react';
 
-const C = {
-  card: '#111827', cardBorder: '#1e293b',
-  text: '#f1f5f9', textMuted: '#64748b', textSecondary: '#94a3b8',
-  input: '#020617', inputBorder: '#1e293b',
-  blue: '#3b82f6', green: '#10b981', amber: '#f59e0b', red: '#ef4444',
-  purple: '#8b5cf6', cyan: '#06b6d4',
-};
 
 function StatusBadge({ status }: { status: string }) {
   const m: Record<string, { bg: string; color: string }> = {
-    CONVERTED: { bg: 'rgba(16,185,129,0.12)',  color: '#10b981' },
-    REWARDED:  { bg: 'rgba(139,92,246,0.12)',  color: '#8b5cf6' },
-    PENDING:   { bg: 'rgba(245,158,11,0.12)',  color: '#f59e0b' },
+    CONVERTED: { bg: `${C.green}1f`,  color: C.green },
+    REWARDED:  { bg: `${C.purple}1f`,  color: C.purple },
+    PENDING:   { bg: `${C.amber}1f`,  color: C.amber },
   };
   const c = m[status] ?? m.PENDING;
   return (
@@ -26,7 +21,7 @@ function StatusBadge({ status }: { status: string }) {
 function StatMini({ label, value, color }: { label: string; value: number; color: string }) {
   return (
     <div style={{
-      background: '#0a0f1e', borderRadius: '12px', padding: '1rem 1.25rem',
+      background: C.surface, borderRadius: '12px', padding: '1rem 1.25rem',
       border: `1px solid ${C.cardBorder}`, flex: 1, minWidth: '120px',
     }}>
       <div style={{ fontSize: '1.75rem', fontWeight: 800, color, letterSpacing: '-0.02em', lineHeight: 1 }}>{value}</div>
@@ -64,11 +59,11 @@ export default function ReferralsPage() {
 
       {/* How referrals work info */}
       <div style={{
-        background: 'rgba(6,182,212,0.05)', border: '1px solid rgba(6,182,212,0.15)',
+        background: `${C.cyan}0d`, border: `1px solid ${C.cyan}26`,
         borderRadius: '12px', padding: '1rem 1.25rem', marginBottom: '1.5rem',
         fontSize: '0.8125rem', color: C.textSecondary, lineHeight: 1.6,
       }}>
-        💡 <strong style={{ color: C.cyan }}>How it works:</strong> Each business owner gets a unique referral code (<code style={{ color: C.cyan }}>KAS-XXXXXX</code>). When a new business signs up using that code, the referral is marked <strong>CONVERTED</strong>. Both parties receive 1 month free (issued as a Paystack coupon). When the coupon is applied, the referral becomes <strong>REWARDED</strong>.
+        <strong style={{ color: C.accentText }}>How it works:</strong> Each business owner gets a unique referral code (<code style={{ color: C.accentText }}>KAS-XXXXXX</code>). When a new business signs up using that code, the referral is marked <strong>CONVERTED</strong>. Both parties receive 1 month free (issued as a Paystack coupon). When the coupon is applied, the referral becomes <strong>REWARDED</strong>.
       </div>
 
       {/* Table */}
@@ -83,7 +78,7 @@ export default function ReferralsPage() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: '#0a0f1e' }}>
+              <tr style={{ background: C.surface }}>
                 {['Referral Code', 'Referrer Business', 'Referred Business ID', 'Status', 'Reward', 'Date'].map(h => (
                   <th key={h} style={{
                     padding: '0.875rem 1.25rem', textAlign: 'left',
@@ -99,10 +94,10 @@ export default function ReferralsPage() {
               )}
               {!loading && data?.referrals?.map((r: any) => (
                 <tr key={r.id} style={{ borderTop: `1px solid ${C.cardBorder}`, transition: 'background 0.1s' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'rgba(255,255,255,0.02)'; }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = `${C.text}05`; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'; }}>
                   <td style={{ padding: '0.875rem 1.25rem' }}>
-                    <code style={{ color: C.cyan, fontFamily: 'monospace', fontSize: '0.875rem', background: 'rgba(6,182,212,0.08)', padding: '2px 8px', borderRadius: '6px' }}>
+                    <code style={{ color: C.accentText, fontFamily: 'monospace', fontSize: '0.875rem', background: `${C.cyan}14`, padding: '2px 8px', borderRadius: '6px' }}>
                       {r.code}
                     </code>
                   </td>
@@ -110,7 +105,7 @@ export default function ReferralsPage() {
                     {r.referrer?.name ?? r.referrerBusinessId}
                   </td>
                   <td style={{ padding: '0.875rem 1.25rem', color: C.textMuted, fontSize: '0.8125rem', fontFamily: 'monospace' }}>
-                    {r.referredBusinessId ?? <span style={{ color: '#374151', fontFamily: 'sans-serif' }}>Not yet claimed</span>}
+                    {r.referredBusinessId ?? <span style={{ color: C.textSecondary, fontFamily: 'sans-serif' }}>Not yet claimed</span>}
                   </td>
                   <td style={{ padding: '0.875rem 1.25rem' }}><StatusBadge status={r.status} /></td>
                   <td style={{ padding: '0.875rem 1.25rem', color: r.rewardCents > 0 ? C.green : C.textMuted, fontWeight: r.rewardCents > 0 ? 600 : 400, fontSize: '0.875rem' }}>
@@ -123,7 +118,7 @@ export default function ReferralsPage() {
               ))}
               {!loading && !data?.referrals?.length && (
                 <tr><td colSpan={6} style={{ padding: '3rem', textAlign: 'center', color: C.textMuted }}>
-                  <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🔗</div>
+                  <Link2 size={32} aria-hidden style={{ marginBottom: '0.5rem', color: C.textMuted }} />
                   No referrals yet
                 </td></tr>
               )}
@@ -139,13 +134,13 @@ export default function ReferralsPage() {
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
             <button
               onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-              style={{ padding: '0.3rem 0.75rem', background: 'rgba(255,255,255,0.05)', color: C.textSecondary, border: 'none', borderRadius: '6px', cursor: page === 1 ? 'not-allowed' : 'pointer', opacity: page === 1 ? 0.4 : 1, fontSize: '0.8125rem', fontWeight: 600 }}>
+              style={{ padding: '0.3rem 0.75rem', background: `${C.text}0d`, color: C.textSecondary, border: 'none', borderRadius: '6px', cursor: page === 1 ? 'not-allowed' : 'pointer', opacity: page === 1 ? 0.4 : 1, fontSize: '0.8125rem', fontWeight: 600 }}>
               ← Prev
             </button>
             <span style={{ padding: '0.375rem 0.75rem', color: C.textSecondary, fontWeight: 600 }}>Page {page}</span>
             <button
               onClick={() => setPage(p => p + 1)} disabled={(data.referrals?.length ?? 0) < 20}
-              style={{ padding: '0.3rem 0.75rem', background: 'rgba(255,255,255,0.05)', color: C.textSecondary, border: 'none', borderRadius: '6px', cursor: (data.referrals?.length ?? 0) < 20 ? 'not-allowed' : 'pointer', opacity: (data.referrals?.length ?? 0) < 20 ? 0.4 : 1, fontSize: '0.8125rem', fontWeight: 600 }}>
+              style={{ padding: '0.3rem 0.75rem', background: `${C.text}0d`, color: C.textSecondary, border: 'none', borderRadius: '6px', cursor: (data.referrals?.length ?? 0) < 20 ? 'not-allowed' : 'pointer', opacity: (data.referrals?.length ?? 0) < 20 ? 0.4 : 1, fontSize: '0.8125rem', fontWeight: 600 }}>
               Next →
             </button>
           </div>

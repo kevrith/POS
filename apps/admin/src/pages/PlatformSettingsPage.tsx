@@ -1,11 +1,7 @@
 import { useState, useEffect } from 'react';
 import { adminApi } from '../lib/api';
+import { C } from '../generated/tokens';
 
-const C = {
-  bg: '#030712', surface: '#0a0f1e', card: '#0f172a', cardBorder: '#1e293b',
-  text: '#f1f5f9', textMuted: '#64748b', textSecondary: '#94a3b8',
-  blue: '#3b82f6', green: '#10b981', amber: '#f59e0b', red: '#ef4444',
-};
 
 function Icon({ d, size = 16, color }: { d: string; size?: number; color?: string }) {
   return (
@@ -100,8 +96,8 @@ export default function PlatformSettingsPage() {
 
       {msg && (
         <div style={{
-          background: msgType === 'ok' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
-          border: `1px solid ${msgType === 'ok' ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)'}`,
+          background: msgType === 'ok' ? `${C.green}1a` : `${C.red}1a`,
+          border: `1px solid ${msgType === 'ok' ? `${C.green}40` : `${C.red}40`}`,
           borderRadius: 8, padding: '0.75rem 1rem',
           color: msgType === 'ok' ? C.green : C.red,
           fontSize: '0.8125rem',
@@ -125,8 +121,8 @@ export default function PlatformSettingsPage() {
           <span style={{
             fontSize: '0.6875rem', fontWeight: 700, padding: '2px 10px', borderRadius: 20,
             color: whitelist.length === 0 ? C.amber : C.green,
-            background: whitelist.length === 0 ? 'rgba(245,158,11,0.1)' : 'rgba(16,185,129,0.1)',
-            border: `1px solid ${whitelist.length === 0 ? 'rgba(245,158,11,0.25)' : 'rgba(16,185,129,0.25)'}`,
+            background: whitelist.length === 0 ? `${C.amber}1a` : `${C.green}1a`,
+            border: `1px solid ${whitelist.length === 0 ? `${C.amber}40` : `${C.green}40`}`,
           }}>
             {whitelist.length === 0 ? 'OPEN' : 'RESTRICTED'}
           </span>
@@ -173,7 +169,7 @@ export default function PlatformSettingsPage() {
             <tbody>
               {whitelist.map((entry: any, i: number) => (
                 <tr key={entry.id} style={{ borderBottom: i < whitelist.length - 1 ? `1px solid ${C.cardBorder}` : 'none' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'rgba(59,130,246,0.04)'; }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = `${C.blue}0a`; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'; }}>
                   <td style={{ padding: '0.75rem 1rem', fontWeight: 700, color: C.green, fontSize: '0.875rem', fontFamily: 'monospace' }}>{entry.ip}</td>
                   <td style={{ padding: '0.75rem 1rem', color: C.textSecondary, fontSize: '0.8125rem' }}>{entry.label ?? '—'}</td>
@@ -183,7 +179,7 @@ export default function PlatformSettingsPage() {
                   </td>
                   <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
                     <button onClick={() => removeIp(entry.id, entry.ip)} disabled={removing === entry.id}
-                      style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 6, border: `1px solid ${C.red}30`, background: 'rgba(239,68,68,0.08)', color: C.red, cursor: 'pointer', fontSize: '0.6875rem', fontWeight: 600 }}>
+                      style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 6, border: `1px solid ${C.red}30`, background: `${C.red}14`, color: C.red, cursor: 'pointer', fontSize: '0.6875rem', fontWeight: 600 }}>
                       <Icon d={Icons.trash} size={11} color={C.red} />
                       {removing === entry.id ? '…' : 'Remove'}
                     </button>

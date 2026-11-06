@@ -1,23 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { adminApi } from '../lib/api';
+import { C } from '../generated/tokens';
 
-const C = {
-  bg:            '#030712',
-  surface:       '#0a0f1e',
-  card:          '#0f172a',
-  cardBorder:    '#1e293b',
-  cardBorder2:   '#263347',
-  text:          '#f1f5f9',
-  textMuted:     '#64748b',
-  textSecondary: '#94a3b8',
-  input:         '#060c1a',
-  inputBorder:   '#1e293b',
-  blue:          '#3b82f6',
-  green:         '#10b981',
-  amber:         '#f59e0b',
-  red:           '#ef4444',
-  purple:        '#8b5cf6',
-};
 
 function Icon({ d, size = 14, color }: { d: string; size?: number; color?: string }) {
   return (
@@ -47,14 +31,14 @@ const EDITABLE_ROLES = ['OWNER', 'MANAGER', 'CASHIER', 'ACCOUNTANT', 'WAITER', '
 
 function RoleBadge({ role }: { role: string }) {
   const m: Record<string, { bg: string; color: string }> = {
-    OWNER:      { bg: 'rgba(139,92,246,0.12)', color: '#8b5cf6' },
-    MANAGER:    { bg: 'rgba(59,130,246,0.12)',  color: '#3b82f6' },
-    CASHIER:    { bg: 'rgba(16,185,129,0.12)',  color: '#10b981' },
-    ACCOUNTANT: { bg: 'rgba(99,102,241,0.12)',  color: '#818cf8' },
-    WAITER:     { bg: 'rgba(245,158,11,0.12)',  color: '#f59e0b' },
-    KITCHEN:    { bg: 'rgba(239,68,68,0.12)',   color: '#ef4444' },
+    OWNER:      { bg: `${C.purple}1f`, color: C.purple },
+    MANAGER:    { bg: `${C.blue}1f`,  color: C.blue },
+    CASHIER:    { bg: `${C.green}1f`,  color: C.green },
+    ACCOUNTANT: { bg: `${C.indigo}1f`,  color: C.accentText },
+    WAITER:     { bg: `${C.amber}1f`,  color: C.amber },
+    KITCHEN:    { bg: `${C.red}1f`,   color: C.red },
   };
-  const c = m[role] ?? { bg: 'rgba(100,116,139,0.1)', color: '#94a3b8' };
+  const c = m[role] ?? { bg: `${C.textMuted}1a`, color: C.textSecondary };
   return (
     <span style={{ padding: '1px 8px', borderRadius: '20px', fontSize: '0.625rem', fontWeight: 700, background: c.bg, color: c.color }}>
       {role}
@@ -65,17 +49,17 @@ function RoleBadge({ role }: { role: string }) {
 function StatusChip({ loginAttempts, lockedUntil }: { loginAttempts: number; lockedUntil: string | null }) {
   const locked = lockedUntil && new Date(lockedUntil) > new Date();
   if (locked) return (
-    <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '0.625rem', fontWeight: 700, background: 'rgba(239,68,68,0.12)', color: C.red }}>
+    <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '0.625rem', fontWeight: 700, background: `${C.red}1f`, color: C.red }}>
       LOCKED ({loginAttempts} att.)
     </span>
   );
   if (loginAttempts > 0) return (
-    <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '0.625rem', fontWeight: 700, background: 'rgba(245,158,11,0.1)', color: C.amber }}>
+    <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '0.625rem', fontWeight: 700, background: `${C.amber}1a`, color: C.amber }}>
       {loginAttempts} failed
     </span>
   );
   return (
-    <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '0.625rem', fontWeight: 600, background: 'rgba(16,185,129,0.08)', color: C.green }}>
+    <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '0.625rem', fontWeight: 600, background: `${C.green}14`, color: C.green }}>
       Active
     </span>
   );
@@ -103,9 +87,9 @@ function btn(bg: string, color: string): React.CSSProperties {
 }
 
 const PLAN_META: Record<string, { label: string; bg: string; color: string }> = {
-  STARTER:    { label: 'Starter',    bg: 'rgba(100,116,139,0.12)', color: '#94a3b8' },
-  PRO:        { label: 'Pro',        bg: 'rgba(59,130,246,0.12)',  color: '#60a5fa' },
-  ENTERPRISE: { label: 'Enterprise', bg: 'rgba(139,92,246,0.12)', color: '#a78bfa' },
+  STARTER:    { label: 'Starter',    bg: `${C.textMuted}1f`, color: C.textSecondary },
+  PRO:        { label: 'Pro',        bg: `${C.blue}1f`,  color: C.accentText },
+  ENTERPRISE: { label: 'Enterprise', bg: `${C.purple}1f`, color: C.accentText },
 };
 
 function PlanBadge({ plan }: { plan?: string }) {
@@ -242,7 +226,7 @@ export default function UsersPage() {
       {/* Temp password modal */}
       {tempPwModal && (
         <div style={{
-          background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.25)',
+          background: `${C.green}0f`, border: `1px solid ${C.green}40`,
           borderRadius: '12px', padding: '1rem 1.25rem',
           display: 'flex', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap',
         }}>
@@ -258,11 +242,11 @@ export default function UsersPage() {
                 {tempPwModal.tempPassword}
               </code>
               <button onClick={() => { navigator.clipboard.writeText(tempPwModal.tempPassword).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); }}
-                style={btn('rgba(16,185,129,0.15)', C.green)}>
+                style={btn(`${C.green}26`, C.green)}>
                 <Icon d={Icons.copy} size={11} color={C.green} />
                 {copied ? 'Copied!' : 'Copy'}
               </button>
-              <button onClick={() => setTempPwModal(null)} style={btn('rgba(100,116,139,0.12)', C.textSecondary)}>
+              <button onClick={() => setTempPwModal(null)} style={btn(`${C.textMuted}1f`, C.textSecondary)}>
                 <Icon d={Icons.x} size={11} color={C.textSecondary} /> Dismiss
               </button>
             </div>
@@ -271,7 +255,7 @@ export default function UsersPage() {
       )}
 
       {error && (
-        <div style={{ padding: '0.75rem 1rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '10px', color: C.red, fontSize: '0.8125rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ padding: '0.75rem 1rem', background: `${C.red}14`, border: `1px solid ${C.red}33`, borderRadius: '10px', color: C.red, fontSize: '0.8125rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           {error}
           <button onClick={() => setError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.red }}>
             <Icon d={Icons.x} size={13} color={C.red} />
@@ -312,7 +296,7 @@ export default function UsersPage() {
         <select value={roleFilter} onChange={e => { setRoleFilter(e.target.value); setPage(1); }} style={selectStyle}>
           {ROLES.map(r => <option key={r} value={r}>{r === 'ALL' ? 'All Roles' : r}</option>)}
         </select>
-        <button onClick={load} style={{ ...btn('rgba(59,130,246,0.15)', C.blue), padding: '0.625rem 1rem' }}>
+        <button onClick={load} style={{ ...btn(`${C.blue}26`, C.blue), padding: '0.625rem 1rem' }}>
           <Icon d={Icons.refresh} size={12} color={C.blue} />
           Refresh
         </button>
@@ -352,7 +336,7 @@ export default function UsersPage() {
               {!loading && users.map((u: any) => (
                 <React.Fragment key={u.id}>
                   {editingId === u.id ? (
-                    <tr style={{ borderTop: `1px solid ${C.cardBorder}`, background: 'rgba(59,130,246,0.04)' }}>
+                    <tr style={{ borderTop: `1px solid ${C.cardBorder}`, background: `${C.blue}0a` }}>
                       <td colSpan={7} style={{ padding: '0.875rem 1.25rem' }}>
                         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
                           <span style={{ fontSize: '0.75rem', fontWeight: 600, color: C.blue, marginRight: '0.25rem', flexShrink: 0 }}>
@@ -379,7 +363,7 @@ export default function UsersPage() {
                             <Icon d={Icons.save} size={11} color="#fff" />
                             {actionLoading === u.id + '_edit' ? 'Saving…' : 'Save'}
                           </button>
-                          <button onClick={() => setEditingId(null)} style={btn('rgba(100,116,139,0.12)', C.textSecondary)}>
+                          <button onClick={() => setEditingId(null)} style={btn(`${C.textMuted}1f`, C.textSecondary)}>
                             <Icon d={Icons.x} size={11} color={C.textSecondary} /> Cancel
                           </button>
                         </div>
@@ -388,7 +372,7 @@ export default function UsersPage() {
                   ) : (
                     <tr
                       style={{ borderTop: `1px solid ${C.cardBorder}`, transition: 'background 0.12s' }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'rgba(59,130,246,0.03)'; }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = `${C.blue}08`; }}
                       onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'; }}>
 
                       {/* User */}
@@ -396,10 +380,10 @@ export default function UsersPage() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                           <div style={{
                             width: '30px', height: '30px', borderRadius: '50%', flexShrink: 0,
-                            background: u.role === 'OWNER' ? 'linear-gradient(135deg,#8b5cf6,#3b82f6)' : 'rgba(255,255,255,0.06)',
+                            background: u.role === 'OWNER' ? `linear-gradient(135deg,${C.purple},${C.blue})` : `${C.text}0f`,
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             fontSize: '0.6875rem', fontWeight: 800, color: '#fff',
-                            border: '1px solid rgba(255,255,255,0.08)',
+                            border: `1px solid ${C.text}14`,
                           }}>
                             {u.name?.charAt(0)?.toUpperCase() ?? '?'}
                           </div>
@@ -456,14 +440,14 @@ export default function UsersPage() {
                           <button
                             onClick={() => { setEditingId(u.id); setEditForm({ name: u.name ?? '', email: u.email ?? '', role: u.role }); }}
                             title="Edit name / email / role"
-                            style={btn('rgba(59,130,246,0.1)', '#93c5fd')}>
-                            <Icon d={Icons.edit} size={10} color="#93c5fd" /> Edit
+                            style={btn(`${C.blue}1a`, C.accentText)}>
+                            <Icon d={Icons.edit} size={10} color={C.accentText} /> Edit
                           </button>
                           <button
                             onClick={() => handleResetPassword(u)}
                             disabled={actionLoading === u.id + '_reset'}
                             title="Generate temporary password"
-                            style={btn('rgba(245,158,11,0.1)', C.amber)}>
+                            style={btn(`${C.amber}1a`, C.amber)}>
                             <Icon d={Icons.reset} size={10} color={C.amber} />
                             {actionLoading === u.id + '_reset' ? '…' : 'Reset PW'}
                           </button>
@@ -472,7 +456,7 @@ export default function UsersPage() {
                               onClick={() => handleUnlock(u)}
                               disabled={actionLoading === u.id + '_unlock'}
                               title="Clear lockout"
-                              style={btn('rgba(239,68,68,0.1)', C.red)}>
+                              style={btn(`${C.red}1a`, C.red)}>
                               <Icon d={Icons.lock} size={10} color={C.red} />
                               {actionLoading === u.id + '_unlock' ? '…' : 'Unlock'}
                             </button>
@@ -482,8 +466,8 @@ export default function UsersPage() {
                               onClick={() => handleDelete(u)}
                               disabled={actionLoading === u.id + '_del'}
                               title="Delete user"
-                              style={btn('rgba(239,68,68,0.08)', '#f87171')}>
-                              <Icon d={Icons.trash} size={10} color="#f87171" />
+                              style={btn(`${C.red}14`, C.red)}>
+                              <Icon d={Icons.trash} size={10} color={C.red} />
                               {actionLoading === u.id + '_del' ? '…' : 'Delete'}
                             </button>
                           )}
@@ -516,14 +500,14 @@ export default function UsersPage() {
           </span>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
             <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-              style={{ ...btn('rgba(255,255,255,0.05)', C.textSecondary), opacity: page === 1 ? 0.4 : 1, cursor: page === 1 ? 'not-allowed' : 'pointer', padding: '0.5rem 1rem' }}>
+              style={{ ...btn(`${C.text}0d`, C.textSecondary), opacity: page === 1 ? 0.4 : 1, cursor: page === 1 ? 'not-allowed' : 'pointer', padding: '0.5rem 1rem' }}>
               ← Prev
             </button>
             <span style={{ padding: '0.375rem 0.875rem', color: C.textSecondary, fontWeight: 700, background: C.surface, borderRadius: '8px', border: `1px solid ${C.cardBorder}` }}>
               {page}
             </span>
             <button onClick={() => setPage(p => p + 1)} disabled={(users.length ?? 0) < 30}
-              style={{ ...btn('rgba(255,255,255,0.05)', C.textSecondary), opacity: (users.length ?? 0) < 30 ? 0.4 : 1, cursor: (users.length ?? 0) < 30 ? 'not-allowed' : 'pointer', padding: '0.5rem 1rem' }}>
+              style={{ ...btn(`${C.text}0d`, C.textSecondary), opacity: (users.length ?? 0) < 30 ? 0.4 : 1, cursor: (users.length ?? 0) < 30 ? 'not-allowed' : 'pointer', padding: '0.5rem 1rem' }}>
               Next →
             </button>
           </div>

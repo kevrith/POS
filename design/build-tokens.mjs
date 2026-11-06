@@ -69,7 +69,46 @@ export const BaseColors = {
 `;
 }
 
+/**
+ * The light, Mist-and-violet palette for the two apps that are not Tailwind: the admin console (inline styles)
+ * and the landing site (plain CSS). One semantic vocabulary, built from the same tokens as the web app.
+ * Blue, purple, cyan and indigo all collapse onto the brand scale (a module does not get its own accent);
+ * green, amber and red keep their status meaning and use the text-safe shades.
+ */
+function semantic() {
+  const b = t.brand, n = t.neutral;
+  return {
+    bg: n[100], surface: n[50], card: '#FFFFFF', cardBorder: n[200], cardBorder2: n[300],
+    border: n[200], text: n[900], textSecondary: n[600], textMuted: n[500],
+    input: '#FFFFFF', inputBorder: n[300],
+    sidebar: '#FFFFFF', sidebarBorder: n[200],
+    accent: b[600], accentDark: b[700], accentText: t.brandText.light, accentSoft: b[100], accentTint: b[50],
+    blue: t.brandText.light, blue2: t.brandText.light, purple: b[700], cyan: b[400], indigo: b[800],
+    green: t.statusText.green, amber: t.statusText.amber, red: t.statusText.red,
+    success: t.status.success, warning: t.status.warning, danger: t.status.danger,
+    successSoft: t.status.successSoft, warningSoft: t.status.warningSoft, dangerSoft: t.status.dangerSoft,
+    overlay: n[950],
+  };
+}
+
+function adminTs() {
+  return `// ${HEADER}
+/** Admin console colours: Signal Violet on Mist Gray. Append two hex digits for transparency, e.g. \`\${C.blue}1f\`. */
+export const C = ${JSON.stringify(semantic(), null, 2).replace(/"([A-Za-z0-9_]+)":/g, '$1:').replace(/"/g, "'")} as const;
+`;
+}
+
+/** CSS variables for the apps that style with plain CSS (the landing site, and the admin console's global rules). */
+function landingCss() {
+  const s = semantic();
+  const kebab = (k) => k.replace(/[A-Z]/g, (m) => '-' + m.toLowerCase());
+  return `/* ${HEADER} */\n:root {\n${Object.entries(s).map(([k, v]) => `  --${kebab(k)}: ${v};`).join('\n')}\n  --brand-50: ${t.brand[50]};\n  --brand-100: ${t.brand[100]};\n  --brand-200: ${t.brand[200]};\n  --brand-300: ${t.brand[300]};\n  --brand-400: ${t.brand[400]};\n  --brand-500: ${t.brand[500]};\n  --brand-600: ${t.brand[600]};\n  --brand-700: ${t.brand[700]};\n  --brand-800: ${t.brand[800]};\n  --brand-900: ${t.brand[900]};\n  --brand-950: ${t.brand[950]};\n  --radius-sm: ${t.radius.sm}px;\n  --radius-md: ${t.radius.md}px;\n  --radius-lg: ${t.radius.lg}px;\n  --radius-xl: ${t.radius.xl}px;\n}\n`;
+}
+
 const targets = [
+  ['apps/admin/src/generated/tokens.ts', adminTs()],
+  ['apps/landing/tokens.css', landingCss()],
+  ['apps/admin/src/generated/tokens.css', landingCss()],
   ['apps/web/src/styles/tokens.css', webCss()],
   ...['mobile-pos', 'mobile-customer', 'mobile-driver', 'mobile-agent'].map((a) => [`apps/${a}/constants/tokens.ts`, mobileTs()]),
 ];

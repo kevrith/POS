@@ -1,12 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { adminApi } from '../lib/api';
+import { C } from '../generated/tokens';
 
-const C = {
-  card: '#111827', cardBorder: '#1e293b',
-  text: '#f1f5f9', textMuted: '#64748b', textSecondary: '#94a3b8',
-  input: '#020617', inputBorder: '#1e293b',
-  blue: '#3b82f6', green: '#10b981', amber: '#f59e0b', red: '#ef4444', purple: '#8b5cf6',
-};
 
 interface Affiliate {
   id: string; name: string; email: string; phone?: string | null; code: string; status: string;

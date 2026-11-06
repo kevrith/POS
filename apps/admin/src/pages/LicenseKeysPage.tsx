@@ -1,12 +1,8 @@
 import { useState, useEffect } from 'react';
 import { adminApi } from '../lib/api';
+import { C } from '../generated/tokens';
+import { KeyRound } from 'lucide-react';
 
-const C = {
-  card: '#111827', cardBorder: '#1e293b',
-  text: '#f1f5f9', textMuted: '#64748b', textSecondary: '#94a3b8',
-  input: '#020617', inputBorder: '#1e293b',
-  blue: '#3b82f6', green: '#10b981', amber: '#f59e0b', red: '#ef4444', purple: '#8b5cf6',
-};
 
 const inputStyle: React.CSSProperties = {
   padding: '0.75rem 1rem', background: C.input,
@@ -16,12 +12,12 @@ const inputStyle: React.CSSProperties = {
 
 function TierBadge({ tier }: { tier: string }) {
   const m: Record<string, { bg: string; color: string }> = {
-    LIFETIME:   { bg: 'rgba(245,158,11,0.15)',  color: '#f59e0b' },
-    ENTERPRISE: { bg: 'rgba(139,92,246,0.12)', color: '#8b5cf6' },
-    PRO:        { bg: 'rgba(59,130,246,0.12)',  color: '#3b82f6' },
-    GROWTH:     { bg: 'rgba(6,182,212,0.12)',   color: '#06b6d4' },
-    STARTER:    { bg: 'rgba(100,116,139,0.12)', color: '#64748b' },
-    FREE:       { bg: 'rgba(16,185,129,0.12)',  color: '#10b981' },
+    LIFETIME:   { bg: `${C.amber}26`,  color: C.amber },
+    ENTERPRISE: { bg: `${C.purple}1f`, color: C.purple },
+    PRO:        { bg: `${C.blue}1f`,  color: C.blue },
+    GROWTH:     { bg: `${C.cyan}1f`,   color: C.accentText },
+    STARTER:    { bg: `${C.textMuted}1f`, color: C.textMuted },
+    FREE:       { bg: `${C.green}1f`,  color: C.green },
   };
   const c = m[tier] ?? m.FREE;
   return (
@@ -130,7 +126,7 @@ export default function LicenseKeysPage() {
           borderRadius: '14px', padding: '1.5rem',
         }}>
           <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: C.text, marginBottom: '0.375rem' }}>
-            🔑 Generic License Key
+            Generic License Key
           </h3>
           <p style={{ fontSize: '0.75rem', color: C.textMuted, marginBottom: '1.25rem' }}>
             Not machine-bound. Works on any device. Use for trials or testing.
@@ -147,8 +143,8 @@ export default function LicenseKeysPage() {
                 Expires In (days)
               </label>
               {tier === 'LIFETIME' ? (
-                <div style={{ ...inputStyle, width: '100%', color: C.amber, background: 'rgba(245,158,11,0.07)', border: `1px solid rgba(245,158,11,0.3)`, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span>♾️</span> Never expires
+                <div style={{ ...inputStyle, width: '100%', color: C.amber, background: `${C.amber}12`, border: `1px solid ${C.amber}4c`, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  Never expires
                 </div>
               ) : (
                 <input
@@ -163,14 +159,14 @@ export default function LicenseKeysPage() {
               onClick={createKey} disabled={creating}
               style={{
                 padding: '0.75rem 1.5rem',
-                background: creating ? 'rgba(16,185,129,0.5)' : C.green,
+                background: creating ? `${C.green}80` : C.green,
                 color: '#fff', border: 'none', borderRadius: '10px',
                 cursor: creating ? 'not-allowed' : 'pointer',
                 fontWeight: 700, fontSize: '0.875rem',
-                boxShadow: creating ? 'none' : '0 4px 12px rgba(16,185,129,0.3)',
+                boxShadow: creating ? 'none' : `0 4px 12px ${C.green}4c`,
                 transition: 'all 0.15s',
               }}>
-              {creating ? '⏳ Generating…' : '✨ Generate Generic Key'}
+              {creating ? 'Generating…' : 'Generate Generic Key'}
             </button>
           </div>
         </div>
@@ -181,7 +177,7 @@ export default function LicenseKeysPage() {
           borderRadius: '14px', padding: '1.5rem',
         }}>
           <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: C.text, marginBottom: '0.375rem' }}>
-            🖥️ Machine-Bound Key
+            Machine-Bound Key
           </h3>
           <p style={{ fontSize: '0.75rem', color: C.textMuted, marginBottom: '1.25rem' }}>
             Tied to a specific device. Customer finds their Machine ID in the desktop setup wizard.
@@ -209,8 +205,8 @@ export default function LicenseKeysPage() {
               <div style={{ flex: 1 }}>
                 <label style={{ display: 'block', fontSize: '0.75rem', color: C.textMuted, marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Days</label>
                 {mbTier === 'LIFETIME' ? (
-                  <div style={{ ...inputStyle, color: C.amber, background: 'rgba(245,158,11,0.07)', border: `1px solid rgba(245,158,11,0.3)`, display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.8125rem' }}>
-                    ♾️ Never
+                  <div style={{ ...inputStyle, color: C.amber, background: `${C.amber}12`, border: `1px solid ${C.amber}4c`, display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.8125rem' }}>
+                    Never
                   </div>
                 ) : (
                   <input
@@ -226,20 +222,20 @@ export default function LicenseKeysPage() {
               onClick={createMachineBoundKey} disabled={mbCreating}
               style={{
                 padding: '0.75rem 1.5rem',
-                background: mbCreating ? 'rgba(139,92,246,0.5)' : C.purple,
+                background: mbCreating ? `${C.purple}80` : C.purple,
                 color: '#fff', border: 'none', borderRadius: '10px',
                 cursor: mbCreating ? 'not-allowed' : 'pointer',
                 fontWeight: 700, fontSize: '0.875rem',
-                boxShadow: mbCreating ? 'none' : '0 4px 12px rgba(139,92,246,0.3)',
+                boxShadow: mbCreating ? 'none' : `0 4px 12px ${C.purple}4c`,
                 transition: 'all 0.15s',
               }}>
-              {mbCreating ? '⏳ Generating…' : '🔒 Generate Machine-Bound Key'}
+              {mbCreating ? 'Generating…' : 'Generate Machine-Bound Key'}
             </button>
 
             {/* Result */}
             {mbResult && (
               <div style={{
-                background: 'rgba(139,92,246,0.08)', border: `1px solid ${C.purple}40`,
+                background: `${C.purple}14`, border: `1px solid ${C.purple}40`,
                 borderRadius: '10px', padding: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.75rem',
               }}>
                 <code style={{ flex: 1, color: C.purple, fontSize: '0.875rem', fontFamily: 'monospace', wordBreak: 'break-all' }}>
@@ -247,11 +243,11 @@ export default function LicenseKeysPage() {
                 </code>
                 <button onClick={copyMbKey} style={{
                   padding: '0.4rem 0.75rem', flexShrink: 0,
-                  background: mbCopied ? 'rgba(16,185,129,0.15)' : 'rgba(139,92,246,0.15)',
+                  background: mbCopied ? `${C.green}26` : `${C.purple}26`,
                   color: mbCopied ? C.green : C.purple,
                   border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 700,
                 }}>
-                  {mbCopied ? '✓ Copied' : '📋 Copy'}
+                  {mbCopied ? 'Copied' : 'Copy'}
                 </button>
               </div>
             )}
@@ -268,7 +264,7 @@ export default function LicenseKeysPage() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: '#0a0f1e' }}>
+              <tr style={{ background: C.surface }}>
                 {['Key', 'Tier', 'Business', 'Status', 'Expires', 'Created', 'Actions'].map(h => (
                   <th key={h} style={{
                     padding: '0.875rem 1.25rem', textAlign: 'left',
@@ -284,20 +280,20 @@ export default function LicenseKeysPage() {
               )}
               {!loading && data?.keys?.map((k: any) => (
                 <tr key={k.id} style={{ borderTop: `1px solid ${C.cardBorder}`, transition: 'background 0.1s' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'rgba(255,255,255,0.02)'; }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = `${C.text}05`; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'; }}>
                   <td style={{ padding: '0.875rem 1.25rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <code style={{ color: '#60a5fa', fontSize: '0.8125rem', fontFamily: 'monospace', background: 'rgba(59,130,246,0.08)', padding: '2px 8px', borderRadius: '6px' }}>
+                      <code style={{ color: C.accentText, fontSize: '0.8125rem', fontFamily: 'monospace', background: `${C.blue}14`, padding: '2px 8px', borderRadius: '6px' }}>
                         {k.key}
                       </code>
                       <button onClick={() => copyKey(k.key, k.id)} style={{
-                        padding: '2px 8px', background: copiedId === k.id ? 'rgba(16,185,129,0.15)' : 'rgba(59,130,246,0.15)',
-                        color: copiedId === k.id ? C.green : '#93c5fd',
+                        padding: '2px 8px', background: copiedId === k.id ? `${C.green}26` : `${C.blue}26`,
+                        color: copiedId === k.id ? C.green : C.accentText,
                         border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '0.6875rem', fontWeight: 600,
                         transition: 'all 0.2s',
                       }}>
-                        {copiedId === k.id ? '✓' : '📋'}
+                        {copiedId === k.id ? 'Copied' : 'Copy'}
                       </button>
                     </div>
                   </td>
@@ -315,7 +311,7 @@ export default function LicenseKeysPage() {
                   <td style={{ padding: '0.875rem 1.25rem' }}>
                     <span style={{
                       padding: '2px 10px', borderRadius: '20px', fontSize: '0.6875rem', fontWeight: 700,
-                      background: k.isActive ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
+                      background: k.isActive ? `${C.green}1f` : `${C.red}1f`,
                       color: k.isActive ? C.green : C.red,
                     }}>
                       {k.isActive ? 'Active' : 'Revoked'}
@@ -336,11 +332,11 @@ export default function LicenseKeysPage() {
                           title="Re-email the existing key to the business owner"
                           style={{
                             padding: '0.3rem 0.625rem',
-                            background: 'rgba(59,130,246,0.12)', color: '#60a5fa',
+                            background: `${C.blue}1f`, color: C.accentText,
                             border: 'none', borderRadius: '6px', cursor: actionLoading === `${k.id}-resend` ? 'not-allowed' : 'pointer',
                             fontSize: '0.6875rem', fontWeight: 600, opacity: actionLoading === `${k.id}-resend` ? 0.6 : 1,
                           }}>
-                          {actionLoading === `${k.id}-resend` ? '⏳' : '📧 Resend'}
+                          {actionLoading === `${k.id}-resend` ? '…' : 'Resend'}
                         </button>
                       )}
                       {k.isActive && k.businessId && (
@@ -350,17 +346,17 @@ export default function LicenseKeysPage() {
                           title="Revoke this key and issue a new one, then email the new key to the owner"
                           style={{
                             padding: '0.3rem 0.625rem',
-                            background: 'rgba(245,158,11,0.12)', color: C.amber,
+                            background: `${C.amber}1f`, color: C.amber,
                             border: 'none', borderRadius: '6px', cursor: actionLoading === `${k.id}-regen` ? 'not-allowed' : 'pointer',
                             fontSize: '0.6875rem', fontWeight: 600, opacity: actionLoading === `${k.id}-regen` ? 0.6 : 1,
                           }}>
-                          {actionLoading === `${k.id}-regen` ? '⏳' : '🔄 Regen'}
+                          {actionLoading === `${k.id}-regen` ? '…' : 'Regen'}
                         </button>
                       )}
                       {k.isActive && (
                         <button onClick={() => revoke(k.id)} style={{
                           padding: '0.3rem 0.625rem',
-                          background: 'rgba(239,68,68,0.12)', color: C.red,
+                          background: `${C.red}1f`, color: C.red,
                           border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.6875rem', fontWeight: 600,
                         }}>
                           Revoke
@@ -374,7 +370,7 @@ export default function LicenseKeysPage() {
           </table>
           {!loading && !data?.keys?.length && (
             <div style={{ padding: '3rem', textAlign: 'center', color: C.textMuted }}>
-              <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🔑</div>
+              <KeyRound size={32} aria-hidden style={{ marginBottom: '0.5rem', color: C.textMuted }} />
               No license keys generated yet
             </div>
           )}

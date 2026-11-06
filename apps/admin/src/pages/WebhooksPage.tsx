@@ -1,11 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { adminApi } from '../lib/api';
+import { C } from '../generated/tokens';
 
-const C = {
-  bg: '#030712', surface: '#0a0f1e', card: '#0f172a', cardBorder: '#1e293b',
-  text: '#f1f5f9', textMuted: '#64748b', textSecondary: '#94a3b8',
-  blue: '#3b82f6', green: '#10b981', amber: '#f59e0b', red: '#ef4444',
-};
 
 function Icon({ d, size = 16, color }: { d: string; size?: number; color?: string }) {
   return (
@@ -83,7 +79,7 @@ export default function WebhooksPage() {
       </div>
 
       {msg && (
-        <div style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 8, padding: '0.75rem 1rem', color: C.green, fontSize: '0.8125rem' }}>
+        <div style={{ background: `${C.green}1a`, border: `1px solid ${C.green}40`, borderRadius: 8, padding: '0.75rem 1rem', color: C.green, fontSize: '0.8125rem' }}>
           {msg}
         </div>
       )}
@@ -123,7 +119,7 @@ export default function WebhooksPage() {
                   try { events = JSON.parse(w.events); } catch { events = [w.events]; }
                   return (
                     <tr key={w.id} style={{ borderBottom: i < webhooks.length - 1 ? `1px solid ${C.cardBorder}` : 'none' }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'rgba(59,130,246,0.04)'; }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = `${C.blue}0a`; }}
                       onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'; }}>
                       <td style={{ padding: '0.875rem 1rem' }}>
                         <div style={{ fontWeight: 600, color: C.text, fontSize: '0.8125rem' }}>{w.business?.name ?? '—'}</div>
@@ -138,7 +134,7 @@ export default function WebhooksPage() {
                       <td style={{ padding: '0.875rem 1rem' }}>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                           {events.slice(0, 3).map((ev: string) => (
-                            <span key={ev} style={{ fontSize: '0.5625rem', background: 'rgba(59,130,246,0.1)', color: C.blue, border: '1px solid rgba(59,130,246,0.2)', padding: '1px 6px', borderRadius: 8, whiteSpace: 'nowrap' }}>
+                            <span key={ev} style={{ fontSize: '0.5625rem', background: `${C.blue}1a`, color: C.blue, border: `1px solid ${C.blue}33`, padding: '1px 6px', borderRadius: 8, whiteSpace: 'nowrap' }}>
                               {ev}
                             </span>
                           ))}
@@ -149,8 +145,8 @@ export default function WebhooksPage() {
                         <span style={{
                           fontSize: '0.6875rem', fontWeight: 700,
                           color: w.isActive ? C.green : C.textMuted,
-                          background: w.isActive ? 'rgba(16,185,129,0.1)' : 'rgba(100,116,139,0.1)',
-                          border: `1px solid ${w.isActive ? 'rgba(16,185,129,0.25)' : 'rgba(100,116,139,0.25)'}`,
+                          background: w.isActive ? `${C.green}1a` : `${C.textMuted}1a`,
+                          border: `1px solid ${w.isActive ? `${C.green}40` : `${C.textMuted}40`}`,
                           padding: '2px 8px', borderRadius: 10,
                         }}>
                           {w.isActive ? 'ACTIVE' : 'DISABLED'}
@@ -171,7 +167,7 @@ export default function WebhooksPage() {
                           {w.failureCount > 0 && (
                             <button onClick={() => retry(w.id)} disabled={retrying === w.id}
                               title="Reset failure count"
-                              style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 6, border: `1px solid ${C.amber}`, background: 'rgba(245,158,11,0.1)', color: C.amber, cursor: 'pointer', fontSize: '0.6875rem', fontWeight: 600 }}>
+                              style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 6, border: `1px solid ${C.amber}`, background: `${C.amber}1a`, color: C.amber, cursor: 'pointer', fontSize: '0.6875rem', fontWeight: 600 }}>
                               <Icon d={Icons.retry} size={11} color={C.amber} />
                               {retrying === w.id ? '…' : 'Retry'}
                             </button>

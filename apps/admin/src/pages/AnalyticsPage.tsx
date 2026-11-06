@@ -1,12 +1,7 @@
 import { useState, useEffect } from 'react';
 import { adminApi } from '../lib/api';
+import { C } from '../generated/tokens';
 
-const C = {
-  bg: '#030712', surface: '#0a0f1e', card: '#0f172a', cardBorder: '#1e293b',
-  cardBorder2: '#263347', text: '#f1f5f9', textMuted: '#64748b',
-  textSecondary: '#94a3b8', blue: '#3b82f6', green: '#10b981',
-  amber: '#f59e0b', red: '#ef4444', purple: '#8b5cf6', cyan: '#06b6d4',
-};
 
 function Icon({ d, size = 16, color }: { d: string; size?: number; color?: string }) {
   return (
@@ -74,10 +69,10 @@ function ChurnTab() {
       {/* Date-range picker */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
         <span style={{ fontSize: '0.8125rem', color: C.textMuted, fontWeight: 500 }}>Range:</span>
-        <input type="date" value={from} onChange={e => setFrom(e.target.value)}
+        <input type="date" aria-label="From date" value={from} onChange={e => setFrom(e.target.value)}
           style={{ padding: '5px 10px', borderRadius: 8, border: `1px solid ${C.cardBorder}`, background: C.surface, color: C.text, fontSize: '0.8125rem', outline: 'none' }} />
         <span style={{ color: C.textMuted, fontSize: '0.8125rem' }}>→</span>
-        <input type="date" value={to} onChange={e => setTo(e.target.value)}
+        <input type="date" aria-label="To date" value={to} onChange={e => setTo(e.target.value)}
           style={{ padding: '5px 10px', borderRadius: 8, border: `1px solid ${C.cardBorder}`, background: C.surface, color: C.text, fontSize: '0.8125rem', outline: 'none' }} />
         <button onClick={() => load(from || undefined, to || undefined)}
           style={{ padding: '5px 16px', borderRadius: 8, background: C.blue, color: '#fff', border: 'none', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer' }}>
@@ -203,7 +198,7 @@ function CohortTab() {
           <tbody>
             {cohorts.map((c: any, i: number) => (
               <tr key={c.month} style={{ borderBottom: i < cohorts.length - 1 ? `1px solid ${C.cardBorder}` : 'none' }}
-                onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'rgba(59,130,246,0.04)'; }}
+                onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = `${C.blue}0a`; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'; }}>
                 <td style={{ padding: '0.875rem 1rem', fontWeight: 600, color: C.text, fontSize: '0.875rem' }}>{c.month}</td>
                 <td style={{ padding: '0.875rem 1rem', color: C.textSecondary, fontSize: '0.875rem' }}>{c.total}</td>
@@ -287,7 +282,7 @@ function LTVTab() {
                   const planColor = biz.subscriptionTier === 'ENTERPRISE' ? C.purple : biz.subscriptionTier === 'PRO' ? C.blue : C.textMuted;
                   return (
                     <tr key={biz.id} style={{ borderBottom: i < businesses.length - 1 ? `1px solid ${C.cardBorder}` : 'none' }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'rgba(59,130,246,0.04)'; }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = `${C.blue}0a`; }}
                       onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'; }}>
                       <td style={{ padding: '0.875rem 1rem' }}>
                         <div style={{ fontWeight: 600, color: C.text, fontSize: '0.875rem' }}>{biz.name}</div>
@@ -308,7 +303,7 @@ function LTVTab() {
                       <td style={{ padding: '0.875rem 1rem' }}>
                         <span style={{ fontWeight: 700, color: C.green, fontSize: '0.875rem' }}>{fmt(biz.ltvCents)}</span>
                       </td>
-                      <td style={{ padding: '0.875rem 1rem', color: C.cyan, fontSize: '0.875rem', fontWeight: 600 }}>
+                      <td style={{ padding: '0.875rem 1rem', color: C.accentText, fontSize: '0.875rem', fontWeight: 600 }}>
                         {fmt(biz.totalGMVCents)}
                       </td>
                     </tr>
@@ -372,7 +367,7 @@ function PaystackTab() {
         {[
           { label: 'Total Collected (KES)',  value: fmt(data.totalCollectedCents),  color: C.green },
           { label: 'Total Transactions',     value: data.totalTransactions,         color: C.blue },
-          { label: 'Active Subscriptions',   value: data.activeSubscriptions,       color: C.cyan },
+          { label: 'Active Subscriptions',   value: data.activeSubscriptions,       color: C.accentText },
         ].map(kpi => (
           <div key={kpi.label} style={{ background: C.card, border: `1px solid ${C.cardBorder}`, borderRadius: 12, padding: '1.25rem' }}>
             <div style={{ fontSize: '1.625rem', fontWeight: 800, color: kpi.color }}>{kpi.value}</div>
@@ -450,7 +445,7 @@ export default function AnalyticsPage() {
     { id: 'churn',    label: 'Churn',          icon: Icons.churn,    color: C.red },
     { id: 'cohort',   label: 'Cohort',         icon: Icons.cohort,   color: C.blue },
     { id: 'ltv',      label: 'LTV',            icon: Icons.ltv,      color: C.green },
-    { id: 'paystack', label: 'Paystack',        icon: Icons.paystack, color: C.cyan },
+    { id: 'paystack', label: 'Paystack',        icon: Icons.paystack, color: C.accentText },
   ];
 
   const handleExport = async () => {
@@ -492,7 +487,7 @@ export default function AnalyticsPage() {
             color: tab === t.id ? t.color : C.textMuted,
             fontSize: '0.8125rem', fontWeight: tab === t.id ? 600 : 400,
             transition: 'all 0.15s',
-            boxShadow: tab === t.id ? '0 1px 4px rgba(0,0,0,0.3)' : 'none',
+            boxShadow: tab === t.id ? `0 1px 4px ${C.overlay}33` : 'none',
           }}>
             <Icon d={t.icon} size={13} color={tab === t.id ? t.color : C.textMuted} />
             {t.label}

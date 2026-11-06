@@ -20,6 +20,12 @@ Generated from `tokens.json`:
   and `BaseColors`. Each mobile app's `constants/theme.ts` builds its `Colors` from `BaseColors`. The mobile apps are
   outside the npm workspace, so they cannot import this package and get a copy.
 
+- `apps/admin/src/generated/tokens.ts` - the admin console's `C` palette (inline styles, append two hex digits for
+  transparency: `${C.blue}1f`); `apps/admin/src/generated/tokens.css` and `apps/landing/tokens.css` - the same colours as
+  CSS variables (`--bg`, `--card`, `--text`, `--accent`, `--brand-600` ...) for the admin's global rules and the landing site.
+  Both are the light Mist and Signal Violet look. Blue, purple, cyan and indigo are all brand shades there; green, amber and
+  red use the `statusText` shades so they stay readable on their own 12% tint.
+
 `apps/web/tailwind.config.js` reads `tokens.json` directly.
 
 ## Rules

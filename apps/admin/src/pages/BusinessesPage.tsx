@@ -2,25 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { adminApi } from '../lib/api';
 import { useDialog } from '../components/Dialog';
 import GiftPlanModal from '../components/GiftPlanModal';
+import { C } from '../generated/tokens';
 
-const C = {
-  bg:            '#030712',
-  surface:       '#0a0f1e',
-  card:          '#0f172a',
-  cardBorder:    '#1e293b',
-  cardBorder2:   '#263347',
-  text:          '#f1f5f9',
-  textMuted:     '#64748b',
-  textSecondary: '#94a3b8',
-  input:         '#060c1a',
-  inputBorder:   '#1e293b',
-  blue:          '#3b82f6',
-  green:         '#10b981',
-  amber:         '#f59e0b',
-  red:           '#ef4444',
-  purple:        '#8b5cf6',
-  cyan:          '#06b6d4',
-};
 
 function Icon({ d, size = 14, color }: { d: string; size?: number; color?: string }) {
   return (
@@ -46,10 +29,10 @@ const Icons = {
 
 function StatusBadge({ status }: { status: string }) {
   const m: Record<string, { bg: string; color: string }> = {
-    ACTIVE:    { bg: 'rgba(16,185,129,0.12)',  color: '#10b981' },
-    TRIAL:     { bg: 'rgba(245,158,11,0.12)',  color: '#f59e0b' },
-    EXPIRED:   { bg: 'rgba(239,68,68,0.12)',   color: '#ef4444' },
-    CANCELLED: { bg: 'rgba(100,116,139,0.12)', color: '#64748b' },
+    ACTIVE:    { bg: `${C.green}1f`,  color: C.green },
+    TRIAL:     { bg: `${C.amber}1f`,  color: C.amber },
+    EXPIRED:   { bg: `${C.red}1f`,   color: C.red },
+    CANCELLED: { bg: `${C.textMuted}1f`, color: C.textMuted },
   };
   const c = m[status] ?? m.CANCELLED;
   return (
@@ -63,7 +46,7 @@ function CompedBadge() {
   return (
     <span title="Complimentary — excluded from MRR and revenue"
       style={{ marginLeft: 6, padding: '1px 6px', borderRadius: 5, fontSize: '0.625rem', fontWeight: 700,
-               background: 'rgba(139,92,246,0.15)', color: '#7C3AED', border: '1px solid rgba(139,92,246,0.3)' }}>
+               background: `${C.purple}26`, color: C.accentText, border: `1px solid ${C.purple}4c` }}>
       GIFT
     </span>
   );
@@ -71,11 +54,11 @@ function CompedBadge() {
 
 function PlanBadge({ plan }: { plan: string }) {
   const m: Record<string, { bg: string; color: string }> = {
-    ENTERPRISE: { bg: 'rgba(139,92,246,0.12)', color: '#8b5cf6' },
-    PRO:        { bg: 'rgba(59,130,246,0.12)',  color: '#3b82f6' },
-    GROWTH:     { bg: 'rgba(6,182,212,0.12)',   color: '#06b6d4' },
-    STARTER:    { bg: 'rgba(100,116,139,0.1)',  color: '#94a3b8' },
-    FREE:       { bg: 'rgba(16,185,129,0.12)',  color: '#10b981' },
+    ENTERPRISE: { bg: `${C.purple}1f`, color: C.purple },
+    PRO:        { bg: `${C.blue}1f`,  color: C.blue },
+    GROWTH:     { bg: `${C.cyan}1f`,   color: C.accentText },
+    STARTER:    { bg: `${C.textMuted}1a`,  color: C.textSecondary },
+    FREE:       { bg: `${C.green}1f`,  color: C.green },
   };
   const c = m[plan ?? 'FREE'] ?? m.FREE;
   return (
@@ -87,14 +70,14 @@ function PlanBadge({ plan }: { plan: string }) {
 
 function RoleBadge({ role }: { role: string }) {
   const m: Record<string, { bg: string; color: string }> = {
-    OWNER:      { bg: 'rgba(139,92,246,0.12)', color: '#8b5cf6' },
-    MANAGER:    { bg: 'rgba(59,130,246,0.12)',  color: '#3b82f6' },
-    CASHIER:    { bg: 'rgba(16,185,129,0.12)',  color: '#10b981' },
-    ACCOUNTANT: { bg: 'rgba(99,102,241,0.12)',  color: '#818cf8' },
-    WAITER:     { bg: 'rgba(245,158,11,0.12)',  color: '#f59e0b' },
-    KITCHEN:    { bg: 'rgba(239,68,68,0.12)',   color: '#ef4444' },
+    OWNER:      { bg: `${C.purple}1f`, color: C.purple },
+    MANAGER:    { bg: `${C.blue}1f`,  color: C.blue },
+    CASHIER:    { bg: `${C.green}1f`,  color: C.green },
+    ACCOUNTANT: { bg: `${C.indigo}1f`,  color: C.accentText },
+    WAITER:     { bg: `${C.amber}1f`,  color: C.amber },
+    KITCHEN:    { bg: `${C.red}1f`,   color: C.red },
   };
-  const c = m[role] ?? { bg: 'rgba(100,116,139,0.1)', color: '#94a3b8' };
+  const c = m[role] ?? { bg: `${C.textMuted}1a`, color: C.textSecondary };
   return (
     <span style={{ padding: '1px 8px', borderRadius: '20px', fontSize: '0.625rem', fontWeight: 700, background: c.bg, color: c.color }}>
       {role}
@@ -201,14 +184,14 @@ function UserManagementPanel({ businessId, businessName }: { businessId: string;
     <tr>
       <td colSpan={8} style={{ padding: 0 }}>
         <div style={{
-          background: 'linear-gradient(180deg,rgba(59,130,246,0.05) 0%,rgba(59,130,246,0.01) 100%)',
-          borderTop: '1px solid rgba(59,130,246,0.18)', borderBottom: `1px solid ${C.cardBorder}`,
+          background: `linear-gradient(180deg,${C.blue}0d 0%,${C.blue}03 100%)`,
+          borderTop: `1px solid ${C.blue}2e`, borderBottom: `1px solid ${C.cardBorder}`,
         }}>
           {/* Panel header */}
           <div style={{ padding: '0.875rem 1.5rem', borderBottom: `1px solid ${C.cardBorder}`, display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
             <Icon d={Icons.users} size={15} color={C.blue} />
             <span style={{ fontSize: '0.875rem', fontWeight: 700, color: C.blue }}>User Management</span>
-            <span style={{ fontSize: '0.6875rem', color: '#64748b' }}>—</span>
+            <span style={{ fontSize: '0.6875rem', color: C.textMuted }}>—</span>
             <span style={{ fontSize: '0.8125rem', color: C.textSecondary, fontWeight: 500 }}>{businessName}</span>
             {!loading && (
               <span style={{ marginLeft: 'auto', fontSize: '0.6875rem', color: C.textMuted, background: C.surface, padding: '2px 10px', borderRadius: '20px', border: `1px solid ${C.cardBorder}`, fontWeight: 600 }}>
@@ -218,14 +201,14 @@ function UserManagementPanel({ businessId, businessName }: { businessId: string;
           </div>
 
           {error && (
-            <div style={{ margin: '0.75rem 1.5rem', padding: '0.5rem 0.875rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', color: C.red, fontSize: '0.8125rem' }}>
+            <div style={{ margin: '0.75rem 1.5rem', padding: '0.5rem 0.875rem', background: `${C.red}14`, border: `1px solid ${C.red}33`, borderRadius: '8px', color: C.red, fontSize: '0.8125rem' }}>
               {error}
             </div>
           )}
 
           {/* Temp password modal */}
           {tempPasswordModal && (
-            <div style={{ margin: '0.75rem 1.5rem', padding: '1rem 1.25rem', background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: '10px' }}>
+            <div style={{ margin: '0.75rem 1.5rem', padding: '1rem 1.25rem', background: `${C.green}0f`, border: `1px solid ${C.green}40`, borderRadius: '10px' }}>
               <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: C.green, marginBottom: '0.5rem' }}>
                 Password Reset Successful
               </div>
@@ -238,11 +221,11 @@ function UserManagementPanel({ businessId, businessName }: { businessId: string;
                 </code>
                 <button onClick={() => {
                   navigator.clipboard.writeText(tempPasswordModal.tempPassword).then(() => { setCopiedPw(true); setTimeout(() => setCopiedPw(false), 2000); });
-                }} style={btn('rgba(16,185,129,0.15)', C.green)}>
+                }} style={btn(`${C.green}26`, C.green)}>
                   <Icon d={Icons.copy} size={11} color={C.green} />
                   {copiedPw ? 'Copied!' : 'Copy'}
                 </button>
-                <button onClick={() => setTempPasswordModal(null)} style={btn('rgba(100,116,139,0.12)', C.textSecondary)}>
+                <button onClick={() => setTempPasswordModal(null)} style={btn(`${C.textMuted}1f`, C.textSecondary)}>
                   <Icon d={Icons.x} size={11} color={C.textSecondary} /> Dismiss
                 </button>
               </div>
@@ -268,7 +251,7 @@ function UserManagementPanel({ businessId, businessName }: { businessId: string;
                   {users.map((u: any) => (
                     <React.Fragment key={u.id}>
                       {editingUser?.id === u.id ? (
-                        <tr style={{ background: 'rgba(59,130,246,0.04)' }}>
+                        <tr style={{ background: `${C.blue}0a` }}>
                           <td colSpan={6} style={{ padding: '0.75rem' }}>
                             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
                               <span style={{ fontSize: '0.75rem', fontWeight: 600, color: C.blue, marginRight: '0.25rem' }}>Editing: {u.name}</span>
@@ -299,7 +282,7 @@ function UserManagementPanel({ businessId, businessName }: { businessId: string;
                                 <Icon d={iconSave} size={11} color="#fff" />
                                 {actionLoading === u.id + '_edit' ? 'Saving…' : 'Save'}
                               </button>
-                              <button onClick={() => setEditingUser(null)} style={btn('rgba(100,116,139,0.12)', C.textSecondary)}>
+                              <button onClick={() => setEditingUser(null)} style={btn(`${C.textMuted}1f`, C.textSecondary)}>
                                 <Icon d={Icons.x} size={11} color={C.textSecondary} /> Cancel
                               </button>
                             </div>
@@ -307,13 +290,13 @@ function UserManagementPanel({ businessId, businessName }: { businessId: string;
                         </tr>
                       ) : (
                         <tr style={{ borderBottom: `1px solid ${C.cardBorder}` }}
-                          onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'rgba(255,255,255,0.02)'; }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = `${C.text}05`; }}
                           onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'; }}>
                           <td style={{ padding: '0.625rem 0.75rem' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                               <div style={{
                                 width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0,
-                                background: u.role === 'OWNER' ? 'linear-gradient(135deg,#8b5cf6,#3b82f6)' : 'rgba(255,255,255,0.06)',
+                                background: u.role === 'OWNER' ? `linear-gradient(135deg,${C.purple},${C.blue})` : `${C.text}0f`,
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 fontSize: '0.6875rem', fontWeight: 800, color: '#fff', border: `1px solid ${C.cardBorder2}`,
                               }}>
@@ -331,15 +314,15 @@ function UserManagementPanel({ businessId, businessName }: { businessId: string;
                           </td>
                           <td style={{ padding: '0.625rem 0.75rem' }}>
                             {isLocked(u) ? (
-                              <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '0.625rem', fontWeight: 700, background: 'rgba(239,68,68,0.12)', color: C.red }}>
+                              <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '0.625rem', fontWeight: 700, background: `${C.red}1f`, color: C.red }}>
                                 LOCKED ({u.loginAttempts ?? 0} attempts)
                               </span>
                             ) : u.loginAttempts > 0 ? (
-                              <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '0.625rem', fontWeight: 700, background: 'rgba(245,158,11,0.1)', color: C.amber }}>
+                              <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '0.625rem', fontWeight: 700, background: `${C.amber}1a`, color: C.amber }}>
                                 {u.loginAttempts} failed attempt{u.loginAttempts !== 1 ? 's' : ''}
                               </span>
                             ) : (
-                              <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '0.625rem', fontWeight: 600, background: 'rgba(16,185,129,0.08)', color: C.green }}>
+                              <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '0.625rem', fontWeight: 600, background: `${C.green}14`, color: C.green }}>
                                 Active
                               </span>
                             )}
@@ -350,15 +333,15 @@ function UserManagementPanel({ businessId, businessName }: { businessId: string;
                               <button
                                 onClick={() => { setEditingUser(u); setEditForm({ name: u.name ?? '', email: u.email ?? '', role: u.role }); }}
                                 title="Edit user"
-                                style={btn('rgba(59,130,246,0.1)', '#93c5fd')}>
-                                <Icon d={iconEdit2} size={10} color="#93c5fd" /> Edit
+                                style={btn(`${C.blue}1a`, C.accentText)}>
+                                <Icon d={iconEdit2} size={10} color={C.accentText} /> Edit
                               </button>
                               {/* Reset Password */}
                               <button
                                 onClick={() => handleResetPassword(u)}
                                 disabled={actionLoading === u.id + '_reset'}
                                 title="Generate temporary password"
-                                style={btn('rgba(245,158,11,0.1)', C.amber)}>
+                                style={btn(`${C.amber}1a`, C.amber)}>
                                 <Icon d={iconReset} size={10} color={C.amber} />
                                 {actionLoading === u.id + '_reset' ? '…' : 'Reset PW'}
                               </button>
@@ -368,7 +351,7 @@ function UserManagementPanel({ businessId, businessName }: { businessId: string;
                                   onClick={() => handleUnlock(u)}
                                   disabled={actionLoading === u.id + '_unlock'}
                                   title="Clear lockout and failed attempts"
-                                  style={btn('rgba(239,68,68,0.1)', C.red)}>
+                                  style={btn(`${C.red}1a`, C.red)}>
                                   <Icon d={iconLock} size={10} color={C.red} />
                                   {actionLoading === u.id + '_unlock' ? '…' : 'Unlock'}
                                 </button>
@@ -576,12 +559,12 @@ export default function BusinessesPage() {
       {banner && (
         <div style={{
           display: 'flex', alignItems: 'flex-start', gap: '0.75rem',
-          background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.25)',
-          borderRadius: '12px', padding: '0.875rem 1.125rem', color: '#c4b5fd', fontSize: '0.875rem',
+          background: `${C.purple}14`, border: `1px solid ${C.purple}40`,
+          borderRadius: '12px', padding: '0.875rem 1.125rem', color: C.accentText, fontSize: '0.875rem',
         }}>
           <span style={{ flex: 1 }}>{banner}</span>
           <button onClick={() => setBanner('')}
-            style={{ background: 'none', border: 'none', color: '#7C3AED', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}
+            style={{ background: 'none', border: 'none', color: C.accentText, cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}
             aria-label="Dismiss">×</button>
         </div>
       )}
@@ -589,7 +572,7 @@ export default function BusinessesPage() {
       {/* Impersonate banner */}
       {impersonateResult && (
         <div style={{
-          background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)',
+          background: `${C.blue}0f`, border: `1px solid ${C.blue}33`,
           borderRadius: '12px', padding: '1rem 1.25rem',
           display: 'flex', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap',
         }}>
@@ -597,19 +580,19 @@ export default function BusinessesPage() {
             <Icon d={Icons.key} size={16} color={C.blue} />
           </div>
           <div style={{ flex: 1, minWidth: '200px' }}>
-            <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#93c5fd', marginBottom: '4px' }}>
+            <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: C.accentText, marginBottom: '4px' }}>
               Impersonation token — {impersonateResult.businessName} ({impersonateResult.ownerEmail})
             </div>
-            <code style={{ fontSize: '0.6875rem', color: '#60a5fa', wordBreak: 'break-all', display: 'block', lineHeight: 1.5 }}>
+            <code style={{ fontSize: '0.6875rem', color: C.accentText, wordBreak: 'break-all', display: 'block', lineHeight: 1.5 }}>
               {impersonateResult.token}
             </code>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
-            <button onClick={copyToken} style={btn('rgba(59,130,246,0.2)', '#93c5fd')}>
-              <Icon d={Icons.copy} size={12} color="#93c5fd" />
+            <button onClick={copyToken} style={btn(`${C.blue}33`, C.accentText)}>
+              <Icon d={Icons.copy} size={12} color={C.accentText} />
               {copiedToken ? 'Copied!' : 'Copy'}
             </button>
-            <button onClick={() => setImpersonateResult(null)} style={btn('rgba(100,116,139,0.15)', C.textSecondary)}>
+            <button onClick={() => setImpersonateResult(null)} style={btn(`${C.textMuted}26`, C.textSecondary)}>
               <Icon d={Icons.x} size={12} color={C.textSecondary} />
               Dismiss
             </button>
@@ -641,7 +624,7 @@ export default function BusinessesPage() {
           <option value="PRO">Pro</option>
           <option value="ENTERPRISE">Enterprise</option>
         </select>
-        <button onClick={load} style={{ ...btn('rgba(59,130,246,0.15)', C.blue), padding: '0.625rem 1rem' }}>
+        <button onClick={load} style={{ ...btn(`${C.blue}26`, C.blue), padding: '0.625rem 1rem' }}>
           <Icon d={Icons.refresh} size={12} color={C.blue} />
           Refresh
         </button>
@@ -675,7 +658,7 @@ export default function BusinessesPage() {
 
       {/* Bulk action bar */}
       {selected.size > 0 && (
-        <div style={{ background: 'rgba(59,130,246,0.08)', border: `1px solid rgba(59,130,246,0.25)`, borderRadius: 10, padding: '0.75rem 1rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.75rem' }}>
+        <div style={{ background: `${C.blue}14`, border: `1px solid ${C.blue}40`, borderRadius: 10, padding: '0.75rem 1rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.75rem' }}>
           <span style={{ fontSize: '0.875rem', fontWeight: 700, color: C.blue }}>{selected.size} selected</span>
           <select value={bulkStatus} onChange={e => setBulkStatus(e.target.value)}
             style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${C.cardBorder}`, background: C.surface, color: C.text, fontSize: '0.8125rem' }}>
@@ -709,7 +692,7 @@ export default function BusinessesPage() {
             <thead>
               <tr style={{ background: C.surface }}>
                 <th style={{ padding: '0.75rem 0.75rem 0.75rem 1.25rem', borderBottom: `1px solid ${C.cardBorder}` }}>
-                  <input type="checkbox" checked={selected.size > 0 && selected.size === (data?.businesses?.length ?? 0)}
+                  <input type="checkbox" aria-label="Select all businesses" checked={selected.size > 0 && selected.size === (data?.businesses?.length ?? 0)}
                     onChange={selectAll} style={{ cursor: 'pointer', width: 14, height: 14 }} />
                 </th>
                 {['Business', 'Owner', 'Status', 'Plan', 'Trial Ends', 'Stores', 'Users', 'LTV (Est.)', 'Actions'].map(h => (
@@ -733,7 +716,7 @@ export default function BusinessesPage() {
               {!loading && businesses.map((b: any) => (
                 <React.Fragment key={b.id}>
                   {editingId === b.id ? (
-                    <tr style={{ borderTop: `1px solid ${C.cardBorder}`, background: 'rgba(59,130,246,0.04)' }}>
+                    <tr style={{ borderTop: `1px solid ${C.cardBorder}`, background: `${C.blue}0a` }}>
                       <td colSpan={8} style={{ padding: '1rem 1.25rem' }}>
                         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
                           <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: C.blue, marginRight: '0.25rem' }}>
@@ -761,18 +744,18 @@ export default function BusinessesPage() {
                           {b.isComped ? (
                             <button onClick={() => revokeGift(b)}
                               title="Stop comping — this account starts counting towards MRR"
-                              style={{ padding: '0.5rem 1rem', background: 'rgba(245,158,11,0.14)', color: '#B45309', border: '1px solid rgba(245,158,11,0.35)', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 600 }}>
+                              style={{ padding: '0.5rem 1rem', background: `${C.amber}24`, color: C.amber, border: `1px solid ${C.amber}59`, borderRadius: '8px', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 600 }}>
                               Stop comping
                             </button>
                           ) : (
                             <button onClick={() => setGiftTarget(b)}
                               title="Grant the selected tier free of charge, excluded from revenue"
-                              style={{ padding: '0.5rem 1rem', background: 'rgba(139,92,246,0.14)', color: '#7C3AED', border: '1px solid rgba(139,92,246,0.35)', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 600 }}>
+                              style={{ padding: '0.5rem 1rem', background: `${C.purple}24`, color: C.accentText, border: `1px solid ${C.purple}59`, borderRadius: '8px', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 600 }}>
                               Gift {editForm.subscriptionTier} free
                             </button>
                           )}
                           <button onClick={() => setEditingId(null)}
-                            style={{ padding: '0.5rem 1rem', background: 'rgba(100,116,139,0.12)', color: C.textSecondary, border: `1px solid ${C.cardBorder}`, borderRadius: '8px', cursor: 'pointer', fontSize: '0.875rem' }}>
+                            style={{ padding: '0.5rem 1rem', background: `${C.textMuted}1f`, color: C.textSecondary, border: `1px solid ${C.cardBorder}`, borderRadius: '8px', cursor: 'pointer', fontSize: '0.875rem' }}>
                             Cancel
                           </button>
                         </div>
@@ -780,11 +763,11 @@ export default function BusinessesPage() {
                     </tr>
                   ) : (
                     <tr
-                      style={{ borderTop: `1px solid ${C.cardBorder}`, transition: 'background 0.12s', background: selected.has(b.id) ? 'rgba(59,130,246,0.06)' : 'transparent' }}
-                      onMouseEnter={e => { if (!selected.has(b.id)) (e.currentTarget as HTMLTableRowElement).style.background = 'rgba(59,130,246,0.03)'; }}
+                      style={{ borderTop: `1px solid ${C.cardBorder}`, transition: 'background 0.12s', background: selected.has(b.id) ? `${C.blue}0f` : 'transparent' }}
+                      onMouseEnter={e => { if (!selected.has(b.id)) (e.currentTarget as HTMLTableRowElement).style.background = `${C.blue}08`; }}
                       onMouseLeave={e => { if (!selected.has(b.id)) (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'; }}>
                       <td style={{ padding: '0.875rem 0.75rem 0.875rem 1.25rem' }}>
-                        <input type="checkbox" checked={selected.has(b.id)} onChange={() => toggleSelect(b.id)}
+                        <input type="checkbox" aria-label={`Select ${b.name}`} checked={selected.has(b.id)} onChange={() => toggleSelect(b.id)}
                           style={{ cursor: 'pointer', width: 14, height: 14 }} />
                       </td>
                       <td style={{ padding: '0.875rem 1.25rem' }}>
@@ -810,7 +793,7 @@ export default function BusinessesPage() {
                         <button
                           onClick={() => setExpandedUsers(expandedUsers === b.id ? null : b.id)}
                           style={{
-                            ...btn(expandedUsers === b.id ? 'rgba(59,130,246,0.2)' : 'rgba(59,130,246,0.08)', expandedUsers === b.id ? C.blue : C.textSecondary),
+                            ...btn(expandedUsers === b.id ? `${C.blue}33` : `${C.blue}14`, expandedUsers === b.id ? C.blue : C.textSecondary),
                             gap: '4px',
                           }}>
                           <Icon d={Icons.users} size={11} color={expandedUsers === b.id ? C.blue : C.textMuted} />
@@ -835,13 +818,13 @@ export default function BusinessesPage() {
                         <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap' }}>
                           <button
                             onClick={() => { setEditingId(b.id); setEditForm({ subscriptionStatus: b.subscriptionStatus, subscriptionTier: b.subscriptionTier ?? 'STARTER', trialDays: '' }); }}
-                            style={btn('rgba(59,130,246,0.12)', '#93c5fd')}>
-                            <Icon d={Icons.edit} size={11} color="#93c5fd" />
+                            style={btn(`${C.blue}1f`, C.accentText)}>
+                            <Icon d={Icons.edit} size={11} color={C.accentText} />
                             Edit
                           </button>
                           <button onClick={() => impersonate(b.id)}
-                            style={btn('rgba(139,92,246,0.12)', '#c4b5fd')}>
-                            <Icon d={Icons.key} size={11} color="#c4b5fd" />
+                            style={btn(`${C.purple}1f`, C.accentText)}>
+                            <Icon d={Icons.key} size={11} color={C.accentText} />
                             Login As
                           </button>
                           <button
@@ -866,8 +849,8 @@ export default function BusinessesPage() {
                                 });
                               }
                             }}
-                            style={btn('rgba(239,68,68,0.12)', '#fca5a5')}>
-                            <Icon d={Icons.x} size={11} color="#fca5a5" />
+                            style={btn(`${C.red}1f`, C.red)}>
+                            <Icon d={Icons.x} size={11} color={C.red} />
                             Delete
                           </button>
                         </div>
@@ -904,14 +887,14 @@ export default function BusinessesPage() {
           </span>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
             <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-              style={{ ...btn('rgba(255,255,255,0.05)', C.textSecondary), opacity: page === 1 ? 0.4 : 1, cursor: page === 1 ? 'not-allowed' : 'pointer', padding: '0.5rem 1rem' }}>
+              style={{ ...btn(`${C.text}0d`, C.textSecondary), opacity: page === 1 ? 0.4 : 1, cursor: page === 1 ? 'not-allowed' : 'pointer', padding: '0.5rem 1rem' }}>
               ← Prev
             </button>
             <span style={{ padding: '0.375rem 0.875rem', color: C.textSecondary, fontWeight: 700, background: C.surface, borderRadius: '8px', border: `1px solid ${C.cardBorder}` }}>
               {page}
             </span>
             <button onClick={() => setPage(p => p + 1)} disabled={(data.businesses?.length ?? 0) < 20}
-              style={{ ...btn('rgba(255,255,255,0.05)', C.textSecondary), opacity: (data.businesses?.length ?? 0) < 20 ? 0.4 : 1, cursor: (data.businesses?.length ?? 0) < 20 ? 'not-allowed' : 'pointer', padding: '0.5rem 1rem' }}>
+              style={{ ...btn(`${C.text}0d`, C.textSecondary), opacity: (data.businesses?.length ?? 0) < 20 ? 0.4 : 1, cursor: (data.businesses?.length ?? 0) < 20 ? 'not-allowed' : 'pointer', padding: '0.5rem 1rem' }}>
               Next →
             </button>
           </div>

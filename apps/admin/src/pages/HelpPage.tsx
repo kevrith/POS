@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { SUPER_ADMIN_GUIDE_HTML } from '../generated/superAdminGuide';
+import { C } from '../generated/tokens';
 
 /**
  * The super-admin guide, rendered inside the console.
@@ -13,15 +14,6 @@ import { SUPER_ADMIN_GUIDE_HTML } from '../generated/superAdminGuide';
  * Deliberately NOT published to the landing site: this documents impersonation,
  * tenant deletion and comping, which customers have no business reading.
  */
-const C = {
-  bg: '#0a0f1e',
-  card: '#111827',
-  border: '#1e293b',
-  text: '#f1f5f9',
-  textMuted: '#64748b',
-  textSecondary: '#94a3b8',
-  accent: '#3b82f6',
-} as const;
 
 export default function HelpPage() {
   const ref = useRef<HTMLDivElement>(null);
@@ -56,18 +48,18 @@ export default function HelpPage() {
         .sa-doc ul, .sa-doc ol { margin: 0 0 0.875rem; padding-left: 1.25rem; }
         .sa-doc li { margin-bottom: 0.375rem; }
         .sa-doc strong { color: ${C.text}; font-weight: 600; }
-        .sa-doc a { color: #60a5fa; text-decoration: none; }
+        .sa-doc a { color: ${C.accentText}; text-decoration: none; }
         .sa-doc a:hover { text-decoration: underline; }
         .sa-doc code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-                       font-size: 0.8125rem; background: #1e293b; border: 1px solid ${C.border};
-                       padding: 1px 6px; border-radius: 4px; color: #a5f3fc; }
-        .sa-doc blockquote { border-left: 3px solid ${C.accent}; background: rgba(59,130,246,0.08);
+                       font-size: 0.8125rem; background: ${C.cardBorder}; border: 1px solid ${C.border};
+                       padding: 1px 6px; border-radius: 4px; color: ${C.accentText}; }
+        .sa-doc blockquote { border-left: 3px solid ${C.accent}; background: ${C.blue}14;
                              margin: 1rem 0; padding: 0.75rem 1rem;
                              border-radius: 0 8px 8px 0; color: ${C.textSecondary}; }
         .sa-doc blockquote p:last-child { margin-bottom: 0; }
         .sa-table-wrap { overflow-x: auto; margin: 1rem 0; }
         .sa-doc table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
-        .sa-doc th { background: #1e293b; color: ${C.text}; font-weight: 600;
+        .sa-doc th { background: ${C.cardBorder}; color: ${C.text}; font-weight: 600;
                      padding: 0.5rem 0.75rem; text-align: left; border: 1px solid ${C.border};
                      font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.05em; }
         .sa-doc td { padding: 0.5rem 0.75rem; border: 1px solid ${C.border};

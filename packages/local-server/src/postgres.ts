@@ -58,6 +58,29 @@ export interface PostgresOptions {
   logFile: string;
 }
 
+/**
+ * The settings PostgreSQL is started with (passed through `pg_ctl -o`). It listens on this computer only, keeps full
+ * durability, and has no Unix-domain socket.
+ *
+ * The socket is switched off with an empty value on Linux and macOS, where pg_ctl's shell reads '' as "empty". On Windows
+ * the setting is LEFT OUT: Windows has no Unix sockets and its default is already empty, and passing '' there hands
+ * PostgreSQL two literal quote characters through cmd.exe, which it then tries to use as a folder name ("could not create
+ * lock file ''/.s.PGSQL.54700.lock"). That failure only shows on Windows, so it is pinned by a test.
+ */
+export function serverOptions(port: number, platform: NodeJS.Platform = process.platform): string {
+  return [
+    `-p ${port}`,
+    '-c listen_addresses=127.0.0.1',
+    ...(platform === 'win32' ? [] : ["-c unix_socket_directories=''"]),
+    '-c max_connections=60',
+    '-c fsync=on',
+    '-c synchronous_commit=on',
+    '-c full_page_writes=on',
+    '-c log_timezone=Africa/Nairobi',
+    '-c timezone=Africa/Nairobi',
+  ].join(' ');
+}
+
 export class PostgresManager {
   constructor(private readonly o: PostgresOptions) {}
 
@@ -130,17 +153,7 @@ export class PostgresManager {
   /** Start and wait until it accepts connections. A stale postmaster.pid after a power cut is handled by pg_ctl itself. */
   async start(): Promise<void> {
     if (await this.isRunning()) return;
-    const opts = [
-      `-p ${this.o.port}`,
-      '-c listen_addresses=127.0.0.1',
-      "-c unix_socket_directories=''",
-      '-c max_connections=60',
-      '-c fsync=on',
-      '-c synchronous_commit=on',
-      '-c full_page_writes=on',
-      '-c log_timezone=Africa/Nairobi',
-      '-c timezone=Africa/Nairobi',
-    ].join(' ');
+    const opts = serverOptions(this.o.port);
     const r = await run(this.bin('pg_ctl'), ['-D', this.o.dataDir, '-l', this.o.logFile, '-w', '-t', '60', '-o', opts, 'start'], {
       env: this.env(),
       timeoutMs: 90000,

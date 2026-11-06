@@ -256,7 +256,11 @@ jobs:
 
       - name: The packed file keeps Prisma's generated client (a dot-folder)
         shell: bash
-        run: tar -tzf apps/desktop/src-tauri/resources/server.tar.gz | grep -q "node_modules/.prisma/client/index.js"
+        # Listed to a file first: `grep -q` stops at the first match, which kills `tar` with a broken pipe (exit 141) under the
+        # runner's `pipefail`.
+        run: |
+          tar -tzf apps/desktop/src-tauri/resources/server.tar.gz > "$RUNNER_TEMP/server-files.txt"
+          grep -q "node_modules/.prisma/client/index.js" "$RUNNER_TEMP/server-files.txt"
 
       - name: Smoke test the bundle (start, register, back up, stop)
         run: node apps/desktop/scripts/smoke-server-bundle.mjs

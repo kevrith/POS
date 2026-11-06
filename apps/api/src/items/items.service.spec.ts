@@ -8,6 +8,7 @@ function makeItem(overrides: Record<string, any> = {}) {
 function makePrisma() {
   return {
     item: { findMany: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
+    category: { findMany: jest.fn().mockResolvedValue([]) },
     inventoryMovement: { aggregate: jest.fn().mockResolvedValue({ _sum: { quantity: 10 } }), groupBy: jest.fn().mockResolvedValue([]) },
     batch: { findMany: jest.fn().mockResolvedValue([]) },
   };
@@ -25,6 +26,33 @@ function makeService(prismaOverrides = {}) {
 }
 
 describe('ItemsService', () => {
+  describe('getCategories', () => {
+    it('leaves out a stored category with a blank name', async () => {
+      const { svc, prisma } = makeService();
+      prisma.category.findMany.mockResolvedValue([
+        { id: 'c1', name: 'Drinks' }, { id: 'c2', name: '' }, { id: 'c3', name: '   ' },
+      ]);
+      const cats = await svc.getCategories('biz-1');
+      expect(cats.map((c: any) => c.name)).toEqual(['Drinks']);
+    });
+
+    it('builds categories from items without a nameless one when the business has none stored', async () => {
+      const { svc, prisma } = makeService();
+      prisma.category.findMany.mockResolvedValue([]);
+      prisma.item.findMany.mockResolvedValue([{ category: 'Food' }, { category: '' }, { category: '  ' }, { category: 'Soda' }]);
+      const cats = await svc.getCategories('biz-1');
+      expect(cats.map((c: any) => c.name)).toEqual(['Food', 'Soda']);
+    });
+
+    it('falls back to the items when only blank-named categories are stored', async () => {
+      const { svc, prisma } = makeService();
+      prisma.category.findMany.mockResolvedValue([{ id: 'c2', name: '' }]);
+      prisma.item.findMany.mockResolvedValue([{ category: 'Food' }]);
+      const cats = await svc.getCategories('biz-1');
+      expect(cats.map((c: any) => c.name)).toEqual(['Food']);
+    });
+  });
+
   describe('findAll', () => {
     it('returns items with currentStock merged in', async () => {
       const item = makeItem();

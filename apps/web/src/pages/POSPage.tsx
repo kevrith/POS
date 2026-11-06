@@ -750,21 +750,33 @@ export default function POSPage() {
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     const tag = (e.target as HTMLElement).tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-    if (e.key === '/') { e.preventDefault(); searchRef.current?.focus(); }
-    else if (e.key === 'F1') { e.preventDefault(); if (cart.length > 0) void handlePayClick(); }
-    else if (e.key === 'F2') { e.preventDefault(); setShowCustomerModal(true); }
-    else if (e.key === 'F3') { e.preventDefault(); setServiceChargeEnabled((v) => !v); }
-    else if (e.key === 'F4') { e.preventDefault(); if (cart.length > 0) void handlePayClick(); }
-    else if (e.key === 'F5') { e.preventDefault(); holdCurrentSale(); }
-    else if (e.key === 'F6') { e.preventDefault(); setShowHeld(true); }
-    else if (e.key === 'F7') { e.preventDefault(); navigate('/proforma'); }
-    else if (e.key === 'F8') { e.preventDefault(); navigate('/layaway'); }
-    else if (e.key === 'Escape') {
+    const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+    // "/" is a character a person can type, so it only jumps to the search box from outside a field.
+    if (e.key === '/') {
+      if (typing) return;
+      e.preventDefault(); searchRef.current?.focus();
+      return;
+    }
+    // Escape and the function keys type nothing, so they work from inside a field too. A cashier is usually in the
+    // search box (scanning), and these used to do nothing there; Escape also could not close the customer picker.
+    if (e.key === 'Escape') {
       setShowPayment(false); setShowHeld(false); setShowCustomerModal(false);
       setShowCamera(false); setLastReceipt(null);
+      return;
     }
-  }, [cart.length, holdCurrentSale, navigate]);
+    if (!/^F[1-8]$/.test(e.key)) return;
+    e.preventDefault(); // always: F1 is the browser's help, F3 find, F5 reload
+    if (e.repeat) return; // holding a key down must not fire it again and again
+    if (showPayment || showHeld || showCustomerModal || showCamera || lastReceipt) return; // a dialog is open
+    if (e.key === 'F1') { if (cart.length > 0) void handlePayClick(); }
+    else if (e.key === 'F2') setShowCustomerModal(true);
+    else if (e.key === 'F3') setServiceChargeEnabled((v) => !v);
+    else if (e.key === 'F4') { if (cart.length > 0) void handlePayClick(); }
+    else if (e.key === 'F5') holdCurrentSale();
+    else if (e.key === 'F6') setShowHeld(true);
+    else if (e.key === 'F7') navigate('/proforma');
+    else if (e.key === 'F8') navigate('/layaway');
+  }, [cart.length, holdCurrentSale, navigate, showPayment, showHeld, showCustomerModal, showCamera, lastReceipt]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);

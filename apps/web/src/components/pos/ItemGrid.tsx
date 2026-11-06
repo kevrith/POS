@@ -72,8 +72,12 @@ export default function ItemGrid({
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-slate-950">
       {/* Search + Price Level bar */}
-      <div className="bg-slate-900 border-b border-slate-800 px-3 md:px-4 py-2 md:py-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 md:gap-3">
-        <div className="relative flex-1 min-w-0">
+      {/* Wraps on the width of THIS pane, not the window: with the sidebar open and the cart beside it the item area
+          can be ~300px inside an 800px window, and a window-width breakpoint (sm:flex-row) squeezed the search box to
+          nothing and pushed the price levels and Customer button out over the edge. The search keeps at least 200px
+          and the controls drop to their own line when there is no room. */}
+      <div className="bg-slate-900 border-b border-slate-800 px-3 md:px-4 py-2 md:py-3 flex flex-wrap items-center gap-2 md:gap-3">
+        <div className="relative flex-1 basis-[200px] min-w-[160px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             ref={searchRef}
@@ -95,7 +99,7 @@ export default function ItemGrid({
           )}
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+        <div className="flex items-center gap-2 flex-wrap max-w-full">
           {/* Price Level pill buttons */}
           <div className="flex items-center border border-slate-700 rounded-lg overflow-hidden flex-shrink-0" title="Price Level">
             {(Object.entries(PRICE_LEVEL_LABELS) as [PriceLevel, string][]).map(([val, label]) => (
@@ -174,7 +178,7 @@ export default function ItemGrid({
         >
           All Items
         </button>
-        {categories.map((cat) => (
+        {categories.filter((cat) => cat.name?.trim()).map((cat) => (
           <button
             key={cat.id}
             onClick={() => setActiveCategory(cat.id)}
@@ -191,7 +195,7 @@ export default function ItemGrid({
 
       {/* Item grid */}
       <div className="flex-1 overflow-y-auto p-2 md:p-4" style={{ paddingBottom: 'calc(120px + env(safe-area-inset-bottom))' }}>
-        <div className="grid grid-cols-2 xs:grid-cols-3 md:grid-cols-3 xl:grid-cols-4 gap-2 md:gap-3">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] xl:grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-2 md:gap-3">
           {items.map((item) => {
             const price =
               priceLevel === 'WHOLESALE' && item.wholesalePriceCents
@@ -280,7 +284,7 @@ export default function ItemGrid({
         <span><kbd className="bg-slate-700 text-slate-300 px-1 rounded">F1</kbd> Pay</span>
         <span><kbd className="bg-slate-700 text-slate-300 px-1 rounded">F2</kbd> Customer</span>
         <span><kbd className="bg-slate-700 text-slate-300 px-1 rounded">F3</kbd> Service</span>
-        <span><kbd className="bg-slate-700 text-slate-300 px-1 rounded">F4</kbd> Split</span>
+        <span><kbd className="bg-slate-700 text-slate-300 px-1 rounded">F4</kbd> Pay</span>
         <span><kbd className="bg-slate-700 text-slate-300 px-1 rounded">F5</kbd> Hold</span>
         <span><kbd className="bg-slate-700 text-slate-300 px-1 rounded">F6</kbd> Held ({heldSalesCount})</span>
         <span><kbd className="bg-slate-700 text-slate-300 px-1 rounded">F7</kbd> Proforma</span>

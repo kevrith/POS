@@ -203,10 +203,12 @@ export class ItemsService {
   // ─── Category CRUD ──────────────────────────────────────────────────────────
 
   async getCategories(businessId: string) {
-    const cats = await this.prisma.category.findMany({
+    // A category with no visible name is unusable: the till drew it as a blank chip that matches nothing. Creating or
+    // renaming one is refused, but old rows and imports can still hold one, so it is left out here.
+    const cats = (await this.prisma.category.findMany({
       where: { businessId },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-    });
+    })).filter((c) => c.name?.trim());
     if (cats.length > 0) return cats;
 
     // Fallback: derive categories from existing items (legacy data migration)
@@ -216,7 +218,11 @@ export class ItemsService {
       distinct: ['category'],
       orderBy: { category: 'asc' },
     });
-    return items.map((i) => ({ id: i.category as string, name: i.category as string, color: '#6B7280', sortOrder: 0 }));
+    // `not: null` still lets an empty or all-space category through (an import or a blank form field leaves one);
+    // that became a nameless chip, so only real names count.
+    return items
+      .filter((i) => i.category?.trim())
+      .map((i) => ({ id: i.category as string, name: i.category as string, color: '#6B7280', sortOrder: 0 }));
   }
 
   async createCategory(businessId: string, name: string, color?: string) {

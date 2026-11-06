@@ -11,7 +11,7 @@ import {
   ClipboardList, MapPin, Store, Zap, Building2, PanelLeftClose, PanelLeftOpen,
   ShoppingBag,
 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { readLastKnown, writeLastKnown } from '../lib/lastKnown';
 import { prefetchRoute } from '../lib/routeLoaders';
 import { api, getToken } from '../lib/api';
@@ -276,6 +276,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
     return () => { disconnectSocket(); };
   }, [user?.businessId]);
+
+  // ─── Live stock ───────────────────────────────────────────────────────────
+  // A sale made on another till or the mobile app moves stock on the server. The item lists are cached for minutes,
+  // so without this a cashier keeps seeing the old count (148 after 10 were sold elsewhere) until a reload. Every list
+  // that shows stock has a query key starting with 'items'; a burst of sales is folded into one refetch.
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!user?.businessId) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refreshStock = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => { void queryClient.invalidateQueries({ queryKey: ['items'] }); }, 400);
+    };
+    const offSale = subscribeToEvent(SocketEvents.SALE_CREATED, refreshStock);
+    const offStock = subscribeToEvent(SocketEvents.INVENTORY_UPDATED, refreshStock);
+    return () => { clearTimeout(timer); offSale(); offStock(); };
+  }, [user?.businessId, queryClient]);
 
   // ─── Notification unread count + real-time badge ──────────────────────────
   const [unreadCount, setUnreadCount] = useState(0);

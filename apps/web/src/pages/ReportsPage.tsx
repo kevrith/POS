@@ -1205,7 +1205,7 @@ export default function ReportsPage() {
 
             {/* Chart controls */}
             {(tab === 'overview' || tab === 'sales') && (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 max-w-full">
                 <Segmented size="sm" value={chartType} onChange={(t) => setChartType(t as typeof chartType)} items={(['bar', 'line', 'area'] as const).map((t) => ({ id: t, label: t[0].toUpperCase() + t.slice(1) }))} />
                 <Button size="sm" variant={showTrendlines ? 'primary' : 'secondary'} aria-pressed={showTrendlines} onClick={() => setShowTrendlines(!showTrendlines)}>Trends</Button>
               </div>
@@ -1387,10 +1387,10 @@ export default function ReportsPage() {
                 {/* Enhanced daily revenue chart */}
                 {dailyData.length > 0 && (
                   <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                       <h2 className="text-base font-semibold text-gray-800">Revenue Trend</h2>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-400">Chart Type:</span>
+                        <span className="hidden sm:inline text-xs text-gray-400">Chart Type:</span>
                         <div className="flex rounded border border-gray-200 overflow-hidden">
                           {(['bar', 'line', 'area'] as const).map((type) => (
                             <button

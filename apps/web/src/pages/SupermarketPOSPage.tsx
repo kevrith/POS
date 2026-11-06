@@ -735,7 +735,7 @@ export default function SupermarketPOSPage() {
               >
                 ALL DEPTS
               </button>
-              {categories.map((cat) => (
+              {categories.filter((cat) => cat.name?.trim()).map((cat) => (
                 <button
                   key={cat.id}
                   onClick={() => setActiveCategory(cat.id)}

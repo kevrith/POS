@@ -213,9 +213,9 @@ export default function CartPanel({
           )}
           {/* Manual sale discount — bidirectional % ↔ KES */}
           <div className="space-y-1">
-            <div className="flex items-center gap-1.5">
-              <span className="text-slate-400 text-xs whitespace-nowrap w-14">Discount</span>
-              <div className="flex items-center gap-1 flex-1">
+            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+              <span className="text-slate-400 text-xs whitespace-nowrap w-14 shrink-0">Discount</span>
+              <div className="flex items-center gap-1 flex-1 basis-36 min-w-0">
                 <input
                   type="number"
                   min="0"
@@ -227,7 +227,7 @@ export default function CartPanel({
                     setManualDiscountCents(Math.round(subtotalCents * pct / 100));
                   }}
                   placeholder="0"
-                  className="w-14 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-400 focus:ring-1 focus:ring-orange-500 focus:border-orange-500 outline-none text-right"
+                  className="flex-1 min-w-0 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-400 focus:ring-1 focus:ring-orange-500 focus:border-orange-500 outline-none text-right"
                 />
                 <span className="text-slate-400 text-xs">%</span>
                 <span className="text-slate-400 text-xs">/</span>
@@ -241,7 +241,7 @@ export default function CartPanel({
                     setManualDiscountCents(Math.min(Math.round(amt * 100), subtotalCents));
                   }}
                   placeholder="0"
-                  className="w-16 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-400 focus:ring-1 focus:ring-orange-500 focus:border-orange-500 outline-none text-right"
+                  className="flex-1 min-w-0 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-400 focus:ring-1 focus:ring-orange-500 focus:border-orange-500 outline-none text-right"
                 />
                 <span className="text-slate-400 text-xs">KES</span>
                 {manualDiscountCents > 0 && (
@@ -469,7 +469,7 @@ function CartItemRow({ item, onRemove, onQuantityChange, onDiscountChange, onPri
           value={item.discountPercent ? parseFloat(item.discountPercent.toFixed(1)) : ''}
           onChange={(e) => onDiscountChange(Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))}
           placeholder="0"
-          className="w-14 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-400 focus:ring-1 focus:ring-orange-500 outline-none text-right"
+          className="flex-1 min-w-0 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-400 focus:ring-1 focus:ring-orange-500 outline-none text-right"
         />
         <span className="text-slate-400 text-xs">%</span>
         <span className="text-slate-400 text-xs">/</span>
@@ -487,7 +487,7 @@ function CartItemRow({ item, onRemove, onQuantityChange, onDiscountChange, onPri
             onDiscountChange(Math.round(pct * 10) / 10);
           }}
           placeholder="0"
-          className="w-16 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-400 focus:ring-1 focus:ring-orange-500 outline-none text-right"
+          className="flex-1 min-w-0 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-orange-300 placeholder-slate-400 focus:ring-1 focus:ring-orange-500 outline-none text-right"
         />
         <span className="text-slate-400 text-xs">KES</span>
         <button

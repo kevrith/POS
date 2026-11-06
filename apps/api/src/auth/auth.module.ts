@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { WebAuthnService } from './webauthn.service';
+import { DeviceLoginService } from './device-login.service';
 import { WebAuthnController } from './webauthn.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { GoogleStrategy } from './google.strategy';
@@ -29,7 +30,7 @@ import { jwtSecretFrom } from '../common/jwt-secret';
     EmailModule,
     AffiliateModule,
   ],
-  providers: [AuthService, WebAuthnService, JwtStrategy, GoogleStrategy, JwtAuthGuard, RolesGuard, TenantGuard, SubscriptionGuard],
+  providers: [AuthService, WebAuthnService, DeviceLoginService, JwtStrategy, GoogleStrategy, JwtAuthGuard, RolesGuard, TenantGuard, SubscriptionGuard],
   controllers: [AuthController, WebAuthnController],
   exports: [AuthService, JwtModule, JwtAuthGuard, RolesGuard, TenantGuard, SubscriptionGuard],
 })

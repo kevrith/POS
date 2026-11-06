@@ -18,16 +18,21 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { mobileApi } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth';
 import { syncPushToken } from '../../lib/push';
+import {
+  isBiometricReady, getBiometricEnrolment, enableBiometric, signInWithBiometric,
+  type BiometricEnrolment,
+} from '../../lib/biometricLogin';
 import { Colors } from '../../constants/theme';
 
 const SERVER_URL_KEY  = 'pos_server_url';
 const BUSINESS_ID_KEY = 'pos_business_id';
 const BUSINESS_NM_KEY = 'pos_business_name';
+const BIO_DECLINED_KEY = 'pos_biometric_declined';
 const DEFAULT_URL     = 'https://pos-bhe5.onrender.com/api/v1';
 
 type Screen = 'SERVER_URL' | 'AUTH_MODE' | 'BUSINESS' | 'STAFF' | 'PIN_PAD' | 'EMAIL';
@@ -86,6 +91,91 @@ export default function LoginScreen() {
   const [password,     setPassword]     = useState('');
   const [showPw,       setShowPw]       = useState(false);
   const [emailLoading, setEmailLoading] = useState(false);
+
+  // ── Fingerprint sign-in (only offered once someone has turned it on for this phone) ──
+  const [bioUser,    setBioUser]    = useState<BiometricEnrolment | null>(null);
+  const [bioLoading, setBioLoading] = useState(false);
+  const autoPrompted = useRef(false);
+
+  /** Shared tail of every sign-in: remember the session, then open the app. */
+  function finishLogin(data: LoginResponse) {
+    const token = data.accessToken ?? data.access_token ?? '';
+    return SecureStore.setItemAsync('pos_token', token).then(() => {
+      setAuth(data.user, token);
+      void syncPushToken(data.user.id);
+      // A kitchen account has one screen, so it signs straight in to the tickets.
+      router.replace(data.user.role === 'KITCHEN' ? ('/manage-kitchen' as any) : '/(tabs)/pos');
+    });
+  }
+
+  /** After a PIN / password sign-in, offer to switch fingerprint sign-in on (once; "Not now" is remembered). */
+  async function offerBiometric(user: { id: string; name: string }) {
+    try {
+      if (!(await isBiometricReady())) return;
+      const existing = await getBiometricEnrolment();
+      if (existing?.userId === user.id) return;
+      if (await SecureStore.getItemAsync(BIO_DECLINED_KEY)) return;
+      Alert.alert(
+        'Sign in with fingerprint?',
+        'Next time, use your fingerprint or face instead of typing your PIN or password. You can turn this off in Settings.',
+        [
+          { text: 'Not now', style: 'cancel', onPress: () => { void SecureStore.setItemAsync(BIO_DECLINED_KEY, '1'); } },
+          {
+            text: 'Turn on',
+            onPress: () => {
+              enableBiometric(user).catch((e: any) => Alert.alert('Fingerprint sign-in', e?.message ?? 'Could not turn it on.'));
+            },
+          },
+        ],
+      );
+    } catch { /* never block a sign-in on this */ }
+  }
+
+  const handleBiometric = useCallback(async () => {
+    setBioLoading(true);
+    try {
+      const base = (await SecureStore.getItemAsync(SERVER_URL_KEY)) ?? serverUrl;
+      const data = await signInWithBiometric(base);
+      if (data) await finishLogin(data);
+    } catch (e: any) {
+      Alert.alert('Fingerprint sign-in', friendlyError(e, 'Could not sign in.'));
+      setBioUser(await getBiometricEnrolment());
+    } finally {
+      setBioLoading(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverUrl]);
+
+  useEffect(() => {
+    void (async () => {
+      if (!(await isBiometricReady())) return;
+      const who = await getBiometricEnrolment();
+      setBioUser(who);
+      if (who && !autoPrompted.current) {
+        autoPrompted.current = true;
+        void handleBiometric();
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const biometricButton = bioUser ? (
+    <TouchableOpacity
+      style={[s.bioBtn, bioLoading && { opacity: 0.7 }]}
+      onPress={() => void handleBiometric()}
+      disabled={bioLoading}
+      accessibilityRole="button"
+      accessibilityLabel={`Sign in as ${bioUser.name} with fingerprint`}
+    >
+      {bioLoading
+        ? <ActivityIndicator color={Colors.primary} />
+        : <Ionicons name="finger-print" size={26} color={Colors.primary} />}
+      <View style={{ flex: 1 }}>
+        <Text style={s.bioTitle}>Sign in with fingerprint</Text>
+        <Text style={s.bioSub}>as {bioUser.name}</Text>
+      </View>
+    </TouchableOpacity>
+  ) : null;
 
   // ── On mount: restore stored server URL and business info ──────────────────
   useEffect(() => {
@@ -199,12 +289,8 @@ export default function LoginScreen() {
       });
       const data = await res.json() as LoginResponse;
       if (!res.ok) throw new Error((data as any).message ?? 'Invalid PIN');
-      const token = data.accessToken ?? data.access_token ?? '';
-      await SecureStore.setItemAsync('pos_token', token);
-      setAuth(data.user, token);
-      void syncPushToken(data.user.id);
-      // A kitchen account has one screen, so it signs straight in to the tickets.
-      router.replace(data.user.role === 'KITCHEN' ? ('/manage-kitchen' as any) : '/(tabs)/pos');
+      await finishLogin(data);
+      void offerBiometric(data.user);
     } catch (e: any) {
       Alert.alert('Login Failed', friendlyError(e, 'Incorrect PIN. Please try again.'));
       setPin('');
@@ -237,12 +323,8 @@ export default function LoginScreen() {
       });
       const data = await res.json() as LoginResponse;
       if (!res.ok) throw new Error((data as any).message ?? 'Invalid credentials');
-      const token = data.accessToken ?? data.access_token ?? '';
-      await SecureStore.setItemAsync('pos_token', token);
-      setAuth(data.user, token);
-      void syncPushToken(data.user.id);
-      // A kitchen account has one screen, so it signs straight in to the tickets.
-      router.replace(data.user.role === 'KITCHEN' ? ('/manage-kitchen' as any) : '/(tabs)/pos');
+      await finishLogin(data);
+      void offerBiometric(data.user);
     } catch (e: any) {
       Alert.alert('Login Failed', friendlyError(e, 'Invalid email or password.'));
     } finally {
@@ -309,6 +391,7 @@ export default function LoginScreen() {
             <Text style={s.appName}>Kastra POS</Text>
             <Text style={s.appSub}>How would you like to sign in?</Text>
           </View>
+          {biometricButton}
           <View style={s.authModeCard}>
             <TouchableOpacity style={s.modeBtn} onPress={() => setScreen('BUSINESS')}>
               <View style={s.modeIcon}><Ionicons name="keypad" size={26} color={Colors.primary} /></View>
@@ -410,6 +493,7 @@ export default function LoginScreen() {
           </TouchableOpacity>
         </View>
 
+        {biometricButton}
         {staffLoading ? (
           <View style={s.centered}><ActivityIndicator size="large" color={Colors.primary} /></View>
         ) : staff.length === 0 ? (
@@ -559,6 +643,12 @@ export default function LoginScreen() {
 // ── Styles ─────────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
+  bioBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 14, marginHorizontal: 16, marginBottom: 14,
+    padding: 16, borderRadius: 14, borderWidth: 1.5, borderColor: Colors.primary, backgroundColor: Colors.primary + '12',
+  },
+  bioTitle: { fontSize: 15, fontWeight: '700', color: Colors.text },
+  bioSub:   { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
   safe:      { flex: 1, backgroundColor: Colors.background },
   centered:  { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 20 },
   backRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginBottom: 4 },

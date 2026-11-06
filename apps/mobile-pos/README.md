@@ -181,6 +181,17 @@ JWTs are short-lived (15 min email login, 12 h PIN). `lib/api.ts` refreshes
 401 logs the user out rather than retrying. Without this, an expired token surfaced
 to the cashier as a bare "no sales found".
 
+### Fingerprint / face sign-in ([lib/biometricLogin.ts](lib/biometricLogin.ts))
+
+After a PIN or password sign-in the app offers to turn this on (Settings -> Security
+toggles it later). The server issues a revocable **device token** (`POST /auth/device-token`,
+stored hashed in `UserSession`, 90 days sliding), the app keeps it in `SecureStore`, and
+releases it only after `expo-local-authentication` passes. The token is traded for a normal
+12 h session at `POST /auth/login/device`. No password, PIN or JWT is stored for this, Logout
+keeps it (that is the point), and turning it off or a 401 from the server removes it.
+It is native code, so it needs a **new build** (`eas build`), not an OTA update. Only
+mobile-pos has it; the customer, driver and agent apps do not.
+
 Push notifications come from the shared [`@pos/mobile-push`](../../packages/mobile-push/)
 package.
 

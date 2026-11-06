@@ -8,6 +8,7 @@ import { SkipSubscriptionCheck } from './subscription.guard';
 import type { Request } from 'express';
 import type { AuthUser } from './auth.service';
 import { frontendUrl } from '../common/app-urls';
+import { DeviceLoginService } from './device-login.service';
 
 interface LoginDto {
   email: string;
@@ -33,7 +34,7 @@ interface RegisterDto {
 @SkipSubscriptionCheck()
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private authService: AuthService, private deviceLogin: DeviceLoginService) {}
 
   @Public()
   @Throttle({ default: { limit: 10, ttl: 60000 } })
@@ -47,6 +48,30 @@ export class AuthController {
   @Post('login/pin')
   async loginPin(@Body() dto: PinLoginDto) {
     return this.authService.loginWithPin(dto.pin, dto.businessId, dto.storeId, dto.userId);
+  }
+
+  // ─── Fingerprint / face unlock for the native apps ──────────────────────────
+
+  @UseGuards(JwtAuthGuard)
+  @SkipSubscriptionCheck()
+  @Post('device-token')
+  async enrolDevice(@Body() dto: { deviceName?: string }, @Req() req: Request & { user: AuthUser }) {
+    return this.deviceLogin.enrol(req.user.id, dto?.deviceName);
+  }
+
+  @Public()
+  @SkipSubscriptionCheck()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post('login/device')
+  async loginDevice(@Body() dto: { deviceToken: string }) {
+    return this.deviceLogin.login(dto?.deviceToken);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @SkipSubscriptionCheck()
+  @Post('device-token/revoke')
+  async revokeDevice(@Body() dto: { deviceToken?: string }, @Req() req: Request & { user: AuthUser }) {
+    return this.deviceLogin.revoke(req.user.id, dto?.deviceToken);
   }
 
   @Public()

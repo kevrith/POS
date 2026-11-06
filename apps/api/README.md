@@ -48,6 +48,9 @@ build alive.
   `FRONTEND_URL` / `ADMIN_URL` / `EXTRA_ORIGINS`; `WEBAUTHN_RP_ID` optionally widens it to a parent
   domain. Browsers require HTTPS (only `http://localhost` is exempt) and refuse IP addresses, so it
   cannot work over a LAN IP. Managing credentials is limited to yourself, or owner/manager for staff.
+- Native-app fingerprint sign-in uses device tokens (`auth/device-login.service.ts`): `POST /auth/device-token`
+  (signed in), `POST /auth/login/device` (public, throttled), `POST /auth/device-token/revoke`. Tokens are
+  hashed in `UserSession` (`userAgent` starts `device:`), max 5 phones per user, 90 days sliding expiry.
 - Socket.IO adapter for WebSocket / LAN sync.
 - `AllExceptionsFilter` as a global filter. It keeps the status of `HttpException`s and
   maps Prisma request errors to client errors (`PrismaClientValidationError` -> 400,

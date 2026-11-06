@@ -7,6 +7,7 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,6 +26,9 @@ import { requeueRejectedSale } from '../../lib/db';
 import { useSalesQueueStatus } from '../../lib/useOfflineSync';
 import { clearPushToken } from '../../lib/push';
 import PrinterSettingsCard from '../../components/PrinterSettingsCard';
+import {
+  isBiometricReady, getBiometricEnrolment, enableBiometric, disableBiometric,
+} from '../../lib/biometricLogin';
 
 const SERVER_URL_KEY = 'pos_server_url';
 const DEFAULT_URL = 'https://pos-bhe5.onrender.com/api/v1';
@@ -49,6 +53,31 @@ export default function SettingsScreen() {
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ synced: number; failed: number; rejected?: number } | null>(null);
   const queueStatus = useSalesQueueStatus();
+
+  // Fingerprint sign-in: shown only on phones that have a sensor with a fingerprint / face registered.
+  const [bioReady, setBioReady] = useState(false);
+  const [bioOn, setBioOn] = useState(false);
+  const [bioBusy, setBioBusy] = useState(false);
+  useEffect(() => {
+    void (async () => {
+      setBioReady(await isBiometricReady());
+      const who = await getBiometricEnrolment();
+      setBioOn(!!who && who.userId === user?.id);
+    })();
+  }, [user?.id]);
+
+  async function toggleBiometric(next: boolean) {
+    if (!user) return;
+    setBioBusy(true);
+    try {
+      if (next) setBioOn(await enableBiometric(user));
+      else { await disableBiometric(); setBioOn(false); }
+    } catch (e: any) {
+      Alert.alert('Fingerprint sign-in', e?.message ?? 'Something went wrong.');
+    } finally {
+      setBioBusy(false);
+    }
+  }
 
   // Load stored server URL
   useEffect(() => {
@@ -327,6 +356,28 @@ export default function SettingsScreen() {
             <Text style={styles.aboutValue} numberOfLines={1}>{user?.storeId ?? '—'}</Text>
           </View>
         </View>
+
+        {bioReady && (
+          <>
+            <Text style={styles.sectionTitle}>Security</Text>
+            <View style={styles.card}>
+              <View style={styles.aboutRow}>
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                  <Text style={styles.aboutLabel}>Sign in with fingerprint</Text>
+                  <Text style={[styles.aboutValue, { textAlign: 'left', marginTop: 2 }]}>
+                    Use your fingerprint or face instead of your PIN or password on this phone.
+                  </Text>
+                </View>
+                <Switch
+                  value={bioOn}
+                  onValueChange={(v) => void toggleBiometric(v)}
+                  disabled={bioBusy}
+                  accessibilityLabel="Sign in with fingerprint"
+                />
+              </View>
+            </View>
+          </>
+        )}
 
         {/* Logout */}
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>

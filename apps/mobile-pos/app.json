@@ -52,6 +52,12 @@
     "plugins": [
       "expo-router",
       [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow KASTRA POS to use Face ID to sign you in."
+        }
+      ],
+      [
         "expo-camera",
         {
           "cameraPermission": "Allow KASTRA POS to access your camera for barcode scanning."

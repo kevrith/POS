@@ -16,6 +16,11 @@ export class DbBackupService {
   /** Daily at 02:00 UTC (05:00 EAT) */
   @Cron('0 2 * * *')
   async runBackup() {
+    // The offline desktop edition backs itself up (packages/local-server): verified, to the owner's folder, with its own
+    // PostgreSQL tools. This job needs pg_dump and gzip on the PATH and a Linux folder, so on a customer's PC it would
+    // only fail every night and leave a stray C:\var\backups behind.
+    if (process.env.KASTRA_EDITION === 'LOCAL') return;
+
     const dbUrl = process.env.DATABASE_URL;
     if (!dbUrl || !dbUrl.startsWith('postgresql')) {
       this.logger.warn('DB backup skipped — DATABASE_URL is not a PostgreSQL connection string');

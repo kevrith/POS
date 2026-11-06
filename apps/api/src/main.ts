@@ -130,7 +130,11 @@ async function bootstrap() {
     }));
 
     const port = process.env.PORT ?? 3010;
-    await app.listen(port);
+    // HOST narrows who can connect. Unset (the cloud, development) it listens on every interface as before; the offline
+    // desktop edition sets 127.0.0.1 unless the owner chose to act as a server for other computers on the network.
+    const host = process.env.HOST;
+    if (host) await app.listen(port, host);
+    else await app.listen(port);
 
     logger.log(`🚀 API running on port ${port}/api`);
     logger.log('📋 Health check: http://localhost:3010/api/auth/me');

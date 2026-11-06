@@ -26,7 +26,7 @@ jobs:
             target: x86_64-unknown-linux-gnu
             label: Linux x86_64
 
-          # Windows — .msi installer + .exe setup
+          # Windows — the .exe setup (NSIS). It carries the offline server (database + API), so it is the one Windows installer.
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
             label: Windows x86_64
@@ -104,6 +104,34 @@ jobs:
           NODE_ENV: production
         run: npm run build
 
+      # ── Offline server (Windows only) ──────────────────────────────────────────
+      # The Windows installer carries its own PostgreSQL and API so a shop can sell with no internet and no server to set up.
+      # Assembled here (pinned, hash-checked downloads), proven to run on its own, and packed into the ONE file the installer
+      # carries (apps/desktop/src-tauri/resources/server.tar.gz). Other platforms build without it (a placeholder is used).
+      - name: Cache the offline-server downloads
+        if: matrix.platform == 'windows-latest'
+        uses: actions/cache@v4
+        with:
+          path: apps/desktop/.cache/server-bundle
+          key: server-bundle-${{ hashFiles('apps/desktop/scripts/server-bundle.pins.json') }}
+
+      - name: Build the offline server
+        if: matrix.platform == 'windows-latest'
+        shell: bash
+        env:
+          # Prisma only reads these to generate its client; nothing connects.
+          DATABASE_URL: postgresql://localhost/placeholder
+          DIRECT_URL: postgresql://localhost/placeholder
+        run: |
+          npx prisma generate --schema prisma/schema.prisma
+          (cd apps/api && npm run build)
+          (cd packages/local-server && npm run build)
+          node apps/desktop/scripts/build-server-bundle.mjs
+
+      - name: Smoke test the offline server
+        if: matrix.platform == 'windows-latest'
+        run: node apps/desktop/scripts/smoke-server-bundle.mjs
+
       # ── Tauri build + GitHub Release ───────────────────────────────────────────
       - name: Build and release Tauri app
         uses: tauri-apps/tauri-action@v0
@@ -131,8 +159,7 @@ jobs:
             ### Downloads
             | Platform | File | Notes |
             |----------|------|-------|
-            | Windows 10/11 | `.msi` | Recommended installer |
-            | Windows | `.exe` | NSIS setup |
+            | Windows 10/11 | `.exe` | Setup. Includes the offline server: works with no internet |
             | macOS 11+ Intel | `.dmg` | For Intel Macs |
             | macOS 11+ Apple Silicon | `.dmg` | For M1/M2/M3 Macs |
             | Ubuntu/Debian | `.deb` | `sudo dpkg -i kastra-pos_*.deb` |
@@ -141,9 +168,9 @@ jobs:
             ### First-time Setup
             1. Download and install for your platform
             2. Launch the app — the **Setup Wizard** opens automatically
-            3. Choose your network topology (Standalone / Server / Client)
-            4. Enter your server URL (if Client or Cloud mode)
-            5. Log in with your KASTRA POS credentials
+            3. Choose where your data lives: on this computer (works offline) or in KASTRA Cloud
+            4. On this computer: choose server and till, server only, or till only; confirm the folders
+            5. Register your business, or sign in
 
             ### What's included
             - Full POS, Inventory, Reports, HR, Payroll in a native window
@@ -156,4 +183,6 @@ jobs:
             The app will notify you automatically when a new version is available.
           releaseDraft: false
           prerelease: false
-          args: --target ${{ matrix.target }}
+          # Windows builds only the NSIS .exe: the MSI would list about 11,000 offline-server files and the offline server needs
+          # the NSIS firewall rules. Other platforms build everything, as before.
+          args: ${{ matrix.platform == 'windows-latest' && format('--target {0} --bundles nsis', matrix.target) || format('--target {0}', matrix.target) }}

@@ -3,8 +3,18 @@
  * Connects to the NestJS WebSocket gateway for live updates.
  */
 import { io, Socket } from 'socket.io-client';
+import { getApiUrl } from './api';
 
-const WS_URL = import.meta.env.VITE_API_URL?.replace('/api/v1', '') ?? 'http://localhost:3010';
+/**
+ * Where the live connection goes: the server this app was set up to use. The desktop app and a till on a LAN know their
+ * server's address (api.ts), and a relative address would point at the app's own window, not at the server. Plain
+ * web development keeps talking to the dev API directly.
+ */
+function wsUrl(): string {
+  const api = getApiUrl();
+  if (/^https?:\/\//i.test(api)) return api.replace(/\/api\/v1\/?$/, '');
+  return import.meta.env.VITE_API_URL?.replace('/api/v1', '') ?? 'http://localhost:3010';
+}
 
 type EventHandler = (data: Record<string, unknown>) => void;
 
@@ -26,7 +36,7 @@ export function connectSocket(token: string, businessId: string): void {
 
   currentBusinessId = businessId;
 
-  socket = io(WS_URL, {
+  socket = io(wsUrl(), {
     auth: { token },
     transports: ['websocket', 'polling'],
     reconnection: true,

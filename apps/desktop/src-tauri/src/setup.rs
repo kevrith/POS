@@ -4,7 +4,12 @@ use std::path::PathBuf;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct SetupConfig {
-    /// Network topology: STANDALONE | SERVER | CLIENT
+    /// Where this computer's data lives and what it does:
+    ///   CLOUD        data in KASTRA Cloud; this app is a till
+    ///   SERVER_POS   data on THIS computer, which is also a till (a small shop's single PC)
+    ///   SERVER       data on this computer, which only serves the tills (a dedicated server PC)
+    ///   CLIENT       a till that connects to a server on the network
+    /// (STANDALONE is the old name for SERVER_POS and is still read.)
     pub mode: String,
     /// Device role: FULL_POS | CASHIER | KIOSK | KDS | MANAGER
     /// Meaningful on CLIENT; defaults to FULL_POS for STANDALONE/SERVER
@@ -18,6 +23,39 @@ pub struct SetupConfig {
     pub terminal_name: Option<String>,
     /// Business name entered in the wizard; pre-fills registration
     pub business_name: Option<String>,
+    /// Folder for the live database (SERVER_POS / SERVER). None = the default, C:\ProgramData\KASTRA\pgdata.
+    #[serde(default)]
+    pub data_dir: Option<String>,
+    /// Folder for backups. None = Documents\KASTRA Backups.
+    #[serde(default)]
+    pub backup_dir: Option<String>,
+    /// May other computers on the network connect to this server?
+    #[serde(default)]
+    pub lan_enabled: Option<bool>,
+}
+
+/// Does this computer run its own database and API?
+pub fn is_local_server_mode(mode: &str) -> bool {
+    matches!(mode, "SERVER_POS" | "SERVER" | "STANDALONE")
+}
+
+/// Change part of the saved setup (for example the "other computers may connect" choice) and write it back.
+pub fn update_config(change: impl FnOnce(&mut SetupConfig)) -> Result<SetupConfig, String> {
+    let mut cfg = read_config()?;
+    change(&mut cfg);
+    let content = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
+    fs::write(get_config_path(), content).map_err(|e| e.to_string())?;
+    Ok(cfg)
+}
+
+/// Read mode.json without async, for code that already runs on its own thread.
+pub fn read_config() -> Result<SetupConfig, String> {
+    let path = get_config_path();
+    if !path.exists() {
+        return Err("This computer has not been set up yet.".to_string());
+    }
+    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    serde_json::from_str(&content).map_err(|e| e.to_string())
 }
 
 fn get_config_path() -> PathBuf {
@@ -42,6 +80,9 @@ pub async fn get_setup_mode() -> Result<SetupConfig, String> {
             license_key: None,
             terminal_name: None,
             business_name: None,
+            data_dir: None,
+            backup_dir: None,
+            lan_enabled: None,
         });
     }
     let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
@@ -57,6 +98,9 @@ pub async fn set_setup_mode(
     license_key: Option<String>,
     terminal_name: Option<String>,
     business_name: Option<String>,
+    data_dir: Option<String>,
+    backup_dir: Option<String>,
+    lan_enabled: Option<bool>,
 ) -> Result<bool, String> {
     let config = SetupConfig {
         mode,
@@ -66,6 +110,9 @@ pub async fn set_setup_mode(
         license_key,
         terminal_name,
         business_name,
+        data_dir,
+        backup_dir,
+        lan_enabled,
     };
     let content = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
     let path = get_config_path();

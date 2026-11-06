@@ -21,6 +21,9 @@ vi.mock('socket.io-client', () => ({
   },
 }));
 
+// socket.ts asks api.ts which server to connect to; api.ts needs a browser, so give it a fixed answer here.
+vi.mock('../api', () => ({ getApiUrl: () => '/api/v1' }));
+
 import { connectSocket, disconnectSocket, subscribeToEvent } from '../socket';
 
 describe('subscribeToEvent', () => {

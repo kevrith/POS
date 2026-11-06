@@ -78,3 +78,8 @@ backups/*.sqlite
 # committed it becomes the source of truth and app.json silently stops applying.
 apps/*/android/
 apps/*/ios/
+
+# Offline desktop server (apps/desktop/scripts/build-server-bundle.mjs): generated, large, rebuilt by CI
+apps/desktop/.cache/
+apps/desktop/src-tauri/resources/server/
+apps/desktop/src-tauri/resources/server.tar.gz

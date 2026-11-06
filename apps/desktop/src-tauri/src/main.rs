@@ -10,6 +10,8 @@ mod setup;
 mod oauth;
 mod license;
 mod discovery;
+mod local_server_core;
+mod local_server;
 
 /// Check the remote server for a newer application version.
 ///
@@ -41,16 +43,34 @@ async fn check_for_app_update() -> Result<serde_json::Value, String> {
     }
 }
 
+/// Set once the window is closing, so the second "exit" request (the one we make ourselves) goes through.
+static SHUTTING_DOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn main() {
-    tauri::Builder::default()
+    use tauri::Manager;
+
+    let app = tauri::Builder::default()
+        .manage(local_server::LocalServerState::default())
         .setup(|app| {
             let version = app.package_info().version.to_string();
             println!("KASTRA POS Desktop v{} starting...", version);
 
-            // Start LAN discovery responder if this machine is a server/standalone
+            // A computer that keeps its own data starts its database and API now; the web UI shows progress.
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                let (slot, prep) = {
+                    let state = handle.state::<local_server::LocalServerState>();
+                    (state.0.clone(), state.1.clone())
+                };
+                if let Err(e) = local_server::start(&handle, &slot, &prep) {
+                    eprintln!("Local server did not start: {}", e);
+                }
+            });
+
+            // Answer "who is the KASTRA server?" broadcasts only when other computers are allowed to connect.
             tauri::async_runtime::spawn(async {
                 if let Ok(cfg) = setup::get_setup_mode().await {
-                    if cfg.mode == "SERVER" || cfg.mode == "STANDALONE" {
+                    if setup::is_local_server_mode(&cfg.mode) && cfg.lan_enabled.unwrap_or(false) {
                         discovery::start_discovery_responder(3010);
                     }
                 }
@@ -94,7 +114,33 @@ fn main() {
             check_for_app_update,
             // LAN discovery
             discovery::discover_servers,
+            // Local server (this computer's own database + API)
+            local_server::local_server_defaults,
+            local_server::local_server_validate_folders,
+            local_server::local_server_start,
+            local_server::local_server_restart,
+            local_server::local_server_stop,
+            local_server::local_server_set_lan,
+            local_server::local_server_status,
+            local_server::local_server_backup,
+            local_server::local_server_backups,
+            local_server::local_server_restore,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running KASTRA POS desktop");
+        .build(tauri::generate_context!())
+        .expect("error while building KASTRA POS desktop");
+
+    app.run(|app_handle, event| {
+        // Closing the window must not cut the database off mid-write: stop it cleanly (with a backup if the last one is
+        // over an hour old) and only then let the app exit.
+        if let tauri::RunEvent::ExitRequested { api, .. } = &event {
+            if !SHUTTING_DOWN.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                api.prevent_exit();
+                let handle = app_handle.clone();
+                std::thread::spawn(move || {
+                    local_server::shutdown(&handle);
+                    handle.exit(0);
+                });
+            }
+        }
+    });
 }

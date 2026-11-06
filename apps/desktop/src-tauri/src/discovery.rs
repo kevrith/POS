@@ -9,11 +9,17 @@
 
 use serde::{Deserialize, Serialize};
 use tokio::net::UdpSocket;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::time::Duration;
 
 pub const DISCOVERY_PORT: u16 = 47474;
 const DISCOVERY_MAGIC: &str = "KASTRA_DISCOVER";
 const API_PORT: u16 = 3010;
+
+/// Is the responder allowed to answer right now? Off when other computers may not connect to this server.
+static ANSWERING: AtomicBool = AtomicBool::new(false);
+/// Has the listening task been started? It is started once and then only switched on and off.
+static STARTED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DiscoveredServer {
@@ -89,6 +95,11 @@ fn parse_response(msg: &str, ip: String) -> Option<DiscoveredServer> {
 /// Spawn a background task that listens for discovery broadcasts and replies.
 /// Call this once on startup when running in SERVER or STANDALONE mode.
 pub fn start_discovery_responder(api_port: u16) {
+    ANSWERING.store(true, Ordering::SeqCst);
+    // Started once; calling again (the owner switched network access off and on) just lets it answer again.
+    if STARTED.swap(true, Ordering::SeqCst) {
+        return;
+    }
     let my_hostname = hostname::get()
         .map(|h| h.to_string_lossy().to_string())
         .unwrap_or_else(|_| "KASTRA-Server".to_string());
@@ -115,7 +126,7 @@ pub fn start_discovery_responder(api_port: u16) {
             match socket.recv_from(&mut buf).await {
                 Ok((len, peer)) => {
                     let msg = String::from_utf8_lossy(&buf[..len]);
-                    if msg.trim() == DISCOVERY_MAGIC {
+                    if msg.trim() == DISCOVERY_MAGIC && ANSWERING.load(Ordering::SeqCst) {
                         eprintln!("[Discovery] Got probe from {} → replying", peer);
                         socket.send_to(response.as_bytes(), peer).await.ok();
                     }
@@ -127,4 +138,9 @@ pub fn start_discovery_responder(api_port: u16) {
             }
         }
     });
+}
+
+/// Stop answering discovery probes (the responder keeps listening, silently, so it can be switched back on).
+pub fn stop_discovery_responder() {
+    ANSWERING.store(false, Ordering::SeqCst);
 }

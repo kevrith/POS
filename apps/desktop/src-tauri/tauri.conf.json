@@ -29,12 +29,14 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": ["resources/server.tar.gz"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/512x512.png",
       "icons/512x512@2x.png",
+      "icons/icon.icns",
       "icons/icon.ico"
     ],
     "macOS": {
@@ -49,6 +51,13 @@
       "wix": {
         "fragmentPaths": ["wix/setup-cleanup.wxs"],
         "componentRefs": ["KastraSetupCleanup"]
+      },
+      "nsis": {
+        "installMode": "perMachine",
+        "installerHooks": "windows/installer-hooks.nsh",
+        "languages": ["English"],
+        "displayLanguageSelector": false,
+        "compression": "zlib"
       }
     }
   }

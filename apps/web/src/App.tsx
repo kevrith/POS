@@ -8,6 +8,7 @@ import LoginPage from './pages/LoginPage';
 import Layout from './components/Layout';
 import PrintBridge from './components/PrintBridge';
 import { DialogProvider } from './components/Dialog';
+import LocalServerGate from './components/LocalServerGate';
 
 // Lazy load all pages for code-splitting
 const POSPage = lazy(() => import('./pages/POSRouterPage'));
@@ -45,6 +46,8 @@ const ForecastingPage = lazy(() => import('./pages/ForecastingPage'));
 const ReconciliationPage = lazy(() => import('./pages/ReconciliationPage'));
 const FranchisePage = lazy(() => import('./pages/FranchisePage'));
 const DesktopSetupPage = lazy(() => import('./pages/DesktopSetupPage'));
+const ServerConsolePage = lazy(() => import('./pages/ServerConsolePage'));
+const ServerSettingsPage = lazy(() => import('./pages/ServerSettingsPage'));
 const HotelPage = lazy(() => import('./pages/HotelPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const StocktakePage = lazy(() => import('./pages/StocktakePage'));
@@ -172,6 +175,8 @@ export default function App() {
   const { ready, isTauri } = useTauriReady();
   const [tauriSetupVerified, setTauriSetupVerified] = useState(false);
   const [showSetupWizard, setShowSetupWizard] = useState(false);
+  // How this computer was set up (CLOUD, SERVER_POS, SERVER, CLIENT); decides whether it must wait for its own server.
+  const [desktopMode, setDesktopMode] = useState<string | null>(null);
 
   // Always use the Rust config file as the single source of truth.
   // localStorage is unreliable (persists across re-installs in WebView2/WKWebView).
@@ -182,6 +187,7 @@ export default function App() {
       return;
     }
     void tauriInvoke<{ mode: string }>('get_setup_mode').then(cfg => {
+      setDesktopMode(cfg?.mode ?? null);
       if (!cfg || cfg.mode === 'UNCONFIGURED') {
         localStorage.removeItem('desktop-setup-done');
         localStorage.removeItem('desktop-device-role');
@@ -220,6 +226,17 @@ export default function App() {
       </Suspense>
     );
   }
+
+  // A computer set up as "server only" has no till: it shows the server's status, address and backups.
+  if (isTauri && desktopMode === 'SERVER') {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-gray-100" />}>
+        <ServerConsolePage />
+      </Suspense>
+    );
+  }
+  // A computer that keeps its own data (server and till) waits for its database and API before showing the app.
+  const waitForLocalServer = isTauri && (desktopMode === 'SERVER_POS' || desktopMode === 'STANDALONE');
 
   // Public standalone pages — no auth, no layout
   if (window.location.pathname === '/reservation-widget') {
@@ -291,14 +308,17 @@ export default function App() {
 
   if (!isAuthenticated) {
     return (
-      <GoogleOAuthProvider clientId={googleClientId || 'disabled'}>
-        <PrintBridge />
-        <LoginPage />
-      </GoogleOAuthProvider>
+      <LocalServerGate enabled={waitForLocalServer}>
+        <GoogleOAuthProvider clientId={googleClientId || 'disabled'}>
+          <PrintBridge />
+          <LoginPage />
+        </GoogleOAuthProvider>
+      </LocalServerGate>
     );
   }
 
   return (
+    <LocalServerGate enabled={waitForLocalServer}>
     <DialogProvider>
       <>
         <Toaster position="top-right" richColors closeButton duration={4000} />
@@ -339,6 +359,7 @@ export default function App() {
               <Route path="/online-orders" element={<OnlineOrdersPage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/server" element={<ServerSettingsPage />} />
               <Route path="/setup" element={<SetupWizardPage />} />
               <Route path="/forecasting" element={<ForecastingPage />} />
               <Route path="/reconciliation" element={<ReconciliationPage />} />
@@ -366,5 +387,6 @@ export default function App() {
         </Layout>
       </>
     </DialogProvider>
+    </LocalServerGate>
   );
 }

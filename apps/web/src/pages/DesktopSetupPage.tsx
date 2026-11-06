@@ -1,13 +1,16 @@
 /**
  * Desktop Installation Wizard — only shown in Tauri context on first launch.
  *
- * Step flow:
+ * Two questions: where does your data live, and what does THIS computer do?
  *
- *  STANDALONE / SERVER:   Welcome → License → Mode → Done
- *  CLOUD:                 Welcome → License → Mode → Network → Done
- *  CLIENT:                Welcome → License → Mode → Device Role → Network → Done
+ *  Cloud:                      Welcome → License → Data → Network → Done
+ *  This computer (server+till)
+ *  or server only:             Welcome → License → Data → This computer → Folders → Done
+ *  Till (client):              Welcome → License → Data → This computer → Device role → Network → Done
  *
- * Device roles (CLIENT only):
+ * The rules (which step comes next, what is saved) live in lib/desktopSetup.ts and are unit-tested.
+ *
+ * Device roles (tills only):
  *   FULL_POS   — standard cashier terminal, full POS + inventory
  *   CASHIER    — sales only, no management/settings
  *   KIOSK      — customer self-service ordering (fullscreen /kiosk route)
@@ -21,8 +24,13 @@ import { toast } from 'sonner';
 import {
   ShoppingCart, Key, Server, Monitor, Wifi, CheckCircle,
   ChevronRight, ChevronLeft, AlertCircle, Loader2, RefreshCw,
-  ArrowRight, Shield, Tablet, ChefHat, BarChart3, User,
+  ArrowRight, Shield, Tablet, ChefHat, BarChart3, User, HardDrive, Cloud, FolderOpen,
 } from 'lucide-react';
+import {
+  buildSetupPayload, defaultLanEnabled, flowFor, isLocalTopology, normalizeServerUrl, STEP_LABEL, stepAfter, stepBefore,
+  topologyName, type DeviceRole, type Place, type StepId, type Topology,
+} from '../lib/desktopSetup';
+import { serverDefaults, serverStart, validateFolders, type FolderCheck } from '../lib/desktopServer';
 
 // ─── Tauri invoke shim ────────────────────────────────────────────────────────
 
@@ -53,68 +61,85 @@ function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Topology   = 'STANDALONE' | 'SERVER' | 'CLIENT' | 'CLOUD';
-type DeviceRole = 'FULL_POS' | 'CASHIER' | 'KIOSK' | 'KDS' | 'MANAGER';
-
 interface DiscoveredServer { ip: string; port: number; hostname: string; url: string; }
 
-// ─── Topology cards ───────────────────────────────────────────────────────────
+// ─── Cards ────────────────────────────────────────────────────────────────────
 
-const TOPOLOGIES: Array<{
-  value: Topology;
+type Card = {
+  value: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   desc: string;
   details: string[];
   badge?: string;
   color: string;
-}> = [
+};
+
+/** Question 1: where does your data live? */
+const PLACES: Array<Card & { value: Place }> = [
   {
-    value: 'CLOUD',
-    label: 'Cloud (SaaS)',
-    icon: ArrowRight,
-    desc: 'Connect to KASTRA Cloud — data online, accessible from anywhere.',
+    value: 'LOCAL',
+    label: 'On this computer (works offline)',
+    icon: HardDrive,
+    desc: 'Your sales, stock and customers are kept on your own computer. No internet needed to sell.',
     details: [
-      'Data stored securely in the cloud',
-      'Owner can monitor all branches remotely',
-      'Requires internet connection',
+      'Works fully offline, like desktop accounting software',
+      'Automatic backups to your Documents folder',
+      'Other tills in the shop can connect over your local network',
     ],
-    badge: 'Recommended',
-    color: 'sky',
+    badge: 'Offline',
+    color: 'blue',
   },
   {
-    value: 'STANDALONE',
-    label: 'All-in-One / Standalone',
-    icon: Monitor,
-    desc: 'Single computer — API, database and UI all on this machine.',
+    value: 'CLOUD',
+    label: 'KASTRA Cloud (online)',
+    icon: Cloud,
+    desc: 'Your data is kept online and is reachable from anywhere.',
     details: [
-      'Works fully offline — no internet needed',
-      'Best for single-cashier businesses',
-      'Simplest setup',
+      'Owner can watch every branch remotely',
+      'Needs an internet connection to sign in and sell',
+      'Nothing to back up yourself',
     ],
+    color: 'sky',
+  },
+];
+
+/** Question 2 (data on your computers): what does THIS computer do? */
+const TOPOLOGIES: Array<Card & { value: Topology }> = [
+  {
+    value: 'SERVER_POS',
+    label: 'Server and till on this computer',
+    icon: Monitor,
+    desc: 'One computer does everything. The usual choice for a shop with a single counter.',
+    details: [
+      'Keeps the database and is also the till',
+      'Add more tills later if you grow',
+      'Nothing else to set up',
+    ],
+    badge: 'Most shops',
     color: 'blue',
   },
   {
     value: 'SERVER',
-    label: 'LAN Server',
+    label: 'Server only',
     icon: Server,
-    desc: 'This PC hosts the database. Other terminals connect over your local network.',
+    desc: 'A dedicated computer that keeps the data. Tills on other computers connect to it.',
     details: [
-      'Runs API + database on this machine',
-      'Other PCs in the building connect as clients',
-      'Works offline — no internet needed',
+      'For a supermarket or any shop with several tills',
+      'Shows server status, backups and the address tills connect to',
+      'Leave it switched on while the shop is open',
     ],
     color: 'purple',
   },
   {
     value: 'CLIENT',
-    label: 'LAN Client / Kiosk',
+    label: 'Till only',
     icon: Wifi,
-    desc: 'Connect to an existing KASTRA Server or Cloud — choose what role this device plays.',
+    desc: 'This computer is a till. It connects to the server computer on your network.',
     details: [
-      'Can be a cashier terminal, kiosk, or KDS',
-      'Requires a running KASTRA Server on the network',
-      'Device role chosen in the next step',
+      'Needs the server computer to be switched on',
+      'Choose what this screen is for next: cashier, kiosk, kitchen display or back office',
+      'Finds the server automatically',
     ],
     color: 'emerald',
   },
@@ -243,16 +268,15 @@ function StepBar({ steps, current }: { steps: string[]; current: number }) {
   );
 }
 
-// ─── Wizard steps enum ────────────────────────────────────────────────────────
-
-const S = { WELCOME: 0, LICENSE: 1, TOPOLOGY: 2, ROLE: 3, NETWORK: 4, DONE: 5 } as const;
+// Steps are named (see StepId in lib/desktopSetup.ts), and the order a choice leads through is flowFor().
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function DesktopSetupPage() {
   const navigate = useNavigate();
 
-  const [step,          setStep]          = useState<number>(S.WELCOME);
+  const [step,          setStep]          = useState<StepId>('WELCOME');
+  const [place,         setPlace]         = useState<Place | null>(null);
   const [topology,      setTopology]      = useState<Topology | null>(null);
   const [deviceRole,    setDeviceRole]    = useState<DeviceRole>('FULL_POS');
   const [licenseKey,    setLicenseKey]    = useState('');
@@ -268,28 +292,22 @@ export default function DesktopSetupPage() {
   const [terminalName,  setTerminalName]  = useState('');
   const [businessName,  setBusinessName]  = useState('');
   const [saving,        setSaving]        = useState(false);
+  const [dataDir,       setDataDir]       = useState('');
+  const [backupDir,     setBackupDir]     = useState('');
+  const [lanEnabled,    setLanEnabled]    = useState(false);
+  const [folderCheck,   setFolderCheck]   = useState<FolderCheck | null>(null);
+  const [checking,      setChecking]      = useState(false);
+  // The default folders come from the server program, whose files are unpacked the first time it is used (up to a minute on
+  // Windows). So they are asked for when the folders step opens, with a visible "preparing" note, not when the wizard loads.
+  const [defaultsState, setDefaultsState] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle');
+  const [defaultsError, setDefaultsError] = useState('');
 
-  /* Derive which steps to show in the step bar */
-  const visibleSteps = (() => {
-    if (!topology || topology === 'STANDALONE' || topology === 'SERVER')
-      return ['Welcome', 'License', 'Mode', 'Done'];
-    if (topology === 'CLOUD')
-      return ['Welcome', 'License', 'Mode', 'Network', 'Done'];
-    // CLIENT
-    return ['Welcome', 'License', 'Mode', 'Device Role', 'Network', 'Done'];
-  })();
-
-  /* Map wizard step index → step bar position */
-  const stepBarPos = (() => {
-    if (!topology || topology === 'STANDALONE' || topology === 'SERVER') {
-      return [0, 1, 2, -1, -1, 3][step] ?? step;
-    }
-    if (topology === 'CLOUD') {
-      return [0, 1, 2, -1, 3, 4][step] ?? step;
-    }
-    // CLIENT — all 6 steps map 1:1
-    return step;
-  })();
+  /* The steps this choice leads through, and where we are in them */
+  const flow = flowFor(place, topology);
+  const visibleSteps = flow.map((id) => STEP_LABEL[id]);
+  const stepBarPos = Math.max(0, flow.indexOf(step));
+  const next = () => setStep(stepAfter(flow, step));
+  const back = () => setStep(stepBefore(flow, step));
 
   useEffect(() => {
     void (async () => {
@@ -312,6 +330,20 @@ export default function DesktopSetupPage() {
     })();
   }, [navigate]);
 
+  useEffect(() => {
+    if (step !== 'FOLDERS' || defaultsState !== 'idle') return;
+    setDefaultsState('loading');
+    serverDefaults().then(
+      (d) => {
+        // Only fill what the person has not already typed.
+        setDataDir((v) => v || d.dataDir);
+        setBackupDir((v) => v || d.backupDir);
+        setDefaultsState('ready');
+      },
+      (e: Error) => { setDefaultsError(e.message); setDefaultsState('failed'); },
+    );
+  }, [step, defaultsState]);
+
   /* ── Handlers ─────────────────────────────────────────────────────────────── */
 
   async function validateLicense() {
@@ -322,7 +354,7 @@ export default function DesktopSetupPage() {
     setLicenseError('');
     try {
       const valid = await invoke<boolean>('validate_license_key', { key, machineId });
-      if (valid) { setLicenseValid(true); setStep(S.TOPOLOGY); }
+      if (valid) { setLicenseValid(true); setStep('PLACE'); }
       else        setLicenseError('Invalid key. Please check the key or contact support.');
     } catch (e) {
       setLicenseError('Validation failed: ' + String(e));
@@ -331,22 +363,36 @@ export default function DesktopSetupPage() {
     }
   }
 
-  function afterTopology() {
-    if (!topology) return;
-    if (topology === 'STANDALONE' || topology === 'SERVER') {
-      setStep(S.DONE);          // No role or network step needed
-    } else if (topology === 'CLOUD') {
+  /** Question 1 answered. Cloud needs no further choice about this computer; local asks what this computer does. */
+  function afterPlace() {
+    if (place === 'CLOUD') {
+      setTopology('CLOUD');
       setServerUrl(cloudUrl);
-      setStep(S.NETWORK);       // Skip role for cloud
+      setStep('NETWORK');
     } else {
-      setStep(S.ROLE);          // CLIENT → choose role first
+      if (topology === 'CLOUD') setTopology(null);
+      setStep('TOPOLOGY');
+    }
+  }
+
+  /** The folders must pass the same checks the server program will apply, so a bad choice is caught here, with a reason. */
+  async function afterFolders() {
+    setChecking(true);
+    try {
+      const result = await validateFolders(dataDir.trim(), backupDir.trim());
+      setFolderCheck(result);
+      if (result.dataDir.ok && result.backupDir.ok) setStep('DONE');
+    } catch (e) {
+      toast.error('Could not check the folders: ' + String(e));
+    } finally {
+      setChecking(false);
     }
   }
 
   async function testConnection() {
     setConnectStatus('testing');
     try {
-      const ok = await invoke<boolean>('test_server_connection', { serverUrl });
+      const ok = await invoke<boolean>('test_server_connection', { serverUrl: normalizeServerUrl(serverUrl) });
       setConnectStatus(ok ? 'ok' : 'fail');
     } catch {
       setConnectStatus('fail');
@@ -367,35 +413,23 @@ export default function DesktopSetupPage() {
   }
 
   async function finish() {
+    if (!topology) return;
     setSaving(true);
     try {
-      const finalTopology  = topology ?? 'STANDALONE';
-      const needsServerUrl = finalTopology === 'CLIENT' || finalTopology === 'CLOUD';
-      const role           = (finalTopology === 'STANDALONE' || finalTopology === 'SERVER')
-                               ? 'FULL_POS'
-                               : deviceRole;
-
-      await invoke('set_setup_mode', {
-        mode:         finalTopology,
-        deviceRole:   role,
-        serverUrl:    needsServerUrl ? serverUrl : null,
-        storeId:      null,
-        licenseKey:   licenseValid ? licenseKey : null,
-        terminalName: terminalName || null,
-        businessName: businessName.trim() || null,
+      const payload = buildSetupPayload({
+        topology, deviceRole, licenseKey, licenseValid, serverUrl, terminalName, businessName, dataDir, backupDir, lanEnabled,
       });
-
-      if (needsServerUrl) {
-        localStorage.setItem('kastra-server-url', serverUrl);
-      } else {
-        // STANDALONE / SERVER: the API runs on this machine — point to localhost
-        localStorage.setItem('kastra-server-url', 'http://localhost:3010');
-      }
+      await invoke('set_setup_mode', payload.invokeArgs);
+      localStorage.setItem('kastra-server-url', payload.apiServerUrl);
 
       localStorage.setItem('desktop-setup-done', '1');
       if (businessName.trim()) localStorage.setItem('desktop-business-name', businessName.trim());
       else localStorage.removeItem('desktop-business-name');
-      localStorage.setItem('desktop-device-role', role);
+      localStorage.setItem('desktop-device-role', payload.deviceRole);
+
+      // A computer that keeps its own data starts its database and API now. This returns at once; the app shows the
+      // progress ("Creating your database...") until the server is ready.
+      if (payload.startsLocalServer) await serverStart();
 
       // Full reload so api.ts re-resolves the API URL from localStorage.
       window.location.href = '/login';
@@ -416,14 +450,14 @@ export default function DesktopSetupPage() {
       <div className="w-full max-w-[560px] bg-white rounded-2xl shadow-[0_32px_80px_rgba(0,0,0,0.5)] overflow-hidden">
 
         {/* Step bar — hidden on welcome */}
-        {step > S.WELCOME && step < S.DONE && (
+        {step > 'WELCOME' && step < 'DONE' && (
           <StepBar steps={visibleSteps} current={stepBarPos} />
         )}
 
         <div className="p-8">
 
           {/* ── Step 0: Welcome ──────────────────────────────────────────── */}
-          {step === S.WELCOME && (
+          {step === 'WELCOME' && (
             <div className="text-center space-y-6">
               <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-700 rounded-2xl flex items-center justify-center mx-auto shadow-lg">
                 <ShoppingCart className="w-10 h-10 text-white" />
@@ -439,8 +473,8 @@ export default function DesktopSetupPage() {
               <div className="text-left space-y-2">
                 {[
                   { icon: Key,         label: 'License Activation',  desc: 'Verify your purchase (optional trial)' },
-                  { icon: Server,      label: 'Installation Mode',   desc: 'Standalone, Server, Client, or Cloud' },
-                  { icon: Tablet,      label: 'Device Role',         desc: 'POS terminal, kiosk, KDS, or back office' },
+                  { icon: Server,      label: 'Where your data lives', desc: 'On this computer (works offline) or in the cloud' },
+                  { icon: Tablet,      label: 'What this computer does', desc: 'Server and till, server only, or a till' },
                   { icon: CheckCircle, label: 'Ready to Launch',     desc: 'Start taking sales immediately' },
                 ].map(({ icon: Icon, label, desc }) => (
                   <div key={label} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50">
@@ -456,7 +490,7 @@ export default function DesktopSetupPage() {
               </div>
 
               <button
-                onClick={() => setStep(S.LICENSE)}
+                onClick={() => setStep('LICENSE')}
                 className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-[15px] flex items-center justify-center gap-2 transition-colors shadow-lg"
               >
                 Begin Setup <ChevronRight className="w-5 h-5" />
@@ -465,7 +499,7 @@ export default function DesktopSetupPage() {
           )}
 
           {/* ── Step 1: License ──────────────────────────────────────────── */}
-          {step === S.LICENSE && (
+          {step === 'LICENSE' && (
             <div className="space-y-6">
               <div>
                 <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center mb-3">
@@ -518,7 +552,7 @@ export default function DesktopSetupPage() {
               </div>
 
               <div className="flex gap-3">
-                <button onClick={() => setStep(S.WELCOME)} className="px-4 py-2.5 border rounded-xl text-gray-600 hover:bg-gray-50 flex items-center gap-1">
+                <button onClick={() => setStep('WELCOME')} className="px-4 py-2.5 border rounded-xl text-gray-600 hover:bg-gray-50 flex items-center gap-1">
                   <ChevronLeft className="w-4 h-4" /> Back
                 </button>
                 <button
@@ -534,7 +568,7 @@ export default function DesktopSetupPage() {
               </div>
 
               <button
-                onClick={() => setStep(S.TOPOLOGY)}
+                onClick={() => setStep('PLACE')}
                 className="w-full text-xs text-gray-400 hover:text-gray-600 py-1"
               >
                 Skip — I'll activate later (trial mode)
@@ -542,19 +576,88 @@ export default function DesktopSetupPage() {
             </div>
           )}
 
-          {/* ── Step 2: Topology ─────────────────────────────────────────── */}
-          {step === S.TOPOLOGY && (
+          {/* ── Step 2: Where does your data live? ───────────────────────── */}
+          {step === 'PLACE' && (
             <div className="space-y-5">
               <div>
-                <h2 className="text-xl font-bold text-gray-900">Installation Mode</h2>
-                <p className="text-gray-500 text-sm mt-1">How will this computer be used in your setup?</p>
+                <h2 className="text-xl font-bold text-gray-900">Where will your data live?</h2>
+                <p className="text-gray-500 text-sm mt-1">You can change this later, but each business keeps its data in one place at a time.</p>
+              </div>
+
+              <div className="space-y-2.5">
+                {PLACES.map((t) => (
+                  <button
+                    key={t.value}
+                    onClick={() => setPlace(t.value)}
+                    className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
+                      place === t.value ? BORDER_BG[t.color] : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50/60'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${ICON_CLS[t.color]}`}>
+                        <t.icon className="w-5 h-5" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-[13px] text-gray-800">{t.label}</span>
+                          {t.badge && <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">{t.badge}</span>}
+                          {place === t.value && <CheckCircle className="w-4 h-4 text-green-500 ml-auto" />}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5">{t.desc}</p>
+                        {place === t.value && (
+                          <ul className="mt-2 space-y-0.5">
+                            {t.details.map((d) => (
+                              <li key={d} className="text-[11px] text-gray-400 flex items-center gap-1.5">
+                                <span className="w-1 h-1 rounded-full bg-gray-300 flex-shrink-0" />{d}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Business Name <span className="text-gray-400 font-normal">(optional)</span></label>
+                <input
+                  value={businessName}
+                  onChange={(e) => setBusinessName(e.target.value)}
+                  placeholder="e.g. Premier Cafe Ltd"
+                  className="w-full border-2 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                />
+                <p className="text-xs text-gray-400 mt-1">Pre-fills the registration form when you create the business account on this device.</p>
+              </div>
+
+              <div className="flex gap-3 pt-1">
+                <button onClick={back} className="px-4 py-2.5 border rounded-xl text-gray-600 hover:bg-gray-50 flex items-center gap-1">
+                  <ChevronLeft className="w-4 h-4" /> Back
+                </button>
+                <button
+                  onClick={afterPlace}
+                  disabled={!place}
+                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl disabled:opacity-40 flex items-center justify-center gap-2"
+                >
+                  Continue <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 3: What does THIS computer do? ──────────────────────── */}
+          {step === 'TOPOLOGY' && (
+            <div className="space-y-5">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">What will this computer do?</h2>
+                <p className="text-gray-500 text-sm mt-1">Your data stays on your own computers. Choose this computer's job.</p>
               </div>
 
               <div className="space-y-2.5">
                 {TOPOLOGIES.map((t) => (
                   <button
                     key={t.value}
-                    onClick={() => setTopology(t.value)}
+                    onClick={() => { setTopology(t.value); setLanEnabled(defaultLanEnabled(t.value)); }}
                     className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
                       topology === t.value ? BORDER_BG[t.color] : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50/60'
                     }`}
@@ -585,24 +688,13 @@ export default function DesktopSetupPage() {
                 ))}
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Business Name <span className="text-gray-400 font-normal">(optional)</span></label>
-                <input
-                  value={businessName}
-                  onChange={(e) => setBusinessName(e.target.value)}
-                  placeholder="e.g. Premier Cafe Ltd"
-                  className="w-full border-2 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                />
-                <p className="text-xs text-gray-400 mt-1">Pre-fills the registration form when you create the business account on this device.</p>
-              </div>
-
               <div className="flex gap-3 pt-1">
-                <button onClick={() => setStep(S.LICENSE)} className="px-4 py-2.5 border rounded-xl text-gray-600 hover:bg-gray-50 flex items-center gap-1">
+                <button onClick={back} className="px-4 py-2.5 border rounded-xl text-gray-600 hover:bg-gray-50 flex items-center gap-1">
                   <ChevronLeft className="w-4 h-4" /> Back
                 </button>
                 <button
-                  onClick={afterTopology}
-                  disabled={!topology}
+                  onClick={next}
+                  disabled={!topology || topology === 'CLOUD'}
                   className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl disabled:opacity-40 flex items-center justify-center gap-2"
                 >
                   Continue <ChevronRight className="w-4 h-4" />
@@ -611,8 +703,101 @@ export default function DesktopSetupPage() {
             </div>
           )}
 
+          {/* ── Step 4: Folders (server computers) ───────────────────────── */}
+          {step === 'FOLDERS' && isLocalTopology(topology) && (
+            <div className="space-y-5">
+              <div>
+                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-3">
+                  <FolderOpen className="w-6 h-6 text-blue-600" />
+                </div>
+                <h2 className="text-xl font-bold text-gray-900">Where to keep your data</h2>
+                <p className="text-gray-500 text-sm mt-1">The suggested folders are right for almost everyone.</p>
+              </div>
+
+              {defaultsState === 'loading' && (
+                <div role="status" className="flex items-start gap-2.5 p-3 rounded-xl bg-blue-50 border border-blue-200 text-sm text-blue-800">
+                  <Loader2 className="w-4 h-4 animate-spin flex-shrink-0 mt-0.5" />
+                  <span>Preparing the server files. This takes up to a minute the first time after installing.</span>
+                </div>
+              )}
+              {defaultsState === 'failed' && (
+                <div role="alert" className="p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700 space-y-2">
+                  <div className="flex items-start gap-2"><AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /><span>{defaultsError}</span></div>
+                  <button onClick={() => setDefaultsState('idle')} className="font-semibold underline">Try again</button>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Database folder</label>
+                <input
+                  value={dataDir}
+                  onChange={(e) => { setDataDir(e.target.value); setFolderCheck(null); }}
+                  className={`w-full border-2 rounded-xl px-4 py-2.5 font-mono text-sm focus:ring-2 outline-none ${
+                    folderCheck && !folderCheck.dataDir.ok ? 'border-red-300 focus:ring-red-400' : 'focus:ring-blue-500 focus:border-blue-500'
+                  }`}
+                  spellCheck={false}
+                  aria-label="Database folder"
+                />
+                {folderCheck && !folderCheck.dataDir.ok ? (
+                  <div className="flex items-start gap-2 mt-1.5 text-xs text-red-600"><AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />{folderCheck.dataDir.reason}</div>
+                ) : (
+                  <p className="text-xs text-gray-400 mt-1">Must be a folder on this computer, not on OneDrive, Dropbox, a network drive, or in Documents or Desktop (Windows often syncs those).</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Backup folder</label>
+                <input
+                  value={backupDir}
+                  onChange={(e) => { setBackupDir(e.target.value); setFolderCheck(null); }}
+                  className={`w-full border-2 rounded-xl px-4 py-2.5 font-mono text-sm focus:ring-2 outline-none ${
+                    folderCheck && !folderCheck.backupDir.ok ? 'border-red-300 focus:ring-red-400' : 'focus:ring-blue-500 focus:border-blue-500'
+                  }`}
+                  spellCheck={false}
+                  aria-label="Backup folder"
+                />
+                {folderCheck && !folderCheck.backupDir.ok ? (
+                  <div className="flex items-start gap-2 mt-1.5 text-xs text-red-600"><AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />{folderCheck.backupDir.reason}</div>
+                ) : (
+                  <p className="text-xs text-gray-400 mt-1">A backup is saved every day and when you close the app. A USB drive or another disk is safest.</p>
+                )}
+              </div>
+
+              <label className="flex items-start gap-3 p-3.5 rounded-xl border-2 border-gray-200 cursor-pointer hover:bg-gray-50/60">
+                <input
+                  type="checkbox"
+                  checked={lanEnabled}
+                  onChange={(e) => setLanEnabled(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 accent-blue-600"
+                  aria-label="Let other computers on this network connect"
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-gray-800">Let other computers on this network connect</span>
+                  <span className="block text-xs text-gray-500 mt-0.5">
+                    {topology === 'SERVER'
+                      ? 'Needed so the tills can reach this server. Leave this on.'
+                      : 'Switch on only if you will add more tills. You can change this later.'}
+                  </span>
+                </span>
+              </label>
+
+              <div className="flex gap-3 pt-1">
+                <button onClick={back} className="px-4 py-2.5 border rounded-xl text-gray-600 hover:bg-gray-50 flex items-center gap-1">
+                  <ChevronLeft className="w-4 h-4" /> Back
+                </button>
+                <button
+                  onClick={() => void afterFolders()}
+                  disabled={checking || defaultsState === 'loading' || defaultsState === 'failed' || !dataDir.trim() || !backupDir.trim()}
+                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl disabled:opacity-40 flex items-center justify-center gap-2"
+                >
+                  {checking ? <><Loader2 className="w-4 h-4 animate-spin" /> Checking…</> : <>Continue <ChevronRight className="w-4 h-4" /></>}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* ── Step 3: Device Role (CLIENT only) ────────────────────────── */}
-          {step === S.ROLE && (
+          {step === 'ROLE' && (
             <div className="space-y-5">
               <div>
                 <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center mb-3">
@@ -656,11 +841,11 @@ export default function DesktopSetupPage() {
               </div>
 
               <div className="flex gap-3 pt-1">
-                <button onClick={() => setStep(S.TOPOLOGY)} className="px-4 py-2.5 border rounded-xl text-gray-600 hover:bg-gray-50 flex items-center gap-1">
+                <button onClick={back} className="px-4 py-2.5 border rounded-xl text-gray-600 hover:bg-gray-50 flex items-center gap-1">
                   <ChevronLeft className="w-4 h-4" /> Back
                 </button>
                 <button
-                  onClick={() => setStep(S.NETWORK)}
+                  onClick={next}
                   className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-2"
                 >
                   Continue <ChevronRight className="w-4 h-4" />
@@ -670,7 +855,7 @@ export default function DesktopSetupPage() {
           )}
 
           {/* ── Step 4: Network / Server URL ─────────────────────────────── */}
-          {step === S.NETWORK && (topology === 'CLIENT' || topology === 'CLOUD') && (
+          {step === 'NETWORK' && (topology === 'CLIENT' || topology === 'CLOUD') && (
             <div className="space-y-5">
               <div>
                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 ${topology === 'CLOUD' ? 'bg-sky-100' : 'bg-emerald-100'}`}>
@@ -786,13 +971,13 @@ export default function DesktopSetupPage() {
 
               <div className="flex gap-3 pt-1">
                 <button
-                  onClick={() => setStep(topology === 'CLIENT' ? S.ROLE : S.TOPOLOGY)}
+                  onClick={back}
                   className="px-4 py-2.5 border rounded-xl text-gray-600 hover:bg-gray-50 flex items-center gap-1"
                 >
                   <ChevronLeft className="w-4 h-4" /> Back
                 </button>
                 <button
-                  onClick={() => setStep(S.DONE)}
+                  onClick={next}
                   disabled={connectStatus !== 'ok'}
                   className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl disabled:opacity-40 flex items-center justify-center gap-2"
                 >
@@ -803,7 +988,7 @@ export default function DesktopSetupPage() {
           )}
 
           {/* ── Step 5: Done ─────────────────────────────────────────────── */}
-          {step === S.DONE && (
+          {step === 'DONE' && (
             <div className="text-center space-y-6">
               <div className="w-20 h-20 bg-green-100 rounded-2xl flex items-center justify-center mx-auto">
                 <CheckCircle className="w-12 h-12 text-green-600" />
@@ -816,29 +1001,42 @@ export default function DesktopSetupPage() {
               {/* Summary card */}
               <div className="text-left bg-gray-50 rounded-2xl border border-gray-200 divide-y divide-gray-200 overflow-hidden">
                 <div className="px-4 py-3 flex items-center justify-between">
-                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Mode</span>
-                  <span className="text-sm font-semibold text-gray-800">
-                    {topology === 'CLOUD' ? 'Cloud (SaaS)'
-                      : topology === 'SERVER' ? 'LAN Server'
-                      : topology === 'CLIENT' ? 'LAN Client'
-                      : 'Standalone'}
-                  </span>
+                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Setup</span>
+                  <span className="text-sm font-semibold text-gray-800">{topologyName(topology)}</span>
                 </div>
-                <div className="px-4 py-3 flex items-center justify-between">
-                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Device Role</span>
-                  <span className={`text-sm font-semibold ${
-                    deviceRole === 'KIOSK' ? 'text-orange-600'
-                    : deviceRole === 'KDS'  ? 'text-red-600'
-                    : 'text-blue-700'
-                  }`}>
-                    {selectedRole?.label ?? deviceRole}
-                  </span>
-                </div>
+                {topology === 'CLIENT' && (
+                  <div className="px-4 py-3 flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Device Role</span>
+                    <span className={`text-sm font-semibold ${
+                      deviceRole === 'KIOSK' ? 'text-orange-600'
+                      : deviceRole === 'KDS'  ? 'text-red-600'
+                      : 'text-blue-700'
+                    }`}>
+                      {selectedRole?.label ?? deviceRole}
+                    </span>
+                  </div>
+                )}
                 {(topology === 'CLIENT' || topology === 'CLOUD') && (
                   <div className="px-4 py-3 flex items-center justify-between">
                     <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Server</span>
-                    <span className="text-xs font-mono text-gray-700 truncate max-w-[260px]">{serverUrl}</span>
+                    <span className="text-xs font-mono text-gray-700 truncate max-w-[260px]">{normalizeServerUrl(serverUrl)}</span>
                   </div>
+                )}
+                {isLocalTopology(topology) && (
+                  <>
+                    <div className="px-4 py-3 flex items-center justify-between gap-4">
+                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wider flex-shrink-0">Database</span>
+                      <span className="text-xs font-mono text-gray-700 truncate">{dataDir}</span>
+                    </div>
+                    <div className="px-4 py-3 flex items-center justify-between gap-4">
+                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wider flex-shrink-0">Backups</span>
+                      <span className="text-xs font-mono text-gray-700 truncate">{backupDir}</span>
+                    </div>
+                    <div className="px-4 py-3 flex items-center justify-between">
+                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Other computers</span>
+                      <span className="text-sm font-semibold text-gray-800">{lanEnabled ? 'May connect' : 'Not allowed'}</span>
+                    </div>
+                  </>
                 )}
                 {businessName.trim() && (
                   <div className="px-4 py-3 flex items-center justify-between">
@@ -882,7 +1080,7 @@ export default function DesktopSetupPage() {
               </button>
 
               <button
-                onClick={() => setStep(topology === 'CLIENT' || topology === 'CLOUD' ? S.NETWORK : S.TOPOLOGY)}
+                onClick={back}
                 className="w-full text-xs text-gray-400 hover:text-gray-600 py-1"
               >
                 ← Go back and change something

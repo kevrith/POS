@@ -9,7 +9,7 @@ import {
   Fuel, Lock, BedDouble, CheckCircle2, Trash2, Radio, BookOpen,
   Link2, FileText, Clock, Send, Shield, Tablet, Fingerprint,
   ClipboardList, MapPin, Store, Zap, Building2, PanelLeftClose, PanelLeftOpen,
-  ShoppingBag,
+  ShoppingBag, HardDrive,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { readLastKnown, writeLastKnown } from '../lib/lastKnown';
@@ -18,6 +18,8 @@ import { api, getToken, setToken } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { useThemeStore } from '../stores/theme';
 import { connectSocket, disconnectSocket, subscribeToEvent, SocketEvents } from '../lib/socket';
+import { keepsOwnData } from '../lib/desktopSetup';
+import { useDesktopMode } from '../lib/useLocalServer';
 import { toast } from 'sonner';
 import SyncStatusBadge, { OfflineBanner } from './SyncStatusBadge';
 import MobileNav from './MobileNav';
@@ -553,6 +555,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }, [menuLoading, businessType]);
 
   const showSettings = canSee(['OWNER', 'MANAGER']);
+  // Only a computer that keeps its own data has a server to look after.
+  const desktopMode = useDesktopMode();
 
   // ─── Lock screen ─────────────────────────────────────────────────────────
   if (isLocked) {
@@ -850,6 +854,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   <span className="nav-icon"><Settings className="w-[14px] h-[14px] transition-transform duration-300 group-hover:rotate-90" /></span>
                   <span className="nav-label">Settings</span>
                 </Link>
+                {keepsOwnData(desktopMode) && (
+                  <Link
+                    to="/server"
+                    className="nav-item group !px-3 !py-[8px] !rounded-none"
+                    aria-current={isActive('/server') ? 'page' : undefined}
+                  >
+                    <span className="nav-icon"><HardDrive className="w-[14px] h-[14px]" /></span>
+                    <span className="nav-label">Server and backups</span>
+                  </Link>
+                )}
                 <Link
                   to="/setup"
                   className="nav-item group !px-3 !py-[8px] !rounded-none"

@@ -56,28 +56,105 @@ Releases are automated by `.github/workflows/desktop-release.yml`.
 | `lan_sync.rs` | TCP peer sync — a server terminal holds a registry of connected client streams and pushes events to all of them |
 | `vscu.rs` | Offline eTIMS/VSCU queue in local SQLite (`rusqlite`) — sales are signed and held until KRA is reachable |
 | `license.rs` | Machine-bound licensing — stable machine id derived and SHA-256 hashed |
-| `setup.rs` | First-run topology: mode `STANDALONE` / `SERVER` / `CLIENT`, device role `FULL_POS` / `CASHIER` / `KIOSK` / `KDS` / `MANAGER` |
+| `setup.rs` | First-run setup saved in `mode.json`: mode `CLOUD` / `SERVER_POS` / `SERVER` / `CLIENT` (`STANDALONE` is the old name for `SERVER_POS`), device role `FULL_POS` / `CASHIER` / `KIOSK` / `KDS` / `MANAGER` (tills only), and for server computers the database folder, backup folder and whether other computers may connect |
+| `local_server_core.rs` | Launches and talks to the local server program (`packages/local-server`): JSON lines out, JSON commands in, stops everything when this app closes. **No Tauri code in it**, so its tests build anywhere (see Local server below) |
+| `local_server.rs` | The `local_server_*` Tauri commands (defaults, validate folders, start, restart, stop, set_lan, status, backup, backups, restore); finds the installed files; keeps slow requests off the window thread |
 | `backup.rs` | Local database backup/restore to disk |
 
-Auto-updates use the built-in Tauri updater against signed GitHub Releases.
+Update check: `check_for_app_update` in `main.rs` asks the API (`GET /api/v1/super-admin/update-check`) for the latest
+version. There is no Tauri updater plugin in the app, so nothing downloads or installs an update by itself; a new version
+means shipping a new installer from the GitHub release.
 
 ---
 
-## Network topologies
+## Setups
 
-- **STANDALONE** — one terminal, its own local queue.
-- **SERVER** — hosts the API for the site; answers discovery broadcasts and fans out
-  sync events to connected clients.
-- **CLIENT** — discovers the server on the LAN and syncs to it; `device_role`
-  decides which UI it boots into (full POS, cashier-only, kiosk, kitchen display, or
-  manager).
+The wizard asks two questions: where does your data live, and what does THIS computer do?
+
+- **CLOUD** — the app is a till for KASTRA Cloud (`get_cloud_url`); needs internet to sign in and sell.
+- **SERVER_POS** — data on this computer, which is also the till (a small shop's one PC). Works fully offline. Other
+  computers may not connect unless the owner ticks "Let other computers on this network connect".
+- **SERVER** — data on this computer, which only serves the tills (a supermarket's back-room PC). It shows the server
+  console (`ServerConsolePage`): status, the address tills type, backups, restore. LAN access is on by default.
+- **CLIENT** — a till that finds (UDP discovery) or is given the server's address, with a device role.
+
+Owners reach the server from inside the app: a server-and-till computer has **Server and backups** in the sidebar
+(`/server`, `ServerSettingsPage`), a server-only computer has the same panel as its whole screen. Both show status, the
+addresses tills type (shop network first), "Back up now", Restore, and the switch **Let other computers on this network
+connect**, which saves the choice in `mode.json`, restarts the server so it listens accordingly (about ten seconds) and
+switches the discovery answer (`discovery.rs`) on or off. The server applies the app's current choices on every start
+(network access, backup folder, database folder), not just the first.
+
+A computer that keeps its own data starts its database and API when the app starts and stops them (with a backup if the
+last one is over an hour old) when the app closes. The web UI waits for them behind `LocalServerGate` and shows what is
+happening ("Creating your database (first time only)").
+
+## Local server
+
+`packages/local-server` (TypeScript, see its README) runs a private PostgreSQL and the API on this computer: folders and
+their safety rules, secrets, database start/stop, migrations, API process, backups, restore. This app only launches
+`cli.js` and relays its status; the live database goes in `C:\ProgramData\KASTRA\pgdata` by default (never OneDrive,
+Documents or a network share) and backups in `Documents\KASTRA Backups`.
+
+## Packaging the offline server (Windows installer)
+
+The Windows installer (NSIS `.exe`) carries the whole offline server as ONE file, `resources/server.tar.gz`: bundled Node,
+the compiled API, Prisma, the server program (`packages/local-server`) and a trimmed PostgreSQL 17 (about 290 MB unpacked, about
+110 MB packed). One file, not 11,000: an installer with that many files is slow and fragile, and a file glob can skip folders
+whose names start with a dot, such as Prisma's generated `.prisma` client.
+
+```bash
+# on Windows, after: npm ci, prisma generate, build apps/api and packages/local-server
+node apps/desktop/scripts/build-server-bundle.mjs     # assembles src-tauri/resources/server/ and server.tar.gz
+node apps/desktop/scripts/smoke-server-bundle.mjs     # proves the bundle runs on its own (start, register, back up, stop)
+```
+
+- **Downloads are pinned**: `scripts/server-bundle.pins.json` holds the exact Node and PostgreSQL (EnterpriseDB build) URLs and
+  SHA-256 hashes; a download with the wrong hash is deleted and the build stops. Upgrading means changing version and hash together.
+- **What goes in**: the packages are copied from this repository's own `node_modules` (the versions that were tested, with their
+  native parts, so build on Windows for Windows), PostgreSQL is cut down to the programs KASTRA runs (initdb, pg_ctl, postgres,
+  pg_dump, pg_restore, psql and two support tools), their DLLs and Microsoft's runtime DLLs, the extension libraries and the
+  shared data, without pgAdmin, documentation, translations or the Perl/Python/Tcl languages.
+- **Unpacking**: the app unpacks the file once per build (app version + size) into `%LOCALAPPDATA%\KASTRA\server\<build>`
+  using Windows' own `tar.exe` (by full path: a GNU tar from Git for Windows reads `C:\...` as a network host), into a
+  temporary folder renamed into place only when complete, and removes older builds' folders. The wizard's folders step and the
+  start-up screen say "Preparing the server" while it happens (up to a minute the first time).
+- **Developer builds** have no real archive: `build.rs` leaves an empty placeholder, and starting a server says so. Run from a
+  checkout with `KASTRA_DEV_REPO` instead (below).
+- **Installer extras** (`src-tauri/windows/installer-hooks.nsh`, installs for all users so it can add firewall rules): inbound
+  rules for TCP 3010 (API) and UDP 47474 (finding the server) on Private and Domain networks only. They are harmless on a
+  single-computer setup, since the server listens on this computer only unless network access is switched on. **Uninstalling
+  removes those rules and the unpacked server program, and never touches the database (`C:\ProgramData\KASTRA`) or the
+  backups (`Documents\KASTRA Backups`).**
+- **CI**: the `offline-server` job in `ci.yml` builds the real Windows bundle, checks the packed file keeps `.prisma`, runs the
+  smoke test and runs the server package's tests (including the real-database ones) against the Windows PostgreSQL;
+  `desktop-release.yml` assembles and smoke-tests the bundle before building the installer, and builds only the NSIS `.exe` on
+  Windows (an MSI would list every file).
+- **Not verified on a real Windows machine yet** (only the layout and the whole chain on Linux; the Windows programs run for
+  the first time in CI): the Visual C++ runtime DLLs taken from EnterpriseDB's package, Windows `tar.exe` unpacking, the NSIS
+  hooks, and the firewall rules.
+
+**If the app crashes or is killed**, the server program stops the API and database by itself (a broken pipe is ignored and
+an exit handler stops both), and if something still survives, the next start finds the leftover API by its saved process
+id and stops it before starting a new one. Both are covered by integration tests.
+
+**Running it from a checkout** (developers): build the API (`apps/api`) and the server program
+(`packages/local-server`: `npm run build`), then start the desktop app with
+`KASTRA_DEV_REPO=<repo> KASTRA_PG_BIN=<postgres bin folder> [KASTRA_PG_LIB=<its lib folder>]`.
+
+**Testing the Rust launcher without Tauri:** `local_server_core.rs` uses only the standard library and `serde_json`; a scratch
+crate that includes it with `#[path]` can run it against the real server program (spawn, status, backup, stop, a start that
+fails for a non-empty folder). The Tauri wrappers in `local_server.rs` are type-checked the same way against a small stand-in
+for the Tauri types; the full crate itself needs the Windows/Linux Tauri system libraries.
 
 ## First-run setup and reinstalls
 
-The setup wizard (`web/src/pages/DesktopSetupPage.tsx`) shows whenever
-`get_setup_mode` reports `UNCONFIGURED`. The choice is saved in `mode.json` under
-the OS config dir (`%APPDATA%\kastra-pos\` on Windows), including the optional
-`business_name` that pre-fills the registration form.
+The setup wizard (`web/src/pages/DesktopSetupPage.tsx`; its step order and what it saves are in
+`web/src/lib/desktopSetup.ts`, unit-tested) shows whenever `get_setup_mode` reports `UNCONFIGURED`. The choice is saved in
+`mode.json` under the OS config dir (`%APPDATA%\kastra-pos\` on Windows), including the optional `business_name` that
+pre-fills the registration form. The wizard does not create the business: the owner registers on the login screen, against
+this computer's own API (offline) or the cloud. "Reconfigure this terminal" stops the local server and forgets `mode.json`
+but never deletes the database; setting up again on the same folder picks the data up where it was.
 
 On Windows, `src-tauri/wix/setup-cleanup.wxs` deletes `mode.json` when the MSI is
 uninstalled (not on upgrades), so a fresh install opens the wizard. This fragment
@@ -100,3 +177,21 @@ of type "Desktop app"; the desktop build itself needs no Google variable.
 
 When you add a Tauri command, change the discovery/sync protocol, or alter the
 setup topology, update this README in the same change.
+
+---
+
+## App icon
+
+The icon is vector: `icon-src/make_svgs.py` draws it (a bold K on a Signal Violet tile, palette pair 3: `#7A35FF` and
+`#F0F2F5`), and the SVGs in `icon-src/` are the masters. Regenerate every platform file with:
+
+```bash
+cd apps/desktop
+python3 icon-src/build_icons.py     # needs Python + Pillow and Chrome/Chromium/Edge (CHROME=path if not found)
+```
+
+It writes `src-tauri/icons/`: the PNGs `tauri.conf.json` lists, `icon.ico` (ten sizes from 16 to 256 px; 16-40 px use
+the flat, heavier `icon-small.svg` because gradients and shadows turn to mud that small), and `icon.icns` (from
+`icon-macos.svg`, which sits in Apple's 824 px template with a soft shadow, via `npx tauri icon`). Edit the SVG
+generator, not the PNGs.
+

@@ -39,6 +39,7 @@ export const routeLoaders: Record<string, () => Promise<unknown>> = {
   '/notifications': () => import('../pages/NotificationsPage'),
   '/settings': () => import('../pages/SettingsPage'),
   '/setup': () => import('../pages/SetupWizardPage'),
+  '/server': () => import('../pages/ServerSettingsPage'),
   '/forecasting': () => import('../pages/ForecastingPage'),
   '/reconciliation': () => import('../pages/ReconciliationPage'),
   '/franchise': () => import('../pages/FranchisePage'),

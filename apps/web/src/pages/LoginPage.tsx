@@ -7,6 +7,7 @@ import type { AuthUser } from '../stores/auth';
 import { Eye, EyeOff, Delete, ChevronLeft, Building2, Sparkles, Fingerprint, Settings } from 'lucide-react';
 import { isBiometricAvailable } from '../lib/biometric';
 import { setToken } from '../lib/api';
+import { reconfigureThisComputer } from '../lib/desktopServer';
 
 const PLAN_LABELS: Record<string, { label: string; color: string; price: string }> = {
   FREE:       { label: 'Free',       color: 'bg-green-500',   price: 'KES 0/mo' },
@@ -483,15 +484,8 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={async () => {
-                try {
-                  const internals = (window as unknown as { __TAURI_INTERNALS__?: { invoke?: (cmd: string) => Promise<unknown> } }).__TAURI_INTERNALS__;
-                  if (internals?.invoke) await internals.invoke('reset_setup');
-                  else if (window.__TAURI__) await (window.__TAURI__ as { invoke: (cmd: string) => Promise<unknown> }).invoke('reset_setup');
-                } catch { /* ignore */ }
-                localStorage.removeItem('desktop-setup-done');
-                localStorage.removeItem('desktop-device-role');
-                localStorage.removeItem('desktop-business-name');
-                localStorage.removeItem('kastra-server-url');
+                // Stops this computer's own server (with a backup) if it runs one, then forgets the setup.
+                await reconfigureThisComputer();
                 window.location.reload();
               }}
               className="mt-8 flex items-center gap-2 text-brand-200 hover:text-white text-xs transition-colors group cursor-pointer"

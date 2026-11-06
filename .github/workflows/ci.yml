@@ -206,3 +206,63 @@ jobs:
 
       - name: Apply migrations to test database
         run: npx prisma migrate deploy --schema prisma/schema.prisma
+
+  # ─── Offline server: the database + API the Windows installer carries ───────
+  # Builds the real Windows bundle (pinned, hash-checked Node and PostgreSQL), proves the packed file keeps Prisma's
+  # dot-folder, runs the bundle on its own (start, register, back up, stop), and runs the server package's tests, including
+  # the real-database ones, against the Windows PostgreSQL. This is the only place the Windows side is exercised.
+  offline-server:
+    name: Offline server — Windows bundle & smoke test
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    env:
+      # Prisma only reads these to generate its client; nothing connects.
+      DATABASE_URL: postgresql://localhost/placeholder
+      DIRECT_URL: postgresql://localhost/placeholder
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      # One install for the whole workspace (a second `npm ci` inside a workspace folder would wipe it down to that member).
+      - name: Install dependencies (all workspaces)
+        run: npm ci
+
+      - name: Generate the Prisma client
+        run: npx prisma generate --schema prisma/schema.prisma
+
+      - name: Build the API
+        working-directory: apps/api
+        run: npm run build
+
+      - name: Build the server program
+        working-directory: packages/local-server
+        run: npm run build
+
+      - name: Cache the downloads (Node, PostgreSQL)
+        uses: actions/cache@v4
+        with:
+          path: apps/desktop/.cache/server-bundle
+          key: server-bundle-${{ hashFiles('apps/desktop/scripts/server-bundle.pins.json') }}
+
+      - name: Assemble the offline server (downloads are checked against pinned hashes)
+        run: node apps/desktop/scripts/build-server-bundle.mjs
+
+      - name: The packed file keeps Prisma's generated client (a dot-folder)
+        shell: bash
+        run: tar -tzf apps/desktop/src-tauri/resources/server.tar.gz | grep -q "node_modules/.prisma/client/index.js"
+
+      - name: Smoke test the bundle (start, register, back up, stop)
+        run: node apps/desktop/scripts/smoke-server-bundle.mjs
+
+      - name: Server package tests against the Windows PostgreSQL
+        working-directory: packages/local-server
+        env:
+          KASTRA_PG_BIN: ${{ github.workspace }}\apps\desktop\src-tauri\resources\server\postgres\bin
+        run: npm test

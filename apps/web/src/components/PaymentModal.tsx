@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { X, DollarSign, SmartphoneNfc, QrCode, Smartphone, CreditCard, Scissors, AlertCircle, Loader2, CheckCircle, Gift, BedDouble, Building2, Camera, Nfc, Terminal, BookOpen } from 'lucide-react';
+import { X, LayoutGrid, Delete, DollarSign, SmartphoneNfc, QrCode, Smartphone, CreditCard, Scissors, AlertCircle, Loader2, CheckCircle, Gift, BedDouble, Building2, Camera, Nfc, Terminal, BookOpen } from 'lucide-react';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { api } from '../lib/api';
 import IncomingPaymentsPanel from './pos/IncomingPaymentsPanel';
+import { PaymentMethodPicker } from './pos/PaymentMethodPicker';
+import { IconButton } from './ui';
 import { NFCPaymentReader } from '../lib/nfc';
 import { cardTerminalSale, connectCardTerminal, isCardTerminalConnected, isSerialAvailable, type CardTerminalConfig } from '../lib/cardTerminal';
 
@@ -434,24 +436,28 @@ export default function PaymentModal({
 
   const tabGroups: Array<{
     label: string;
+    Icon: typeof DollarSign;
     methods: Array<{ id: PaymentMethod; label: string; Icon: typeof DollarSign }>;
   }> = [
     {
       label: 'Cash',
+      Icon: DollarSign,
       methods: [
         { id: 'CASH', label: 'Cash', Icon: DollarSign },
       ],
     },
     {
       label: 'M-Pesa',
+      Icon: Smartphone,
       methods: [
         { id: 'MPESA_STK', label: 'STK Push', Icon: Smartphone },
         { id: 'MPESA_C2B', label: 'Paybill', Icon: Smartphone },
-        { id: 'MPESA_QR', label: 'QR Code', Icon: CreditCard },
+        { id: 'MPESA_QR', label: 'QR Code', Icon: QrCode },
       ],
     },
     {
       label: 'Card',
+      Icon: CreditCard,
       methods: [
         { id: 'CARD', label: 'Paystack', Icon: CreditCard },
         { id: 'CARD_TERMINAL', label: 'Terminal', Icon: Terminal },
@@ -460,6 +466,7 @@ export default function PaymentModal({
     },
     {
       label: 'Other',
+      Icon: LayoutGrid,
       methods: [
         { id: 'BANK_TRANSFER', label: 'Bank Transfer', Icon: Building2 },
         { id: 'GIFT_CARD', label: 'Gift Card', Icon: Gift },
@@ -569,53 +576,22 @@ export default function PaymentModal({
   return createPortal(
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-2 sm:p-4" style={{ paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom))' }}>
       <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden" style={{ maxHeight: 'calc(100dvh - 1rem)' }}>
-        <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
-          <div>
-            <h2 className="text-lg font-bold text-gray-800">Payment</h2>
-            <div className="text-2xl font-bold text-blue-600">{formatKES(totalCents)}</div>
+        <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3 flex-shrink-0">
+          <div className="min-w-0">
+            <h2 className="text-xs font-bold uppercase tracking-wide text-gray-600">Amount due</h2>
+            <div className="text-3xl font-black text-brand-700 tabular-nums leading-tight">{formatKES(totalCents)}</div>
+            {customerName && <p className="text-xs text-gray-600 mt-0.5 truncate">{customerName}</p>}
           </div>
-          <button onClick={onCancel} className="p-2 rounded-full hover:bg-gray-100" aria-label="Close">
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
+          <IconButton label="Close" onClick={onCancel}><X className="w-5 h-5" /></IconButton>
         </div>
 
-        {/* Grouped payment method tabs */}
-        <div className="border-b bg-gray-50 flex-shrink-0">
-          <div className="flex">
-            {tabGroups.map((group) => {
-              const groupActive = group.methods.some((m) => m.id === method);
-              return (
-                <div key={group.label} className={`flex-1 min-w-0 border-r last:border-r-0 ${groupActive ? 'bg-white' : ''}`}>
-                  {/* Group label */}
-                  <div className={`text-center text-[10px] font-semibold uppercase tracking-wide pt-1.5 pb-0.5 ${
-                    groupActive ? 'text-blue-600' : 'text-gray-400'
-                  }`}>
-                    {group.label}
-                  </div>
-                  {/* Methods within group */}
-                  <div className="flex">
-                    {group.methods.map(({ id, label, Icon }) => (
-                      <button
-                        key={id}
-                        onClick={() => { setMethod(id); cancelMpesa(); }}
-                        className={`flex-1 min-w-0 px-0.5 py-2 text-[11px] font-medium transition-colors flex flex-col items-center gap-0.5 ${
-                          method === id
-                            ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                            : 'text-gray-500 hover:bg-gray-100'
-                        }`}
-                      >
-                        <Icon className="w-3.5 h-3.5" />
-                        <span className="leading-tight text-center">{label}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <PaymentMethodPicker
+          groups={tabGroups}
+          value={method}
+          onChange={(id) => { setMethod(id); cancelMpesa(); }}
+        />
 
-        <div className="p-6 flex-1 overflow-y-auto">
+        <div className="p-5 flex-1 overflow-y-auto">
           {error && (
             <div className="mb-4 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -628,8 +604,8 @@ export default function PaymentModal({
             <div className="space-y-3">
               {/* Amount display */}
               <div className="bg-gray-900 rounded-xl px-4 py-3 text-right">
-                <p className="text-xs text-gray-500 mb-0.5">Cash Received</p>
-                <p className={`text-3xl font-black tabular-nums ${cashCents > 0 ? 'text-white' : 'text-gray-600'}`}>
+                <p className="text-xs text-slate-300 mb-0.5">Cash Received</p>
+                <p className={`text-3xl font-black tabular-nums ${cashCents > 0 ? 'text-white' : 'text-slate-400'}`}>
                   {cashCents > 0 ? `KES ${(cashCents / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 })}` : 'Enter amount'}
                 </p>
               </div>
@@ -658,7 +634,7 @@ export default function PaymentModal({
                   <button
                     key={amt}
                     onClick={() => setCashInput(String(amt))}
-                    className={`py-2 rounded-lg text-sm font-semibold border transition-colors ${
+                    className={`h-11 rounded-lg text-sm font-semibold border transition-colors ${
                       cashCents === amt * 100
                         ? 'bg-blue-600 text-white border-blue-600'
                         : 'bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50'
@@ -669,7 +645,7 @@ export default function PaymentModal({
                 ))}
                 <button
                   onClick={() => setCashInput(String(totalCents / 100))}
-                  className={`py-2 rounded-lg text-sm font-semibold border transition-colors col-span-1 ${
+                  className={`h-11 rounded-lg text-sm font-semibold border transition-colors col-span-1 ${
                     cashCents === totalCents
                       ? 'bg-blue-600 text-white border-blue-600'
                       : 'bg-blue-50 text-blue-700 border-blue-300 hover:bg-blue-100'
@@ -688,28 +664,28 @@ export default function PaymentModal({
                       const s = prev === '0' ? k : prev + k;
                       return s;
                     })}
-                    className="py-3 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-800 font-bold text-lg transition-colors active:scale-95"
+                    className="h-14 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-800 font-bold text-xl transition-colors active:scale-95"
                   >
                     {k}
                   </button>
                 ))}
                 <button
                   onClick={() => setCashInput((prev) => prev.includes('.') ? prev : prev + '.')}
-                  className="py-3 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-800 font-bold text-lg transition-colors active:scale-95"
+                  className="h-14 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-800 font-bold text-xl transition-colors active:scale-95"
                 >
                   .
                 </button>
                 <button
                   onClick={() => setCashInput((prev) => prev === '0' ? '0' : prev + '0')}
-                  className="py-3 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-800 font-bold text-lg transition-colors active:scale-95"
+                  className="h-14 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-800 font-bold text-xl transition-colors active:scale-95"
                 >
                   0
                 </button>
                 <button
                   onClick={() => setCashInput((prev) => prev.slice(0, -1) || '')}
-                  className="py-3 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-500 font-bold text-lg transition-colors active:scale-95"
+                  className="h-14 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-600 font-bold text-xl transition-colors active:scale-95 flex items-center justify-center"
                 >
-                  ⌫
+                  <Delete className="w-6 h-6" aria-label="Backspace" />
                 </button>
               </div>
 
@@ -730,17 +706,20 @@ export default function PaymentModal({
                 </div>
               )}
 
-              <button
-                onClick={handleCash}
-                disabled={cashCents < totalCents || isProcessing}
-                className="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-black text-lg rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                {isProcessing
-                  ? 'Processing…'
-                  : cashCents >= totalCents
-                    ? `Confirm · Change ${formatKES(changeCents)}`
-                    : 'Enter Cash Amount'}
-              </button>
+              {/* The confirm button stays in view: the keypad above can scroll on a small screen, this does not. */}
+              <div className="sticky bottom-0 -mx-5 -mb-5 px-5 pt-3 pb-4 bg-white border-t border-gray-100">
+                <button
+                  onClick={handleCash}
+                  disabled={cashCents < totalCents || isProcessing}
+                  className="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-black text-lg rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isProcessing
+                    ? 'Processing…'
+                    : cashCents >= totalCents
+                      ? `Confirm · Change ${formatKES(changeCents)}`
+                      : 'Enter Cash Amount'}
+                </button>
+              </div>
             </div>
           )}
 

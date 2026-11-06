@@ -14,7 +14,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { readLastKnown, writeLastKnown } from '../lib/lastKnown';
 import { prefetchRoute } from '../lib/routeLoaders';
-import { api, getToken } from '../lib/api';
+import { api, getToken, setToken } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { useThemeStore } from '../stores/theme';
 import { connectSocket, disconnectSocket, subscribeToEvent, SocketEvents } from '../lib/socket';
@@ -416,7 +416,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       );
 
       if (result?.accessToken) {
-        sessionStorage.setItem('pos-auth', JSON.stringify(result));
+        setToken(result.accessToken);
         setIsLocked(false);
         setLockPin('');
         setLockError('');

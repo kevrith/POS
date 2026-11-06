@@ -24,19 +24,40 @@ export interface RunOptions {
   timeoutMs?: number;
 }
 
-/** Run a program to completion without ever flashing a console window on Windows. */
+/**
+ * Run a program to completion without ever flashing a console window on Windows.
+ *
+ * It returns when the program EXITS, not when its output pipe closes. A program can start a background process that
+ * inherits the pipe and keeps it open for as long as it lives: `pg_ctl start` does exactly that on Windows (the database it
+ * launched holds the pipe), so waiting for the pipe to close never ended and the whole server hung. After the exit the
+ * pipes get a moment to deliver what was already written, then are closed from our side.
+ */
 export function run(command: string, args: string[], opts: RunOptions = {}): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { env: opts.env ?? process.env, cwd: opts.cwd, windowsHide: true });
     let stdout = '';
     let stderr = '';
     let timer: NodeJS.Timeout | undefined;
-    child.stdout.on('data', (d) => (stdout += d));
-    child.stderr.on('data', (d) => (stderr += d));
-    child.on('error', reject);
-    child.on('close', (code) => {
+    let finished = false;
+    const finish = (code: number | null) => {
+      if (finished) return;
+      finished = true;
       if (timer) clearTimeout(timer);
       resolve({ code, stdout, stderr });
+    };
+    child.stdout.on('data', (d) => (stdout += d));
+    child.stderr.on('data', (d) => (stderr += d));
+    child.on('error', (e) => { if (!finished) { finished = true; if (timer) clearTimeout(timer); reject(e); } });
+    // Every pipe closed: the normal case, and the fastest.
+    child.on('close', (code) => finish(code));
+    // Exited but a leftover child still holds a pipe: give already-written output a moment, then let go of the pipes.
+    child.on('exit', (code) => {
+      setTimeout(() => {
+        if (finished) return;
+        child.stdout.destroy();
+        child.stderr.destroy();
+        finish(code);
+      }, 300).unref?.();
     });
     if (opts.timeoutMs) timer = setTimeout(() => child.kill(), opts.timeoutMs);
     if (opts.input !== undefined) child.stdin.end(opts.input);

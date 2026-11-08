@@ -183,6 +183,8 @@ jobs:
           $left = Get-ChildItem $env:INSTALL_DIR -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'uninstall.exe' }
           if ($left) { throw "Files left behind after uninstall: $($left.Name -join ', ')" }
           Write-Host 'Uninstalled cleanly; data folder untouched; firewall rules removed.'
+          # netsh answers exit code 1 for a rule that no longer exists (what we want); every real check above uses `throw`.
+          exit 0
 
       - name: Summary
         if: always()

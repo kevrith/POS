@@ -23,8 +23,13 @@
  *   --node PATH              use this Node instead of downloading one
  *   --pg-dir DIR             a PostgreSQL install holding bin/ lib/ share/, instead of downloading
  *   --pg-extra-bin A,B       extra programs to copy into postgres/bin (for example pg_dump, pg_restore)
+ *
+ * Licensing: the app checks paid plans against a PUBLIC key that this script writes to `license-public-key.pem` in the bundle.
+ * Give it as the environment variable LICENSE_PUBLIC_KEY (PEM, or the PEM in base64) or as --license-public-key FILE. A
+ * release without it could never activate a paid plan, so the build FAILS unless you say --allow-unlicensed (tests, CI checks).
+ * Make the key pair with apps/api/scripts/generate-license-keys.mjs; the private half never comes near this script.
  */
-import { createHash } from 'node:crypto';
+import { createHash, createPublicKey } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import https from 'node:https';
@@ -351,6 +356,28 @@ async function addPostgres() {
   }
 }
 
+/** The public key licences are checked against. Validated here, so a mistyped variable fails the build, not the customer's activation. */
+function licensePublicKeyPem() {
+  const raw = args['license-public-key'] ? fs.readFileSync(path.resolve(String(args['license-public-key'])), 'utf8') : process.env.LICENSE_PUBLIC_KEY;
+  if (!raw || !raw.trim()) {
+    if (args['allow-unlicensed']) { log('licence public key: none (--allow-unlicensed): this build cannot activate a paid plan'); return null; }
+    die('No licence public key. Set LICENSE_PUBLIC_KEY (or pass --license-public-key FILE) so the app can check licences. Make one with apps/api/scripts/generate-license-keys.mjs. For a build that is only being tested, pass --allow-unlicensed.');
+  }
+  const text = raw.trim();
+  const pem = (text.includes('-----BEGIN') ? text.replace(/\\n/g, '\n') : Buffer.from(text, 'base64').toString('utf8')).trim();
+  let key;
+  try { key = createPublicKey(pem); } catch { die('LICENSE_PUBLIC_KEY is not a valid public key.'); }
+  if (key.asymmetricKeyType !== 'ed25519') die(`LICENSE_PUBLIC_KEY must be an Ed25519 key, not ${key.asymmetricKeyType}.`);
+  if (/PRIVATE/.test(pem)) die('That is a PRIVATE key. Only the public key goes into the app.');
+  return pem;
+}
+
+function addLicensePublicKey(pem) {
+  if (!pem) return;
+  log('licence public key');
+  fs.writeFileSync(path.join(OUT, 'license-public-key.pem'), pem + '\n');
+}
+
 function verify() {
   log('checking the result');
   const need = [
@@ -393,11 +420,14 @@ function makeArchive() {
 
 // ───────────────────────── go ─────────────────────────
 
+// Checked before anything is deleted or downloaded, so a missing or mistyped key fails in a second, not after ten minutes.
+const licensePem = licensePublicKeyPem();
 resetOut();
 copyOwnCode();
 copyPackages();
 await addNode();
 await addPostgres();
+addLicensePublicKey(licensePem);
 verify();
 
 const { files, mb } = countAndSize(OUT);
@@ -406,6 +436,7 @@ fs.writeFileSync(path.join(OUT, 'bundle-manifest.json'), JSON.stringify({
   platform,
   node: args.node ? 'local' : pins.node.version,
   postgres: args['pg-dir'] ? 'local' : pins.postgres.version,
+  licensed: fs.existsSync(path.join(OUT, 'license-public-key.pem')),
   files,
   megabytes: mb,
 }, null, 2));

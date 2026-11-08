@@ -9,7 +9,7 @@ import {
   Fuel, Lock, BedDouble, CheckCircle2, Trash2, Radio, BookOpen,
   Link2, FileText, Clock, Send, Shield, Tablet, Fingerprint,
   ClipboardList, MapPin, Store, Zap, Building2, PanelLeftClose, PanelLeftOpen,
-  ShoppingBag, HardDrive,
+  ShoppingBag, HardDrive, KeyRound,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { readLastKnown, writeLastKnown } from '../lib/lastKnown';
@@ -22,6 +22,8 @@ import { keepsOwnData } from '../lib/desktopSetup';
 import { useDesktopMode } from '../lib/useLocalServer';
 import { toast } from 'sonner';
 import SyncStatusBadge, { OfflineBanner } from './SyncStatusBadge';
+import LicenseBanner from './LicenseBanner';
+import { useLicense } from '../lib/license';
 import MobileNav from './MobileNav';
 import { hasFeature } from '../lib/featureGates';
 import { parseEnabledModules } from '@pos/shared';
@@ -557,6 +559,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const showSettings = canSee(['OWNER', 'MANAGER']);
   // Only a computer that keeps its own data has a server to look after.
   const desktopMode = useDesktopMode();
+  // Only the offline edition has a licence; on the cloud the answer is 'CLOUD' and nothing is shown.
+  const offlineEdition = useLicense().data?.edition === 'LOCAL';
 
   // ─── Lock screen ─────────────────────────────────────────────────────────
   if (isLocked) {
@@ -864,6 +868,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     <span className="nav-label">Server and backups</span>
                   </Link>
                 )}
+                {offlineEdition && (
+                  <Link
+                    to="/license"
+                    className="nav-item group !px-3 !py-[8px] !rounded-none"
+                    aria-current={isActive('/license') ? 'page' : undefined}
+                    onMouseEnter={() => prefetchRoute('/license')}
+                    onFocus={() => prefetchRoute('/license')}
+                  >
+                    <span className="nav-icon"><KeyRound className="w-[14px] h-[14px]" /></span>
+                    <span className="nav-label">Licence</span>
+                  </Link>
+                )}
                 <Link
                   to="/setup"
                   className="nav-item group !px-3 !py-[8px] !rounded-none"
@@ -1038,6 +1054,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               a stacking context that traps in-page modals (fixed z-50) BELOW the
               z-30 mobile bottom nav. DOM order already paints this above the
               background pattern, so `relative` alone is enough. */}
+          <div className="relative"><LicenseBanner /></div>
           <div className={`relative ${
             ['/pos', '/supermart', '/hospitality', '/kds', '/fuel-pump', '/cybercafe'].some(p => location.pathname.startsWith(p))
               ? 'flex-1 flex flex-col overflow-hidden'

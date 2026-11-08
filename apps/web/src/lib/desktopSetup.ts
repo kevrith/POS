@@ -17,7 +17,7 @@ export type StepId = 'WELCOME' | 'LICENSE' | 'PLACE' | 'TOPOLOGY' | 'FOLDERS' | 
 
 export const STEP_LABEL: Record<StepId, string> = {
   WELCOME: 'Welcome',
-  LICENSE: 'License',
+  LICENSE: 'Licence',
   PLACE: 'Data',
   TOPOLOGY: 'This computer',
   FOLDERS: 'Folders',
@@ -77,8 +77,6 @@ export function normalizeServerUrl(input: string): string {
 export interface SetupDraft {
   topology: Topology;
   deviceRole: DeviceRole;
-  licenseKey: string;
-  licenseValid: boolean;
   serverUrl: string;
   terminalName: string;
   businessName: string;
@@ -94,7 +92,6 @@ export interface SetupPayload {
     deviceRole: DeviceRole;
     serverUrl: string | null;
     storeId: null;
-    licenseKey: string | null;
     terminalName: string | null;
     businessName: string | null;
     dataDir: string | null;
@@ -118,7 +115,6 @@ export function buildSetupPayload(d: SetupDraft): SetupPayload {
       deviceRole: role,
       serverUrl: remote ? normalizeServerUrl(d.serverUrl) : null,
       storeId: null,
-      licenseKey: d.licenseValid ? d.licenseKey : null,
       terminalName: d.terminalName.trim() || null,
       businessName: d.businessName.trim() || null,
       dataDir: local ? d.dataDir.trim() || null : null,

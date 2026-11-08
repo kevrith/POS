@@ -20,6 +20,12 @@ export interface ApiOptions {
   /** Extra origins allowed to call the API; the desktop app's own origins are always included. */
   extraOrigins?: string[];
   appVersion?: string;
+  /** This computer's id, as the licence is bound to it. */
+  machineId?: string;
+  /** Where licences are issued and renewed (the KASTRA cloud). */
+  licenseServerUrl?: string;
+  /** The PUBLIC key licences are checked against (PEM text). Without it nothing can be verified, so no paid plan is granted. */
+  licensePublicKey?: string;
 }
 
 /** The web addresses the Tauri desktop app uses on Windows (http://tauri.localhost) and macOS/Linux (tauri://localhost). */
@@ -42,6 +48,9 @@ export function apiEnvironment(cfg: ServerConfig, o: ApiOptions): NodeJS.Process
     EXTRA_ORIGINS: [...DESKTOP_ORIGINS, ...(o.extraOrigins ?? [])].join(','),
     KASTRA_EDITION: 'LOCAL',
     ...(o.appVersion ? { KASTRA_APP_VERSION: o.appVersion } : {}),
+    ...(o.machineId ? { KASTRA_MACHINE_ID: o.machineId } : {}),
+    ...(o.licenseServerUrl ? { LICENSE_SERVER_URL: o.licenseServerUrl } : {}),
+    ...(o.licensePublicKey ? { KASTRA_LICENSE_PUBLIC_KEY: o.licensePublicKey } : {}),
   };
 }
 

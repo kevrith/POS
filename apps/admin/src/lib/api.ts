@@ -102,8 +102,8 @@ export const adminApi = {
   createLicenseKey: (tier: string, expiresAt?: string) =>
     request<any>('/license-keys', { method: 'POST', body: JSON.stringify({ tier, expiresAt }) }),
 
-  createMachineBoundKey: (machineId: string, tier: string, expiresAt?: string) =>
-    request<any>('/license-keys/machine-bound', { method: 'POST', body: JSON.stringify({ machineId, tier, expiresAt }) }),
+  releaseLicenseKey: (id: string) =>
+    request<any>(`/license-keys/${id}/release`, { method: 'PATCH' }),
 
   revokeKey: (id: string) =>
     request<any>(`/license-keys/${id}/revoke`, { method: 'PATCH' }),

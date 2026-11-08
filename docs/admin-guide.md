@@ -310,7 +310,8 @@ Set `DATABASE_URL` and `DIRECT_URL` to your managed PostgreSQL.
 
 The desktop app is a Tauri shell that **bundles the built web app**, adding native
 capability the browser cannot reach: direct printer sockets, cash-drawer kick, LAN
-peer sync, an offline eTIMS queue in SQLite, and machine-bound licensing.
+peer sync, an offline eTIMS queue in SQLite, and the offline edition's signed licence (see the
+Super Admin Guide, *License keys*).
 
 ```bash
 cd apps/web && npm run build      # MUST be first — Tauri bundles apps/web/dist

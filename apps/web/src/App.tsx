@@ -48,6 +48,7 @@ const FranchisePage = lazy(() => import('./pages/FranchisePage'));
 const DesktopSetupPage = lazy(() => import('./pages/DesktopSetupPage'));
 const ServerConsolePage = lazy(() => import('./pages/ServerConsolePage'));
 const ServerSettingsPage = lazy(() => import('./pages/ServerSettingsPage'));
+const LicensePage = lazy(() => import('./pages/LicensePage'));
 const HotelPage = lazy(() => import('./pages/HotelPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const StocktakePage = lazy(() => import('./pages/StocktakePage'));
@@ -360,6 +361,7 @@ export default function App() {
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/server" element={<ServerSettingsPage />} />
+              <Route path="/license" element={<LicensePage />} />
               <Route path="/setup" element={<SetupWizardPage />} />
               <Route path="/forecasting" element={<ForecastingPage />} />
               <Route path="/reconciliation" element={<ReconciliationPage />} />

@@ -7,6 +7,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { SecretsRotationService } from '../security/secrets-rotation.service';
 import { EmailModule } from '../email/email.module';
 import { DbBackupModule } from '../backup/db-backup.module';
+import { LicensingModule } from '../licensing/licensing.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { DbBackupModule } from '../backup/db-backup.module';
     JwtModule.register({}),
     EmailModule,
     DbBackupModule,
+    LicensingModule,
   ],
   providers: [SuperAdminService, SuperAdminAuthGuard, SecretsRotationService],
   controllers: [SuperAdminController],

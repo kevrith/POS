@@ -6,7 +6,7 @@ import {
 import { formatBytes, timeAgo } from '../desktopServer';
 
 const draft = (over: Partial<SetupDraft> = {}): SetupDraft => ({
-  topology: 'SERVER_POS', deviceRole: 'FULL_POS', licenseKey: 'KPS-1', licenseValid: false, serverUrl: '',
+  topology: 'SERVER_POS', deviceRole: 'FULL_POS', serverUrl: '',
   terminalName: '', businessName: '', dataDir: 'C:\\ProgramData\\KASTRA\\pgdata', backupDir: 'C:\\Users\\X\\Documents\\KASTRA Backups',
   lanEnabled: false, ...over,
 });
@@ -106,9 +106,8 @@ describe('what the wizard saves', () => {
     expect(p.apiServerUrl).toBe('https://pos-bhe5.onrender.com');
     expect(p.startsLocalServer).toBe(false);
   });
-  it('only an activated licence key is saved', () => {
-    expect(buildSetupPayload(draft({ licenseValid: false })).invokeArgs.licenseKey).toBeNull();
-    expect(buildSetupPayload(draft({ licenseValid: true })).invokeArgs.licenseKey).toBe('KPS-1');
+  it('never carries a licence key: activation is done by the server, after setup', () => {
+    expect(Object.keys(buildSetupPayload(draft({})).invokeArgs)).not.toContain('licenseKey');
   });
 });
 

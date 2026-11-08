@@ -57,6 +57,8 @@ services:
         sync: false
       - key: SUPER_ADMIN_SECRET
         generateValue: true
+      - key: LICENSE_SIGNING_PRIVATE_KEY
+        sync: false           # PRIVATE key that signs offline licences; see docs/super-admin-guide.md, License keys
       - key: ETIMS_ENV
         value: test           # Change to "production" once KRA approves your eTIMS credentials
       - key: MPESA_ENV

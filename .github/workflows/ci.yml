@@ -252,7 +252,8 @@ jobs:
           key: server-bundle-${{ hashFiles('apps/desktop/scripts/server-bundle.pins.json') }}
 
       - name: Assemble the offline server (downloads are checked against pinned hashes)
-        run: node apps/desktop/scripts/build-server-bundle.mjs
+        # No licence public key here: this job proves the server runs, it does not make an installer anyone gets.
+        run: node apps/desktop/scripts/build-server-bundle.mjs --allow-unlicensed
 
       - name: The packed file keeps Prisma's generated client (a dot-folder)
         shell: bash

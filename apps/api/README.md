@@ -152,6 +152,30 @@ Trials get full access until they expire; after that the business's
 `subscriptionTier` is enforced. Gifted ("comped") subscriptions grant a tier without
 recording revenue.
 
+### Licensing the offline edition ([src/licensing/](src/licensing/))
+
+The offline edition (`KASTRA_EDITION=LOCAL`, set by `packages/local-server`) cannot ask a payment
+provider whether it is paid up, so its plan comes from a **signed licence**:
+
+- `license-token.ts` — `kl1.<payload>.<signature>`, Ed25519. The private key exists only on the cloud
+  server (`LICENSE_SIGNING_PRIVATE_KEY`); the app carries the public key (`KASTRA_LICENSE_PUBLIC_KEY`),
+  so it can check a licence and cannot make one. The payload names the computer (`machineId`), the plan,
+  when this token ends and when the licence itself ends.
+- `license-authority.service.ts` + `license-server.controller.ts` (**cloud**) — `POST /license-server/activate`
+  and `/renew` (public, throttled). A `LicenseKey` binds to the first computer that activates it
+  (atomically); another computer is refused (`OTHER_COMPUTER`) until the admin **Releases** it. Revoked and
+  expired keys are refused. Tokens last 30 days, never beyond the licence's end.
+- `license.service.ts` (**offline**) — keeps the token in `LocalLicense`, renews quietly at most once a day
+  when online, and writes `Business.subscriptionTier/Status/trialEndsAt/planName` from the **verified token**
+  so the existing `effectiveTier()`/`SubscriptionGuard` do the enforcing. A token that fails verification or is
+  for another computer is never stored. `GET /license/status`, `POST /license/activate`, `POST /license/renew`.
+- `license-state.ts` — the rules, pure: ACTIVE → EXPIRING_SOON (last 7 days) → GRACE (14 days after the token
+  ends) → LAPSED (Free plan, as a lapsed cloud subscription). `effectiveNow = max(now, lastSeenAt)` so winding the
+  clock back gains nothing. Data and backups are never locked.
+
+Migration `20261108000000_license_activation` adds the binding columns and `LocalLicense`; apply it to the cloud
+database before deploying code that reads them.
+
 ---
 
 ## Modules

@@ -66,6 +66,11 @@ export const ACCESS_RULES: readonly AccessRule[] = [
   r('*', '/push/**', ALL),
   r('GET', '/health', ALL),
 
+  // ── Licence (the offline edition): everyone may read the status that drives the banner; the owner activates ──────────
+  r('GET', '/license/status', ALL),
+  r('POST', '/license/activate', OWN),
+  r('POST', '/license/renew', MGMT),
+
   // ── Business: settings, credentials, staff accounts ───────────────────────
   r('POST', '/business/:id/cancel-subscription', OWN),
   r('PATCH', '/business/:id/etims-credentials', OWN),

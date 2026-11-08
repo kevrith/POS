@@ -134,6 +134,11 @@ pub async fn reset_setup() -> Result<bool, String> {
 /// Set VITE_KASTRA_CLOUD_URL in the web .env before building the installer.
 #[tauri::command]
 pub fn get_cloud_url() -> String {
+    cloud_url()
+}
+
+/// The KASTRA cloud address this build talks to (licences are issued and renewed there).
+pub fn cloud_url() -> String {
     // The env var is embedded at compile-time via the build script or
     // via the web Vite build that Tauri bundles.
     // We expose it as a Tauri command so the setup wizard can read it.

@@ -32,6 +32,11 @@ export interface SupervisorOptions extends NewConfigOptions {
   env?: NodeJS.ProcessEnv;
   /** Extra browser origins the API accepts, besides the desktop app's own (development and tests only). */
   extraOrigins?: string[];
+  /** Licensing (see apps/api/src/licensing): handed to the API as environment. */
+  machineId?: string;
+  licenseServerUrl?: string;
+  /** PEM text of the public key licences are checked against. */
+  licensePublicKey?: string;
 }
 
 export type Phase = 'stopped' | 'starting' | 'running' | 'stopping' | 'error';
@@ -165,6 +170,9 @@ export class Supervisor extends EventEmitter {
         pidFile,
         appVersion: this.o.appVersion,
         extraOrigins: this.o.extraOrigins,
+        machineId: this.o.machineId,
+        licenseServerUrl: this.o.licenseServerUrl,
+        licensePublicKey: this.o.licensePublicKey,
       });
       this.api.on('crashed', () => this.set('running', 'The server restarted after a problem'));
       this.api.on('gave-up', () => this.set('error', 'The server keeps stopping. See the log files, then restart KASTRA.'));

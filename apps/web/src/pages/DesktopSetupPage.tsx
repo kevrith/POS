@@ -49,7 +49,6 @@ function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (window.__TAURI__) return (window.__TAURI__ as { invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T> }).invoke<T>(cmd, args);
   // Browser dev fallback
   if (cmd === 'get_machine_id')         return Promise.resolve({ machine_id: 'dev-machine-001', hostname: 'localhost' } as T);
-  if (cmd === 'validate_license_key')   return Promise.resolve(true as T);
   if (cmd === 'get_setup_mode')         return Promise.resolve({ mode: 'UNCONFIGURED' } as T);
   if (cmd === 'set_setup_mode')         return Promise.resolve(true as T);
   if (cmd === 'reset_setup')            return Promise.resolve(true as T);
@@ -279,10 +278,6 @@ export default function DesktopSetupPage() {
   const [place,         setPlace]         = useState<Place | null>(null);
   const [topology,      setTopology]      = useState<Topology | null>(null);
   const [deviceRole,    setDeviceRole]    = useState<DeviceRole>('FULL_POS');
-  const [licenseKey,    setLicenseKey]    = useState('');
-  const [licenseError,  setLicenseError]  = useState('');
-  const [licenseValid,  setLicenseValid]  = useState(false);
-  const [licenseLoading,setLicenseLoading]= useState(false);
   const [machineId,     setMachineId]     = useState('');
   const [serverUrl,     setServerUrl]     = useState('http://192.168.1.');
   const [connectStatus, setConnectStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
@@ -346,23 +341,6 @@ export default function DesktopSetupPage() {
 
   /* ── Handlers ─────────────────────────────────────────────────────────────── */
 
-  async function validateLicense() {
-    const key = licenseKey.trim().toUpperCase();
-    if (!key) { setLicenseError('Please enter your license key.'); return; }
-    if (!key.startsWith('KPS-')) { setLicenseError('License key must start with KPS-'); return; }
-    setLicenseLoading(true);
-    setLicenseError('');
-    try {
-      const valid = await invoke<boolean>('validate_license_key', { key, machineId });
-      if (valid) { setLicenseValid(true); setStep('PLACE'); }
-      else        setLicenseError('Invalid key. Please check the key or contact support.');
-    } catch (e) {
-      setLicenseError('Validation failed: ' + String(e));
-    } finally {
-      setLicenseLoading(false);
-    }
-  }
-
   /** Question 1 answered. Cloud needs no further choice about this computer; local asks what this computer does. */
   function afterPlace() {
     if (place === 'CLOUD') {
@@ -417,7 +395,7 @@ export default function DesktopSetupPage() {
     setSaving(true);
     try {
       const payload = buildSetupPayload({
-        topology, deviceRole, licenseKey, licenseValid, serverUrl, terminalName, businessName, dataDir, backupDir, lanEnabled,
+        topology, deviceRole, serverUrl, terminalName, businessName, dataDir, backupDir, lanEnabled,
       });
       await invoke('set_setup_mode', payload.invokeArgs);
       localStorage.setItem('kastra-server-url', payload.apiServerUrl);
@@ -472,7 +450,7 @@ export default function DesktopSetupPage() {
 
               <div className="text-left space-y-2">
                 {[
-                  { icon: Key,         label: 'License Activation',  desc: 'Verify your purchase (optional trial)' },
+                  { icon: Key,         label: 'Licence',             desc: 'Starts as a free trial; activate any time' },
                   { icon: Server,      label: 'Where your data lives', desc: 'On this computer (works offline) or in the cloud' },
                   { icon: Tablet,      label: 'What this computer does', desc: 'Server and till, server only, or a till' },
                   { icon: CheckCircle, label: 'Ready to Launch',     desc: 'Start taking sales immediately' },
@@ -498,48 +476,31 @@ export default function DesktopSetupPage() {
             </div>
           )}
 
-          {/* ── Step 1: License ──────────────────────────────────────────── */}
+          {/* ── Step 1: Licence ──────────────────────────────────────────── */}
           {step === 'LICENSE' && (
             <div className="space-y-6">
               <div>
                 <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center mb-3">
                   <Key className="w-6 h-6 text-amber-600" />
                 </div>
-                <h2 className="text-xl font-bold text-gray-900">License Activation</h2>
-                <p className="text-gray-500 text-sm mt-1">Enter the license key from your purchase email.</p>
+                <h2 className="text-xl font-bold text-gray-900">Licence</h2>
+                <p className="text-gray-500 text-sm mt-1">You start with a free trial. There is nothing to enter now.</p>
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">License Key</label>
-                <input
-                  value={licenseKey}
-                  onChange={(e) => { setLicenseKey(e.target.value.toUpperCase()); setLicenseError(''); }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') void validateLicense(); }}
-                  placeholder="KPS-XXXXXXXX-XXXXXXXX-XXXXXXXX"
-                  className="w-full border-2 rounded-xl px-4 py-3 font-mono text-sm tracking-widest focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  autoFocus
-                />
-                {licenseError && (
-                  <div className="flex items-center gap-2 mt-2 text-sm text-red-600">
-                    <AlertCircle className="w-4 h-4 flex-shrink-0" /> {licenseError}
-                  </div>
-                )}
-                {licenseValid && (
-                  <div className="flex items-center gap-2 mt-2 text-sm text-green-600">
-                    <CheckCircle className="w-4 h-4" /> License verified
-                  </div>
-                )}
+              <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm text-gray-600">
+                <p>When you have bought a plan, open <strong>Licence</strong> in the menu and enter your key. KASTRA ties it to this computer and checks it with our server once; after that it renews itself whenever the computer is online.</p>
+                <p>Without the internet it keeps working. If it cannot reach us for a long time you get a warning first, and your data stays safe whatever happens.</p>
               </div>
 
               <div className="bg-gray-50 rounded-xl p-3 space-y-1">
-                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Machine ID · share this with your vendor to generate a license key</div>
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">This computer's ID</div>
                 <div className="flex items-center gap-2">
                   <div className="font-mono text-xs text-gray-700 break-all select-all flex-1 bg-white border border-gray-200 rounded-lg px-3 py-2">{machineId || 'Loading…'}</div>
                   <button
                     onClick={() => {
                       if (machineId) {
                         navigator.clipboard.writeText(machineId);
-                        toast.success('Machine ID copied!');
+                        toast.success('Computer ID copied');
                       }
                     }}
                     disabled={!machineId}
@@ -548,7 +509,7 @@ export default function DesktopSetupPage() {
                     Copy
                   </button>
                 </div>
-                <p className="text-[10px] text-gray-400">Send this ID to your KASTRA vendor — they'll generate a license key tied to this machine.</p>
+                <p className="text-[10px] text-gray-400">Support may ask for this if a licence needs to be moved to another computer.</p>
               </div>
 
               <div className="flex gap-3">
@@ -556,23 +517,13 @@ export default function DesktopSetupPage() {
                   <ChevronLeft className="w-4 h-4" /> Back
                 </button>
                 <button
-                  onClick={() => void validateLicense()}
-                  disabled={licenseLoading || !licenseKey.trim()}
-                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl disabled:opacity-40 flex items-center justify-center gap-2"
+                  onClick={() => setStep('PLACE')}
+                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-2"
+                  autoFocus
                 >
-                  {licenseLoading
-                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Verifying…</>
-                    : <>Verify & Continue <ChevronRight className="w-4 h-4" /></>
-                  }
+                  Continue <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
-
-              <button
-                onClick={() => setStep('PLACE')}
-                className="w-full text-xs text-gray-400 hover:text-gray-600 py-1"
-              >
-                Skip — I'll activate later (trial mode)
-              </button>
             </div>
           )}
 
@@ -1051,10 +1002,8 @@ export default function DesktopSetupPage() {
                   </div>
                 )}
                 <div className="px-4 py-3 flex items-center justify-between">
-                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">License</span>
-                  <span className={`text-sm font-semibold ${licenseValid ? 'text-green-600' : 'text-amber-600'}`}>
-                    {licenseValid ? 'Activated' : 'Trial mode'}
-                  </span>
+                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Licence</span>
+                  <span className="text-sm font-semibold text-amber-600">Free trial (activate from the menu)</span>
                 </div>
               </div>
 

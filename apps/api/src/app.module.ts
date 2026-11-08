@@ -47,6 +47,7 @@ import { EmailModule } from './email/email.module';
 import { PushModule } from './push/push.module';
 import { QueueModule } from './queue/queue.module';
 import { SubscriptionModule } from './subscription/subscription.module';
+import { LicensingModule } from './licensing/licensing.module';
 import { SuperAdminModule } from './super-admin/super-admin.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { AffiliateModule } from './affiliate/affiliate.module';
@@ -129,6 +130,7 @@ import { DbBackupModule } from './backup/db-backup.module';
     DbBackupModule,
     // New
     SubscriptionModule,
+    LicensingModule,
     SuperAdminModule,
     ReferralsModule,
     AffiliateModule,

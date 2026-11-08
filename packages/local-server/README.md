@@ -41,6 +41,13 @@ It runs in a temporary folder on free ports and never touches real data.
   handler kills the API and stops the database synchronously, and the API's process id is kept in `run/api.pid` so a later
   start can stop a leftover API (only if that process is alive AND still answers the health check on our port).
 
+## Licensing
+
+The server program passes the API what it needs to check a licence: `--machine-id` (`KASTRA_MACHINE_ID`),
+`--license-server` (`LICENSE_SERVER_URL`) and `--license-public-key <file>` (read and handed over as
+`KASTRA_LICENSE_PUBLIC_KEY`). Without the public key the API can never accept a paid plan. The checking itself is in
+`apps/api/src/licensing`; `__tests__/licensing.integration.test.ts` runs the real API against a stand-in licence server.
+
 ## Also in this package
 
 - `folders.ts` checks a chosen folder on the real disk (empty, writable, not someone's files) for the setup wizard; the
@@ -54,5 +61,5 @@ It runs in a temporary folder on free ports and never touches real data.
   tested on Linux, and run on Windows for the first time in CI (see apps/desktop/README.md, Packaging).
 - Backups do not contain the encryption key: after restoring onto a NEW computer, saved M-Pesa/eTIMS credentials must be
   entered again. Key escrow comes with the cloud backup.
-- Licence checks (online activation with an offline grace period) and the cloud backup.
+- The cloud backup.
 - A client/server version check (a till on an older app than its server).

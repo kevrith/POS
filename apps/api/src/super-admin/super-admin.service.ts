@@ -1,11 +1,12 @@
 import { Injectable, UnauthorizedException, BadRequestException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { LicenseAuthorityService } from '../licensing/license-authority.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { DbBackupService } from '../backup/db-backup.service';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
-import { createHash, randomBytes } from 'crypto';
+import { randomBytes } from 'crypto';
 import { normalizeTier, planDisplayName } from '@pos/shared';
 import { jwtSecret } from '../common/jwt-secret';
 
@@ -50,6 +51,7 @@ export class SuperAdminService {
     private jwt: JwtService,
     private email: EmailService,
     private backup: DbBackupService,
+    private licenseAuthority: LicenseAuthorityService,
   ) {}
 
   async login(email: string, password: string): Promise<{ token: string }> {
@@ -232,34 +234,18 @@ export class SuperAdminService {
   }
 
   /**
-   * Build a machine-bound KPS license key.
-   *
-   * Format: KPS-XXXXXXXX-XXXXXXXX-XXXXXXXX  (30 chars, segments all hex)
-   *   seg1 = 8 random hex chars
-   *   seg2 = 8 random hex chars
-   *   key_slice = seg1 + "-" + seg2   (17 chars — must equal Rust's &key[4..21])
-   *   seg3 = sha256(machineId + ":" + key_slice)[0..8]
-   *
-   * If machineId is omitted a random seg3 is used (non-verifiable offline).
+   * A new licence key: KPS- and three groups of 8 random hex characters. The key itself proves nothing; it is only a name the
+   * KASTRA server looks up. What makes a licence unforgeable is the signed token the server issues when the key is activated
+   * (see licensing/). The old "machine-bound" keys carried a checksum whose recipe shipped in the desktop app, so anyone
+   * could compute a valid one; they are gone.
    */
-  private buildLicenseKey(machineId?: string): string {
-    const seg1 = randomBytes(4).toString('hex');
-    const seg2 = randomBytes(4).toString('hex');
-    const keySlice = `${seg1}-${seg2}`; // matches validate_license_key in apps/desktop/src-tauri/src/license.rs
-    let seg3: string;
-    if (machineId) {
-      seg3 = createHash('sha256')
-        .update(`${machineId}:${keySlice}`)
-        .digest('hex')
-        .slice(0, 8);
-    } else {
-      seg3 = randomBytes(4).toString('hex');
-    }
-    return `KPS-${seg1}-${seg2}-${seg3}`;
+  private buildLicenseKey(): string {
+    const part = () => randomBytes(4).toString('hex');
+    return `KPS-${part()}-${part()}-${part()}`;
   }
 
-  async createLicenseKey(data: { tier: string; expiresAt?: Date; machineId?: string }) {
-    const key = this.buildLicenseKey(data.machineId);
+  async createLicenseKey(data: { tier: string; expiresAt?: Date }) {
+    const key = this.buildLicenseKey();
     return this.prisma.licenseKey.create({
       data: {
         key,
@@ -269,9 +255,9 @@ export class SuperAdminService {
     });
   }
 
-  /** Generate a machine-bound key without persisting it (preview / CLI use). */
-  generateKeyPreview(machineId: string, tier: string): { key: string; tier: string; machineId: string } {
-    return { key: this.buildLicenseKey(machineId), tier, machineId };
+  /** Free a key from the computer it is bound to, so a shop that replaced its PC can activate it on the new one. */
+  releaseLicenseKey(id: string) {
+    return this.licenseAuthority.release(id);
   }
 
   async revokeLicenseKey(id: string) {

@@ -7,11 +7,13 @@
  *   node cli.js run --pg-bin <dir> --api-main <file> --prisma-cli <file> --schema <file> --app-version 1.0.0
  *                   [--root <dir>] [--data-dir <dir>] [--backup-dir <dir>] [--lan true|false]
  *                   [--pg-lib <dir>] [--node <path>] [--pg-port N] [--api-port N] [--extra-origins a,b]
+ *                   [--machine-id <id>] [--license-server <url>] [--license-public-key <file>]
  *
  * It prints one JSON object per line on stdout (type: status | log | warning | result) and reads one JSON command per
  * line on stdin: {"id":1,"cmd":"status"|"backups"|"backup"|"restore"|"stop","file":"..."}. When the desktop app closes or crashes,
  * stdin ends and this program stops the API and the database cleanly instead of leaving them running in the background.
  */
+import * as fs from 'fs';
 import * as readline from 'readline';
 import * as os from 'os';
 import { loadConfig } from './config';
@@ -84,6 +86,10 @@ async function main(): Promise<void> {
     prismaCli: a['prisma-cli'],
     schemaPath: a['schema'],
     appVersion: a['app-version'],
+    machineId: a['machine-id'],
+    licenseServerUrl: a['license-server'],
+    // Passed as a file path (a PEM does not survive a command line); read here.
+    licensePublicKey: a['license-public-key'] && fs.existsSync(a['license-public-key']) ? fs.readFileSync(a['license-public-key'], 'utf8') : undefined,
     extraOrigins: a['extra-origins'] ? a['extra-origins'].split(',').map((x) => x.trim()).filter(Boolean) : undefined,
     platform,
   });

@@ -92,30 +92,18 @@ export class SuperAdminController implements OnModuleInit {
 
   @UseGuards(SuperAdminAuthGuard)
   @Post('license-keys')
-  createKey(@Body() body: { tier: string; expiresAt?: string; machineId?: string }) {
+  createKey(@Body() body: { tier: string; expiresAt?: string }) {
     return this.service.createLicenseKey({
       tier: body.tier,
-      expiresAt: body.expiresAt ? new Date(body.expiresAt) : undefined,
-      machineId: body.machineId,
-    });
-  }
-
-  /** Generate + save a machine-bound key in one step */
-  @UseGuards(SuperAdminAuthGuard)
-  @Post('license-keys/machine-bound')
-  generateMachineBoundKey(@Body() body: { machineId: string; tier: string; expiresAt?: string }) {
-    return this.service.createLicenseKey({
-      tier: body.tier,
-      machineId: body.machineId,
       expiresAt: body.expiresAt ? new Date(body.expiresAt) : undefined,
     });
   }
 
-  /** Preview a key without saving — useful for testing */
+  /** Free the key from its computer so it can be activated on a replacement. */
   @UseGuards(SuperAdminAuthGuard)
-  @Post('license-keys/preview')
-  previewKey(@Body() body: { machineId: string; tier: string }) {
-    return this.service.generateKeyPreview(body.machineId, body.tier);
+  @Patch('license-keys/:id/release')
+  releaseKey(@Param('id') id: string) {
+    return this.service.releaseLicenseKey(id);
   }
 
   @UseGuards(SuperAdminAuthGuard)

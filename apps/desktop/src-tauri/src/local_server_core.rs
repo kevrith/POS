@@ -28,6 +28,9 @@ pub struct ServerPaths {
     pub pg_bin: PathBuf,
     /// Only where the PostgreSQL libraries are not next to the programs (Linux/macOS builds; Windows keeps DLLs in bin).
     pub pg_lib: Option<PathBuf>,
+    /// The PUBLIC key licences are checked against, written into the bundle at build time. Absent in developer runs and
+    /// in test builds, where no paid plan can then be activated.
+    pub license_public_key: PathBuf,
 }
 
 impl ServerPaths {
@@ -52,6 +55,7 @@ impl ServerPaths {
             schema: dir.join("prisma").join("schema.prisma"),
             pg_bin: dir.join("postgres").join("bin"),
             pg_lib: if cfg!(windows) || !lib.exists() { None } else { Some(lib) },
+            license_public_key: dir.join("license-public-key.pem"),
         }
     }
 
@@ -65,6 +69,7 @@ impl ServerPaths {
             schema: repo.join("prisma").join("schema.prisma"),
             pg_bin: pg_bin.to_path_buf(),
             pg_lib: pg_lib.map(|p| p.to_path_buf()),
+            license_public_key: repo.join("license-public-key.pem"),
         }
     }
 
@@ -166,6 +171,9 @@ pub struct LaunchOptions {
     pub app_version: String,
     pub pg_port: Option<u16>,
     pub api_port: Option<u16>,
+    /// This computer's id and where licences are issued; the licence is bound to the first and renewed from the second.
+    pub machine_id: Option<String>,
+    pub license_server_url: Option<String>,
 }
 
 #[derive(Default)]
@@ -236,6 +244,15 @@ impl LocalServer {
         }
         if let Some(p) = opts.api_port {
             c.args(["--api-port", &p.to_string()]);
+        }
+        if let Some(m) = &opts.machine_id {
+            c.args(["--machine-id", m]);
+        }
+        if let Some(u) = &opts.license_server_url {
+            c.args(["--license-server", u]);
+        }
+        if paths.license_public_key.exists() {
+            c.args(["--license-public-key", &paths.license_public_key.to_string_lossy()]);
         }
         c.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
         let mut child = c.spawn().map_err(|e| format!("Could not start the server program: {}", e))?;
@@ -353,6 +370,7 @@ mod tests {
         assert!(p.cli.ends_with("local-server/dist/cli.js") || p.cli.ends_with("local-server\\dist\\cli.js"));
         assert!(p.schema.ends_with("prisma/schema.prisma") || p.schema.ends_with("prisma\\schema.prisma"));
         assert!(p.pg_bin.ends_with("postgres/bin") || p.pg_bin.ends_with("postgres\\bin"));
+        assert!(p.license_public_key.ends_with("server/license-public-key.pem") || p.license_public_key.ends_with("server\\license-public-key.pem"));
     }
 
     fn scratch(name: &str) -> PathBuf {

@@ -122,6 +122,8 @@ jobs:
           # Prisma only reads these to generate its client; nothing connects.
           DATABASE_URL: postgresql://localhost/placeholder
           DIRECT_URL: postgresql://localhost/placeholder
+          # The PUBLIC key licences are checked against (a repository variable, not a secret). The build fails without it.
+          LICENSE_PUBLIC_KEY: ${{ vars.LICENSE_PUBLIC_KEY }}
         run: |
           npx prisma generate --schema prisma/schema.prisma
           (cd apps/api && npm run build)

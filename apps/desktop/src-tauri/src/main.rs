@@ -109,7 +109,6 @@ fn main() {
             setup::get_cloud_url,
             // License
             license::get_machine_id,
-            license::validate_license_key,
             // Auto-update
             check_for_app_update,
             // LAN discovery

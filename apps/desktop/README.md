@@ -2,8 +2,8 @@
 
 Native desktop shell around the KASTRA POS web app, adding the hardware and
 offline capabilities a browser cannot reach: direct printer sockets, cash-drawer
-kick, LAN peer sync, an offline eTIMS/VSCU queue in SQLite, and machine-bound
-licensing.
+kick, LAN peer sync, an offline eTIMS/VSCU queue in SQLite, and a signed,
+online-activated licence for the offline edition.
 
 - Product name: **KASTRA POS** · identifier `co.ke.kastra.pos`
 - Frontend: `apps/web` — dev from the Vite server, release from `apps/web/dist`
@@ -55,7 +55,7 @@ Releases are automated by `.github/workflows/desktop-release.yml`.
 | `discovery.rs` | LAN server auto-discovery. UDP :47474 — client broadcasts `KASTRA_DISCOVER`, servers reply `KASTRA_SERVER:{api_port}:{hostname}`; client collects responses for 2 s |
 | `lan_sync.rs` | TCP peer sync — a server terminal holds a registry of connected client streams and pushes events to all of them |
 | `vscu.rs` | Offline eTIMS/VSCU queue in local SQLite (`rusqlite`) — sales are signed and held until KRA is reachable |
-| `license.rs` | Machine-bound licensing — stable machine id derived and SHA-256 hashed |
+| `license.rs` | This computer's stable id (Windows MachineGuid / `/etc/machine-id` / macOS platform UUID, hostname hash as a last resort). It is handed to the server program, which binds the licence to it. **Nothing here decides whether a licence is valid**: the old checksum check, whose recipe shipped in the app and could be copied, is gone (see `apps/api/README.md`, Licensing) |
 | `setup.rs` | First-run setup saved in `mode.json`: mode `CLOUD` / `SERVER_POS` / `SERVER` / `CLIENT` (`STANDALONE` is the old name for `SERVER_POS`), device role `FULL_POS` / `CASHIER` / `KIOSK` / `KDS` / `MANAGER` (tills only), and for server computers the database folder, backup folder and whether other computers may connect |
 | `local_server_core.rs` | Launches and talks to the local server program (`packages/local-server`): JSON lines out, JSON commands in, stops everything when this app closes. **No Tauri code in it**, so its tests build anywhere (see Local server below) |
 | `local_server.rs` | The `local_server_*` Tauri commands (defaults, validate folders, start, restart, stop, set_lan, status, backup, backups, restore); finds the installed files; keeps slow requests off the window thread |
@@ -119,6 +119,10 @@ node apps/desktop/scripts/smoke-server-bundle.mjs     # proves the bundle runs o
   using Windows' own `tar.exe` (by full path: a GNU tar from Git for Windows reads `C:\...` as a network host), into a
   temporary folder renamed into place only when complete, and removes older builds' folders. The wizard's folders step and the
   start-up screen say "Preparing the server" while it happens (up to a minute the first time).
+- **Licence public key**: `build-server-bundle.mjs` writes `license-public-key.pem` into the bundle from the `LICENSE_PUBLIC_KEY`
+  environment variable (or `--license-public-key FILE`) and **fails the build without it**, unless `--allow-unlicensed` is
+  given (CI's server job uses that; it makes no installer). The release workflow reads it from the repository *variable*
+  `LICENSE_PUBLIC_KEY`. Make the pair with `apps/api/scripts/generate-license-keys.mjs`; the private half never enters this repo.
 - **Developer builds** have no real archive: `build.rs` leaves an empty placeholder, and starting a server says so. Run from a
   checkout with `KASTRA_DEV_REPO` instead (below).
 - **Installer extras** (`src-tauri/windows/installer-hooks.nsh`, installs for all users so it can add firewall rules): inbound

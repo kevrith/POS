@@ -80,6 +80,8 @@ pub fn start(app: &AppHandle, slot: &Slot, prep: &Mutex<Prep>) -> Result<bool, S
         app_version: app.package_info().version.to_string(),
         pg_port: None,
         api_port: None,
+        machine_id: Some(crate::license::machine_id()),
+        license_server_url: Some(setup::cloud_url()),
     };
     let server = LocalServer::spawn(&paths, &opts)?;
     *slot.write().unwrap() = Some(Arc::new(server));

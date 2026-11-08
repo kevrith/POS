@@ -1361,11 +1361,38 @@ model LicenseKey {
   expiresAt   DateTime?
   isActive    Boolean   @default(true)
   activatedAt DateTime?
+  // The one server computer this key runs on, set when the offline edition first activates it. Cleared by "release".
+  machineId   String?
+  hostname    String?
+  boundAt     DateTime?
+  // The last time that computer renewed its licence (it does so quietly whenever it is online).
+  lastSeenAt  DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
   @@index([businessId])
   @@index([key])
+  @@index([machineId])
+}
+
+// The licence an offline (LOCAL) installation holds: one row, id "local". The token is signed by the KASTRA server and
+// checked here with the public key, so it cannot be forged; the rest is a readable copy for the status screen.
+model LocalLicense {
+  id               String    @id @default("local")
+  key              String
+  token            String
+  tier             String
+  machineId        String
+  licenseExpiresAt DateTime?
+  tokenExpiresAt   DateTime
+  activatedAt      DateTime  @default(now())
+  lastRenewedAt    DateTime  @default(now())
+  // The latest time this computer has seen. The clock can never be wound back past it to stretch a licence.
+  lastSeenAt       DateTime  @default(now())
+  // What the licence server last said when asked to renew: OK, REVOKED, EXPIRED, OTHER_COMPUTER, or UNREACHABLE.
+  serverStatus     String    @default("OK")
+  serverMessage    String?
+  updatedAt        DateTime  @updatedAt
 }
 
 model SuperAdmin {

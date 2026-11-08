@@ -137,17 +137,44 @@ revenue figures, so the numbers reflect actual money.
 
 ## 7. License keys
 
-For desktop and offline deployments.
+For the offline (desktop) edition. A key is a plain code (`KPS-` and three groups of
+characters). **It is not what protects the licence**: the customer enters it once, in
+the app under *Licence*, and the KASTRA server answers with a signed licence that is
+tied to that computer. The app checks the signature offline; nothing in the app can
+make one.
 
-- **Issue** a key
-- **Machine-bound key** — tied to a specific machine's derived hardware id, so it
-  cannot be copied to another terminal
-- **Revoke** a key
+- **Issue** a key (plan and, except Lifetime, a number of days)
+- **Computer** column — the computer the key was activated on, and when it last
+  checked in. A key belongs to **one** server computer. Till computers that connect to
+  it over the shop network need no key of their own.
+- **Release** — frees the key from its computer so the customer can activate it on a
+  new one (a replaced PC). The old computer keeps working until its current licence
+  period (up to 30 days) ends, then drops to Free.
+- **Revoke** a key — the computer stops being renewed; after its remaining period plus a
+  14-day grace it falls back to the Free plan. Data stays open and backups never stop.
 - **Resend** a key to the customer
 - **Regenerate** a key
 
-Machine-bound keys are the right default for desktop terminals. A plain key is
-portable, which is convenient and also exactly what makes it leakable.
+**How renewal works.** Whenever the customer's computer is online it renews quietly
+(about once a day). Each renewal is good for 30 days, never beyond the licence's own end
+date. If it cannot reach the server, the owner is warned during the last 7 days, then
+gets 14 days of grace, then the shop is on the Free plan — the same result as a lapsed
+cloud subscription.
+
+**One-time setup.** The signing key pair is made once with
+`node apps/api/scripts/generate-license-keys.mjs --private-out <file> --public-out <file>`:
+
+1. Put the private key's contents in the cloud server's environment as
+   `LICENSE_SIGNING_PRIVATE_KEY`, keep a second safe copy, then delete the file. Whoever
+   holds it can issue licences. It must never be committed or sent in chat.
+2. Put the public key in the GitHub Actions *variable* `LICENSE_PUBLIC_KEY`. The Windows
+   installer build fails without it, so an installer that cannot verify licences is never
+   made by accident.
+3. Apply database migration `20261108000000_license_activation` to the cloud database
+   **before** deploying this version.
+
+Losing the private key means no new licences for installed apps; replacing the pair means
+every installed app must be updated.
 
 ## 8. Referrals
 

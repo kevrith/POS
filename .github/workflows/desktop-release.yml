@@ -179,7 +179,7 @@ jobs:
             - **VSCU offline eTIMS** — queues KRA submissions when offline
             - **LAN sync** — sync across terminals without internet
             - **Auto-update** notifications when a new version is available
-            - Machine-bound license validation
+            - Signed licence, activated online once and renewed quietly (works offline)
 
             ### Upgrading
             The app will notify you automatically when a new version is available.

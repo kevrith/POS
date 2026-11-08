@@ -1,0 +1,208 @@
+name: Desktop installer check (no release)
+
+# Builds the real Windows installer and tests it the way a customer uses it: install it, look at what it put on the
+# computer, run the server that is inside it, start the app, uninstall it. NOTHING IS PUBLISHED: no tag, no GitHub release,
+# no upload except a short-lived workflow artifact you can download to try on your own PC. The release workflow
+# (desktop-release.yml) is the one that publishes; this one is safe to run as often as you like.
+#
+# Run it by hand (Actions → Desktop installer check → Run workflow), or it runs when the installer's own files change.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/desktop/src-tauri/**'
+      - 'apps/desktop/scripts/**'
+      - 'packages/local-server/src/**'
+      - '.github/workflows/desktop-installer-check.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-installer-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-installer:
+    name: Windows installer — build, install, run, uninstall
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    env:
+      # Prisma only reads these to generate its client; nothing connects.
+      DATABASE_URL: postgresql://localhost/placeholder
+      DIRECT_URL: postgresql://localhost/placeholder
+      TARGET: x86_64-pc-windows-msvc
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: './apps/desktop/src-tauri -> target'
+
+      # One install for the whole workspace (a second `npm ci` inside a workspace folder would wipe it down to that member).
+      - name: Install dependencies (all workspaces)
+        run: npm ci
+
+      - name: Generate the Prisma client and build the API and the server program
+        shell: bash
+        run: |
+          npx prisma generate --schema prisma/schema.prisma
+          (cd apps/api && npm run build)
+          (cd packages/local-server && npm run build)
+
+      - name: Cache the downloads (Node, PostgreSQL)
+        uses: actions/cache@v4
+        with:
+          path: apps/desktop/.cache/server-bundle
+          key: server-bundle-${{ hashFiles('apps/desktop/scripts/server-bundle.pins.json') }}
+
+      # With the licence public key set, this is the same bundle a release would carry. Without it the build still runs (so the
+      # installer itself can be tested) but is marked unlicensed: it can never activate a paid plan, and the summary says so.
+      - name: Assemble the offline server
+        id: bundle
+        shell: bash
+        env:
+          LICENSE_PUBLIC_KEY: ${{ vars.LICENSE_PUBLIC_KEY }}
+        run: |
+          if [ -n "$LICENSE_PUBLIC_KEY" ]; then
+            node apps/desktop/scripts/build-server-bundle.mjs
+            echo "licensed=yes" >> "$GITHUB_OUTPUT"
+          else
+            node apps/desktop/scripts/build-server-bundle.mjs --allow-unlicensed
+            echo "licensed=no" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build the installer (NSIS only, nothing published)
+        working-directory: apps/desktop
+        env:
+          VITE_API_URL: /api/v1
+          NODE_ENV: production
+        run: npx tauri build --target ${{ env.TARGET }} --bundles nsis
+
+      - name: Find the installer
+        id: find
+        shell: bash
+        run: |
+          dir="apps/desktop/src-tauri/target/${TARGET}/release/bundle/nsis"
+          ls -l "$dir"
+          installer=$(ls "$dir"/*-setup.exe "$dir"/*.exe 2>/dev/null | head -n 1)
+          test -n "$installer"
+          echo "path=$installer" >> "$GITHUB_OUTPUT"
+          bytes=$(stat -c %s "$installer")
+          echo "bytes=$bytes" >> "$GITHUB_OUTPUT"
+          echo "Installer: $installer ($((bytes / 1000000)) MB)"
+
+      # ── Install it like a customer ────────────────────────────────────────────
+      - name: Install silently
+        shell: pwsh
+        run: |
+          $installer = (Resolve-Path "${{ steps.find.outputs.path }}").Path
+          $p = Start-Process -FilePath $installer -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "The installer exited with code $($p.ExitCode)" }
+          $dir = Get-ChildItem -Directory "$env:ProgramFiles" | Where-Object { $_.Name -like 'KASTRA*' } | Select-Object -First 1
+          if (-not $dir) { throw 'Nothing was installed under Program Files' }
+          "INSTALL_DIR=$($dir.FullName)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          Write-Host "Installed to $($dir.FullName)"
+          Get-ChildItem -Recurse $dir.FullName | Select-Object -First 40 FullName, Length | Format-Table -AutoSize
+
+      - name: What the installer put on the computer
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem $env:INSTALL_DIR -Filter *.exe | Where-Object { $_.Name -notlike 'uninstall*' } | Select-Object -First 1
+          if (-not $exe) { throw 'The program itself is missing' }
+          if (-not (Test-Path "$env:INSTALL_DIR\uninstall.exe")) { throw 'There is no uninstaller' }
+          # Tauri puts a listed resource under resources\ or beside the program, depending on how it is listed; the app accepts both.
+          $archive = @("$env:INSTALL_DIR\resources\server.tar.gz", "$env:INSTALL_DIR\server.tar.gz") | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $archive) { throw 'server.tar.gz (the offline server) is not in the installation' }
+          $built = (Get-Item apps/desktop/src-tauri/resources/server.tar.gz).Length
+          $installed = (Get-Item $archive).Length
+          if ($built -ne $installed) { throw "The installed server file is $installed bytes but the built one is $built" }
+          "SERVER_ARCHIVE=$archive" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          Write-Host "Program: $($exe.Name); server file: $archive ($([math]::Round($installed/1MB)) MB)"
+          foreach ($name in 'KASTRA POS server (API)', 'KASTRA POS server (discovery)') {
+            $out = netsh advfirewall firewall show rule name="$name" | Out-String
+            if ($out -notmatch 'Enabled:\s+Yes') { throw "Firewall rule missing: $name`n$out" }
+            if ($out -notmatch 'Direction:\s+In') { throw "Firewall rule is not inbound: $name" }
+            Write-Host "Firewall rule present: $name"
+          }
+
+      # The file inside the installer, unpacked by Windows' own tar (as the app does) and run on its own.
+      - name: Run the installed server (unpack, start, register, back up, stop)
+        shell: pwsh
+        run: |
+          $dest = Join-Path $env:RUNNER_TEMP 'installed-server'
+          New-Item -ItemType Directory -Force $dest | Out-Null
+          & "$env:SystemRoot\System32\tar.exe" -xzf $env:SERVER_ARCHIVE -C $dest
+          if ($LASTEXITCODE -ne 0) { throw 'Windows tar could not unpack the installed server file' }
+          if (-not (Test-Path "$dest\node_modules\.prisma\client\index.js")) { throw "Prisma's generated client (a dot-folder) did not unpack" }
+          node apps/desktop/scripts/smoke-server-bundle.mjs --bundle $dest
+          if ($LASTEXITCODE -ne 0) { throw 'The installed server failed its smoke test' }
+
+      - name: The installed app starts and stays up
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem $env:INSTALL_DIR -Filter *.exe | Where-Object { $_.Name -notlike 'uninstall*' } | Select-Object -First 1
+          $p = Start-Process -FilePath $exe.FullName -PassThru
+          Start-Sleep -Seconds 25
+          if ($p.HasExited) { throw "The app closed by itself within 25 seconds (exit code $($p.ExitCode))" }
+          Write-Host "The app was still running after 25 seconds"
+          Stop-Process -Id $p.Id -Force
+          Get-Process | Where-Object { $_.ProcessName -like 'msedgewebview2' } | Stop-Process -Force -ErrorAction SilentlyContinue
+
+      # ── Uninstall: the program goes, the customer's data never does ───────────
+      - name: Uninstall, and prove the data is untouched
+        shell: pwsh
+        run: |
+          $data = "$env:ProgramData\KASTRA"
+          New-Item -ItemType Directory -Force $data | Out-Null
+          Set-Content -Path "$data\canary.txt" -Value 'customer data'
+          # _?= makes the uninstaller run in place and wait, instead of copying itself to a temp folder and returning at once.
+          $p = Start-Process -FilePath "$env:INSTALL_DIR\uninstall.exe" -ArgumentList '/S', "_?=$env:INSTALL_DIR" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "The uninstaller exited with code $($p.ExitCode)" }
+          if (-not (Test-Path "$data\canary.txt")) { throw 'UNINSTALLING DELETED CUSTOMER DATA' }
+          foreach ($name in 'KASTRA POS server (API)', 'KASTRA POS server (discovery)') {
+            $out = netsh advfirewall firewall show rule name="$name" 2>&1 | Out-String
+            if ($out -match 'Enabled:\s+Yes') { throw "Firewall rule was left behind: $name" }
+          }
+          $left = Get-ChildItem $env:INSTALL_DIR -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'uninstall.exe' }
+          if ($left) { throw "Files left behind after uninstall: $($left.Name -join ', ')" }
+          Write-Host 'Uninstalled cleanly; data folder untouched; firewall rules removed.'
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### Windows installer check"
+            echo "- Installer: $(( ${{ steps.find.outputs.bytes || 0 }} / 1000000 )) MB"
+            if [ "${{ steps.bundle.outputs.licensed }}" = "yes" ]; then
+              echo "- Licence public key: **included** (this is what a release would carry)"
+            else
+              echo "- Licence public key: **not set**. This installer cannot activate a paid plan. Set the repository variable \`LICENSE_PUBLIC_KEY\` before releasing."
+            fi
+            echo "- Nothing was published."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the installer for 7 days so it can be tried on a real PC
+        uses: actions/upload-artifact@v4
+        with:
+          name: kastra-pos-windows-installer-${{ steps.bundle.outputs.licensed == 'yes' && 'licensed' || 'UNLICENSED-test-build' }}
+          path: ${{ steps.find.outputs.path }}
+          retention-days: 7
+          if-no-files-found: error

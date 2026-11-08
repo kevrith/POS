@@ -134,9 +134,16 @@ node apps/desktop/scripts/smoke-server-bundle.mjs     # proves the bundle runs o
   smoke test and runs the server package's tests (including the real-database ones) against the Windows PostgreSQL;
   `desktop-release.yml` assembles and smoke-tests the bundle before building the installer, and builds only the NSIS `.exe` on
   Windows (an MSI would list every file).
-- **Not verified on a real Windows machine yet** (only the layout and the whole chain on Linux; the Windows programs run for
-  the first time in CI): the Visual C++ runtime DLLs taken from EnterpriseDB's package, Windows `tar.exe` unpacking, the NSIS
-  hooks, and the firewall rules.
+- **Installer check without a release**: `desktop-installer-check.yml` (run it by hand from the Actions tab, or it runs when the
+  installer's files change on `main`) builds the real NSIS installer on Windows and **publishes nothing**. It installs it silently,
+  checks the program, uninstaller, `server.tar.gz` (same size as the one built) and both firewall rules, unpacks the installed
+  server file with Windows' own `tar.exe` and runs the bundle smoke test on it, starts the installed app and requires it to stay
+  up for 25 seconds, then uninstalls and proves a canary file in `C:\ProgramData\KASTRA` survived and the rules and files are
+  gone. The installer is kept as a workflow artifact for 7 days so it can be tried on a real PC. Without the repository variable
+  `LICENSE_PUBLIC_KEY` the artifact is named `UNLICENSED-test-build` and cannot activate a paid plan.
+- **Not verified on a real Windows machine yet**: the workflow above has not been run yet, so the Visual C++ runtime DLLs taken
+  from EnterpriseDB's package, Windows `tar.exe` unpacking, the NSIS hooks and the firewall rules are exercised for the first time
+  by its first run; the installed app's window and the wizard have only been seen through a Linux stand-in.
 
 **If the app crashes or is killed**, the server program stops the API and database by itself (a broken pipe is ignored and
 an exit handler stops both), and if something still survives, the next start finds the leftover API by its saved process

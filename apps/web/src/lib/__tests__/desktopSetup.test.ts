@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildSetupPayload, defaultLanEnabled, flowFor, isLocalTopology, keepsOwnData, localServerUrl, normalizeServerUrl,
+  buildSetupPayload, defaultLanEnabled, googleSignInAvailable, flowFor, isLocalTopology, keepsOwnData, localServerUrl, normalizeServerUrl,
   stepAfter, stepBefore, topologyName, type SetupDraft,
 } from '../desktopSetup';
 import { formatBytes, timeAgo } from '../desktopServer';
@@ -123,5 +123,17 @@ describe('wording', () => {
     expect(timeAgo('2026-11-06T11:55:00', now)).toBe('5 minutes ago');
     expect(timeAgo('2026-11-06T09:00:00', now)).toBe('3 hours ago');
     expect(timeAgo('2026-11-05T11:00:00', now)).toBe('yesterday');
+  });
+});
+
+describe('Google sign-in', () => {
+  it('is offered in a browser and in a desktop app that uses the cloud', () => {
+    expect(googleSignInAvailable(false, null)).toBe(true);
+    expect(googleSignInAvailable(true, 'CLOUD')).toBe(true);
+  });
+  it('is not offered on an offline setup, a till of one, or before the setup is known', () => {
+    for (const m of ['SERVER_POS', 'SERVER', 'STANDALONE', 'CLIENT', 'UNCONFIGURED', null, undefined]) {
+      expect(googleSignInAvailable(true, m as string | null | undefined)).toBe(false);
+    }
   });
 });

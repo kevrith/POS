@@ -138,3 +138,16 @@ export function topologyName(t: Topology | 'STANDALONE' | string | null): string
     default: return 'Not set up';
   }
 }
+
+/**
+ * Is "Sign in with Google" offered on the login screen?
+ *
+ * In a browser: yes (the web app is the cloud app). In the desktop app only when the data lives in KASTRA Cloud. A computer that
+ * keeps its own data, or a till connected to one, talks to a server on the shop network that has no Google settings and may have
+ * no internet, so the button could only fail (and the Google secret must never be put on a customer's computer). While the
+ * setup is still being read (`undefined`) it is hidden, so the button does not flash and vanish.
+ */
+export function googleSignInAvailable(inDesktopApp: boolean, setupMode: string | null | undefined): boolean {
+  if (!inDesktopApp) return true;
+  return setupMode === 'CLOUD';
+}

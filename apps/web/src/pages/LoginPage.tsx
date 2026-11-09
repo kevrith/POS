@@ -8,6 +8,8 @@ import { Eye, EyeOff, Delete, ChevronLeft, Building2, Sparkles, Fingerprint, Set
 import { isBiometricAvailable } from '../lib/biometric';
 import { setToken } from '../lib/api';
 import { reconfigureThisComputer } from '../lib/desktopServer';
+import { googleSignInAvailable } from '../lib/desktopSetup';
+import { useDesktopMode } from '../lib/useLocalServer';
 
 const PLAN_LABELS: Record<string, { label: string; color: string; price: string }> = {
   FREE:       { label: 'Free',       color: 'bg-green-500',   price: 'KES 0/mo' },
@@ -48,6 +50,9 @@ function initials(name: string) {
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  // Google sign-in needs the internet and the cloud server's Google settings; an offline setup has neither.
+  const desktopSetup = useDesktopMode();
+  const googleAvailable = googleSignInAvailable(isDesktopApp(), desktopSetup);
 
   // Read URL params on mount
   const urlParams = new URLSearchParams(window.location.search);
@@ -679,6 +684,8 @@ export default function LoginPage() {
                 >
                   {regLoading ? 'Creating account…' : 'Create Account →'}
                 </button>
+                {googleAvailable && (
+                <>
                 <div className="flex items-center gap-3">
                   <div className="flex-1 border-t border-gray-200" />
                   <span className="text-xs text-gray-400 font-medium">OR</span>
@@ -706,6 +713,8 @@ export default function LoginPage() {
                   </svg>
                   Sign up with Google
                 </button>
+                </>
+                )}
 
                 <p className="text-center text-xs text-gray-400">
                   Already have an account?{' '}
@@ -844,6 +853,8 @@ export default function LoginPage() {
                 </div>
               )}
 
+              {googleAvailable && (
+              <>
               <div className="flex items-center gap-3">
                 <div className="flex-1 border-t border-gray-200" />
                 <span className="text-xs text-gray-400 font-medium">OR</span>
@@ -871,6 +882,8 @@ export default function LoginPage() {
                 </svg>
                 Sign in with Google
               </button>
+              </>
+              )}
             </form>
           )}
 

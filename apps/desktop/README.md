@@ -130,6 +130,10 @@ node apps/desktop/scripts/smoke-server-bundle.mjs     # proves the bundle runs o
   single-computer setup, since the server listens on this computer only unless network access is switched on. **Uninstalling
   removes those rules and the unpacked server program, and never touches the database (`C:\ProgramData\KASTRA`) or the
   backups (`Documents\KASTRA Backups`).**
+  **A fresh install opens on the setup wizard**: the wizard shows when `%APPDATA%\kastra-pos\mode.json` is missing, and that file
+  outlives an uninstall, so the installer's pre-install hook deletes it when KASTRA is not installed yet (an update over an existing
+  installation keeps it). A damaged `mode.json` is moved aside (`mode.json.unreadable`) and the wizard starts. The installer check
+  tests both the fresh and the update case.
 - **CI**: the `offline-server` job in `ci.yml` builds the real Windows bundle, checks the packed file keeps `.prisma`, runs the
   smoke test and runs the server package's tests (including the real-database ones) against the Windows PostgreSQL;
   `desktop-release.yml` assembles and smoke-tests the bundle before building the installer, and builds only the NSIS `.exe` on

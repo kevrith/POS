@@ -109,6 +109,15 @@ jobs:
           echo "Installer: $installer ($((bytes / 1000000)) MB)"
 
       # ── Install it like a customer ────────────────────────────────────────────
+      # A computer that was set up before (an older build, a test) still has its setup file. A FRESH install must forget it, or
+      # the app opens on the login screen instead of the setup wizard.
+      - name: Leave a stale setup file, as an earlier install would have
+        shell: pwsh
+        run: |
+          $cfg = "$env:APPDATA\kastra-pos"
+          New-Item -ItemType Directory -Force $cfg | Out-Null
+          Set-Content -Path "$cfg\mode.json" -Value '{"mode":"CLOUD"}'
+
       - name: Install silently
         shell: pwsh
         run: |
@@ -124,6 +133,7 @@ jobs:
       - name: What the installer put on the computer
         shell: pwsh
         run: |
+          if (Test-Path "$env:APPDATA\kastra-pos\mode.json") { throw 'A fresh install kept the old setup file, so the app would open on the login screen instead of the wizard' }
           $exe = Get-ChildItem $env:INSTALL_DIR -Filter *.exe | Where-Object { $_.Name -notlike 'uninstall*' } | Select-Object -First 1
           if (-not $exe) { throw 'The program itself is missing' }
           if (-not (Test-Path "$env:INSTALL_DIR\uninstall.exe")) { throw 'There is no uninstaller' }
@@ -164,6 +174,21 @@ jobs:
           Write-Host "The app was still running after 25 seconds"
           Stop-Process -Id $p.Id -Force
           Get-Process | Where-Object { $_.ProcessName -like 'msedgewebview2' } | Stop-Process -Force -ErrorAction SilentlyContinue
+
+      # An update (the installer run again over an existing installation) must keep this computer's setup.
+      - name: Installing over an existing installation keeps the setup
+        shell: pwsh
+        run: |
+          $cfg = "$env:APPDATA\kastra-pos"
+          New-Item -ItemType Directory -Force $cfg | Out-Null
+          Set-Content -Path "$cfg\mode.json" -Value '{"mode":"CLOUD"}'
+          $installer = (Resolve-Path "${{ steps.find.outputs.path }}").Path
+          $p = Start-Process -FilePath $installer -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "The installer exited with code $($p.ExitCode) when run over an existing installation" }
+          if (-not (Test-Path "$cfg\mode.json")) { throw 'Updating the app wiped this computer''s setup' }
+          if (-not (Test-Path "$env:INSTALL_DIR\uninstall.exe")) { throw 'The update left no uninstaller' }
+          Remove-Item "$cfg\mode.json" -Force
+          exit 0
 
       # ── Uninstall: the program goes, the customer's data never does ───────────
       - name: Uninstall, and prove the data is untouched

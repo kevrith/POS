@@ -67,26 +67,38 @@ fn get_config_path() -> PathBuf {
     path
 }
 
+/// What `get_setup_mode` answers when there is no usable setup: the web app shows the wizard for `UNCONFIGURED`.
+fn unconfigured() -> SetupConfig {
+    SetupConfig {
+        mode: "UNCONFIGURED".to_string(),
+        device_role: None,
+        server_url: None,
+        store_id: None,
+        license_key: None,
+        terminal_name: None,
+        business_name: None,
+        data_dir: None,
+        backup_dir: None,
+        lan_enabled: None,
+    }
+}
+
 #[tauri::command]
 pub async fn get_setup_mode() -> Result<SetupConfig, String> {
     let path = get_config_path();
     if !path.exists() {
         // Return a sentinel value so the UI knows first-run wizard must be shown
-        return Ok(SetupConfig {
-            mode: "UNCONFIGURED".to_string(),
-            device_role: None,
-            server_url: None,
-            store_id: None,
-            license_key: None,
-            terminal_name: None,
-            business_name: None,
-            data_dir: None,
-            backup_dir: None,
-            lan_enabled: None,
-        });
+        return Ok(unconfigured());
     }
-    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    serde_json::from_str(&content).map_err(|e| e.to_string())
+    // An unreadable or damaged file must not leave the app guessing: keep it aside for inspection and start the wizard.
+    let parsed = fs::read_to_string(&path).map_err(|e| e.to_string()).and_then(|c| serde_json::from_str::<SetupConfig>(&c).map_err(|e| e.to_string()));
+    match parsed {
+        Ok(cfg) => Ok(cfg),
+        Err(_) => {
+            let _ = fs::rename(&path, path.with_extension("json.unreadable"));
+            Ok(unconfigured())
+        }
+    }
 }
 
 #[tauri::command]

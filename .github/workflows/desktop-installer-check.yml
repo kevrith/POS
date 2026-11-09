@@ -59,6 +59,12 @@ jobs:
       - name: Install dependencies (all workspaces)
         run: npm ci
 
+      # The updater compares the installed version with the release's, so the four files that hold it must agree.
+      - name: Check the app version is the same everywhere
+        run: |
+          node apps/desktop/scripts/app-version.mjs --check
+          node --test apps/desktop/scripts/app-version.test.mjs
+
       - name: Generate the Prisma client and build the API and the server program
         shell: bash
         run: |
@@ -93,7 +99,9 @@ jobs:
         env:
           VITE_API_URL: /api/v1
           NODE_ENV: production
-        run: npx tauri build --target ${{ env.TARGET }} --bundles nsis
+        # No update-signing key is needed here: this build is only tried out, never offered as an update, so the signed
+        # update file is switched off (the release workflow makes the real one).
+        run: npx tauri build --target ${{ env.TARGET }} --bundles nsis --config src-tauri/tauri.no-updater.conf.json
 
       - name: Find the installer
         id: find

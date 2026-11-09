@@ -29,6 +29,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "resources": ["resources/server.tar.gz"],
     "icon": [
       "icons/32x32.png",
@@ -59,6 +60,13 @@
         "displayLanguageSelector": false,
         "compression": "zlib"
       }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ4MEZBN0E2MTc3NzYyNEUKUldST1luY1hwcWNQU0VVYmI3Rm1OUlhtcld1NmRtanBoRGNLMXBiQ0NrbEtQTFRvK0Z2OG5Xb2sK",
+      "endpoints": ["https://github.com/kevrith/POS/releases/download/desktop-updates/latest.json"],
+      "windows": { "installMode": "passive" }
     }
   }
 }

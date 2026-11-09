@@ -12,36 +12,7 @@ mod license;
 mod discovery;
 mod local_server_core;
 mod local_server;
-
-/// Check the remote server for a newer application version.
-///
-/// Calls `GET <VITE_API_URL>/api/v1/super-admin/update-check` and returns the
-/// JSON response body.  The web layer can compare the returned `latestVersion`
-/// field against `app.getVersion()` to decide whether to prompt the user.
-///
-/// Falls back to `http://localhost:3010` when `VITE_API_URL` is not set.
-#[tauri::command]
-async fn check_for_app_update() -> Result<serde_json::Value, String> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    let base_url = std::env::var("VITE_API_URL")
-        .unwrap_or_else(|_| "http://localhost:3010".to_string());
-    let url = format!("{}/api/v1/super-admin/update-check", base_url.trim_end_matches('/'));
-
-    match client.get(&url).send().await {
-        Ok(resp) => {
-            let json = resp
-                .json::<serde_json::Value>()
-                .await
-                .map_err(|e| e.to_string())?;
-            Ok(json)
-        }
-        Err(e) => Err(format!("Update check failed: {}", e)),
-    }
-}
+mod app_update;
 
 /// Set once the window is closing, so the second "exit" request (the one we make ourselves) goes through.
 static SHUTTING_DOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -51,6 +22,8 @@ fn main() {
 
     let app = tauri::Builder::default()
         .manage(local_server::LocalServerState::default())
+        .manage(app_update::AppUpdateState::default())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let version = app.package_info().version.to_string();
             println!("KASTRA POS Desktop v{} starting...", version);
@@ -109,8 +82,11 @@ fn main() {
             setup::get_cloud_url,
             // License
             license::get_machine_id,
-            // Auto-update
-            check_for_app_update,
+            // Updating the app (and the offline server inside it)
+            app_update::app_version,
+            app_update::app_update_check,
+            app_update::app_update_install,
+            app_update::app_update_status,
             // LAN discovery
             discovery::discover_servers,
             // Local server (this computer's own database + API)

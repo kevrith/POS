@@ -49,6 +49,7 @@ import { hasFeature } from '../lib/featureGates';
 import SalesPipelineCard from '../components/SalesPipelineCard';
 import HotelLeviesCard from '../components/HotelLeviesCard';
 import { PageHeader, SideNav, Switch, Tabs } from '../components/ui';
+import AppUpdateCard from '../components/AppUpdateCard';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1328,6 +1329,8 @@ export default function SettingsPage() {
       {/* ── General Settings ──────────────────────────────────────────────── */}
       {activeTab === 'general' && (
         <div className="space-y-6">
+
+        <AppUpdateCard />
 
         {/* ── Business Code card ── */}
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-5">

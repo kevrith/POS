@@ -23,6 +23,7 @@ import { useDesktopMode } from '../lib/useLocalServer';
 import { toast } from 'sonner';
 import SyncStatusBadge, { OfflineBanner } from './SyncStatusBadge';
 import LicenseBanner from './LicenseBanner';
+import UpdateBanner from './UpdateBanner';
 import { useLicense } from '../lib/license';
 import MobileNav from './MobileNav';
 import { hasFeature } from '../lib/featureGates';
@@ -1054,7 +1055,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               a stacking context that traps in-page modals (fixed z-50) BELOW the
               z-30 mobile bottom nav. DOM order already paints this above the
               background pattern, so `relative` alone is enough. */}
-          <div className="relative"><LicenseBanner /></div>
+          <div className="relative"><UpdateBanner /><LicenseBanner /></div>
           <div className={`relative ${
             ['/pos', '/supermart', '/hospitality', '/kds', '/fuel-pump', '/cybercafe'].some(p => location.pathname.startsWith(p))
               ? 'flex-1 flex flex-col overflow-hidden'

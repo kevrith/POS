@@ -25,3 +25,17 @@ export async function migrate(cfg: ServerConfig, o: MigrateOptions): Promise<str
   }
   return r.stdout;
 }
+
+/**
+ * Is there anything for `migrate` to do (or anything wrong)? True means the database is NOT in step with this version of the
+ * app: a migration is waiting, or an earlier one failed. Used to decide whether a safety backup is needed before the start,
+ * even when the version number did not change (a developer build, a release that forgot to bump the version).
+ */
+export async function needsMigration(cfg: ServerConfig, o: MigrateOptions): Promise<boolean> {
+  const url = databaseUrl(cfg);
+  const r = await run(o.nodePath, [o.prismaCli, 'migrate', 'status', '--schema', o.schemaPath], {
+    env: { ...process.env, DATABASE_URL: url, DIRECT_URL: url, CHECKPOINT_DISABLE: '1', PRISMA_HIDE_UPDATE_MESSAGE: '1' },
+    timeoutMs: 2 * 60 * 1000,
+  });
+  return r.code !== 0;
+}

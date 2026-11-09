@@ -13,7 +13,7 @@ import * as os from 'os';
 import { ApiProcess, checkHealth, reapOrphanApi } from './api';
 import { BackupInfo, BackupReason, createBackup, listBackups, pruneBackups, restoreBackup } from './backup';
 import { ensureConfig, loadConfig, saveConfig, ServerConfig, NewConfigOptions } from './config';
-import { migrate } from './migrate';
+import { migrate, needsMigration } from './migrate';
 import { isPortFree, findFreePort } from './ports';
 import { PostgresManager } from './postgres';
 import { Platform, validateBackupDir, validateDataDir } from './paths';
@@ -147,14 +147,24 @@ export class Supervisor extends EventEmitter {
       }
       await this.pg.start();
 
-      // An update (new app version) is the riskiest moment for a database: save a copy first, and stop if that fails.
-      if (!firstRun && config.lastRunVersion && config.lastRunVersion !== this.o.appVersion) {
-        this.set('starting', 'Saving a safety backup before updating');
-        await createBackup(this.pg, config, 'pre-upgrade');
+      // An update is the riskiest moment for a database: save a copy first, and stop if that fails. It counts as an update when
+      // the app version changed OR the database is behind this version's migrations (a build that kept its version number).
+      const migrateOptions = { nodePath: this.o.nodePath, prismaCli: this.o.prismaCli, schemaPath: this.o.schemaPath };
+      let safety: BackupInfo | undefined;
+      if (!firstRun) {
+        const versionChanged = !!config.lastRunVersion && config.lastRunVersion !== this.o.appVersion;
+        if (versionChanged || (await needsMigration(config, migrateOptions))) {
+          this.set('starting', 'Saving a safety backup before updating');
+          safety = await createBackup(this.pg, config, 'pre-upgrade');
+        }
       }
 
       this.set('starting', 'Updating the database');
-      await migrate(config, { nodePath: this.o.nodePath, prismaCli: this.o.prismaCli, schemaPath: this.o.schemaPath });
+      try {
+        await migrate(config, migrateOptions);
+      } catch (e) {
+        throw await this.putBackAfterFailedUpdate(e as Error, config, safety);
+      }
 
       const pidFile = nodePath.join(nodePath.dirname(this.o.configFile), 'run', 'api.pid');
       if (await reapOrphanApi(pidFile, config.apiPort)) this.emit('warning', 'Stopped a server left running by an earlier crash.');
@@ -188,6 +198,24 @@ export class Supervisor extends EventEmitter {
       this.set('error', msg);
       throw e;
     }
+  }
+
+  /**
+   * The database update failed. A half-applied update leaves the database neither old nor new (and Prisma then refuses to go
+   * on), so with a safety backup in hand the data is put back exactly as it was before the update, and the message says so.
+   * Returns the error to report.
+   */
+  private async putBackAfterFailedUpdate(failure: Error, config: ServerConfig, safety: BackupInfo | undefined): Promise<Error> {
+    if (!safety || !this.pg) return failure;
+    try {
+      this.set('starting', 'The update failed, putting your data back as it was');
+      await restoreBackup(this.pg, config, safety.file);
+    } catch (restoreFailure) {
+      return new Error(
+        `${failure.message} Putting your data back also failed (${(restoreFailure as Error).message}). Your data from before the update is safe in ${safety.file}.`,
+      );
+    }
+    return new Error(`The update could not change your database, so it was put back exactly as it was before. Nothing was lost. ${failure.message}`);
   }
 
   /** Apply what the app asks for now over what was saved, checking folders the same way as on the first run. */

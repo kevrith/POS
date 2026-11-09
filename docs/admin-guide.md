@@ -332,6 +332,19 @@ display, or manager.
 
 LAN discovery uses UDP port **47474**. Allow it between terminals.
 
+**Updates.** Installed desktop apps look for a newer version a little after start-up and every
+six hours. When one is ready, a banner appears at the top: the **owner or a manager** presses
+*Install and restart* (Settings → General also shows the version and has *Check for updates*).
+The app saves a backup, closes for about a minute, installs and reopens by itself. On the first
+start of the new version the database is backed up again before it is changed, and put back
+automatically if the change fails.
+
+To publish one: `node apps/desktop/scripts/app-version.mjs --set 1.2.0`, commit, then
+`git tag desktop-v1.2.0 && git push origin desktop-v1.2.0`. The release workflow needs the
+GitHub secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (the update
+signing key; keep a safe copy, installed apps cannot update without it). Details:
+`apps/desktop/README.md`, *Updates*.
+
 > **Known issue:** `apps/desktop/src-tauri/tauri.conf.json` sets `devUrl` to
 > `http://localhost:3001`, but the web dev server runs on **3005**. This affects
 > `npm run dev` only, not release builds.

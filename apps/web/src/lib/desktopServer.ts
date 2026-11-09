@@ -55,7 +55,7 @@ function tauriInvoke(): Invoke | null {
 
 export const inDesktopApp = (): boolean => tauriInvoke() !== null;
 
-async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+export async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   const invoke = tauriInvoke();
   if (!invoke) throw new Error('This is only available in the KASTRA desktop app.');
   try {

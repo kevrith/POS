@@ -60,10 +60,54 @@ Releases are automated by `.github/workflows/desktop-release.yml`.
 | `local_server_core.rs` | Launches and talks to the local server program (`packages/local-server`): JSON lines out, JSON commands in, stops everything when this app closes. **No Tauri code in it**, so its tests build anywhere (see Local server below) |
 | `local_server.rs` | The `local_server_*` Tauri commands (defaults, validate folders, start, restart, stop, set_lan, status, backup, backups, restore); finds the installed files; keeps slow requests off the window thread |
 | `backup.rs` | Local database backup/restore to disk |
+| `app_update.rs` | Updating the app and the offline server inside it (see Updates below) |
 
-Update check: `check_for_app_update` in `main.rs` asks the API (`GET /api/v1/super-admin/update-check`) for the latest
-version. There is no Tauri updater plugin in the app, so nothing downloads or installs an update by itself; a new version
-means shipping a new installer from the GitHub release.
+## Updates
+
+Installed apps update themselves, with the owner's go-ahead. Parts:
+
+| Part | Where | What it does |
+|---|---|---|
+| `app_update.rs` | `src-tauri/src` | `app_update_check` asks the manifest whether a newer version exists; `app_update_install` downloads it, **stops the offline server cleanly (with a backup)**, runs the installer and restarts; `app_update_status` is polled for progress. If the installer cannot run, the server is started again |
+| Banner and card | `apps/web`: `UpdateBanner.tsx` (top of every screen), `AppUpdateCard.tsx` (Settings, General), state in `lib/appUpdate.ts` | A check 20 s after start and every 6 h. The banner says "KASTRA 1.2.0 is ready"; the **owner or a manager** presses *Install and restart* (a cashier is told to ask). Quiet when offline |
+| The signed manifest | `tauri.conf.json` `plugins.updater` | The app only accepts an installer signed with KASTRA's update key: the **public** key is in `tauri.conf.json`, the private key is the GitHub secret `TAURI_SIGNING_PRIVATE_KEY` |
+| Manifest address | `https://github.com/kevrith/POS/releases/download/desktop-updates/latest.json` | One fixed address. The release workflow copies each release's `latest.json` there (a pre-release called `desktop-updates`, so it never becomes the repository's "latest release") |
+
+**Data safety on the first start of a new version** (`packages/local-server`, `supervisor.ts`): the new version unpacks its own
+server, then, before touching the database, saves a `pre-upgrade` backup (when the version changed, or when the database is
+behind this version's migrations even if the number did not change). It then applies the database changes. If they fail, the
+database is **put back from that backup** and the owner is told so, so a shop is never left half-updated. `update.integration.test.ts`
+proves this on a real PostgreSQL and the real API, with records already in the database.
+
+### Shipping an update
+
+```bash
+node apps/desktop/scripts/app-version.mjs --set 1.2.0     # changes tauri.conf.json, Cargo.toml, Cargo.lock, package.json
+git commit -am "release: desktop 1.2.0" && git push origin main
+git tag desktop-v1.2.0 && git push origin desktop-v1.2.0   # the release workflow builds, signs and publishes
+```
+
+The version must go **up** (the app only updates to a higher number) and the tag must match it: the workflow checks both and
+stops in seconds if not. The workflow builds Windows, Linux and both macOS targets, then copies `latest.json` to the fixed address
+once all of them are done.
+
+### One-time setup
+
+1. The signing key pair is made with `npx tauri signer generate -w <file>`. Keep the private key and its password somewhere safe
+   (**losing them means installed apps can never be updated again**, they would need a manual reinstall).
+2. GitHub, Settings, Secrets and variables, Actions, **Secrets**: `TAURI_SIGNING_PRIVATE_KEY` (the whole key file's text) and
+   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
+3. The public key in `tauri.conf.json` must be the matching one. To change keys, change both, and ship one manual installer
+   first (apps built with the old public key reject updates signed with the new key).
+
+### What an update does on a computer
+
+- **Windows:** the installer runs in "passive" mode (a progress bar) and asks for administrator permission (the app installs for
+  all users). Settings and the database are kept: the installer only removes `mode.json` on a *fresh* install.
+- **Linux:** AppImage updates itself; a `.deb` install must be updated by installing the new `.deb`.
+- **macOS:** the app is replaced and restarts.
+- A **till** (client) updates on its own. Updating tills and their server to different versions is possible for a while: update
+  the server first. (A version check between them is not built yet.)
 
 ---
 
@@ -209,16 +253,16 @@ setup topology, update this README in the same change.
 
 ## App icon
 
-The icon is vector: `icon-src/make_svgs.py` draws it (a bold K on a Signal Violet tile, palette pair 3: `#7A35FF` and
-`#F0F2F5`), and the SVGs in `icon-src/` are the masters. Regenerate every platform file with:
+The icon is the KASTRA logo: `icon-src/logo.png` (1024 px, the same file as `apps/admin/public/logo.png`) is the one source.
+`icon-src/build_icons.py` cuts the rounded tile out of its white canvas (smooth edges, white inside the logo is kept),
+trims it to a 3% margin, and scales that one 1024 px master to every size. Regenerate every platform file with:
 
 ```bash
 cd apps/desktop
-python3 icon-src/build_icons.py     # needs Python + Pillow and Chrome/Chromium/Edge (CHROME=path if not found)
+python3 icon-src/build_icons.py     # needs Python + Pillow; the .icns also needs the Tauri CLI (npx tauri icon)
 ```
 
-It writes `src-tauri/icons/`: the PNGs `tauri.conf.json` lists, `icon.ico` (ten sizes from 16 to 256 px; 16-40 px use
-the flat, heavier `icon-small.svg` because gradients and shadows turn to mud that small), and `icon.icns` (from
-`icon-macos.svg`, which sits in Apple's 824 px template with a soft shadow, via `npx tauri icon`). Edit the SVG
-generator, not the PNGs.
+It writes `src-tauri/icons/`: the PNGs `tauri.conf.json` lists (up to 1024 px), `icon.ico` (ten sizes from 16 to 256 px,
+each scaled from the master, not from a smaller icon) and `icon.icns`. To change the icon, replace `icon-src/logo.png` with
+a square image of 1024 px or more and re-run the script; do not edit the generated files.
 

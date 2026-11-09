@@ -1,15 +1,16 @@
 name: Desktop App Release
 
+# The release is named after the version in apps/desktop/src-tauri/tauri.conf.json (desktop-v1.2.0), because installed apps
+# compare their own version with it to decide whether an update exists. To ship one:
+#   node apps/desktop/scripts/app-version.mjs --set 1.2.0   (then commit)
+#   git tag desktop-v1.2.0 && git push origin desktop-v1.2.0
+# or run this workflow by hand from main. Either way the tag and the version files must agree, and the update signing key
+# must be set (the job stops with a clear message otherwise).
 on:
   push:
     tags:
-      - 'desktop-v*'   # git tag desktop-v1.0.0 && git push --tags
+      - 'desktop-v*'
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Release version (e.g. 1.0.0)'
-        required: true
-        default: '1.0.0'
 
 permissions:
   contents: write  # needed to create GitHub releases
@@ -31,8 +32,9 @@ jobs:
             target: x86_64-pc-windows-msvc
             label: Windows x86_64
 
-          # macOS Intel
-          - platform: macos-13
+          # macOS Intel. Built on the Apple Silicon runner (the Rust target is added below): GitHub retired the macos-13 Intel
+          # runner, and a job waiting for it never starts, which would also keep the update manifest from being published.
+          - platform: macos-latest
             target: x86_64-apple-darwin
             label: macOS Intel
 
@@ -54,6 +56,23 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
+
+      # ── Version and update signing key ────────────────────────────────────────
+      # Fail in seconds, not after an hour of building, if the release cannot be updated to from an installed app.
+      - name: Check the version and the update signing key
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            node apps/desktop/scripts/app-version.mjs --check-tag "${{ github.ref_name }}"
+          else
+            node apps/desktop/scripts/app-version.mjs --check
+          fi
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY is not set. Installed apps only accept updates signed with it. Add it (and TAURI_SIGNING_PRIVATE_KEY_PASSWORD) under Settings > Secrets and variables > Actions > Secrets. See apps/desktop/README.md, Updates."
+            exit 1
+          fi
 
       # ── Rust ──────────────────────────────────────────────────────────────────
       - name: Install Rust stable
@@ -152,11 +171,16 @@ jobs:
           # APPLE_ID, APPLE_PASSWORD, and APPLE_TEAM_ID to GitHub repository secrets
         with:
           projectPath: apps/desktop
-          # Tag-based releases use the tag name; workflow_dispatch uses input
-          tagName: ${{ github.ref_name || format('desktop-v{0}', github.event.inputs.version) }}
-          releaseName: 'KASTRA POS Desktop ${{ github.ref_name || github.event.inputs.version }}'
+          # __VERSION__ is the app version from tauri.conf.json (checked against the tag above), so a by-hand run and a tag
+          # push make the same release.
+          tagName: desktop-v__VERSION__
+          releaseName: 'KASTRA POS Desktop v__VERSION__'
+          # Each platform's signed update file is added to latest.json on this release; the next job copies it to the fixed
+          # address installed apps check (see update-manifest below).
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true
           releaseBody: |
-            ## KASTRA POS Desktop — ${{ github.ref_name || github.event.inputs.version }}
+            ## KASTRA POS Desktop
 
             ### Downloads
             | Platform | File | Notes |
@@ -178,13 +202,57 @@ jobs:
             - Full POS, Inventory, Reports, HR, Payroll in a native window
             - **VSCU offline eTIMS** — queues KRA submissions when offline
             - **LAN sync** — sync across terminals without internet
-            - **Auto-update** notifications when a new version is available
+            - **Updates**: the app tells the owner when a new version is ready and installs it, saving a backup first
             - Signed licence, activated online once and renewed quietly (works offline)
 
             ### Upgrading
-            The app will notify you automatically when a new version is available.
+            Installed apps check for updates by themselves and show a banner to the owner or a manager. Installing it saves a
+            backup of your data first, then the app restarts by itself. You can also run the new installer over the old one:
+            your data and settings are kept.
           releaseDraft: false
           prerelease: false
           # Windows builds only the NSIS .exe: the MSI would list about 11,000 offline-server files and the offline server needs
           # the NSIS firewall rules. Other platforms build everything, as before.
           args: ${{ matrix.platform == 'windows-latest' && format('--target {0} --bundles nsis', matrix.target) || format('--target {0}', matrix.target) }}
+
+  # ── Update manifest ───────────────────────────────────────────────────────────
+  # Installed apps ask ONE fixed address whether a newer version exists. tauri-action writes latest.json on the versioned
+  # release; this job checks it and copies it to the release named desktop-updates (a pre-release, so it never becomes the
+  # repository's "latest release", which other workflows use). Runs only when every platform built.
+  update-manifest:
+    name: Publish the update manifest
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Copy latest.json to the address installed apps check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION=$(node apps/desktop/scripts/app-version.mjs)
+          mkdir out
+          gh release download "desktop-v$VERSION" --repo "$GITHUB_REPOSITORY" --pattern latest.json --dir out
+          node -e '
+            const m = JSON.parse(require("fs").readFileSync("out/latest.json", "utf8"));
+            const want = process.argv[1];
+            if (m.version !== want) throw new Error(`latest.json says ${m.version}, expected ${want}`);
+            const platforms = Object.entries(m.platforms || {});
+            for (const need of ["windows-x86_64", "linux-x86_64", "darwin-x86_64", "darwin-aarch64"]) {
+              if (!m.platforms || !m.platforms[need]) throw new Error(`latest.json has no ${need} entry`);
+            }
+            for (const [name, p] of platforms) {
+              if (!p.url || !p.signature) throw new Error(`${name} has no url or signature`);
+            }
+            console.log("manifest ok:", want, platforms.map(([n]) => n).join(", "));
+          ' "$VERSION"
+          if ! gh release view desktop-updates --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create desktop-updates --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+              --title "Desktop update manifest" \
+              --notes "Not a download. Installed KASTRA desktop apps read latest.json from here to find the newest version."
+          fi
+          gh release upload desktop-updates out/latest.json --repo "$GITHUB_REPOSITORY" --clobber

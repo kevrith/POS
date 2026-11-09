@@ -8,8 +8,8 @@ import { Eye, EyeOff, Delete, ChevronLeft, Building2, Sparkles, Fingerprint, Set
 import { isBiometricAvailable } from '../lib/biometric';
 import { setToken } from '../lib/api';
 import { reconfigureThisComputer } from '../lib/desktopServer';
-import { googleSignInAvailable } from '../lib/desktopSetup';
-import { useDesktopMode } from '../lib/useLocalServer';
+import { describeConnection, googleSignInAvailable } from '../lib/desktopSetup';
+import { useDesktopMode, useDesktopSetup } from '../lib/useLocalServer';
 
 const PLAN_LABELS: Record<string, { label: string; color: string; price: string }> = {
   FREE:       { label: 'Free',       color: 'bg-green-500',   price: 'KES 0/mo' },
@@ -53,6 +53,8 @@ export default function LoginPage() {
   // Google sign-in needs the internet and the cloud server's Google settings; an offline setup has neither.
   const desktopSetup = useDesktopMode();
   const googleAvailable = googleSignInAvailable(isDesktopApp(), desktopSetup);
+  // Which server and business this installation is connected to, so a till never has to guess where its sales go.
+  const connection = describeConnection(useDesktopSetup());
 
   // Read URL params on mount
   const urlParams = new URLSearchParams(window.location.search);
@@ -484,6 +486,14 @@ export default function LoginPage() {
             ))}
           </div>
 
+          {/* Which server and business this installation is connected to — Tauri desktop only */}
+          {connection && (
+            <div className="mt-8 text-left text-xs text-brand-100 border border-white/15 rounded-lg px-3 py-2 max-w-xs" data-testid="connection-note">
+              <p className="font-semibold text-white">{connection.business ?? 'Business not named yet'}</p>
+              <p className="opacity-80">{connection.where}</p>
+            </div>
+          )}
+
           {/* Reconfigure terminal — Tauri desktop only */}
           {!!(window.__TAURI_INTERNALS__ ?? window.__TAURI__) && (
             <button
@@ -493,7 +503,7 @@ export default function LoginPage() {
                 await reconfigureThisComputer();
                 window.location.reload();
               }}
-              className="mt-8 flex items-center gap-2 text-brand-200 hover:text-white text-xs transition-colors group cursor-pointer"
+              className="mt-4 flex items-center gap-2 text-brand-200 hover:text-white text-xs transition-colors group cursor-pointer"
             >
               <Settings className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform duration-300" />
               Reconfigure this terminal

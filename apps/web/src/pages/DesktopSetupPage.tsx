@@ -24,13 +24,16 @@ import { toast } from 'sonner';
 import {
   ShoppingCart, Key, Server, Monitor, Wifi, CheckCircle,
   ChevronRight, ChevronLeft, AlertCircle, Loader2, RefreshCw,
-  ArrowRight, Shield, Tablet, ChefHat, BarChart3, User, HardDrive, Cloud, FolderOpen,
+  ArrowRight, Shield, Tablet, ChefHat, BarChart3, User, HardDrive, Cloud, FolderOpen, Eye, EyeOff,
 } from 'lucide-react';
 import {
-  buildSetupPayload, defaultLanEnabled, flowFor, isLocalTopology, normalizeServerUrl, STEP_LABEL, stepAfter, stepBefore,
+  buildSetupPayload, validateOwnerAccount, localServerUrl, defaultLanEnabled, flowFor, isLocalTopology, normalizeServerUrl, STEP_LABEL, stepAfter, stepBefore,
   topologyName, type DeviceRole, type Place, type StepId, type Topology,
 } from '../lib/desktopSetup';
-import { serverDefaults, serverStart, validateFolders, type FolderCheck } from '../lib/desktopServer';
+import { serverDefaults, serverStart, serverStatus, validateFolders, type FolderCheck } from '../lib/desktopServer';
+import { registerOwner, waitForLocalServer } from '../lib/ownerSetup';
+import { setToken } from '../lib/api';
+import { useAuthStore } from '../stores/auth';
 
 // ─── Tauri invoke shim ────────────────────────────────────────────────────────
 
@@ -287,6 +290,16 @@ export default function DesktopSetupPage() {
   const [terminalName,  setTerminalName]  = useState('');
   const [businessName,  setBusinessName]  = useState('');
   const [saving,        setSaving]        = useState(false);
+  // The owner's account, made by the wizard once the database exists. Optional: it can still be made on the sign-in screen.
+  const [ownerName,     setOwnerName]     = useState('');
+  const [ownerEmail,    setOwnerEmail]    = useState('');
+  const [ownerPassword, setOwnerPassword] = useState('');
+  const [ownerConfirm,  setOwnerConfirm]  = useState('');
+  const [ownerSkipped,  setOwnerSkipped]  = useState(false);
+  const [ownerError,    setOwnerError]    = useState('');
+  const [showOwnerPw,   setShowOwnerPw]   = useState(false);
+  /** What the server is doing while the Launch button waits for it. */
+  const [launchNote,    setLaunchNote]    = useState('');
   const [dataDir,       setDataDir]       = useState('');
   const [backupDir,     setBackupDir]     = useState('');
   const [lanEnabled,    setLanEnabled]    = useState(false);
@@ -359,7 +372,7 @@ export default function DesktopSetupPage() {
     try {
       const result = await validateFolders(dataDir.trim(), backupDir.trim());
       setFolderCheck(result);
-      if (result.dataDir.ok && result.backupDir.ok) setStep('DONE');
+      if (result.dataDir.ok && result.backupDir.ok) setStep('OWNER');
     } catch (e) {
       toast.error('Could not check the folders: ' + String(e));
     } finally {
@@ -390,6 +403,24 @@ export default function DesktopSetupPage() {
     }
   }
 
+  const ownerInput = { businessName, name: ownerName, email: ownerEmail, password: ownerPassword, confirm: ownerConfirm };
+  /** The wizard makes the owner's account only when it was filled in correctly and not skipped. */
+  const wantsOwner = isLocalTopology(topology) && !ownerSkipped && validateOwnerAccount(ownerInput) === null;
+
+  function afterOwner() {
+    const problem = validateOwnerAccount(ownerInput);
+    if (problem) { setOwnerError(problem); return; }
+    setOwnerError('');
+    setOwnerSkipped(false);
+    setStep('DONE');
+  }
+
+  function skipOwner() {
+    setOwnerSkipped(true);
+    setOwnerError('');
+    setStep('DONE');
+  }
+
   async function finish() {
     if (!topology) return;
     setSaving(true);
@@ -409,12 +440,34 @@ export default function DesktopSetupPage() {
       // progress ("Creating your database...") until the server is ready.
       if (payload.startsLocalServer) await serverStart();
 
+      // Make the owner's account on the new database. This waits for the server (the first start creates the database), which
+      // is why the button shows what the server is doing. Any failure falls back to the sign-in screen, where the same
+      // account can be made, so a problem here never strands the shop.
+      let destination = '/login';
+      if (payload.startsLocalServer && wantsOwner) {
+        try {
+          setLaunchNote('Starting the server');
+          const status = await waitForLocalServer(serverStatus, { onProgress: setLaunchNote });
+          const base = localServerUrl(status.apiPort);
+          // The server may have taken another port than the usual one; the app must use the one it really has.
+          localStorage.setItem('kastra-server-url', base);
+          setLaunchNote('Creating your account');
+          const { accessToken, user } = await registerOwner(base, { name: ownerName, email: ownerEmail, password: ownerPassword, businessName });
+          setToken(accessToken);
+          useAuthStore.setState({ user, isAuthenticated: true });
+          destination = topology === 'SERVER' ? '/' : '/setup';
+        } catch (e) {
+          toast.error(`${(e as Error).message} You can create your account on the sign-in screen.`);
+        }
+      }
+
       // Full reload so api.ts re-resolves the API URL from localStorage.
-      window.location.href = '/login';
+      window.location.href = destination;
     } catch (e) {
       toast.error('Failed to save: ' + String(e));
     } finally {
       setSaving(false);
+      setLaunchNote('');
     }
   }
 
@@ -747,6 +800,77 @@ export default function DesktopSetupPage() {
             </div>
           )}
 
+          {/* ── Owner account (this computer keeps the data) ─────────────── */}
+          {step === 'OWNER' && isLocalTopology(topology) && (
+            <form
+              className="space-y-5"
+              onSubmit={(e) => { e.preventDefault(); afterOwner(); }}
+            >
+              <div>
+                <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mb-3">
+                  <User className="w-6 h-6 text-green-600" />
+                </div>
+                <h2 className="text-xl font-bold text-gray-900">Create your owner account</h2>
+                <p className="text-gray-500 text-sm mt-1">
+                  This is the account you sign in with. It is made on {topology === 'SERVER' ? 'this server' : 'this computer'} and stays here, so it works with no internet.
+                </p>
+              </div>
+
+              {ownerError && (
+                <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /> {ownerError}
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <label className="block">
+                  <span className="block text-sm font-semibold text-gray-700 mb-1">Business name</span>
+                  <input value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="e.g. Premier Cafe Ltd" autoComplete="organization"
+                    className="w-full border-2 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                </label>
+                <label className="block">
+                  <span className="block text-sm font-semibold text-gray-700 mb-1">Your full name</span>
+                  <input value={ownerName} onChange={(e) => setOwnerName(e.target.value)} autoComplete="name"
+                    className="w-full border-2 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                </label>
+                <label className="block">
+                  <span className="block text-sm font-semibold text-gray-700 mb-1">Email (you sign in with this)</span>
+                  <input type="email" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} autoComplete="email"
+                    className="w-full border-2 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                </label>
+                <div>
+                  <label htmlFor="owner-password" className="block text-sm font-semibold text-gray-700 mb-1">Password</label>
+                  <div className="relative">
+                    <input id="owner-password" type={showOwnerPw ? 'text' : 'password'} value={ownerPassword} onChange={(e) => setOwnerPassword(e.target.value)} autoComplete="new-password" aria-describedby="owner-password-hint"
+                      className="w-full border-2 rounded-xl px-4 py-2.5 pr-11 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                    <button type="button" onClick={() => setShowOwnerPw((v) => !v)} aria-label={showOwnerPw ? 'Hide password' : 'Show password'}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                      {showOwnerPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <p id="owner-password-hint" className="text-xs text-gray-400 mt-1">At least 8 characters, with a capital letter and a number.</p>
+                </div>
+                <div>
+                  <label htmlFor="owner-confirm" className="block text-sm font-semibold text-gray-700 mb-1">Confirm password</label>
+                  <input id="owner-confirm" type={showOwnerPw ? 'text' : 'password'} value={ownerConfirm} onChange={(e) => setOwnerConfirm(e.target.value)} autoComplete="new-password"
+                    className="w-full border-2 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={back} className="px-4 py-2.5 border rounded-xl text-gray-600 hover:bg-gray-50 flex items-center gap-1">
+                  <ChevronLeft className="w-4 h-4" /> Back
+                </button>
+                <button type="submit" className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-2">
+                  Continue <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+              <button type="button" onClick={skipOwner} className="w-full text-xs text-gray-400 hover:text-gray-600 py-1">
+                Skip: I will create my account on the sign-in screen
+              </button>
+            </form>
+          )}
+
           {/* ── Step 3: Device Role (CLIENT only) ────────────────────────── */}
           {step === 'ROLE' && (
             <div className="space-y-5">
@@ -995,6 +1119,12 @@ export default function DesktopSetupPage() {
                     <span className="text-sm font-semibold text-gray-800">{businessName.trim()}</span>
                   </div>
                 )}
+                {isLocalTopology(topology) && (
+                  <div className="px-4 py-3 flex items-center justify-between gap-4">
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider flex-shrink-0">Owner account</span>
+                    <span className="text-sm font-semibold text-gray-800 truncate">{wantsOwner ? ownerEmail.trim() : 'Created on the sign-in screen'}</span>
+                  </div>
+                )}
                 {terminalName && (
                   <div className="px-4 py-3 flex items-center justify-between">
                     <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Terminal Name</span>
@@ -1023,8 +1153,8 @@ export default function DesktopSetupPage() {
                 className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-[15px] flex items-center justify-center gap-2 transition-colors disabled:opacity-50 shadow-lg"
               >
                 {saving
-                  ? <><Loader2 className="w-5 h-5 animate-spin" /> Launching…</>
-                  : <><ArrowRight className="w-5 h-5" /> Launch KASTRA POS</>
+                  ? <><Loader2 className="w-5 h-5 animate-spin" /> {launchNote ? `${launchNote}…` : 'Launching…'}</>
+                  : <><ArrowRight className="w-5 h-5" /> {wantsOwner ? 'Create my account and launch' : 'Launch KASTRA POS'}</>
                 }
               </button>
 

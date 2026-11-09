@@ -13,7 +13,7 @@
 export type Topology = 'CLOUD' | 'SERVER_POS' | 'SERVER' | 'CLIENT';
 export type Place = 'LOCAL' | 'CLOUD';
 export type DeviceRole = 'FULL_POS' | 'CASHIER' | 'KIOSK' | 'KDS' | 'MANAGER';
-export type StepId = 'WELCOME' | 'LICENSE' | 'PLACE' | 'TOPOLOGY' | 'FOLDERS' | 'ROLE' | 'NETWORK' | 'DONE';
+export type StepId = 'WELCOME' | 'LICENSE' | 'PLACE' | 'TOPOLOGY' | 'FOLDERS' | 'OWNER' | 'ROLE' | 'NETWORK' | 'DONE';
 
 export const STEP_LABEL: Record<StepId, string> = {
   WELCOME: 'Welcome',
@@ -21,6 +21,7 @@ export const STEP_LABEL: Record<StepId, string> = {
   PLACE: 'Data',
   TOPOLOGY: 'This computer',
   FOLDERS: 'Folders',
+  OWNER: 'Owner account',
   ROLE: 'Device role',
   NETWORK: 'Network',
   DONE: 'Done',
@@ -39,7 +40,7 @@ export function flowFor(place: Place | null, topology: Topology | null): StepId[
   const start: StepId[] = ['WELCOME', 'LICENSE', 'PLACE'];
   if (place === 'CLOUD' || topology === 'CLOUD') return [...start, 'NETWORK', 'DONE'];
   if (place !== 'LOCAL') return [...start, 'DONE'];
-  if (isLocalTopology(topology)) return [...start, 'TOPOLOGY', 'FOLDERS', 'DONE'];
+  if (isLocalTopology(topology)) return [...start, 'TOPOLOGY', 'FOLDERS', 'OWNER', 'DONE'];
   if (topology === 'CLIENT') return [...start, 'TOPOLOGY', 'ROLE', 'NETWORK', 'DONE'];
   return [...start, 'TOPOLOGY', 'DONE'];
 }
@@ -150,4 +151,59 @@ export function topologyName(t: Topology | 'STANDALONE' | string | null): string
 export function googleSignInAvailable(inDesktopApp: boolean, setupMode: string | null | undefined): boolean {
   if (!inDesktopApp) return true;
   return setupMode === 'CLOUD';
+}
+
+// ─── The owner account, created by the wizard ───────────────────────────────────
+
+export interface OwnerAccountInput {
+  businessName: string;
+  name: string;
+  email: string;
+  password: string;
+  confirm: string;
+}
+
+/**
+ * Check the owner's details before the wizard sends them, with the same password rules the server enforces (so a rejection
+ * comes back as a plain sentence here, not as a failure after the database has been made). Null means fine.
+ */
+export function validateOwnerAccount(i: OwnerAccountInput): string | null {
+  if (!i.businessName.trim()) return 'Enter the name of your business.';
+  if (!i.name.trim()) return 'Enter your name.';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(i.email.trim())) return 'Enter a valid email address. You will sign in with it.';
+  if (i.password.length < 8) return 'The password must be at least 8 characters.';
+  if (!/[A-Z]/.test(i.password)) return 'The password must contain at least one capital letter.';
+  if (!/[0-9]/.test(i.password)) return 'The password must contain at least one number.';
+  if (i.password !== i.confirm) return 'The two passwords do not match.';
+  return null;
+}
+
+// ─── Which server and business this computer is connected to ─────────────────────
+
+export interface SetupSummary {
+  mode: string;
+  server_url?: string | null;
+  business_name?: string | null;
+}
+
+/** The words for "what is this computer connected to", shown on the login screen. Null when nothing is known yet. */
+export function describeConnection(cfg: SetupSummary | null | undefined): { where: string; business: string | null } | null {
+  if (!cfg || !cfg.mode || cfg.mode === 'UNCONFIGURED') return null;
+  const business = cfg.business_name?.trim() || null;
+  switch (cfg.mode) {
+    case 'SERVER_POS':
+    case 'STANDALONE':
+      return { where: 'This computer keeps the data and works offline', business };
+    case 'SERVER':
+      return { where: 'This computer is the shop server', business };
+    case 'CLIENT': {
+      let host = cfg.server_url ?? '';
+      try { host = new URL(cfg.server_url ?? '').host; } catch { /* show it as typed */ }
+      return { where: host ? `Till connected to the server at ${host}` : 'Till connected to a shop server', business };
+    }
+    case 'CLOUD':
+      return { where: 'KASTRA Cloud (needs the internet)', business };
+    default:
+      return null;
+  }
 }

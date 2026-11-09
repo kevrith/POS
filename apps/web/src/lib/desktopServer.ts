@@ -82,7 +82,7 @@ export const validateFolders = (dataDir: string, backupDir: string): Promise<Fol
     : Promise.resolve({ dataDir: { ok: true }, backupDir: { ok: true } });
 
 export const serverSetLan = (enabled: boolean): Promise<boolean> => call('local_server_set_lan', { enabled });
-export const getSetupMode = (): Promise<{ mode: string }> => call('get_setup_mode');
+export const getSetupMode = (): Promise<{ mode: string; server_url?: string | null; business_name?: string | null }> => call('get_setup_mode');
 export const serverStart = (): Promise<boolean> => call('local_server_start');
 export const serverRestart = (): Promise<boolean> => call('local_server_restart');
 export const serverStop = (): Promise<boolean> => call('local_server_stop');

@@ -166,16 +166,28 @@ for the Tauri types; the full crate itself needs the Windows/Linux Tauri system 
 
 The setup wizard (`web/src/pages/DesktopSetupPage.tsx`; its step order and what it saves are in
 `web/src/lib/desktopSetup.ts`, unit-tested) shows whenever `get_setup_mode` reports `UNCONFIGURED`. The choice is saved in
-`mode.json` under the OS config dir (`%APPDATA%\kastra-pos\` on Windows), including the optional `business_name` that
-pre-fills the registration form. The wizard does not create the business: the owner registers on the login screen, against
-this computer's own API (offline) or the cloud. "Reconfigure this terminal" stops the local server and forgets `mode.json`
-but never deletes the database; setting up again on the same folder picks the data up where it was.
+`mode.json` under the OS config dir (`%APPDATA%\kastra-pos\` on Windows), including the optional `business_name`.
 
-On Windows, `src-tauri/wix/setup-cleanup.wxs` deletes `mode.json` when the MSI is
-uninstalled (not on upgrades), so a fresh install opens the wizard. This fragment
-is untested on a real Windows build: confirm it after the next release by
-reinstalling and checking the wizard appears. To reset by hand, delete the file or
-use Reconfigure on the login page.
+**Owner account.** On a computer that keeps its own data (server and till, or server only) the wizard has an *Owner account*
+step (business name, name, email, password; the same password rules as the server, checked first). On *Launch* it starts the
+server, waits for it (`web/src/lib/ownerSetup.ts`: the first start creates the database, and the button shows what the
+server is doing), registers the owner against the port the server really took, signs that owner in (token in
+`sessionStorage`, never the password) and opens `/setup`. Any failure (email already used, server slow) falls back to the
+login screen, where the same account can still be made; the step also has a *Skip* link. The password is held in memory only
+until it is sent.
+
+**Which server this is connected to.** The login screen shows the business name and where the data lives ("This computer keeps
+the data and works offline", "Till connected to the server at 192.168.1.20:3010", "KASTRA Cloud") from `mode.json`
+(`describeConnection`). Google sign-in is shown only in a browser or a desktop app set up for the cloud
+(`googleSignInAvailable`): an offline server has no Google settings and no internet to rely on.
+
+"Reconfigure this terminal" stops the local server and forgets `mode.json` but never deletes the database; setting up again on
+the same folder picks the data up where it was.
+
+**Fresh installs.** The NSIS installer's pre-install hook (`windows/installer-hooks.nsh`) deletes `mode.json` when KASTRA is not
+installed yet, and keeps it on an update; the installer check proves both. (`wix/setup-cleanup.wxs` does the same on an MSI
+uninstall, but Windows builds are NSIS-only now, so it does not run there.) To reset by hand, delete the file or use
+Reconfigure on the login page.
 
 ## Google sign-in
 

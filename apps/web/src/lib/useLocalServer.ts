@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getSetupMode, inDesktopApp, serverStatus, type LocalServerStatus } from './desktopServer';
+import type { SetupSummary } from './desktopSetup';
 
 const WAITING: LocalServerStatus = { phase: 'starting', message: 'Starting', addresses: [] };
 
@@ -45,4 +46,16 @@ export function useDesktopMode(): string | null | undefined {
     return () => { alive = false; };
   }, []);
   return mode;
+}
+
+/** The whole saved setup (mode, server address, business name), or null outside the desktop app / before setup. */
+export function useDesktopSetup(): SetupSummary | null {
+  const [cfg, setCfg] = useState<SetupSummary | null>(null);
+  useEffect(() => {
+    if (!inDesktopApp()) return;
+    let alive = true;
+    getSetupMode().then((c) => alive && setCfg(c), () => undefined);
+    return () => { alive = false; };
+  }, []);
+  return cfg;
 }

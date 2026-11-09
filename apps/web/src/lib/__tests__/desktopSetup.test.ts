@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildSetupPayload, defaultLanEnabled, googleSignInAvailable, flowFor, isLocalTopology, keepsOwnData, localServerUrl, normalizeServerUrl,
+  buildSetupPayload, defaultLanEnabled, describeConnection, googleSignInAvailable, validateOwnerAccount, flowFor, isLocalTopology, keepsOwnData, localServerUrl, normalizeServerUrl,
   stepAfter, stepBefore, topologyName, type SetupDraft,
 } from '../desktopSetup';
 import { formatBytes, timeAgo } from '../desktopServer';
@@ -19,10 +19,10 @@ describe('the steps each choice leads through', () => {
     expect(flowFor('CLOUD', 'CLOUD')).toEqual(['WELCOME', 'LICENSE', 'PLACE', 'NETWORK', 'DONE']);
   });
   it('a computer on its own (server and till) chooses folders and is done', () => {
-    expect(flowFor('LOCAL', 'SERVER_POS')).toEqual(['WELCOME', 'LICENSE', 'PLACE', 'TOPOLOGY', 'FOLDERS', 'DONE']);
+    expect(flowFor('LOCAL', 'SERVER_POS')).toEqual(['WELCOME', 'LICENSE', 'PLACE', 'TOPOLOGY', 'FOLDERS', 'OWNER', 'DONE']);
   });
   it('a server-only computer takes the same path', () => {
-    expect(flowFor('LOCAL', 'SERVER')).toEqual(['WELCOME', 'LICENSE', 'PLACE', 'TOPOLOGY', 'FOLDERS', 'DONE']);
+    expect(flowFor('LOCAL', 'SERVER')).toEqual(['WELCOME', 'LICENSE', 'PLACE', 'TOPOLOGY', 'FOLDERS', 'OWNER', 'DONE']);
   });
   it('a till chooses its device role, then finds its server', () => {
     expect(flowFor('LOCAL', 'CLIENT')).toEqual(['WELCOME', 'LICENSE', 'PLACE', 'TOPOLOGY', 'ROLE', 'NETWORK', 'DONE']);
@@ -135,5 +135,32 @@ describe('Google sign-in', () => {
     for (const m of ['SERVER_POS', 'SERVER', 'STANDALONE', 'CLIENT', 'UNCONFIGURED', null, undefined]) {
       expect(googleSignInAvailable(true, m as string | null | undefined)).toBe(false);
     }
+  });
+});
+
+describe('owner account details', () => {
+  const ok = { businessName: 'Premier Cafe', name: 'Amina', email: 'amina@shop.test', password: 'Goodpass1', confirm: 'Goodpass1' };
+  it('accepts good details', () => expect(validateOwnerAccount(ok)).toBeNull());
+  it('says what is wrong, in this order', () => {
+    expect(validateOwnerAccount({ ...ok, businessName: ' ' })).toMatch(/business/);
+    expect(validateOwnerAccount({ ...ok, name: '' })).toMatch(/name/);
+    expect(validateOwnerAccount({ ...ok, email: 'amina' })).toMatch(/email/);
+    expect(validateOwnerAccount({ ...ok, password: 'Short1', confirm: 'Short1' })).toMatch(/8 characters/);
+    expect(validateOwnerAccount({ ...ok, password: 'lowercase1', confirm: 'lowercase1' })).toMatch(/capital/);
+    expect(validateOwnerAccount({ ...ok, password: 'NoNumberHere', confirm: 'NoNumberHere' })).toMatch(/number/);
+    expect(validateOwnerAccount({ ...ok, confirm: 'Different1' })).toMatch(/match/);
+  });
+});
+
+describe('what this computer is connected to', () => {
+  it('says nothing before setup', () => {
+    expect(describeConnection(null)).toBeNull();
+    expect(describeConnection({ mode: 'UNCONFIGURED' })).toBeNull();
+  });
+  it('names the offline setups, a till and the cloud', () => {
+    expect(describeConnection({ mode: 'SERVER_POS', business_name: ' Premier Cafe ' })).toEqual({ where: 'This computer keeps the data and works offline', business: 'Premier Cafe' });
+    expect(describeConnection({ mode: 'SERVER' })?.where).toMatch(/shop server/);
+    expect(describeConnection({ mode: 'CLIENT', server_url: 'http://192.168.1.20:3010' })?.where).toContain('192.168.1.20:3010');
+    expect(describeConnection({ mode: 'CLOUD' })?.where).toMatch(/Cloud/);
   });
 });

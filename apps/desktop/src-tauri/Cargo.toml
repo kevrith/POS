@@ -1,6 +1,6 @@
 [package]
 name = "kastra-pos-desktop"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 description = "KASTRA POS Desktop - Enterprise POS for Kenya"
 

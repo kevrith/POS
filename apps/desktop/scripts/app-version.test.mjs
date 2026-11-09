@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { problem, readVersions, setVersion } from './app-version.mjs';
 
 /** The real four files, held in memory so a test never edits them. */
@@ -27,7 +28,7 @@ test('setting a version changes all four files', () => {
 test('only the app package is changed in Cargo.lock, not other crates', () => {
   const d = fakeDisk();
   setVersion('9.8.7', d.read, d.write);
-  const lock = d.read(new URL('../src-tauri/Cargo.lock', import.meta.url).pathname);
+  const lock = d.read(fileURLToPath(new URL('../src-tauri/Cargo.lock', import.meta.url)));
   assert.equal((lock.match(/version = "9\.8\.7"/g) ?? []).length, 1);
 });
 

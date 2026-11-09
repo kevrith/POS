@@ -31,6 +31,17 @@ test('only the app package is changed in Cargo.lock, not other crates', () => {
   assert.equal((lock.match(/version = "9\.8\.7"/g) ?? []).length, 1);
 });
 
+test('files with Windows line endings (as a Windows checkout has them) work the same', () => {
+  const disk = new Map();
+  const read = (f) => {
+    if (!disk.has(f)) disk.set(f, readFileSync(f, 'utf8').replace(/\r?\n/g, '\r\n'));
+    return disk.get(f);
+  };
+  assert.equal(problem(readVersions(read), undefined), null);
+  setVersion('9.8.7', read, (f, text) => disk.set(f, text));
+  assert.deepEqual(readVersions(read), { tauri: '9.8.7', cargo: '9.8.7', lock: '9.8.7', npm: '9.8.7' });
+});
+
 test('a bad version is refused before anything is written', () => {
   const d = fakeDisk();
   let wrote = false;

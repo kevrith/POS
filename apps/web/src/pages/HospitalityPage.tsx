@@ -14,6 +14,8 @@ import { api } from '../lib/api';
 import { Button, IconButton } from '../components/ui';
 import { useAuthStore } from '../stores/auth';
 import PaymentModal from '../components/PaymentModal';
+import OrderVoidDialog, { type VoidOutcome, type VoidTarget } from '../components/OrderVoidDialog';
+import VoidLogModal from '../components/VoidLogModal';
 import { printKOT, printBill, printKOTWithRouting } from '../lib/printer';
 import { reportKotPrint } from '../lib/kotPrintFeedback';
 import type { KOTData } from '../lib/printer';
@@ -47,6 +49,8 @@ interface OrderItem {
   kotSent?: boolean;
   course?: string;
   firedAt?: string | null;
+  /** Set once a kitchen ticket carries this line. */
+  sentToKitchenAt?: string | null;
   seatNumber?: number;
 }
 
@@ -822,7 +826,7 @@ function FastFoodPanel({ businessId, storeId, userId, userName, onClose }: FastF
   return (
     <>
       <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
-      <div className="fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl z-50 flex flex-col">
+      <div className="fixed right-0 top-0 h-full w-full sm:max-w-lg xl:max-w-xl bg-white shadow-2xl z-50 flex flex-col">
         <div className="px-5 py-4 border-b bg-amber-50">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -838,7 +842,7 @@ function FastFoodPanel({ businessId, storeId, userId, userName, onClose }: FastF
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-2">
+        <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-1.5">
           {pendingItems.length === 0 ? (
             <div className="text-center py-12">
               <UtensilsCrossed className="w-12 h-12 mx-auto text-gray-300 mb-3" />
@@ -1300,8 +1304,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
   const [showSplitBill, setShowSplitBill] = useState(false);
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
   const [coverCount, setCoverCount] = useState(1);
-  const [voidingItemId, setVoidingItemId] = useState<string | null>(null);
-  const [voidReason, setVoidReason] = useState('');
+  const [voidTarget, setVoidTarget] = useState<VoidTarget | null>(null);
 
   const { data: printers = [] } = useQuery<Array<{ id: string; handles: string[]; connectionType: string; connectionDetails: string }>>({
     queryKey: ['printers', storeId],
@@ -1332,7 +1335,7 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
     refetchInterval: 8000,
   });
 
-  const { data: bizSettings } = useQuery<{ name?: string; receiptHeader?: string; receiptFooter?: string; tablePrefix?: string | null; taxType?: 'VAT' | 'TOT' | 'NONE'; totRate?: number }>({
+  const { data: bizSettings } = useQuery<{ name?: string; kitchenMode?: string; receiptHeader?: string; receiptFooter?: string; tablePrefix?: string | null; taxType?: 'VAT' | 'TOT' | 'NONE'; totRate?: number }>({
     queryKey: ['biz-settings', businessId],
     queryFn: () => api.get(`/business/${businessId}/settings`),
     enabled: !!businessId,
@@ -1391,19 +1394,6 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
     mutationFn: (vars: { orderId: string; itemId: string }) =>
       api.post(`/hospitality/orders/${vars.orderId}/items/remove`, { itemIds: [vars.itemId] }),
     onSuccess: () => void refetchOrder(),
-  });
-
-  const voidItemMutation = useMutation({
-    mutationFn: ({ orderId, itemId, reason }: { orderId: string; itemId: string; reason: string }) =>
-      api.patch(`/hospitality/orders/${orderId}/items/${itemId}/void`, { reason }),
-    onSuccess: () => {
-      setVoidingItemId(null);
-      setVoidReason('');
-      void refetchOrder();
-      void qc.invalidateQueries({ queryKey: ['hospitality-orders'] });
-    },
-    // Voiding something the kitchen already has needs a manager; say so rather than failing silently.
-    onError: (err: unknown) => toast.error(err instanceof Error ? err.message : 'Could not void the item'),
   });
 
   const sendKOTMutation = useMutation({
@@ -1521,6 +1511,29 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
   });
 
   const activeOrder = order;
+  // Without a kitchen display the waiter's printed ticket is the only message the kitchen gets, so a void must print too.
+  const printOnly = bizSettings?.kitchenMode === 'PRINT_ONLY';
+  const orderLines = (activeOrder?.items ?? []).map((i) => ({
+    id: i.id, itemId: i.itemId, name: i.name, quantity: i.quantity, totalCents: lineTotal(i), sent: !!i.sentToKitchenAt,
+  }));
+
+  function handleVoidDone(outcome: VoidOutcome) {
+    setVoidTarget(null);
+    toast.success(outcome.scope === 'ORDER' ? 'Order voided' : 'Item voided');
+    if (printOnly && outcome.sentLines.length > 0) {
+      const slip: KOTData = {
+        tableNumber: table.number,
+        orderType: 'VOID',
+        createdAt: new Date().toISOString(),
+        waiterName: userName ?? user?.name,
+        items: outcome.sentLines.map((l) => ({ name: l.name, quantity: l.quantity, ...(l.itemId ? routingLookup.get(l.itemId) : undefined) })),
+      };
+      void printKOTWithRouting(slip, printers).then(reportKotPrint);
+    }
+    void refetchOrder();
+    void qc.invalidateQueries({ queryKey: ['tables'] });
+    if (outcome.scope === 'ORDER') { onRefresh(); onClose(); }
+  }
   const allItems: Array<OrderItem | (PendingItem & { id: string; kotSent: boolean })> = [
     ...(activeOrder?.items ?? []),
     ...pendingItems.map((p) => ({ ...p, id: `pending-${p.itemId}-${Math.random()}`, kotSent: false })),
@@ -1621,10 +1634,10 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
       <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
       <div className="fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl z-50 flex flex-col">
         {/* Header */}
-        <div className="px-5 py-4 border-b bg-gray-50">
+        <div className="px-4 py-3 border-b bg-gray-50">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-bold text-gray-800">{fmtTable(table.number, tablePrefix)}</h2>
+              <h2 className="text-lg font-bold text-gray-800 leading-tight">{fmtTable(table.number, tablePrefix)}</h2>
               <p className="text-sm text-gray-500">
                 <Users className="w-3 h-3 inline mr-1" />
                 {table.capacity} seats •{' '}
@@ -1755,12 +1768,16 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
                         const pricedMods = parsePricedModifiers(item.modifiers);
                         const itemAllergens: string[] = (() => { try { return JSON.parse(allergenLookup.get(item.itemId) ?? '[]') as string[]; } catch { return []; } })();
                         return (
-                          <div key={item.id} className={`flex items-start gap-3 p-3 rounded-xl mb-1 ${item.firedAt ? 'bg-orange-50 border border-orange-200' : 'bg-gray-50'}`}>
+                          <div key={item.id} className={`flex items-start gap-2 px-3 py-2 rounded-lg mb-1 ${item.firedAt ? 'bg-orange-50 border border-orange-200' : 'bg-gray-50'}`}>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-sm font-semibold text-gray-800">{item.quantity}×</span>
                                 <span className="text-sm text-gray-700 truncate">{item.name}</span>
-                                <Check className="w-3 h-3 text-green-500 flex-shrink-0" aria-label="Sent to kitchen" />
+                                {item.sentToKitchenAt ? (
+                                  <Check className="w-3 h-3 text-green-500 flex-shrink-0" aria-label="Sent to kitchen" />
+                                ) : (
+                                  <span className="text-[10px] font-semibold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full">not sent</span>
+                                )}
                                 {item.seatNumber != null && item.seatNumber > 0 && (
                                   <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">
                                     G{item.seatNumber}
@@ -1799,20 +1816,22 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
                             <span className="text-sm font-bold text-gray-800 whitespace-nowrap">
                               {fmt(lineTotal(item))}
                             </span>
-                            {table.status !== 'BILL_REQUESTED' && (
+                            {item.sentToKitchenAt ? (
+                              <button
+                                onClick={() => activeOrder && setVoidTarget({
+                                  scope: 'ITEM', orderId: activeOrder.id,
+                                  line: { id: item.id, itemId: item.itemId, name: item.name, quantity: item.quantity, totalCents: lineTotal(item), sent: true },
+                                })}
+                                className="flex-shrink-0 px-2 py-1 text-xs font-semibold text-red-600 border border-red-200 rounded-md hover:bg-red-50"
+                                title="Void this item, or some of it"
+                              >
+                                Void
+                              </button>
+                            ) : (
                               <button
                                 onClick={() => activeOrder && removeItem.mutate({ orderId: activeOrder.id, itemId: item.id })}
-                                className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg" aria-label="Delete">
+                                className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg" aria-label="Remove">
                                 <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
-                            {(user?.role === 'MANAGER' || user?.role === 'OWNER') && (
-                              <button
-                                onClick={() => setVoidingItemId(item.id)}
-                                className="p-1 rounded text-red-400 hover:text-red-600 hover:bg-red-50"
-                                title="Void this item (with reason)"
-                              >
-                                <X className="w-3.5 h-3.5" />
                               </button>
                             )}
                           </div>
@@ -1883,165 +1902,132 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
           )}
         </div>
 
-        {/* Totals + Actions */}
-        <div className="border-t p-5 space-y-3">
+        {/* Kitchen status (display mode only): a thin strip, not a card, so the order keeps the room */}
+        {!printOnly && activeOrder?.kots && activeOrder.kots.length > 0 && (
+          <div className="border-t bg-gray-50 px-3 py-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 flex items-center gap-1"><ChefHat className="w-3 h-3" /> Kitchen</span>
+            {activeOrder.kots.map((kot) => (
+              <span key={kot.id} className="flex items-center gap-1.5 text-xs text-gray-700">
+                <span className={`w-2 h-2 rounded-full ${
+                  kot.status === 'READY' ? 'bg-green-500' : kot.status === 'IN_PROGRESS' ? 'bg-yellow-400' : kot.status === 'SERVED' ? 'bg-gray-300' : 'bg-orange-400'
+                }`} />
+                {kot.kotNumber ? `#${kot.kotNumber} ` : ''}{kot.station === 'BAR' ? 'Bar' : kot.station === 'DESSERT' ? 'Dessert' : 'Kitchen'}
+                <span className="font-semibold">{kot.status === 'IN_PROGRESS' ? 'cooking' : kot.status === 'READY' ? 'ready' : kot.status === 'SERVED' ? 'served' : 'waiting'}</span>
+                {kot.status === 'READY' && (
+                  <button
+                    onClick={() => markServedMutation.mutate(kot.id)}
+                    disabled={markServedMutation.isPending}
+                    className="flex items-center gap-1 px-2 py-0.5 bg-green-600 hover:bg-green-700 text-white text-[11px] font-semibold rounded-md disabled:opacity-50"
+                  >
+                    <CheckCircle className="w-3 h-3" /> Served
+                  </button>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Totals + actions. Compact on purpose: the order above is what the waiter works with. */}
+        <div className="border-t bg-white px-3 pt-2.5 pb-3 space-y-2">
           {allItems.length > 0 && (
-            <div className="flex justify-between text-lg font-bold text-gray-800 pb-2 border-b">
-              <span>Total</span>
-              <span className="text-blue-600">{fmt(subtotal)}</span>
+            <div className="flex items-baseline justify-between px-1">
+              <span className="text-sm font-semibold text-gray-500">Total</span>
+              <span className="text-2xl font-extrabold text-gray-900 tabular-nums">{fmt(subtotal)}</span>
             </div>
           )}
 
-          <button
-            onClick={() => setShowPicker(true)}
-            className="w-full py-3 border-2 border-dashed border-blue-300 text-blue-600 hover:bg-blue-50 rounded-xl font-medium text-sm flex items-center justify-center gap-2 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Add Items
-          </button>
-
-          {(hasPendingItems || (activeOrder && activeOrder.items.length > 0 && activeOrder.status === 'OPEN')) && (
-            <button
-              onClick={() => void handleSendKOT()}
-              disabled={isBusy}
-              className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-40 ${
-                hasPendingItems
-                  ? 'bg-orange-500 hover:bg-orange-600 text-white ring-2 ring-orange-300 ring-offset-1'
-                  : 'bg-orange-400 hover:bg-orange-500 text-white'
-              }`}
-            >
-              {isBusy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-              {hasPendingItems
-                ? `Send ${pendingItems.length} New Item${pendingItems.length !== 1 ? 's' : ''} to Kitchen`
-                : 'Re-send All to Kitchen'}
-            </button>
-          )}
-
-          {activeOrder && table.status === 'OCCUPIED' && (
-            <button
-              onClick={() => requestBill.mutate(activeOrder.id)}
-              disabled={isBusy}
-              className="w-full py-3 bg-yellow-500 hover:bg-yellow-600 disabled:opacity-40 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors"
-            >
-              {requestBill.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Receipt className="w-5 h-5" />}
-              Request Bill
-            </button>
-          )}
+          {(() => {
+            const canSend = hasPendingItems || (activeOrder && activeOrder.items.length > 0 && activeOrder.status === 'OPEN');
+            return (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setShowPicker(true)}
+                  className={`py-2.5 border-2 border-dashed border-blue-300 text-blue-600 hover:bg-blue-50 rounded-lg font-semibold text-sm flex items-center justify-center gap-1.5 transition-colors ${canSend ? '' : 'col-span-2'}`}
+                >
+                  <Plus className="w-4 h-4" /> Add items
+                </button>
+                {canSend && (
+                  <button
+                    onClick={() => void handleSendKOT()}
+                    disabled={isBusy}
+                    className={`py-2.5 rounded-lg font-bold text-sm flex items-center justify-center gap-1.5 transition-colors disabled:opacity-40 text-white ${
+                      hasPendingItems ? 'bg-orange-500 hover:bg-orange-600 ring-2 ring-orange-300 ring-offset-1' : 'bg-orange-400 hover:bg-orange-500'
+                    }`}
+                  >
+                    {isBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    {hasPendingItems
+                      ? `Send ${pendingItems.length} to ${printOnly ? 'kitchen (print)' : 'kitchen'}`
+                      : printOnly ? 'Reprint ticket' : 'Re-send all'}
+                  </button>
+                )}
+              </div>
+            );
+          })()}
 
           {activeOrder && (table.status === 'OCCUPIED' || table.status === 'BILL_REQUESTED') && activeOrder.items.length > 0 && (
-            <button
-              onClick={() => {
-                printBill({
-                  tableNumber: table.number,
-                  businessName: bizSettings?.name ?? 'Restaurant',
-                  waiterName: userName,
-                  items: activeOrder.items.map((i) => ({
-                    name: i.name,
-                    quantity: i.quantity,
-                    unitPriceCents: i.unitPriceCents,
-                    totalCents: lineTotal(i),
-                  })),
-                  subtotalCents: subtotal,
-                  totalCents: subtotal,
-                  ...billTax(subtotal, activeOrder.items.map((i) => ({ itemId: i.itemId, totalCents: lineTotal(i) }))),
-                  date: new Date().toISOString(),
-                  footer: bizSettings?.receiptFooter || undefined,
-                });
-              }}
-              className="w-full py-2.5 border-2 border-amber-300 text-amber-700 hover:bg-amber-50 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-colors"
-            >
-              <Receipt className="w-4 h-4" />
-              Print Bill
-            </button>
-          )}
-
-          {activeOrder && (table.status === 'OCCUPIED' || table.status === 'BILL_REQUESTED') && activeOrder.items.length > 0 && (
-            <button
-              onClick={() => setShowSplitBill(true)}
-              disabled={isBusy}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors"
-            >
-              <Users className="w-5 h-5" />
-              Split Bill by Guest
-            </button>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={() => requestBill.mutate(activeOrder.id)}
+                disabled={isBusy || table.status !== 'OCCUPIED'}
+                className="py-2 bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50 text-white rounded-lg font-semibold text-sm flex items-center justify-center gap-1.5 transition-colors"
+              >
+                {requestBill.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Receipt className="w-4 h-4" />}
+                {table.status === 'OCCUPIED' ? 'Request bill' : 'Bill asked'}
+              </button>
+              <button
+                onClick={() => {
+                  printBill({
+                    tableNumber: table.number,
+                    businessName: bizSettings?.name ?? 'Restaurant',
+                    waiterName: userName,
+                    items: activeOrder.items.map((i) => ({
+                      name: i.name,
+                      quantity: i.quantity,
+                      unitPriceCents: i.unitPriceCents,
+                      totalCents: lineTotal(i),
+                    })),
+                    subtotalCents: subtotal,
+                    totalCents: subtotal,
+                    ...billTax(subtotal, activeOrder.items.map((i) => ({ itemId: i.itemId, totalCents: lineTotal(i) }))),
+                    date: new Date().toISOString(),
+                    footer: bizSettings?.receiptFooter || undefined,
+                  });
+                }}
+                className="py-2 border-2 border-amber-300 text-amber-700 hover:bg-amber-50 rounded-lg font-semibold text-sm flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <Receipt className="w-4 h-4" /> Print bill
+              </button>
+              <button
+                onClick={() => setShowSplitBill(true)}
+                disabled={isBusy}
+                className="py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-lg font-semibold text-sm flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <Users className="w-4 h-4" /> Split bill
+              </button>
+            </div>
           )}
 
           {activeOrder && (table.status === 'OCCUPIED' || table.status === 'BILL_REQUESTED') && (
-            <button
-              onClick={() => { setPayError(null); setShowPayment(true); }}
-              disabled={isBusy}
-              className="w-full py-3.5 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors"
-            >
-              <ArrowRight className="w-5 h-5" />
-              Take Payment — {fmt(subtotal)}
-            </button>
-          )}
-
-          {/* ── KOT Status tracker (waiter view) ── */}
-          {activeOrder?.kots && activeOrder.kots.length > 0 && (
-            <div className="border border-gray-200 rounded-xl overflow-hidden">
-              <div className="px-3 py-2 bg-gray-50 border-b text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
-                <ChefHat className="w-3.5 h-3.5" /> Kitchen Status
-              </div>
-              <div className="divide-y">
-                {activeOrder.kots.map((kot) => (
-                  <div key={kot.id} className="flex items-center justify-between px-3 py-2.5 gap-3">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                        kot.status === 'READY'       ? 'bg-green-500' :
-                        kot.status === 'IN_PROGRESS' ? 'bg-yellow-400' :
-                        kot.status === 'SERVED'      ? 'bg-gray-300' :
-                                                       'bg-orange-400'
-                      }`} />
-                      <span className="text-xs text-gray-600 truncate">
-                        {kot.kotNumber ? `#${kot.kotNumber} ` : ''}{kot.station === 'BAR' ? 'Bar' : kot.station === 'DESSERT' ? 'Dessert' : 'Kitchen'} · {kot.type.replace('_', ' ').toLowerCase()}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                        kot.status === 'READY'       ? 'bg-green-100 text-green-700' :
-                        kot.status === 'IN_PROGRESS' ? 'bg-yellow-100 text-yellow-700' :
-                        kot.status === 'SERVED'      ? 'bg-gray-100 text-gray-500' :
-                                                       'bg-orange-100 text-orange-700'
-                      }`}>
-                        {kot.status === 'IN_PROGRESS' ? 'Cooking' : kot.status === 'READY' ? 'Ready!' : kot.status === 'SERVED' ? 'Served' : 'Pending'}
-                      </span>
-                      {kot.status === 'READY' && (
-                        <button
-                          onClick={() => markServedMutation.mutate(kot.id)}
-                          disabled={markServedMutation.isPending}
-                          className="flex items-center gap-1 px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg disabled:opacity-50 transition-colors"
-                        >
-                          <CheckCircle className="w-3 h-3" /> Served ✓
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+            <div className="flex gap-2">
+              {activeOrder.items.length > 0 && (
+                <button
+                  onClick={() => setVoidTarget({ scope: 'ORDER', orderId: activeOrder.id, tableLabel: fmtTable(table.number, tablePrefix), lines: orderLines })}
+                  disabled={isBusy}
+                  className="px-3 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg font-semibold text-sm flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                  title="Void the whole order"
+                >
+                  <Trash2 className="w-4 h-4" /> Void order
+                </button>
+              )}
+              <button
+                onClick={() => { setPayError(null); setShowPayment(true); }}
+                disabled={isBusy}
+                className="flex-1 py-3 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors"
+              >
+                <ArrowRight className="w-5 h-5" />
+                Take payment {fmt(subtotal)}
+              </button>
             </div>
-          )}
-
-          {/* ── Manager: Force-clear occupied table (guests left mid-service) ── */}
-          {activeOrder && (table.status === 'OCCUPIED' || table.status === 'BILL_REQUESTED') &&
-           activeOrder.items.length > 0 &&
-           (user?.role === 'OWNER' || user?.role === 'MANAGER') && (
-            <button
-              onClick={async () => {
-                const ok = await confirm({
-                  title: 'Clear Table',
-                  message: `Clear ${fmtTable(table.number, tablePrefix)}? This will void the current order (${activeOrder.items.length} item${activeOrder.items.length !== 1 ? 's' : ''}) and mark the table as available. Use this only when guests have left without paying.`,
-                  variant: 'warning',
-                  confirmLabel: 'Clear Table',
-                });
-                if (ok) cancelOrderMutation.mutate(activeOrder.id);
-              }}
-              disabled={cancelOrderMutation.isPending}
-              className="w-full py-2 border border-red-200 text-red-600 hover:bg-red-50 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              Clear Table (void order)
-            </button>
           )}
         </div>
       </div>
@@ -2164,40 +2150,14 @@ function OrderPanel({ table, allTables, businessId, storeId, onClose, onRefresh,
         />
       )}
 
-      {/* ── Void Item Modal ───────────────────────────────────────────────── */}
-      {voidingItemId && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-2xl">
-            <h3 className="text-base font-bold mb-1">Void Item</h3>
-            <p className="text-sm text-gray-500 mb-3">Enter reason for voiding this item:</p>
-            <textarea
-              value={voidReason}
-              onChange={e => setVoidReason(e.target.value)}
-              className="w-full border rounded-lg p-2.5 text-sm resize-none focus:ring-2 focus:ring-red-400 focus:border-transparent"
-              rows={2}
-              placeholder="e.g. Customer changed mind, Wrong item..."
-              autoFocus
-            />
-            <div className="flex gap-2 mt-4">
-              <button
-                onClick={() => { setVoidingItemId(null); setVoidReason(''); }}
-                className="flex-1 py-2 border rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  if (!voidReason.trim() || !activeOrder) return;
-                  voidItemMutation.mutate({ orderId: activeOrder.id, itemId: voidingItemId, reason: voidReason });
-                }}
-                disabled={!voidReason.trim() || voidItemMutation.isPending || !activeOrder}
-                className="flex-1 py-2 bg-red-600 text-white rounded-lg text-sm font-medium disabled:opacity-40 hover:bg-red-700"
-              >
-                {voidItemMutation.isPending ? 'Voiding...' : 'Void Item'}
-              </button>
-            </div>
-          </div>
-        </div>
+      {voidTarget && (
+        <OrderVoidDialog
+          target={voidTarget}
+          role={user?.role}
+          userName={user?.name}
+          onDone={handleVoidDone}
+          onClose={() => setVoidTarget(null)}
+        />
       )}
     </>
   );
@@ -2212,6 +2172,7 @@ export default function HospitalityPage() {
   const [view, setView] = useState<'tables' | 'bar-tabs' | 'rooms'>('tables');
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [showReservations, setShowReservations] = useState(false);
+  const [showVoidLog, setShowVoidLog] = useState(false);
   const [showFastFood, setShowFastFood] = useState(false);
   const [filterStatus, setFilterStatus] = useState<Table['status'] | 'ALL'>('ALL');
   const [selectedBarTab, setSelectedBarTab] = useState<BarTab | null>(null);
@@ -2261,7 +2222,7 @@ export default function HospitalityPage() {
     refetchInterval: 10000,
   });
 
-  const { data: bizSettings } = useQuery<{ tablePrefix?: string | null }>({
+  const { data: bizSettings } = useQuery<{ tablePrefix?: string | null; kitchenMode?: string }>({
     queryKey: ['biz-settings', businessId],
     queryFn: () => api.get(`/business/${businessId}/settings`),
     enabled: !!businessId,
@@ -2629,7 +2590,12 @@ export default function HospitalityPage() {
             <Button variant="secondary" icon={<CalendarDays className="w-4 h-4" />} onClick={() => setShowReservations(true)}>Reservations</Button>
             <Button variant="secondary" icon={<Zap className="w-4 h-4" />} onClick={() => setShowFastFood(true)}>Fast Food</Button>
             <Button variant="secondary" icon={<Sparkles className="w-4 h-4" />} onClick={() => setShowHappyHourModal(true)} title="Happy Hours">Happy Hours</Button>
-            <Button variant="secondary" icon={<ChefHat className="w-4 h-4" />} onClick={() => navigate('/kds')}>KDS</Button>
+            {bizSettings?.kitchenMode !== 'PRINT_ONLY' && (
+              <Button variant="secondary" icon={<ChefHat className="w-4 h-4" />} onClick={() => navigate('/kds')}>KDS</Button>
+            )}
+            {['OWNER', 'MANAGER', 'ADMIN'].includes(String(user?.role)) && (
+              <Button variant="secondary" icon={<Trash2 className="w-4 h-4" />} onClick={() => setShowVoidLog(true)}>Voids</Button>
+            )}
             <Button icon={<Plus className="w-4 h-4" />} onClick={openAddTable}>Add Table</Button>
           </div>
         </div>
@@ -4316,6 +4282,8 @@ export default function HospitalityPage() {
           onClose={() => setShowFastFood(false)}
         />
       )}
+
+      {showVoidLog && storeId && <VoidLogModal storeId={storeId} onClose={() => setShowVoidLog(false)} />}
 
       {/* Reservations Modal */}
       {showReservations && (

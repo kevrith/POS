@@ -35,6 +35,11 @@ interface AuthState {
   loginWithBiometric: (businessId: string, userId?: string) => Promise<boolean>;
   /** Re-read the plan fields from the API. Safe to call on every app load. */
   refreshUser: () => Promise<void>;
+  /**
+   * Fill in the signed-in user's store when the login did not (the desktop setup wizard, a biometric sign-in, a restored
+   * session). Most screens read `user.storeId` and ask the API for nothing without it. No-op when it is already set.
+   */
+  ensureStoreId: () => Promise<void>;
   logout: () => void;
 }
 
@@ -170,6 +175,21 @@ export const useAuthStore = create<AuthState>()(
         } catch {
           // Offline, or the API is unreachable. Keep the cached user — this is an
           // offline-first POS and a failed refresh must never block trading.
+        }
+      },
+
+      ensureStoreId: async () => {
+        const { user } = useAuthStore.getState();
+        const token = getToken();
+        if (!user || user.storeId || !token) return;
+        try {
+          const res = await fetch(`${API_V1}/business/${user.businessId}/stores`, { headers: { Authorization: `Bearer ${token}` } });
+          if (!res.ok) return;
+          const stores = await res.json() as Array<{ id: string }>;
+          if (stores.length === 0) return;
+          set((s) => (s.user && !s.user.storeId ? { user: { ...s.user, storeId: stores[0].id } } : {}));
+        } catch {
+          // Offline or unreachable: try again next load. Screens that need a store say so.
         }
       },
 

@@ -1,7 +1,8 @@
-import { Controller, Post, Get, Patch, Delete, Body, Param, Query, Req, UnauthorizedException, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Body, Param, Query, Req, UnauthorizedException, UseGuards, ForbiddenException } from '@nestjs/common';
 import type { Request } from 'express';
 import type { AuthUser } from '../auth/auth.service';
 import { HospitalityService } from './hospitality.service';
+import { AuthService } from '../auth/auth.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { SubscriptionGuard, RequiresFeature } from '../auth/subscription.guard';
 import { HospitalityAccessGuard } from './hospitality-access.guard';
@@ -28,7 +29,21 @@ function userOf(req: AuthedRequest): AuthUser {
 @RequiresFeature(Feature.HOSPITALITY)
 @Controller('hospitality')
 export class HospitalityController {
-  constructor(private hospitalityService: HospitalityService) {}
+  constructor(private hospitalityService: HospitalityService, private auth: AuthService) {}
+
+  /**
+   * Who approves a void. A manager or owner signed in approves their own; anyone else supplies a manager PIN that is
+   * checked here against this business's managers. Null = nobody, which the service refuses for anything the kitchen has.
+   */
+  private async approverOf(req: AuthedRequest, managerPin?: string): Promise<string | null> {
+    if (managerPin) return (await this.auth.verifyManagerPin(String(managerPin), businessOf(req))).userId;
+    return ['OWNER', 'MANAGER', 'ADMIN'].includes(String(userOf(req).role)) ? userOf(req).id : null;
+  }
+
+  private actorOf(req: AuthedRequest) {
+    const u = userOf(req);
+    return { id: u.id, name: u.name ?? 'staff', role: String(u.role ?? '') };
+  }
 
   // ── Tables ─────────────────────────────────────────────────────────────────
 
@@ -113,10 +128,29 @@ export class HospitalityController {
     return this.hospitalityService.requestBill(id, businessOf(req));
   }
 
-  /** Cancel an order and reset the table to AVAILABLE (guests left without ordering) */
+  /**
+   * Clear a table. Nothing the kitchen has: any waiter. Otherwise a manager (signed in, or `managerPin`). The body is
+   * optional so older clients still work; they are recorded as "Other: cleared from the table screen".
+   */
   @Post('orders/:id/cancel')
-  async cancelOrder(@Req() req: AuthedRequest, @Param('id') id: string) {
-    return this.hospitalityService.cancelOrder(id, businessOf(req));
+  async cancelOrder(@Req() req: AuthedRequest, @Param('id') id: string, @Body() body: { reasonCode?: string; note?: string; managerPin?: string } = {}) {
+    return this.hospitalityService.cancelOrder(id, businessOf(req), {
+      actor: this.actorOf(req),
+      approvedById: await this.approverOf(req, body?.managerPin),
+      input: { reasonCode: body?.reasonCode, note: body?.note },
+    });
+  }
+
+  /** Void a whole order with a reason; a manager must approve when the kitchen has any of it. */
+  @Post('orders/:id/void')
+  async voidOrder(@Req() req: AuthedRequest, @Param('id') id: string, @Body() body: { reasonCode?: string; note?: string; managerPin?: string }) {
+    return this.hospitalityService.voidOrder(
+      id,
+      { reasonCode: body?.reasonCode, note: body?.note },
+      this.actorOf(req),
+      await this.approverOf(req, body?.managerPin),
+      businessOf(req),
+    );
   }
 
   @Get('orders/:id')
@@ -387,18 +421,33 @@ export class HospitalityController {
     return this.hospitalityService.getHotelDashboard(businessOf(req), storeId);
   }
 
-  // ── Void Single KOT Item ──────────────────────────────────────────────────
+  // ── Void all or part of one line ──────────────────────────────────────────
 
   @Patch('orders/:orderId/items/:itemId/void')
   async voidOrderItem(
     @Req() req: AuthedRequest,
     @Param('orderId') orderId: string,
     @Param('itemId') itemId: string,
-    @Body() body: { reason: string },
+    @Body() body: { quantity?: number; reasonCode?: string; note?: string; reason?: string; managerPin?: string },
   ) {
     return this.hospitalityService.voidOrderItem(
-      orderId, itemId, body.reason, String(req.user?.role ?? ''), req.user?.name ?? 'staff', businessOf(req),
+      orderId,
+      itemId,
+      // `reason` (free text) is what older clients sent; it is kept as an "Other" explanation.
+      body?.reasonCode
+        ? { quantity: body.quantity, reasonCode: body.reasonCode, note: body.note }
+        : { quantity: body?.quantity, reasonCode: body?.reason ? 'OTHER' : undefined, note: body?.reason },
+      this.actorOf(req),
+      await this.approverOf(req, body?.managerPin),
+      businessOf(req),
     );
+  }
+
+  /** The void log, for a manager's review. */
+  @Get('voids')
+  async getVoids(@Req() req: AuthedRequest, @Query('storeId') storeId: string, @Query('from') from?: string, @Query('to') to?: string) {
+    if (!['OWNER', 'MANAGER', 'ADMIN'].includes(String(userOf(req).role))) throw new ForbiddenException('Only a manager can review voids');
+    return this.hospitalityService.getVoidLog(storeId, businessOf(req), from, to);
   }
 
   // ── Happy Hours ───────────────────────────────────────────────────────────

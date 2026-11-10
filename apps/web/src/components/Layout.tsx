@@ -211,7 +211,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const bizId = user?.businessId;
   type SubscriptionInfo = { subscriptionStatus: string; trialEndsAt: string | null; daysRemaining: number | null; isTrialExpired: boolean };
-  type BusinessInfo = { posMode: string; enabledModules?: string; name: string; subscriptionTier: string; stores?: { id: string; name: string; storeCode: string }[] };
+  type BusinessInfo = { kitchenMode?: string; posMode: string; enabledModules?: string; name: string; subscriptionTier: string; stores?: { id: string; name: string; storeCode: string }[] };
 
   // Both are drawn from what the server last said (initialData, marked stale so they are re-fetched straight away), so the
   // menu is right on the first paint and only changes if something really changed.
@@ -535,7 +535,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     .map((g) => ({
       ...g,
       items: g.items.filter(
-        (item) => canSee(item.roles) && canSeeBusinessType(item.businessTypes, item.modules, item.notForTypes) && canSeePlan(item.to),
+        (item) =>
+          canSee(item.roles) && canSeeBusinessType(item.businessTypes, item.modules, item.notForTypes) && canSeePlan(item.to) &&
+          // A business that prints its kitchen tickets has no kitchen display to open (Settings > General > Kitchen).
+          !(item.to === '/kds' && businessSettings?.kitchenMode === 'PRINT_ONLY'),
       ),
     }))
     .filter((g) => g.items.length > 0);

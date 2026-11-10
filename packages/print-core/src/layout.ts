@@ -229,10 +229,11 @@ export function layoutKot(kot: KotDocument): Block[] {
   if (kot.waiterName) meta += ` - ${kot.waiterName}`;
   if (kot.kotNumber) meta += ` - KOT #${kot.kotNumber}`;
   b.push({ kind: 'line', text: meta, align: 'center', size: 'small' });
-  b.push({ kind: 'banner', text: kot.orderType === 'ADDITION' ? '+ ADDITION' : 'NEW ORDER', tone: 'info' });
+  if (kot.orderType === 'VOID') b.push({ kind: 'banner', text: '*** CANCEL - DO NOT MAKE ***', tone: 'void' });
+  else b.push({ kind: 'banner', text: kot.orderType === 'ADDITION' ? '+ ADDITION' : 'NEW ORDER', tone: 'info' });
   b.push({ kind: 'rule', style: 'double' });
   for (const item of kot.items) {
-    b.push({ kind: 'line', text: `${item.quantity}x ${item.name}`, bold: true, size: 'large' });
+    b.push({ kind: 'line', text: `${kot.orderType === 'VOID' ? 'CANCEL ' : ''}${item.quantity}x ${item.name}`, bold: true, size: 'large' });
     if (item.specialInstructions) b.push({ kind: 'line', text: `!! ${item.specialInstructions}`, indent: true });
     for (const mod of item.modifiers ?? []) b.push({ kind: 'line', text: `+ ${mod}`, indent: true, size: 'small' });
   }

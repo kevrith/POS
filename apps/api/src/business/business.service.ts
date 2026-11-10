@@ -14,7 +14,7 @@ import * as bcrypt from 'bcrypt';
 import { assertPinAvailable } from '../auth/pin.util';
 import { assertCanManageUser } from '../auth/access-policy';
 import { createCipheriv, randomBytes } from 'crypto';
-import { UserRole, parseEnabledModules } from '@pos/shared';
+import { KITCHEN_MODES, UserRole, parseEnabledModules } from '@pos/shared';
 
 import { requireString } from '../common/validate';
 import { validateLevies } from '../common/hotel-levies';
@@ -42,6 +42,8 @@ interface UpdateBusinessDto {
   idleMessage?: string;
   idleLogoUrl?: string;
   tablePrefix?: string;
+  /** KDS (kitchen display) or PRINT_ONLY (ticket printed and carried). */
+  kitchenMode?: string;
   receiptHeader?: string;
   receiptFooter?: string;
   enableCashDrawer?: boolean;
@@ -139,7 +141,7 @@ export class BusinessService {
     'expenseApprovalThresholdCents', 'expiryAlertDays',
     'exchangeRates', 'displayCurrencies', 'paystackPublicKey',
     'bankName', 'bankAccountNumber', 'bankAccountName', 'bankBranch',
-    'idleMessage', 'idleLogoUrl', 'tablePrefix',
+    'idleMessage', 'idleLogoUrl', 'tablePrefix', 'kitchenMode',
     'receiptHeader', 'receiptFooter',
     'receiptFormatSale', 'receiptFormatInvoice', 'receiptFormatDelivery', 'receiptFormatEmail',
     'enableCashDrawer', 'enableBarcodeScanner', 'enablePoleDisplay',
@@ -164,6 +166,10 @@ export class BusinessService {
       if (dto[key as keyof UpdateBusinessDto] !== undefined) {
         data[key] = dto[key as keyof UpdateBusinessDto];
       }
+    }
+
+    if (dto.kitchenMode !== undefined && !(KITCHEN_MODES as readonly string[]).includes(String(dto.kitchenMode))) {
+      throw new BadRequestException(`kitchenMode must be one of ${KITCHEN_MODES.join(', ')}`);
     }
 
     // Stored as a JSON list; anything that is not a known module is dropped.

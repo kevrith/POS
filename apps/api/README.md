@@ -202,6 +202,16 @@ Kitchen tickets (`hospitality/orders/:id/kot`, `hospitality/kot/:id/status`,
 - status changes follow `KOT_TRANSITIONS`; an unchanged status is a no-op, a lost race is a 409;
 - cancelling an order cancels its open tickets; voiding a sent line needs a manager and
   pulls it off its ticket (`kot_voided` socket event);
+- **voids** (`PATCH hospitality/orders/:orderId/items/:itemId/void`, `POST hospitality/orders/:id/void`, the
+  `cancel` route, `GET hospitality/voids`): a reason from `VOID_REASONS` (`@pos/shared`) is always required; `quantity`
+  voids part of a line (the line keeps the rest, priced per unit including modifiers); once the kitchen has a line
+  (`sentToKitchenAt`) a manager must approve, either signed in or via `managerPin` (checked by
+  `AuthService.verifyManagerPin` in the controller, never trusted from the body). Each void writes an immutable `OrderVoid`
+  row (who, approver, value, `wasSent`, `wasPrepared`). The plain `items/remove` route refuses lines the kitchen has.
+  Paid orders are voided from the receipt (`sales/:id/void`), not here;
+- **`Business.kitchenMode`** (`KDS` | `PRINT_ONLY`, set in Settings): with `PRINT_ONLY` there is no kitchen screen, so
+  `createKOT` records each ticket as `SERVED` at once (it keeps its number and lines for reprints and audit but never
+  waits on a display or lights the floor plan), and the web prints a `VOID` cancellation slip for voids after sending;
 - every order, ticket and store id is checked against the caller's business, and
   `HospitalityAccessGuard` (on the hospitality, housekeeping and waitlist controllers) refuses
   restaurant routes (tables, orders, kitchen, kds, kot, reservations, bar-tabs, happy-hours,

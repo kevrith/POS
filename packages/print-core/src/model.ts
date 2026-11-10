@@ -86,7 +86,8 @@ export interface KotItem {
 export interface KotDocument {
   kotNumber?: string;
   tableNumber: string;
-  orderType: 'NEW_ORDER' | 'ADDITION';
+  /** VOID = a slip telling the kitchen to stop making the listed items (they were already sent). */
+  orderType: 'NEW_ORDER' | 'ADDITION' | 'VOID';
   items: KotItem[];
   createdAt: string;
   waiterName?: string;

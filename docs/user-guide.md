@@ -389,6 +389,23 @@ Settings, Printers.
 Send an order twice by mistake and nothing is cooked twice: lines already sent are
 refused, and the waiter's screen says so.
 
+**No kitchen screen?** A kitchen display needs a second screen or computer, and many restaurants and hotels do not
+have one. Go to **Settings, General, "How does your kitchen receive orders?"** and choose **Printed tickets only**. The
+Kitchen Display menu and KDS button disappear. When the waiter sends an order, a ticket prints for the kitchen (food to the
+kitchen printer, drinks to the bar printer) and the order is recorded as handed over straight away, so nothing waits on a
+screen and the table never shows a "waiting" or "ready" badge. If something is voided after it was sent, a second slip
+prints saying **CANCEL - DO NOT MAKE**, so the kitchen hears about it without a screen. Switch back to **Kitchen display**
+at any time.
+
+**Voiding on a table.** Open the table and tap **Void** beside a line to take back all or only some of it: for example,
+if 10 ugali were sent and the guest wants one fewer, enter 1 and the order keeps 9 (the total and the kitchen ticket
+follow). **Void order** takes back the whole order. Every void needs a **reason** from a short list (entered by mistake,
+customer changed their mind, wrong item, out of stock, waited too long, kitchen error, complaint, guests left, or "Other"
+with a few words). Removing something the kitchen has not received needs nothing more. Once the kitchen has it, a **manager
+must approve**: a manager signed in approves their own; anyone else asks a manager to type their PIN. Managers and owners
+review every void under **Tables, Voids** (who, what, how much, why, and who approved), and see food that was made and then
+voided as wastage. An order that has already been **paid** is voided from its receipt in Sales (see section 9).
+
 **Kitchen display (KDS).** Instead of paper, the kitchen can run a screen showing
 live tickets, on a wall screen, a tablet or a phone. Tickets arrive the moment they
 are sent (with an optional chime), and turn amber then red as they wait. Pick

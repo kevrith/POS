@@ -6,9 +6,10 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { EventsModule } from '../events/events.module';
 import { LedgerModule } from '../ledger/ledger.module';
 import { SalesModule } from '../sales/sales.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [NotificationsModule, EventsModule, LedgerModule, SalesModule],
+  imports: [NotificationsModule, EventsModule, LedgerModule, SalesModule, AuthModule],
   controllers: [HospitalityController],
   providers: [HospitalityService, PrismaService],
   exports: [HospitalityService],

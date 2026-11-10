@@ -50,6 +50,7 @@ import { onlineStoreLink } from '../lib/storeLink';
 import { inDesktopApp } from '../lib/desktopServer';
 import SalesPipelineCard from '../components/SalesPipelineCard';
 import HotelLeviesCard from '../components/HotelLeviesCard';
+import KitchenModeCard from '../components/KitchenModeCard';
 import { PageHeader, SideNav, Switch, Tabs } from '../components/ui';
 import AppUpdateCard from '../components/AppUpdateCard';
 
@@ -1933,6 +1934,11 @@ export default function SettingsPage() {
               </div>
             ))}
           </div>
+
+          {settings && ['OWNER', 'MANAGER'].includes(String(user?.role)) &&
+            (['HOSPITALITY', 'FAST_FOOD', 'BAR_TAB'].includes(settings.posMode) || parseEnabledModules(settings.enabledModules).includes('RESTAURANT')) && (
+            <KitchenModeCard businessId={businessId} stored={(settings as { kitchenMode?: string }).kitchenMode} />
+          )}
 
           {settings && ['OWNER', 'MANAGER'].includes(String(user?.role)) && (settings.posMode === 'HOSPITALITY' || (settings as { hotelLevies?: string }).hotelLevies !== '[]') && (
             <HotelLeviesCard businessId={businessId} stored={(settings as { hotelLevies?: string }).hotelLevies} />

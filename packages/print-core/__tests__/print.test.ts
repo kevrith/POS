@@ -262,6 +262,17 @@ describe('kitchen ticket and bill', () => {
     }
   });
 
+  it('a cancellation slip says CANCEL and DO NOT MAKE on every format', () => {
+    const o = { paperWidth: 80 as const };
+    const slip: KotDocument = { ...kot, orderType: 'VOID', items: [{ name: 'Ugali', quantity: 1 }] };
+    const out = [printedLines(kotEscPos(slip, o)).join('\n'), kotHtml(slip, o), kotEpsonXml(slip, o), kotStarXml(slip, o)];
+    for (const text of out) {
+      expect(text).toContain('DO NOT MAKE');
+      expect(text).toContain('CANCEL 1x Ugali');
+      expect(text).not.toContain('NEW ORDER');
+    }
+  });
+
   it('bill shows tax only when the business charged it', () => {
     const bill: BillDocument = {
       tableNumber: '3', businessName: 'Premier', date: '2026-10-27T10:15:00', subtotalCents: 11600, totalCents: 11600,

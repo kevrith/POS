@@ -14,6 +14,7 @@ function build() {
     orderItem: {
       findMany: jest.fn().mockResolvedValue([]),
       findFirst: jest.fn(),
+      update: jest.fn().mockResolvedValue({}),
       updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       delete: jest.fn().mockResolvedValue({}),
       deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
@@ -28,6 +29,9 @@ function build() {
     kotCounter: { upsert: jest.fn() },
     table: { update: jest.fn().mockResolvedValue({}), findUnique: jest.fn().mockResolvedValue({ number: '5' }) },
     notification: { create: jest.fn().mockResolvedValue({}) },
+    business: { findUnique: jest.fn().mockResolvedValue({ kitchenMode: 'KDS' }) },
+    user: { findMany: jest.fn().mockResolvedValue([]) },
+    orderVoid: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
     $transaction: jest.fn((arg: any) => (typeof arg === 'function' ? arg(prisma) : Promise.all(arg))),
   };
   const notifications: any = { sendWhatsApp: jest.fn().mockResolvedValue(undefined) };
@@ -162,7 +166,14 @@ describe('updateKOTStatus', () => {
 });
 
 describe('cancelling and voiding', () => {
-  it('cancelling an order cancels its live tickets', async () => {
+  const waiter = { id: 'w1', name: 'Wanjiru', role: 'WAITER' };
+  const manager = { id: 'm1', name: 'Mo', role: 'MANAGER' };
+  const sentAt = new Date();
+  const orderLine = (id: string, extra: Record<string, unknown> = {}) => ({
+    id, itemId: `item-${id}`, name: 'Pilau', quantity: 1, unitPriceCents: 30000, totalCents: 30000, sentToKitchenAt: null, ...extra,
+  });
+
+  it('cancelling an empty order cancels its live tickets, frees the table and logs nothing', async () => {
     const { prisma, service } = build();
     await service.cancelOrder('o1', BIZ);
     expect(prisma.kOT.updateMany).toHaveBeenCalledWith({
@@ -170,6 +181,7 @@ describe('cancelling and voiding', () => {
       data: { status: 'CANCELLED' },
     });
     expect(prisma.table.update).toHaveBeenCalledWith({ where: { id: 't1' }, data: { status: 'AVAILABLE' } });
+    expect(prisma.orderVoid.create).not.toHaveBeenCalled();
   });
 
   it('will not cancel a paid order', async () => {
@@ -178,42 +190,193 @@ describe('cancelling and voiding', () => {
     await expect(service.cancelOrder('o1', BIZ)).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('lets a waiter remove a line the kitchen never got, with no kitchen alert', async () => {
-    const { prisma, service, events } = build();
-    prisma.orderItem.findFirst.mockResolvedValue({ id: 'a', name: 'Pilau', quantity: 1, sentToKitchenAt: null });
-    await service.voidOrderItem('o1', 'a', 'typo', 'WAITER', 'Wanjiru', BIZ);
-    expect(prisma.orderItem.delete).toHaveBeenCalled();
-    expect(events.emitKotVoided).not.toHaveBeenCalled();
+  describe('void a whole order', () => {
+    it('refuses a waiter when the kitchen has any line, and changes nothing', async () => {
+      const { prisma, service } = build();
+      prisma.orderItem.findMany.mockResolvedValue([orderLine('a', { sentToKitchenAt: sentAt }), orderLine('b')]);
+      const err: any = await service.voidOrder('o1', { reasonCode: 'GUESTS_LEFT' }, waiter, null, BIZ).catch((e) => e);
+      expect(err).toBeInstanceOf(ForbiddenException);
+      expect(err.getResponse()).toEqual(expect.objectContaining({ code: 'APPROVAL_REQUIRED' }));
+      expect(prisma.order.update).not.toHaveBeenCalled();
+      expect(prisma.orderVoid.create).not.toHaveBeenCalled();
+    });
+
+    it('with a manager: logs every line, cancels tickets, frees the table and warns the kitchen', async () => {
+      const { prisma, service, events } = build();
+      prisma.orderItem.findMany.mockResolvedValue([orderLine('a', { sentToKitchenAt: sentAt, quantity: 2, totalCents: 60000 }), orderLine('b')]);
+      const out = await service.voidOrder('o1', { reasonCode: 'GUESTS_LEFT' }, waiter, manager.id, BIZ);
+
+      expect(out).toEqual({ success: true, voidedValueCents: 90000 });
+      expect(prisma.orderVoid.create).toHaveBeenCalledTimes(2);
+      expect(prisma.orderVoid.create.mock.calls[0][0].data).toEqual(expect.objectContaining({
+        scope: 'ORDER', itemName: 'Pilau', quantity: 2, unitCents: 30000, valueCents: 60000, reasonCode: 'GUESTS_LEFT',
+        wasSent: true, voidedById: 'w1', approvedById: 'm1',
+      }));
+      expect(prisma.order.update).toHaveBeenCalledWith({ where: { id: 'o1' }, data: { status: 'CANCELLED' } });
+      expect(prisma.table.update).toHaveBeenCalledWith({ where: { id: 't1' }, data: { status: 'AVAILABLE' } });
+      expect(events.emitKotVoided).toHaveBeenCalledWith(BIZ, expect.objectContaining({ wholeOrder: true, lines: [{ name: 'Pilau', quantity: 2 }] }));
+    });
+
+    it('lets a waiter void an order the kitchen never got, and still logs it', async () => {
+      const { prisma, service, events } = build();
+      prisma.orderItem.findMany.mockResolvedValue([orderLine('a')]);
+      await service.voidOrder('o1', { reasonCode: 'ENTERED_BY_MISTAKE' }, waiter, null, BIZ);
+      expect(prisma.orderVoid.create).toHaveBeenCalledTimes(1);
+      expect(prisma.orderVoid.create.mock.calls[0][0].data).toEqual(expect.objectContaining({ wasSent: false, approvedById: null }));
+      expect(events.emitKotVoided).not.toHaveBeenCalled();
+    });
+
+    it('needs a reason when there is anything on the order, and an explanation for "Other"', async () => {
+      const { prisma, service } = build();
+      prisma.orderItem.findMany.mockResolvedValue([orderLine('a')]);
+      await expect(service.voidOrder('o1', {}, manager, manager.id, BIZ)).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.voidOrder('o1', { reasonCode: 'NOT_A_REASON' }, manager, manager.id, BIZ)).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.voidOrder('o1', { reasonCode: 'OTHER', note: ' ' }, manager, manager.id, BIZ)).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.order.update).not.toHaveBeenCalled();
+    });
+
+    it('sends a paid order to the receipt void instead', async () => {
+      const { prisma, service } = build();
+      prisma.order.findUnique.mockResolvedValue({ id: 'o1', businessId: BIZ, storeId: 's1', tableId: null, status: 'PAID' });
+      await expect(service.voidOrder('o1', { reasonCode: 'OTHER', note: 'x y z' }, manager, manager.id, BIZ)).rejects.toThrow(/receipt/);
+    });
   });
 
-  it('needs a manager to void a line the kitchen already has', async () => {
+  describe('void one line', () => {
+    it('lets a waiter remove a line the kitchen never got, logs it, and sends no kitchen alert', async () => {
+      const { prisma, service, events } = build();
+      prisma.orderItem.findFirst.mockResolvedValue(orderLine('a'));
+      await service.voidOrderItem('o1', 'a', { reasonCode: 'ENTERED_BY_MISTAKE' }, waiter, null, BIZ);
+      expect(prisma.orderItem.delete).toHaveBeenCalledWith({ where: { id: 'a' } });
+      expect(prisma.orderVoid.create.mock.calls[0][0].data).toEqual(expect.objectContaining({ scope: 'ITEM', wasSent: false, quantity: 1, valueCents: 30000 }));
+      expect(events.emitKotVoided).not.toHaveBeenCalled();
+    });
+
+    it('needs a manager to void a line the kitchen already has', async () => {
+      const { prisma, service } = build();
+      prisma.orderItem.findFirst.mockResolvedValue(orderLine('a', { sentToKitchenAt: sentAt }));
+      const err: any = await service.voidOrderItem('o1', 'a', { reasonCode: 'WRONG_ITEM' }, waiter, null, BIZ).catch((e) => e);
+      expect(err).toBeInstanceOf(ForbiddenException);
+      expect(err.getResponse()).toEqual(expect.objectContaining({ code: 'APPROVAL_REQUIRED' }));
+      expect(prisma.orderItem.delete).not.toHaveBeenCalled();
+      expect(prisma.orderVoid.create).not.toHaveBeenCalled();
+    });
+
+    it('requires a reason from the list, and a few words for "Other"', async () => {
+      const { prisma, service } = build();
+      prisma.orderItem.findFirst.mockResolvedValue(orderLine('a'));
+      await expect(service.voidOrderItem('o1', 'a', {}, manager, manager.id, BIZ)).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.voidOrderItem('o1', 'a', { reasonCode: 'typo' }, manager, manager.id, BIZ)).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.voidOrderItem('o1', 'a', { reasonCode: 'OTHER', note: 'x' }, manager, manager.id, BIZ)).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('voids part of a line: 1 of 10 ugali leaves 9, priced correctly, and the kitchen is told to stop one', async () => {
+      const { prisma, service, events } = build();
+      prisma.orderItem.findFirst.mockResolvedValue(orderLine('a', { name: 'Ugali', quantity: 10, totalCents: 10 * 5500, sentToKitchenAt: sentAt }));
+      prisma.kOT.findMany.mockResolvedValue([{ id: 'k1', status: 'PENDING', itemIds: JSON.stringify(['a']) }]);
+
+      const out: any = await service.voidOrderItem('o1', 'a', { quantity: 1, reasonCode: 'CUSTOMER_CHANGED_MIND' }, waiter, manager.id, BIZ);
+
+      expect(prisma.orderItem.update).toHaveBeenCalledWith({ where: { id: 'a' }, data: { quantity: 9, totalCents: 9 * 5500 } });
+      expect(prisma.orderItem.delete).not.toHaveBeenCalled();
+      expect(prisma.orderVoid.create.mock.calls[0][0].data).toEqual(expect.objectContaining({ quantity: 1, unitCents: 5500, valueCents: 5500, approvedById: 'm1' }));
+      // the ticket keeps its line (now 9) and is not cancelled
+      expect(prisma.kOT.update).not.toHaveBeenCalled();
+      expect(events.emitKotVoided).toHaveBeenCalledWith(BIZ, expect.objectContaining({ lines: [{ name: 'Ugali', quantity: 1 }], kotIds: ['k1'] }));
+      expect(out.voided).toEqual(expect.objectContaining({ quantity: 1, valueCents: 5500, wasSent: true }));
+    });
+
+    it('keeps modifier prices when it reduces the quantity', async () => {
+      const { prisma, service } = build();
+      // 3 coffees at 300 + a 50 modifier each = 1050
+      prisma.orderItem.findFirst.mockResolvedValue(orderLine('a', { quantity: 3, totalCents: 1050 }));
+      await service.voidOrderItem('o1', 'a', { quantity: 1, reasonCode: 'WRONG_ITEM' }, waiter, null, BIZ);
+      expect(prisma.orderItem.update).toHaveBeenCalledWith({ where: { id: 'a' }, data: { quantity: 2, totalCents: 700 } });
+    });
+
+    it('will not void more than was ordered, or zero', async () => {
+      const { prisma, service } = build();
+      prisma.orderItem.findFirst.mockResolvedValue(orderLine('a', { quantity: 2, totalCents: 60000 }));
+      await expect(service.voidOrderItem('o1', 'a', { quantity: 3, reasonCode: 'WRONG_ITEM' }, manager, manager.id, BIZ)).rejects.toThrow(/Only 2/);
+      await expect(service.voidOrderItem('o1', 'a', { quantity: 0, reasonCode: 'WRONG_ITEM' }, manager, manager.id, BIZ)).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.voidOrderItem('o1', 'a', { quantity: 1.5, reasonCode: 'WRONG_ITEM' }, manager, manager.id, BIZ)).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.orderItem.update).not.toHaveBeenCalled();
+    });
+
+    it('pulls a fully voided line off its ticket, cancels an emptied ticket and warns the kitchen', async () => {
+      const { prisma, service, events } = build();
+      prisma.orderItem.findFirst.mockResolvedValue(orderLine('a', { quantity: 2, totalCents: 60000, sentToKitchenAt: sentAt }));
+      prisma.kOT.findMany.mockResolvedValue([
+        { id: 'k1', status: 'PENDING', itemIds: JSON.stringify(['a']) },
+        { id: 'k2', status: 'PENDING', itemIds: JSON.stringify(['a', 'b']) },
+        { id: 'k3', status: 'PENDING', itemIds: JSON.stringify(['z']) },
+      ]);
+      await service.voidOrderItem('o1', 'a', { reasonCode: 'WRONG_ITEM' }, manager, manager.id, BIZ);
+
+      expect(prisma.kOT.update).toHaveBeenCalledWith({ where: { id: 'k1' }, data: { itemIds: '[]', status: 'CANCELLED' } });
+      expect(prisma.kOT.update).toHaveBeenCalledWith({ where: { id: 'k2' }, data: { itemIds: JSON.stringify(['b']) } });
+      expect(prisma.kOT.update).toHaveBeenCalledTimes(2);
+      expect(events.emitKotVoided).toHaveBeenCalledWith(BIZ, expect.objectContaining({ table: '5', lines: [{ name: 'Pilau', quantity: 2 }] }));
+    });
+
+    it('marks food as made when a cook had started it (display mode)', async () => {
+      const { prisma, service } = build();
+      prisma.orderItem.findFirst.mockResolvedValue(orderLine('a', { sentToKitchenAt: sentAt }));
+      prisma.kOT.findMany.mockResolvedValue([{ id: 'k1', status: 'IN_PROGRESS', itemIds: JSON.stringify(['a']) }]);
+      await service.voidOrderItem('o1', 'a', { reasonCode: 'CUSTOMER_COMPLAINT' }, waiter, manager.id, BIZ);
+      expect(prisma.orderVoid.create.mock.calls[0][0].data).toEqual(expect.objectContaining({ wasSent: true, wasPrepared: true }));
+    });
+
+    it('does not claim food was made just because a print-only ticket is recorded as served', async () => {
+      const { prisma, service } = build();
+      prisma.business.findUnique.mockResolvedValue({ kitchenMode: 'PRINT_ONLY' });
+      prisma.orderItem.findFirst.mockResolvedValue(orderLine('a', { sentToKitchenAt: sentAt }));
+      prisma.kOT.findMany.mockResolvedValue([{ id: 'k1', status: 'SERVED', itemIds: JSON.stringify(['a']) }]);
+      await service.voidOrderItem('o1', 'a', { reasonCode: 'WRONG_ITEM' }, waiter, manager.id, BIZ);
+      expect(prisma.orderVoid.create.mock.calls[0][0].data).toEqual(expect.objectContaining({ wasSent: true, wasPrepared: false }));
+    });
+
+    it('refuses to remove a line the kitchen has through the plain remove route', async () => {
+      const { prisma, service } = build();
+      prisma.orderItem.findMany.mockResolvedValue([orderLine('a', { sentToKitchenAt: sentAt })]);
+      await expect(service.removeOrderItems('o1', ['a'], BIZ)).rejects.toThrow(/Void it instead/);
+      expect(prisma.orderItem.deleteMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('void log', () => {
+    it('is scoped to the caller\'s store and business', async () => {
+      const { prisma, service } = build();
+      await service.getVoidLog('s1', BIZ);
+      expect(prisma.orderVoid.findMany.mock.calls[0][0].where).toEqual(expect.objectContaining({ businessId: BIZ, storeId: 's1' }));
+      await expect(service.getVoidLog('s1', 'biz-B')).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+});
+
+describe('kitchen mode', () => {
+  const prep = (prisma: any) => {
+    prisma.orderItem.findMany.mockResolvedValue([line('a', 'Pilau')]);
+    prisma.orderItem.updateMany.mockResolvedValue({ count: 1 });
+    prisma.kotCounter.upsert.mockResolvedValue({ last: 1 });
+    prisma.kOT.create.mockImplementation(async ({ data }: any) => ({ id: 'k1', ...data }));
+  };
+
+  it('with a kitchen display, a new ticket waits for a cook', async () => {
     const { prisma, service } = build();
-    prisma.orderItem.findFirst.mockResolvedValue({ id: 'a', name: 'Pilau', quantity: 1, sentToKitchenAt: new Date() });
-    await expect(service.voidOrderItem('o1', 'a', 'guest left', 'WAITER', 'Wanjiru', BIZ)).rejects.toBeInstanceOf(ForbiddenException);
-    expect(prisma.orderItem.delete).not.toHaveBeenCalled();
+    prep(prisma);
+    const [t] = await service.createKOT('o1', 'NEW_ORDER', ['a'], BIZ);
+    expect(t.status).toBe('PENDING');
   });
 
-  it('requires a reason', async () => {
-    const { service } = build();
-    await expect(service.voidOrderItem('o1', 'a', '  ', 'MANAGER', 'M', BIZ)).rejects.toBeInstanceOf(BadRequestException);
-  });
-
-  it('pulls a voided line off its ticket, cancels an emptied ticket and warns the kitchen', async () => {
-    const { prisma, service, events } = build();
-    prisma.orderItem.findFirst.mockResolvedValue({ id: 'a', name: 'Pilau', quantity: 2, sentToKitchenAt: new Date() });
-    prisma.kOT.findMany.mockResolvedValue([
-      { id: 'k1', itemIds: JSON.stringify(['a']) },
-      { id: 'k2', itemIds: JSON.stringify(['a', 'b']) },
-      { id: 'k3', itemIds: JSON.stringify(['z']) },
-    ]);
-    await service.voidOrderItem('o1', 'a', 'guest left', 'MANAGER', 'Mo', BIZ);
-
-    expect(prisma.kOT.update).toHaveBeenCalledWith({ where: { id: 'k1' }, data: { itemIds: '[]', status: 'CANCELLED' } });
-    expect(prisma.kOT.update).toHaveBeenCalledWith({ where: { id: 'k2' }, data: { itemIds: JSON.stringify(['b']) } });
-    expect(prisma.kOT.update).toHaveBeenCalledTimes(2);
-    expect(events.emitKotVoided).toHaveBeenCalledWith(BIZ, expect.objectContaining({
-      table: '5', lines: [{ name: 'Pilau', quantity: 2 }],
-    }));
+  it('without one (print only), the ticket is recorded as handed over so it never waits on a screen', async () => {
+    const { prisma, service } = build();
+    prep(prisma);
+    prisma.business.findUnique.mockResolvedValue({ kitchenMode: 'PRINT_ONLY' });
+    const [t] = await service.createKOT('o1', 'NEW_ORDER', ['a'], BIZ);
+    expect(t.status).toBe('SERVED');
+    expect(t.preparedAt).toBeInstanceOf(Date);
+    expect(t.kotNumber).toBe(1);
   });
 });
 

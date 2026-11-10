@@ -432,6 +432,34 @@ export const KOT_STATION_PRINTER_HANDLE: Record<KotStation, string> = {
   DESSERT: 'KOT_DESSERTS',
 };
 
+/** How a business handles kitchen tickets. KDS = kitchen display; PRINT_ONLY = ticket is printed and carried. */
+export const KITCHEN_MODES = ['KDS', 'PRINT_ONLY'] as const;
+export type KitchenMode = (typeof KITCHEN_MODES)[number];
+
+export function normalizeKitchenMode(raw?: string | null): KitchenMode {
+  return raw === 'PRINT_ONLY' ? 'PRINT_ONLY' : 'KDS';
+}
+
+// ─── VOIDS ON TABLE ORDERS ────────────────────────────────────
+// Every line or order taken off a table order is recorded with one of these reasons. `note` = a typed explanation is
+// required (OTHER). `waste` = the food was made and thrown away, so the owner wants it counted as wastage.
+export const VOID_REASONS = [
+  { code: 'ENTERED_BY_MISTAKE', label: 'Entered by mistake', note: false, waste: false },
+  { code: 'CUSTOMER_CHANGED_MIND', label: 'Customer changed their mind', note: false, waste: false },
+  { code: 'WRONG_ITEM', label: 'Wrong item taken', note: false, waste: false },
+  { code: 'OUT_OF_STOCK', label: 'Out of stock', note: false, waste: false },
+  { code: 'LONG_WAIT', label: 'Waited too long', note: false, waste: false },
+  { code: 'KITCHEN_ERROR', label: 'Kitchen error or spoiled', note: false, waste: true },
+  { code: 'CUSTOMER_COMPLAINT', label: 'Customer complaint', note: false, waste: true },
+  { code: 'GUESTS_LEFT', label: 'Guests left without paying', note: false, waste: true },
+  { code: 'OTHER', label: 'Other (explain)', note: true, waste: false },
+] as const;
+export type VoidReasonCode = (typeof VOID_REASONS)[number]['code'];
+
+export function voidReason(code?: string | null) {
+  return VOID_REASONS.find((r) => r.code === code) ?? null;
+}
+
 export function normalizeStation(raw?: string | null): KotStation | null {
   const upper = (raw ?? '').trim().toUpperCase();
   return (KOT_STATIONS as readonly string[]).includes(upper) ? (upper as KotStation) : null;

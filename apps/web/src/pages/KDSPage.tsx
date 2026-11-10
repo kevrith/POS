@@ -268,7 +268,7 @@ export default function KDSPage() {
     }
   })();
 
-  const { data: bizSettings } = useQuery<{ tablePrefix?: string | null }>({
+  const { data: bizSettings } = useQuery<{ tablePrefix?: string | null; kitchenMode?: string }>({
     queryKey: ['biz-settings', businessId],
     queryFn: () => api.get(`/business/${businessId}/settings`),
     enabled: !!businessId,
@@ -276,7 +276,7 @@ export default function KDSPage() {
   });
   const tablePrefix = bizSettings?.tablePrefix ?? 'T';
 
-  const { data: orders = [], isFetching } = useQuery<KDSOrder[]>({
+  const { data: orders = [], isFetching, error: ordersError, refetch: refetchOrders } = useQuery<KDSOrder[]>({
     queryKey: ['kds-orders', storeId],
     queryFn: () => api.get<KDSOrder[]>(`/hospitality/kds/orders?storeId=${storeId}`),
     enabled: !!storeId,
@@ -467,9 +467,32 @@ export default function KDSPage() {
         </div>
       </div>
 
+      {bizSettings?.kitchenMode === 'PRINT_ONLY' && (
+        <div className="mx-3 mt-3 md:mx-4 rounded-lg border border-amber-600/40 bg-amber-950/40 px-4 py-2.5 text-sm text-amber-200">
+          This business prints its kitchen tickets and does not use a kitchen display, so new orders do not appear here.
+          An owner can switch the display on in Settings, General, Kitchen.
+        </div>
+      )}
+
       {/* KOT Grid */}
       <div className="flex-1 overflow-y-auto p-3 md:p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-        {visible.length === 0 ? (
+        {!storeId ? (
+          // Without a store there is nothing to ask for. Say so, rather than showing an empty screen that looks like "no orders".
+          <div className="flex flex-col items-center justify-center h-full text-slate-300 text-center px-6">
+            <AlertTriangle className="w-14 h-14 mb-4 text-amber-500" />
+            <p className="text-xl font-medium">No store selected for this sign-in</p>
+            <p className="text-sm mt-1 text-slate-400">Sign out and sign in again. If this stays, contact your administrator.</p>
+          </div>
+        ) : ordersError && orders.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-slate-300 text-center px-6">
+            <AlertTriangle className="w-14 h-14 mb-4 text-red-500" />
+            <p className="text-xl font-medium">Could not load the kitchen orders</p>
+            <p className="text-sm mt-1 text-slate-400">{ordersError instanceof Error ? ordersError.message : 'Please try again.'}</p>
+            <button onClick={() => void refetchOrders()} className="mt-4 px-5 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm font-semibold text-white">
+              Try again
+            </button>
+          </div>
+        ) : visible.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-slate-400">
             <CheckCircle className="w-16 h-16 mb-4 text-green-600" />
             <p className="text-xl font-medium">All clear!</p>

@@ -75,6 +75,10 @@ desktop app it is hidden when the data lives on this computer or a LAN server (t
 `tauri.localhost`); for a desktop connected to the cloud it needs `VITE_PUBLIC_WEB_URL` (the hosted website's origin) set at
 build time.
 
+A session can begin without `user.storeId` (the desktop setup wizard, a biometric sign-in), and most screens ask the API for
+nothing without it. `ensureStoreId()` in the auth store fills it in from the business's stores on every app load, so a page
+never has to; the kitchen display also says "No store selected" instead of showing an empty screen.
+
 Always call through `api.get / api.post / api.patch / api.delete`. Get the bearer
 token with `getToken()` from `../lib/api` — not from the auth store.
 
@@ -116,6 +120,7 @@ Tests: `npm test` (vitest) covers the print preference, routing and failure repo
 | `fuelPumpController.ts` | Fuel dispenser control |
 | `socket.ts` | Live updates (KDS, pole display, driver location). The server only joins a socket to the business in its token |
 | `useKdsRealtime.ts` | Keeps a kitchen screen live: refreshes on ticket events, chimes for a new ticket, warns loudly when a sent line is voided |
+| `components/OrderVoidDialog.tsx` | One dialog for voiding part or all of a line, or a whole table order: quantity, reason, manager PIN when the kitchen already has it. `VoidLogModal.tsx` is the manager's review |
 | `useRestaurantAccess.ts` | Whether tables and the kitchen display are on: a restaurant till, or any till with the Restaurant module enabled |
 | `db.ts`, `syncEngine.ts` | Dexie/IndexedDB offline store + replay |
 | `whatsapp.ts` | WhatsApp receipt handoff |

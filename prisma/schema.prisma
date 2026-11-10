@@ -19,6 +19,9 @@ model Business {
   negativePolicyDefault         String                @default("WARN")
   posMode                       String                @default("RETAIL")
   enabledModules                String                @default("[]")
+  /// How kitchen tickets are handled: "KDS" = they appear on the kitchen display and a cook marks them ready;
+  /// "PRINT_ONLY" = no display, the ticket is printed and the waiter carries it, so it is recorded as handed over at once.
+  kitchenMode                   String                @default("KDS")
   /// The moment fuel, hotel, pharmacy, cyber and appointment takings started becoming real Sales (receipt, eTIMS, Z-report,
   /// drawer, ledger). Null = still off, so a shop that rings those takings through the till is not counted twice.
   verticalSalesFrom   DateTime?
@@ -546,6 +549,38 @@ model SaleItem {
   sale           Sale     @relation(fields: [saleId], references: [id])
 
   @@index([saleId])
+}
+
+/// Permanent record of every line (or whole order) taken off a table order after it was entered: who, why, how much,
+/// whether the kitchen had it, and who approved. Rows are only ever added.
+model OrderVoid {
+  id           String   @id @default(uuid())
+  businessId   String
+  storeId      String
+  orderId      String
+  orderItemId  String?
+  /// ITEM = part or all of one line; ORDER = the whole order was voided or cleared.
+  scope        String
+  itemId       String?
+  itemName     String
+  quantity     Int
+  /// Price of one unit including priced modifiers, as it was on the bill.
+  unitCents    Int
+  valueCents   Int
+  reasonCode   String
+  note         String?
+  /// The kitchen already had the line.
+  wasSent      Boolean
+  /// The kitchen had started or finished it, so the food was made and is wasted.
+  wasPrepared  Boolean  @default(false)
+  voidedById   String
+  voidedByName String
+  /// A manager or owner who authorised it (required once the kitchen has the line).
+  approvedById String?
+  createdAt    DateTime @default(now())
+
+  @@index([businessId, storeId, createdAt])
+  @@index([orderId])
 }
 
 model OrderItem {

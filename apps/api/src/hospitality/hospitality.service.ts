@@ -10,8 +10,10 @@ import {
   taxClassOf,
   type TaxClass,
   isKotStatus,
+  normalizeKitchenMode,
   normalizeStation,
   stationForItem,
+  voidReason,
   type KotStation,
   type KotStatus,
 } from '@pos/shared';
@@ -102,6 +104,27 @@ function cleanModifiers(raw: unknown): Array<string | { name: string; priceCents
   }
   return out.length > 0 ? out : null;
 }
+
+/** The line ids a ticket carries (stored as a JSON list; a legacy or damaged row reads as empty). */
+function ticketLineIds(raw: string | null | undefined): string[] {
+  try { const v = JSON.parse(raw ?? '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
+}
+
+/** Who is doing a void, and the manager who approved it (null when nobody did). */
+export interface VoidActor { id: string; name: string; role: string }
+export interface VoidInput { quantity?: number; reasonCode?: string; note?: string }
+
+/** A reason from the shared list; OTHER needs a few words of explanation. */
+function cleanVoidReason(input: VoidInput): { reasonCode: string; note: string | null } {
+  const reason = voidReason(input?.reasonCode);
+  if (!reason) throw new BadRequestException('Choose why this is being voided');
+  const note = String(input?.note ?? '').trim().slice(0, 300);
+  if (reason.note && note.length < 3) throw new BadRequestException('Explain in a few words why this is being voided');
+  return { reasonCode: reason.code, note: note || null };
+}
+
+const NEEDS_APPROVAL_MESSAGE = 'The kitchen already has this. A manager must approve taking it back: enter a manager PIN.';
+const approvalRequired = () => new ForbiddenException({ message: NEEDS_APPROVAL_MESSAGE, code: 'APPROVAL_REQUIRED' });
 
 @Injectable()
 export class HospitalityService {
@@ -215,6 +238,12 @@ export class HospitalityService {
   /** A realtime hiccup must never fail the action that caused it. */
   private emit(fn: () => void) {
     try { fn(); } catch { /* socket server not ready or no listeners */ }
+  }
+
+  /** KDS (cooks use the display) or PRINT_ONLY (the ticket is printed and carried). */
+  private async kitchenModeOf(businessId: string) {
+    const b = await this.prisma.business.findUnique({ where: { id: businessId }, select: { kitchenMode: true } });
+    return normalizeKitchenMode(b?.kitchenMode);
   }
 
   async getTables(storeId: string, businessId: string, status?: string) {
@@ -367,32 +396,30 @@ export class HospitalityService {
     if (['PAID', 'CANCELLED'].includes(order.status)) throw new BadRequestException('Cannot modify a completed order');
 
     const lines = await this.prisma.orderItem.findMany({ where: { orderId, id: { in: itemIds } } });
+    // Taking back something the kitchen has is a void: it needs a reason, a manager and a log entry.
+    if (lines.some((l) => l.sentToKitchenAt)) {
+      throw new BadRequestException('The kitchen already has this item. Void it instead, so the reason and approval are recorded.');
+    }
     await this.prisma.orderItem.deleteMany({ where: { orderId, id: { in: itemIds } } });
-    await this.pullFromTickets(order, lines);
   }
 
-  async cancelOrder(orderId: string, businessId: string) {
-    const order = await this.assertOrderAccess(orderId, businessId);
-    if (order.status === 'PAID') throw new BadRequestException('A paid order cannot be cancelled');
-    if (order.status === 'CANCELLED') return { success: true };
-
-    // Tickets die with the order. Without this a cancelled table kept showing on
-    // the kitchen screen, and the cooks kept making food nobody would pay for.
-    await this.prisma.$transaction([
-      this.prisma.order.update({ where: { id: orderId }, data: { status: 'CANCELLED' } }),
-      this.prisma.kOT.updateMany({
-        where: { orderId, status: { in: [...OPEN_KOT_STATUSES] } },
-        data: { status: 'CANCELLED' },
-      }),
-    ]);
-    if (order.tableId) {
-      await this.prisma.table.update({
-        where: { id: order.tableId },
-        data: { status: 'AVAILABLE' },
-      }).catch(() => null);
-    }
-    this.emit(() => this.events.emitKotUpdated(order.businessId, { orderId, status: 'CANCELLED' }));
-    return { success: true };
+  /**
+   * Clear a table. An order with nothing on it, or nothing the kitchen has, is simply closed; one the kitchen already has
+   * needs a manager (see voidOrder). Callers that do not say why (the mobile app's "clear table") are recorded as
+   * "Other: cleared from the table screen".
+   */
+  async cancelOrder(
+    orderId: string,
+    businessId: string,
+    ctx?: { actor: VoidActor; approvedById: string | null; input?: VoidInput },
+  ) {
+    return this.voidOrder(
+      orderId,
+      ctx?.input?.reasonCode ? ctx.input : { reasonCode: 'OTHER', note: 'Cleared from the table screen' },
+      ctx?.actor ?? { id: 'system', name: 'system', role: 'SYSTEM' },
+      ctx?.approvedById ?? null,
+      businessId,
+    );
   }
 
   async requestBill(orderId: string, businessId: string) {
@@ -677,6 +704,9 @@ export class HospitalityService {
       byStation.set(station, [...(byStation.get(station) ?? []), line]);
     }
 
+    // Without a kitchen display nobody would ever tap "ready" or "served", so a printed ticket is recorded as handed over
+    // at once: it keeps its number and lines (reprints, audit) but never sits on a screen or pulses on the floor plan.
+    const printOnly = (await this.kitchenModeOf(order.businessId)) === 'PRINT_ONLY';
     const now = new Date();
     const day = this.serviceDay(now);
     const tickets = await this.prisma.$transaction(async (tx) => {
@@ -703,9 +733,10 @@ export class HospitalityService {
             kotNumber: counter.last,
             type: ticketType,
             station,
-            status: 'PENDING',
+            status: printOnly ? 'SERVED' : 'PENDING',
             itemIds: JSON.stringify(group.map((l) => l.id)),
             printedAt: now,
+            ...(printOnly ? { preparedAt: now } : {}),
             estimatedPrepMinutes: Math.max(...group.map((l) => l.item?.prepTimeMinutes ?? 5)),
           },
         }));
@@ -827,9 +858,7 @@ export class HospitalityService {
       ],
     });
 
-    const idsOf = (raw: string | null): string[] => {
-      try { const v = JSON.parse(raw ?? '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
-    };
+    const idsOf = ticketLineIds;
     const allIds = [...new Set(kots.flatMap((k) => idsOf(k.itemIds)))];
     const lines = allIds.length === 0 ? [] : await this.prisma.orderItem.findMany({
       where: { id: { in: allIds } },
@@ -1814,66 +1843,217 @@ export class HospitalityService {
     return { success: true };
   }
 
-  // ── Void Single KOT Item ─────────────────────────────────────────────────────
+  // ── Voids ────────────────────────────────────────────────────────────────────
+  // Taking something off a table order is where money leaks, so every void names a reason from a fixed list, is written to
+  // the permanent OrderVoid log (who, what, how much, whether the kitchen had it, who approved) and, once the kitchen has
+  // the line, needs a manager: either a manager signed in, or a manager PIN checked by the controller.
 
-  async voidOrderItem(orderId: string, itemId: string, reason: string, actorRole: string, actorName: string, businessId: string) {
-    if (!reason?.trim()) throw new BadRequestException('A reason is required to void an item');
-    const order = await this.assertOrderAccess(orderId, businessId);
-    if (['PAID', 'CANCELLED'].includes(order.status)) throw new BadRequestException('Cannot modify a completed order');
-
-    const item = await this.prisma.orderItem.findFirst({ where: { id: itemId, orderId } });
-    if (!item) throw new NotFoundException('Item not found in order');
-
-    // Taking back something the kitchen already has costs money, so that needs a
-    // manager. Removing a line that was never sent is just correcting a mistake.
-    if (item.sentToKitchenAt && !['OWNER', 'MANAGER', 'ADMIN'].includes(actorRole)) {
-      throw new ForbiddenException('Only a manager can void an item the kitchen already has');
+  /** Were any of these lines already started or finished (food made), judged from the tickets that carry them? */
+  private async preparedLineIds(orderId: string, businessId: string): Promise<Set<string>> {
+    const tickets = await this.prisma.kOT.findMany({ where: { orderId } });
+    // With no display, "served" only means "printed", so it says nothing about whether the food was made.
+    const kds = (await this.kitchenModeOf(businessId)) === 'KDS';
+    const made = new Set<string>();
+    for (const t of tickets) {
+      if (t.status === 'IN_PROGRESS' || t.status === 'READY' || (kds && t.status === 'SERVED')) {
+        for (const id of ticketLineIds(t.itemIds)) made.add(id);
+      }
     }
-
-    await this.prisma.orderItem.delete({ where: { id: itemId } });
-    await this.pullFromTickets(order, [item]);
-
-    // Audit notification (fire and forget)
-    this.prisma.notification.create({
-      data: {
-        businessId: order.businessId,
-        title: 'KOT Item Voided',
-        body: `"${item.name}" x${item.quantity} removed from Order ${order.id.slice(-6).toUpperCase()} by ${actorName}. Reason: ${reason.trim()}`,
-        type: 'VOID',
-      },
-    }).catch(() => {});
-
-    return this.prisma.order.findUnique({ where: { id: orderId }, include: { items: true } });
+    return made;
   }
 
   /**
-   * Take removed lines off any live ticket that carries them, and tell the
-   * kitchen. A ticket left with no lines is cancelled. Until now a void just
-   * deleted the line, so the cooks went on making a dish that was no longer on
-   * the bill and nobody told them.
+   * Void all or part of one line: "void 1 of the 10 ugali". The quantity is optional (whole line when omitted). Nothing
+   * is ever voided silently: a reason is required, and a line the kitchen already has needs `approvedById`.
+   */
+  async voidOrderItem(
+    orderId: string,
+    itemId: string,
+    input: VoidInput,
+    actor: VoidActor,
+    approvedById: string | null,
+    businessId: string,
+  ) {
+    const { reasonCode, note } = cleanVoidReason(input);
+    const order = await this.assertOrderAccess(orderId, businessId);
+    if (['PAID', 'CANCELLED'].includes(order.status)) throw new BadRequestException('Cannot modify a completed order');
+
+    const line = await this.prisma.orderItem.findFirst({ where: { id: itemId, orderId } });
+    if (!line) throw new NotFoundException('Item not found in order');
+
+    const qty = input.quantity === undefined ? line.quantity : Number(input.quantity);
+    if (!Number.isInteger(qty) || qty < 1) throw new BadRequestException('Quantity to void must be a whole number of 1 or more');
+    if (qty > line.quantity) throw new BadRequestException(`Only ${line.quantity} of ${line.name} on this order, so ${qty} cannot be voided`);
+
+    const sent = !!line.sentToKitchenAt;
+    if (sent && !approvedById) throw approvalRequired();
+
+    const unitCents = Math.round(line.totalCents / line.quantity);
+    const whole = qty === line.quantity;
+    const prepared = sent && (await this.preparedLineIds(orderId, businessId)).has(line.id);
+
+    await this.prisma.$transaction(async (tx) => {
+      if (whole) {
+        await tx.orderItem.delete({ where: { id: line.id } });
+      } else {
+        await tx.orderItem.update({
+          where: { id: line.id },
+          data: { quantity: line.quantity - qty, totalCents: unitCents * (line.quantity - qty) },
+        });
+      }
+      await tx.orderVoid.create({
+        data: {
+          businessId: order.businessId, storeId: order.storeId, orderId, orderItemId: line.id, scope: 'ITEM',
+          itemId: line.itemId, itemName: line.name, quantity: qty, unitCents, valueCents: unitCents * qty,
+          reasonCode, note, wasSent: sent, wasPrepared: prepared,
+          voidedById: actor.id, voidedByName: actor.name, approvedById,
+        },
+      });
+    });
+
+    // Only a whole line leaves its ticket; for part of a line the ticket keeps it at the lower quantity, but the
+    // kitchen is still told how many to stop.
+    await this.pullFromTickets(order, [{ ...line, quantity: qty }], { keepLines: !whole });
+
+    this.announceVoid(order, actor, approvedById, `"${line.name}" x${qty}`, reasonCode, note);
+    const updated = await this.prisma.order.findUnique({ where: { id: orderId }, include: { items: true } });
+    return { ...updated, voided: { name: line.name, quantity: qty, valueCents: unitCents * qty, wasSent: sent, wasPrepared: prepared } };
+  }
+
+  /**
+   * Void a whole order: every line is logged, open tickets are cancelled and the table is freed. An order with nothing on
+   * it is just closed. If the kitchen has any line, a manager must approve. Paid orders are voided from the receipt.
+   */
+  async voidOrder(
+    orderId: string,
+    input: VoidInput,
+    actor: VoidActor,
+    approvedById: string | null,
+    businessId: string,
+  ) {
+    const order = await this.assertOrderAccess(orderId, businessId);
+    if (order.status === 'PAID') throw new BadRequestException('A paid order is voided from its receipt in Sales, not from the table');
+    if (order.status === 'CANCELLED') return { success: true, voidedValueCents: 0 };
+
+    const lines = await this.prisma.orderItem.findMany({ where: { orderId } });
+    const anySent = lines.some((l) => l.sentToKitchenAt);
+    let reason: { reasonCode: string; note: string | null } | null = null;
+    if (lines.length > 0) {
+      reason = cleanVoidReason(input);
+      if (anySent && !approvedById) throw approvalRequired();
+    }
+    const prepared = anySent ? await this.preparedLineIds(orderId, businessId) : new Set<string>();
+    const voidedValueCents = lines.reduce((sum, l) => sum + l.totalCents, 0);
+
+    await this.prisma.$transaction(async (tx) => {
+      if (reason) {
+        for (const l of lines) {
+          await tx.orderVoid.create({
+            data: {
+              businessId: order.businessId, storeId: order.storeId, orderId, orderItemId: l.id, scope: 'ORDER',
+              itemId: l.itemId, itemName: l.name, quantity: l.quantity, unitCents: Math.round(l.totalCents / l.quantity),
+              valueCents: l.totalCents, reasonCode: reason.reasonCode, note: reason.note,
+              wasSent: !!l.sentToKitchenAt, wasPrepared: prepared.has(l.id),
+              voidedById: actor.id, voidedByName: actor.name, approvedById,
+            },
+          });
+        }
+      }
+      // Tickets die with the order, or a cancelled table keeps showing on the kitchen screen.
+      await tx.order.update({ where: { id: orderId }, data: { status: 'CANCELLED' } });
+      await tx.kOT.updateMany({ where: { orderId, status: { in: [...OPEN_KOT_STATUSES] } }, data: { status: 'CANCELLED' } });
+      if (order.tableId) await tx.table.update({ where: { id: order.tableId }, data: { status: 'AVAILABLE' } }).catch(() => null);
+    });
+
+    this.emit(() => this.events.emitKotUpdated(order.businessId, { orderId, status: 'CANCELLED' }));
+    if (anySent) {
+      const table = order.tableId
+        ? await this.prisma.table.findUnique({ where: { id: order.tableId }, select: { number: true } })
+        : null;
+      this.emit(() => this.events.emitKotVoided(order.businessId, {
+        orderId,
+        table: table?.number ?? null,
+        kotIds: [],
+        lines: lines.filter((l) => l.sentToKitchenAt).map((l) => ({ name: l.name, quantity: l.quantity })),
+        wholeOrder: true,
+      }));
+    }
+    if (reason) {
+      this.announceVoid(order, actor, approvedById, `Whole order (${lines.length} line${lines.length === 1 ? '' : 's'}, KES ${(voidedValueCents / 100).toFixed(2)})`, reason.reasonCode, reason.note);
+    }
+    return { success: true, voidedValueCents };
+  }
+
+  /** The manager's feed: one notification per void, saying who did it and who approved. */
+  private announceVoid(
+    order: { id: string; businessId: string },
+    actor: VoidActor,
+    approvedById: string | null,
+    what: string,
+    reasonCode: string,
+    note: string | null,
+  ) {
+    const label = voidReason(reasonCode)?.label ?? reasonCode;
+    const approval = approvedById && approvedById !== actor.id ? ' Approved by a manager.' : '';
+    void this.prisma.notification.create({
+      data: {
+        businessId: order.businessId,
+        title: 'Order voided',
+        body: `${what} voided from Order ${order.id.slice(-6).toUpperCase()} by ${actor.name}. Reason: ${label}${note ? ` (${note})` : ''}.${approval}`,
+        type: 'VOID',
+      },
+    }).catch(() => undefined);
+  }
+
+  /** The void log for a store, newest first, for the manager's review. */
+  async getVoidLog(storeId: string, businessId: string, from?: string, to?: string) {
+    await this.assertStoreAccess(storeId, businessId);
+    const start = from ? new Date(from) : new Date(Date.now() - 7 * 86_400_000);
+    const end = to ? new Date(to) : new Date();
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) throw new BadRequestException('from and to must be dates');
+    const rows = await this.prisma.orderVoid.findMany({
+      where: { businessId, storeId, createdAt: { gte: start, lte: end } },
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+    });
+    // Show the approver by name; the log stores only their id.
+    const approverIds = [...new Set(rows.map((r) => r.approvedById).filter((id): id is string => !!id))];
+    const approvers = approverIds.length === 0 ? [] : await this.prisma.user.findMany({
+      where: { id: { in: approverIds }, businessId },
+      select: { id: true, name: true },
+    });
+    const nameOf = new Map(approvers.map((u) => [u.id, u.name]));
+    return rows.map((r) => ({ ...r, approvedByName: r.approvedById ? nameOf.get(r.approvedById) ?? null : null }));
+  }
+
+  /**
+   * Take removed lines off any live ticket that carries them, and tell the kitchen. A ticket left with no lines is
+   * cancelled. `keepLines` is for a partial void: the ticket keeps the line (its quantity is read from the order, so it
+   * already shows the lower number) and only the notice goes out. The notice always names the quantity taken back.
    */
   private async pullFromTickets(
     order: { id: string; businessId: string; tableId: string | null },
     removed: Array<{ id: string; name: string; quantity: number; sentToKitchenAt?: Date | null }>,
+    opts: { keepLines?: boolean } = {},
   ) {
     const sent = removed.filter((r) => r.sentToKitchenAt);
     if (sent.length === 0) return;
 
     const gone = new Set(sent.map((r) => r.id));
+    const touched: string[] = [];
     const tickets = await this.prisma.kOT.findMany({
       where: { orderId: order.id, status: { in: [...OPEN_KOT_STATUSES] } },
     });
-    const touched: string[] = [];
     for (const ticket of tickets) {
-      let ids: string[] = [];
-      try { const v = JSON.parse(ticket.itemIds ?? '[]'); ids = Array.isArray(v) ? v : []; } catch { /* legacy row */ }
+      const ids = ticketLineIds(ticket.itemIds);
       if (!ids.some((id) => gone.has(id))) continue;
+      touched.push(ticket.id);
+      if (opts.keepLines) continue;
       const left = ids.filter((id) => !gone.has(id));
       await this.prisma.kOT.update({
         where: { id: ticket.id },
         data: { itemIds: JSON.stringify(left), ...(left.length === 0 ? { status: 'CANCELLED' } : {}) },
       });
-      touched.push(ticket.id);
     }
 
     const table = order.tableId

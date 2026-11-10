@@ -455,6 +455,8 @@ export default function DesktopSetupPage() {
           const { accessToken, user } = await registerOwner(base, { name: ownerName, email: ownerEmail, password: ownerPassword, businessName });
           setToken(accessToken);
           useAuthStore.setState({ user, isAuthenticated: true });
+          // The new account has no store on it yet in the sign-in answer; look it up now so every screen has one.
+          await useAuthStore.getState().ensureStoreId();
           destination = topology === 'SERVER' ? '/' : '/setup';
         } catch (e) {
           toast.error(`${(e as Error).message} You can create your account on the sign-in screen.`);

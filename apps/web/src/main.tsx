@@ -40,7 +40,8 @@ initSyncEngine();
 // registers the worker, and the desktop app removes any left from earlier versions.
 if (inDesktopApp()) {
   void dropOfflineShell(browserCacheEnv());
-} else if ('serviceWorker' in navigator) {
+} else if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  // Production only: the development server has no /sw.js, and answering the request with the page made the browser log an error.
   window.addEventListener('load', () => {
     void navigator.serviceWorker.register('/sw.js', { scope: '/' });
   });

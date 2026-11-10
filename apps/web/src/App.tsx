@@ -210,9 +210,13 @@ export default function App() {
   // The persisted user is written at login and never updated, so an upgrade (or a
   // plan gifted from the admin console) left paid features greyed out for a
   // signed-in customer until they manually signed out and back in.
+  const ensureStoreId = useAuthStore((s) => s.ensureStoreId);
   useEffect(() => {
-    if (isAuthenticated) void refreshUser();
-  }, [isAuthenticated, refreshUser]);
+    if (!isAuthenticated) return;
+    void refreshUser();
+    // A session that began without a store (desktop wizard, biometric) gets one here, for every page at once.
+    void ensureStoreId();
+  }, [isAuthenticated, refreshUser, ensureStoreId]);
 
   // Wait until Tauri env is detected AND (if Tauri) setup config is verified
   if (!ready || (isTauri && !tauriSetupVerified)) {

@@ -79,6 +79,12 @@ behind this version's migrations even if the number did not change). It then app
 database is **put back from that backup** and the owner is told so, so a shop is never left half-updated. `update.integration.test.ts`
 proves this on a real PostgreSQL and the real API, with records already in the database.
 
+**No offline copy of the screens in the desktop app.** The website registers a service worker that answers pages from a saved
+copy; inside the desktop app that copy outlived installs and updates, so the app opened on the PREVIOUS version's screens (a new
+screen, such as the update banner, only appeared on the second launch). `main.tsx` now registers the worker only in a browser,
+and the desktop app removes any worker and saved copy left by earlier versions (`lib/desktopCache.ts`, reloads once). An install
+older than this fix still shows the previous screens for one launch after it first updates to a version with the fix.
+
 ### Shipping an update
 
 ```bash

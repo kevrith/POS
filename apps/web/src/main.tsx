@@ -8,6 +8,8 @@ import './index.css';
 import './mobile.css';
 import { initTheme } from './stores/theme';
 import { initSyncEngine } from './lib/syncEngine';
+import { inDesktopApp } from './lib/desktopServer';
+import { browserCacheEnv, dropOfflineShell } from './lib/desktopCache';
 
 // Initialize Sentry error tracking (no-op when DSN not set)
 if (import.meta.env.VITE_SENTRY_DSN) {
@@ -32,6 +34,17 @@ if (savedFontSize) {
 }
 // Start offline sync engine
 initSyncEngine();
+
+// The website keeps an offline copy of its screens (a service worker). The desktop app carries its own screens in the
+// installer, and an old offline copy there makes an updated app open on the PREVIOUS version's screens: so only the website
+// registers the worker, and the desktop app removes any left from earlier versions.
+if (inDesktopApp()) {
+  void dropOfflineShell(browserCacheEnv());
+} else if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register('/sw.js', { scope: '/' });
+  });
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {

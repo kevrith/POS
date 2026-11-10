@@ -8,7 +8,8 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      injectRegister: 'auto',
+      // main.tsx registers the worker itself (the same call the plugin would inject), because the desktop app must not.
+      injectRegister: null,
       includeAssets: ['favicon.png', 'logo.png', 'icons/*.png'],
       manifest: {
         name: 'KASTRA POS',

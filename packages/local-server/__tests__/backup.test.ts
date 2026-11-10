@@ -1,4 +1,4 @@
-import { BackupInfo, backupFileName, backupsToDelete, parseBackupName } from '../src/backup';
+import { BackupInfo, backupFileName, backupsToDelete, dailyBackupDue, parseBackupName } from '../src/backup';
 
 const at = (y: number, m: number, d: number, h = 10) => new Date(y, m - 1, d, h, 0, 0);
 const mk = (date: Date, reason = 'auto'): BackupInfo => {
@@ -56,5 +56,29 @@ describe('what to keep', () => {
   it('never deletes the newest three, however old', () => {
     const list = newestFirst([mk(at(2024, 1, 1)), mk(at(2024, 1, 2)), mk(at(2024, 1, 3))]);
     expect(backupsToDelete(list, now)).toHaveLength(0);
+  });
+});
+
+describe('the daily backup rule', () => {
+  const when = (iso: string) => new Date(iso);
+  // Dates without a zone are local time, which is what the rule uses (the shop's own midnight).
+  it('is due when there is no backup at all', () => {
+    expect(dailyBackupDue(undefined, when('2026-11-10T09:00:00'))).toBe(true);
+  });
+
+  it('is not due when a backup was made since this midnight, however early or late', () => {
+    expect(dailyBackupDue(when('2026-11-10T00:00:00'), when('2026-11-10T23:59:00'))).toBe(false);
+    expect(dailyBackupDue(when('2026-11-10T00:30:00'), when('2026-11-10T09:00:00'))).toBe(false);
+  });
+
+  it('becomes due the moment midnight passes', () => {
+    const last = when('2026-11-09T18:00:00');
+    expect(dailyBackupDue(last, when('2026-11-09T23:59:59'))).toBe(false);
+    expect(dailyBackupDue(last, when('2026-11-10T00:00:00'))).toBe(true);
+  });
+
+  it('catches up on the first check after a closed night, whatever the hour', () => {
+    expect(dailyBackupDue(when('2026-11-09T21:00:00'), when('2026-11-10T08:15:00'))).toBe(true);
+    expect(dailyBackupDue(when('2026-11-05T21:00:00'), when('2026-11-10T08:15:00'))).toBe(true);
   });
 });

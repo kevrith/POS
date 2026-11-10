@@ -14,7 +14,7 @@ TypeScript, where it is tested against a real database.
 | Updates | `migrate.ts` | `prisma migrate deploy` on every start; first run also creates the empty database |
 | API | `api.ts` | Runs the API as a child process, restarts it if it dies (gives up after 5 crashes a minute), `HOST` = `127.0.0.1` unless LAN is on |
 | Backups | `backup.ts` | `pg_dump` custom format, verified after writing, atomic rename, retention (all for 7 days, daily to 30 days, monthly to 12 months, safety copies 90 days, newest 3 always) |
-| Orchestration | `supervisor.ts` | Start order, safety backup before an app-version change, backup on close (skipped if one is under an hour old), hourly check for a daily backup, restore with a pre-restore safety backup |
+| Orchestration | `supervisor.ts` | Start order, safety backup before an app-version change, backup on close (skipped if one is under an hour old), one backup per calendar day (taken just after midnight while the app is open, checked every five minutes; if midnight passed while the app was closed, a minute after it starts), restore with a pre-restore safety backup |
 | Launcher | `cli.ts` | JSON lines on stdout (`status`, `log`, `warning`, `result`), JSON commands on stdin (`status`, `backup`, `restore`, `stop`). When stdin closes (the app closed or crashed) it stops the API and database instead of leaving them running |
 
 ## Running the tests

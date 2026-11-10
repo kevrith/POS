@@ -11,7 +11,7 @@ import { randomBytes } from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { listBackups } from '../src/backup';
+import { backupFileName, BackupReason, listBackups } from '../src/backup';
 import { isPortFree, findFreePort } from '../src/ports';
 import { Supervisor, SupervisorOptions } from '../src/supervisor';
 
@@ -189,6 +189,27 @@ maybe('updating the app keeps the shop data', () => {
       expect(sql('SELECT count(*) FROM information_schema.columns WHERE column_name = \'updateTestThird\'')).toBe('1');
       expect(sql('SELECT count(*) FROM "User"')).toBe(users);
       expect(await login('other@shop.test')).toBe(201);
+    } finally {
+      await sup.stop();
+    }
+  });
+
+  it('takes the daily backup once the day has changed, and only once a day', async () => {
+    const dir = path.join(root, 'backups');
+    // Pretend every backup so far was made two days ago, as after a closed weekend.
+    for (const b of listBackups(dir)) {
+      const older = new Date(b.createdAt.getTime() - 2 * 24 * 60 * 60 * 1000);
+      fs.renameSync(b.file, path.join(dir, backupFileName(older, b.reason as BackupReason)));
+    }
+    const sup = new Supervisor(opts('3.0.1', path.join(root, 'v3-fixed', 'schema.prisma')));
+    await sup.start();
+    try {
+      const before = listBackups(dir).length;
+      expect(await sup.checkDailyBackup()).toBe(true); // nothing since this midnight: take it now
+      expect(listBackups(dir).length).toBe(before + 1);
+      expect(listBackups(dir)[0].reason).toBe('auto');
+      expect(await sup.checkDailyBackup()).toBe(false); // today's is done
+      expect(await sup.checkDailyBackup(new Date(Date.now() + 25 * 60 * 60 * 1000))).toBe(true); // the next day: due again
     } finally {
       await sup.stop();
     }

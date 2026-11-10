@@ -11,7 +11,7 @@ import { EventEmitter } from 'events';
 import * as nodePath from 'path';
 import * as os from 'os';
 import { ApiProcess, checkHealth, reapOrphanApi } from './api';
-import { BackupInfo, BackupReason, createBackup, listBackups, pruneBackups, restoreBackup } from './backup';
+import { BackupInfo, BackupReason, createBackup, dailyBackupDue, listBackups, pruneBackups, restoreBackup } from './backup';
 import { ensureConfig, loadConfig, saveConfig, ServerConfig, NewConfigOptions } from './config';
 import { migrate, needsMigration } from './migrate';
 import { isPortFree, findFreePort } from './ports';
@@ -253,23 +253,29 @@ export class Supervisor extends EventEmitter {
     };
   }
 
-  /** One check an hour: if the newest backup is over a day old, take one. Cheap to run, hard to forget. */
+  /**
+   * The daily backup: one per calendar day, taken just after midnight while the app is open (checked every five minutes), or
+   * a minute after the app starts if midnight passed while it was closed. While the app is closed the database is off, so
+   * nothing can be backed up then; the catch-up on the next start and the backup taken when the app closes cover that.
+   */
   private scheduleBackups(): void {
     if (this.timer) clearInterval(this.timer);
-    const check = async () => {
-      if (this.phase !== 'running' || this.busy || !this.cfg || !this.pg) return;
-      const newest = listBackups(this.cfg.backupDir)[0];
-      if (!newest || Date.now() - newest.createdAt.getTime() > 24 * HOUR) {
-        try {
-          await this.backupNow('auto');
-        } catch (e) {
-          this.emit('warning', `Automatic backup failed: ${(e as Error).message}`);
-        }
-      }
-    };
-    this.timer = setInterval(check, HOUR);
+    this.timer = setInterval(() => void this.checkDailyBackup(), 5 * 60 * 1000);
     this.timer.unref?.();
-    setTimeout(check, 60 * 1000).unref?.();
+    setTimeout(() => void this.checkDailyBackup(), 60 * 1000).unref?.();
+  }
+
+  /** Take today's backup if it is still to be made. Returns true when it made one. Public so a test can drive the clock. */
+  async checkDailyBackup(now: Date = new Date()): Promise<boolean> {
+    if (this.phase !== 'running' || this.busy || !this.cfg || !this.pg) return false;
+    if (!dailyBackupDue(listBackups(this.cfg.backupDir)[0]?.createdAt, now)) return false;
+    try {
+      await this.backupNow('auto');
+      return true;
+    } catch (e) {
+      this.emit('warning', `Automatic backup failed: ${(e as Error).message}`);
+      return false;
+    }
   }
 
   async backupNow(reason: BackupReason = 'manual'): Promise<BackupInfo> {

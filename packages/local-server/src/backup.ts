@@ -103,6 +103,17 @@ export function pruneBackups(dir: string, now: Date = new Date(), policy: Retent
   return doomed;
 }
 
+/**
+ * Is today's backup still to be made? One backup per calendar day (local time), taken as soon as midnight passes while the app
+ * is running, or as soon as the app starts if midnight passed while it was closed. Any backup made since midnight counts,
+ * including the one taken when the app was closed after midnight. Pure, so the rule is tested without a clock or a disk.
+ */
+export function dailyBackupDue(newest: Date | undefined, now: Date): boolean {
+  if (!newest) return true;
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return newest.getTime() < startOfToday.getTime();
+}
+
 export async function createBackup(pg: PostgresManager, cfg: ServerConfig, reason: BackupReason, now: Date = new Date()): Promise<BackupInfo> {
   fs.mkdirSync(cfg.backupDir, { recursive: true });
   const name = backupFileName(now, reason);

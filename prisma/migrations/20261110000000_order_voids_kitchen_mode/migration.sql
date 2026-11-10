@@ -1,8 +1,10 @@
 -- How a business handles kitchen tickets: KDS (display) or PRINT_ONLY (printed and carried).
-ALTER TABLE "Business" ADD COLUMN "kitchenMode" TEXT NOT NULL DEFAULT 'KDS';
+-- Written to be safe to run again: if an earlier attempt applied only part of it (a lock timeout on a busy database), a
+-- re-run completes it instead of failing on something that already exists.
+ALTER TABLE "Business" ADD COLUMN IF NOT EXISTS "kitchenMode" TEXT NOT NULL DEFAULT 'KDS';
 
 -- Permanent void log for table orders.
-CREATE TABLE "OrderVoid" (
+CREATE TABLE IF NOT EXISTS "OrderVoid" (
     "id" TEXT NOT NULL,
     "businessId" TEXT NOT NULL,
     "storeId" TEXT NOT NULL,
@@ -26,5 +28,5 @@ CREATE TABLE "OrderVoid" (
     CONSTRAINT "OrderVoid_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "OrderVoid_businessId_storeId_createdAt_idx" ON "OrderVoid"("businessId", "storeId", "createdAt");
-CREATE INDEX "OrderVoid_orderId_idx" ON "OrderVoid"("orderId");
+CREATE INDEX IF NOT EXISTS "OrderVoid_businessId_storeId_createdAt_idx" ON "OrderVoid"("businessId", "storeId", "createdAt");
+CREATE INDEX IF NOT EXISTS "OrderVoid_orderId_idx" ON "OrderVoid"("orderId");

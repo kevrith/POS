@@ -70,6 +70,11 @@ button with its name. Off the switch the window just confirms the dispense, as b
 whatever origin serves it. Set `VITE_API_URL` **only** when the API lives on a
 different origin than the web app.
 
+The Online Store card in Settings (`lib/storeLink.ts`) only offers a link customers can open from the internet. In the
+desktop app it is hidden when the data lives on this computer or a LAN server (the page address would be the app's internal
+`tauri.localhost`); for a desktop connected to the cloud it needs `VITE_PUBLIC_WEB_URL` (the hosted website's origin) set at
+build time.
+
 Always call through `api.get / api.post / api.patch / api.delete`. Get the bearer
 token with `getToken()` from `../lib/api` — not from the auth store.
 

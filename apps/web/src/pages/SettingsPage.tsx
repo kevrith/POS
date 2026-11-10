@@ -46,6 +46,8 @@ import {
 } from 'lucide-react';
 import { UserRole, OPTIONAL_MODULES, OPTIONAL_MODULE_LABELS, moduleIncludedByMode, parseEnabledModules, type OptionalModule } from '@pos/shared';
 import { hasFeature } from '../lib/featureGates';
+import { onlineStoreLink } from '../lib/storeLink';
+import { inDesktopApp } from '../lib/desktopServer';
 import SalesPipelineCard from '../components/SalesPipelineCard';
 import HotelLeviesCard from '../components/HotelLeviesCard';
 import { PageHeader, SideNav, Switch, Tabs } from '../components/ui';
@@ -1370,7 +1372,27 @@ export default function SettingsPage() {
 
         {/* ── Online Store link card ── */}
         {(() => {
-          const shopUrl = `${window.location.origin}/shop/${businessId}`;
+          let serverUrl: string | null = null;
+          try { serverUrl = localStorage.getItem('kastra-server-url'); } catch { /* storage unavailable */ }
+          const store = onlineStoreLink({
+            inDesktopApp: inDesktopApp(),
+            serverUrl,
+            origin: window.location.origin,
+            publicWebUrl: import.meta.env.VITE_PUBLIC_WEB_URL as string | undefined,
+            businessId: businessId ?? '',
+          });
+          if (store.kind === 'unavailable') {
+            return (
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-sm font-bold text-gray-800">Online Store</span>
+                  <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full font-medium">Not available on this computer</span>
+                </div>
+                <p className="text-sm text-gray-600">{store.reason}</p>
+              </div>
+            );
+          }
+          const shopUrl = store.url;
           return (
             <div className="bg-gradient-to-r from-indigo-50 to-violet-50 border border-indigo-200 rounded-xl p-5">
               <div className="flex items-start justify-between gap-4">

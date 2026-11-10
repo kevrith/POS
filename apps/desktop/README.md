@@ -272,3 +272,8 @@ It writes `src-tauri/icons/`: the PNGs `tauri.conf.json` lists (up to 1024 px), 
 each scaled from the master, not from a smaller icon) and `icon.icns`. To change the icon, replace `icon-src/logo.png` with
 a square image of 1024 px or more and re-run the script; do not edit the generated files.
 
+Two details matter for sharpness. Frames of 64 px and below come from a zoomed "small" master (the shield fills the icon
+instead of a quarter of it being empty gradient) and are lightly sharpened. And `icon.ico` lists the 48 px frame **first**
+on purpose: Tauri builds the running window's title-bar and taskbar icon from the first entry and Windows rescales it, so a
+16 px first entry is blown up (blurry). Do not let a tool re-sort the entries by size. Windows caches shortcut icons; after
+an update, a stale one clears on restart or with `ie4uinit.exe -show`.

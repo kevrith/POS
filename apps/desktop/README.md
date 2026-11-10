@@ -115,6 +115,23 @@ once all of them are done.
 - A **till** (client) updates on its own. Updating tills and their server to different versions is possible for a while: update
   the server first. (A version check between them is not built yet.)
 
+### Website download buttons
+
+The installers' file names carry the version, so a fixed link cannot point at them. After every successful release the
+`update-manifest` job also copies them under **stable names** onto the `desktop-updates` release:
+
+| Button on the website | Stable file |
+|---|---|
+| Windows | `KASTRA-POS-windows-x64.exe` |
+| macOS Intel / Apple Silicon | `KASTRA-POS-macos-intel.dmg` / `KASTRA-POS-macos-apple-silicon.dmg` |
+| Linux | `KASTRA-POS-linux.AppImage` / `KASTRA-POS-linux.deb` |
+
+`apps/landing/index.html` links straight to `https://github.com/kevrith/POS/releases/download/desktop-updates/<file>`, so a
+click downloads that one file with no release page in between. **This only works while the repository is public**: for a
+private repository GitHub answers a signed-out visitor with 404, and installed apps could not fetch `latest.json` or updates
+either. To make the repository private, move `latest.json` and these files to public storage first and change
+`plugins.updater.endpoints` (that needs one manual reinstall of every existing app).
+
 ---
 
 ## Setups

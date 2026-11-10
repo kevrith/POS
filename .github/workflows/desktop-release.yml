@@ -216,7 +216,8 @@ jobs:
           args: ${{ matrix.platform == 'windows-latest' && format('--target {0} --bundles nsis', matrix.target) || format('--target {0}', matrix.target) }}
 
   # ── Update manifest ───────────────────────────────────────────────────────────
-  # Installed apps ask ONE fixed address whether a newer version exists. tauri-action writes latest.json on the versioned
+  # Also publishes the installers under STABLE file names on the same release, so the website's download buttons can link
+  # straight to a file (the versioned names change every release). Installed apps ask ONE fixed address whether a newer version exists. tauri-action writes latest.json on the versioned
   # release; this job checks it and copies it to the release named desktop-updates (a pre-release, so it never becomes the
   # repository's "latest release", which other workflows use). Runs only when every platform built.
   update-manifest:
@@ -256,3 +257,27 @@ jobs:
               --notes "Not a download. Installed KASTRA desktop apps read latest.json from here to find the newest version."
           fi
           gh release upload desktop-updates out/latest.json --repo "$GITHUB_REPOSITORY" --clobber
+
+      # The website's download buttons point at these fixed names (apps/landing/index.html); see apps/desktop/README.md.
+      - name: Publish the installers under stable names for the website
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION=$(node apps/desktop/scripts/app-version.mjs)
+          mkdir dl
+          gh release download "desktop-v$VERSION" --repo "$GITHUB_REPOSITORY" --dir dl \
+            --pattern '*-setup.exe' --pattern '*_x64.dmg' --pattern '*_aarch64.dmg' --pattern '*.AppImage' --pattern '*.deb'
+          ls -l dl
+          pick() { # pick <glob> <stable name>: exactly one file must match
+            local files=(dl/$1)
+            if [ "${#files[@]}" -ne 1 ] || [ ! -f "${files[0]}" ]; then echo "expected exactly one file for $1, got: ${files[*]}"; exit 1; fi
+            mkdir -p stable
+            cp "${files[0]}" "stable/$2"
+          }
+          pick '*_x64-setup.exe'  KASTRA-POS-windows-x64.exe
+          pick '*_x64.dmg'        KASTRA-POS-macos-intel.dmg
+          pick '*_aarch64.dmg'    KASTRA-POS-macos-apple-silicon.dmg
+          pick '*.AppImage'       KASTRA-POS-linux.AppImage
+          pick '*.deb'            KASTRA-POS-linux.deb
+          gh release upload desktop-updates stable/* --repo "$GITHUB_REPOSITORY" --clobber

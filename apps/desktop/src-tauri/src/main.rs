@@ -13,6 +13,7 @@ mod discovery;
 mod local_server_core;
 mod local_server;
 mod app_update;
+mod win_icon;
 
 /// Set once the window is closing, so the second "exit" request (the one we make ourselves) goes through.
 static SHUTTING_DOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -27,6 +28,17 @@ fn main() {
         .setup(|app| {
             let version = app.package_info().version.to_string();
             println!("KASTRA POS Desktop v{} starting...", version);
+
+            // Exact-size title-bar and taskbar icons (Windows only; see win_icon.rs), redone if the window changes screen scaling.
+            if let Some(window) = app.get_webview_window("main") {
+                win_icon::apply(&window);
+                let again = window.clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::ScaleFactorChanged { .. } = event {
+                        win_icon::apply(&again);
+                    }
+                });
+            }
 
             // A computer that keeps its own data starts its database and API now; the web UI shows progress.
             let handle = app.handle().clone();

@@ -13,7 +13,7 @@ icon-src/logo.png, not the generated files.
 What it writes into src-tauri/icons/:
   icon.png, 512x512@2x.png (1024)  512x512.png  128x128@2x.png (256)  128x128.png  32x32.png  icon.ico  icon.icns
 The ICO holds ten sizes from 16 to 256 px, each scaled from the master (not from a smaller icon), small ones sharpened.
-Its first entry is the 48 px frame on purpose (see ICO_ORDER).
+Its first entry is the 32 px frame on purpose (see ICO_ORDER and src-tauri/src/win_icon.rs).
 """
 import shutil
 import subprocess
@@ -32,10 +32,11 @@ MASTER = 1024          # master edge, px
 MARGIN = 0.03          # transparent margin around the tile, as a share of the master
 WORK = 4               # supersample factor used while cutting out the tile (smooth edges)
 ICO_SIZES = (256, 128, 96, 64, 48, 40, 32, 24, 20, 16)
-# Tauri builds the RUNNING window's title-bar and taskbar icon from the FIRST entry of icon.ico and lets Windows rescale it.
-# A 16 px first entry gets blown up for the taskbar (blurry); 48 px is scaled down 3:1 for the title bar and 2:1 for the
-# 24 px taskbar, so it stays crisp. The order below is therefore deliberate: do not sort it by size.
-ICO_ORDER = (48, 256, 128, 96, 64, 40, 32, 24, 20, 16)
+# Tauri builds the RUNNING window's icon from the FIRST entry of icon.ico and lets Windows rescale it (poorly): a 16 px
+# first entry is blown up in the taskbar, a 48 px one is squashed 3:1 in the title bar. src/win_icon.rs therefore replaces
+# it at start-up with the exact-size frame for each place; this first entry (32 px, a 2:1 squash for the title bar) is only
+# the fallback if that fails. Do not let a tool re-sort the entries by size.
+ICO_ORDER = (32, 256, 128, 96, 64, 48, 40, 24, 20, 16)
 SMALL_BELOW = 65       # frames up to this edge are cut from the zoomed 'small' master (see small_master)
 SMALL_CROP = 0.845     # share of the tile kept for the small master: crops the empty gradient margin so the shield fills the icon
 SMALL_RADIUS = 0.22    # corner radius of the small master, as a share of its edge

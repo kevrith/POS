@@ -36,6 +36,15 @@ what is already marked. The CSV import takes a `taxClass` column (A to D, or exe
 non-VAT; blank means standard). Items are standard-rated until classified, which is how every sale has always
 been taxed. The tills compute VAT with `computeTaxes` from `@pos/shared`, the same function the server uses.
 
+## Fuel station screen
+
+`/fuel-pump` (also `/pos` for a fuel business) is `pages/FuelPumpPage.tsx`, a thin shell over `pages/fuel/`: Forecourt (pumps, nozzles, the
+sale window), Shift (open with attendants and meter readings, live view, close with meter and cash reconciliation, history), Tanks
+(levels, measure, delivery with dips and cost), Wet stock, Prices (with history and the regulator's cap), Fleet accounts, Sales, Reports
+(margin) and Setup (pumps and nozzles, service log, optional pump-controller link, which is untested against real hardware). Staff who are
+not managers see only Forecourt, Shift, Tanks, Prices and Sales. Money is typed in shillings (`fuel/money.ts`), never cents. A fuel business's
+shop, lubricants and LPG are sold on `/shop-till` (the standard till); bundles, RFQ, forecasting and gift cards are hidden for it in `lib/menuRules.ts`.
+
 ## Fuel receipts and the sales switch
 
 Settings has an owner-only card, **Fuel, hotel, pharmacy and cyber takings**. Off (the default for a business that existed

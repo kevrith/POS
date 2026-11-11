@@ -62,6 +62,8 @@ const PayCheckoutPage = lazy(() => import('./pages/PayCheckoutPage'));
 const RFQPage = lazy(() => import('./pages/RFQPage'));
 const KioskPage = lazy(() => import('./pages/KioskPage'));
 const SupermarketPOSPage = lazy(() => import('./pages/SupermarketPOSPage'));
+// A fuel station's shop, lubricants and LPG are sold on the standard till; /pos is the forecourt for it.
+const ShopTillPage = lazy(() => import('./pages/POSPage'));
 const ReservationWidgetPage = lazy(() => import('./pages/ReservationWidgetPage'));
 const SecuritySettingsPage = lazy(() => import('./pages/SecuritySettingsPage'));
 const DeliveryManagementPage = lazy(() => import('./pages/DeliveryManagementPage'));
@@ -336,6 +338,7 @@ export default function App() {
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/pos" element={<POSPage />} />
               <Route path="/supermart" element={<SupermarketPOSPage />} />
+              <Route path="/shop-till" element={<ShopTillPage />} />
               <Route path="/hospitality" element={<HospitalityPage />} />
               <Route path="/layaway" element={<LayawayPage />} />
               <Route path="/proforma" element={<ProformaPage />} />

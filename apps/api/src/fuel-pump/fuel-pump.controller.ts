@@ -6,6 +6,7 @@ import type { AuthUser } from '../auth/auth.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FuelPumpService } from './fuel-pump.service';
 import { FuelPumpGateway } from './fuel-pump.gateway';
+import { FuelControlService } from './fuel-control.service';
 
 type Authed = Request & { user: AuthUser };
 
@@ -13,7 +14,7 @@ type Authed = Request & { user: AuthUser };
 @RequiresFeature(Feature.FUEL_PUMP)
 @Controller('fuel-pump')
 export class FuelPumpController {
-  constructor(private svc: FuelPumpService, private gateway: FuelPumpGateway) {}
+  constructor(private svc: FuelPumpService, private control: FuelControlService, private gateway: FuelPumpGateway) {}
 
   // ── TCP status ─────────────────────────────────────────────────────────────
   @Get('tcp-status')
@@ -34,7 +35,13 @@ export class FuelPumpController {
 
   @Patch('grades/:id')
   updateGrade(@Param('id') id: string, @Body() dto: any, @Req() req: Authed) {
-    return this.svc.updateGrade(id, req.user.businessId, dto);
+    return this.svc.updateGrade(id, req.user.businessId, dto, req.user.name);
+  }
+
+  /** Every price change for a grade: who, when, from what to what. */
+  @Get('grades/:id/price-history')
+  getPriceHistory(@Param('id') id: string, @Req() req: Authed) {
+    return this.svc.getPriceHistory(req.user.businessId, id);
   }
 
   // ── Pumps ─────────────────────────────────────────────────────────────────
@@ -51,6 +58,17 @@ export class FuelPumpController {
   @Patch('pumps/:id')
   updatePump(@Param('id') id: string, @Body() dto: any, @Req() req: Authed) {
     return this.svc.updatePump(id, req.user.businessId, dto);
+  }
+
+  /** A hose on a dispenser: its grade, the tank it draws from, and its own meter. */
+  @Post('pumps/:id/nozzles')
+  addNozzle(@Param('id') id: string, @Body() dto: any, @Req() req: Authed) {
+    return this.svc.addNozzle(id, req.user.businessId, dto ?? {});
+  }
+
+  @Patch('nozzles/:id')
+  updateNozzle(@Param('id') id: string, @Body() dto: any, @Req() req: Authed) {
+    return this.svc.updateNozzle(id, req.user.businessId, dto ?? {});
   }
 
   @Post('pumps/:id/authorize')
@@ -115,18 +133,18 @@ export class FuelPumpController {
 
   @Get('tanks/:id/dippings')
   getDippings(@Param('id') tankId: string, @Req() req: Authed) {
-    return this.svc.getDippings(req.user.businessId, tankId);
+    return this.control.getDippings(req.user.businessId, tankId);
   }
 
   /** Who took the reading is the signed-in user, not a name typed into the request. */
   @Post('tanks/dipping')
   recordDipping(@Body() dto: any, @Req() req: Authed) {
-    return this.svc.recordDipping({ ...dto, businessId: req.user.businessId, recordedBy: req.user.name });
+    return this.control.recordDipping({ ...dto, businessId: req.user.businessId, recordedBy: req.user.name });
   }
 
   @Post('tanks/delivery')
   recordDelivery(@Body() dto: any, @Req() req: Authed) {
-    return this.svc.recordDelivery({ ...dto, businessId: req.user.businessId });
+    return this.control.recordDelivery({ ...dto, businessId: req.user.businessId, recordedBy: req.user.name });
   }
 
   @Get('deliveries')
@@ -135,7 +153,18 @@ export class FuelPumpController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
-    return this.svc.getDeliveries(businessId, startDate, endDate);
+    return this.control.getDeliveries(businessId, startDate, endDate);
+  }
+
+  // ── Pump tests ────────────────────────────────────────────────────────────
+  @Get('tests')
+  getPumpTests(@Query('storeId') storeId: string, @Query('shiftId') shiftId: string | undefined, @Req() req: Authed) {
+    return this.control.getPumpTests(req.user.businessId, storeId, shiftId);
+  }
+
+  @Post('tests')
+  recordPumpTest(@Body() dto: any, @Req() req: Authed) {
+    return this.control.recordPumpTest({ ...dto, businessId: req.user.businessId, recordedBy: req.user.name });
   }
 
   // ── Variance Report ───────────────────────────────────────────────────────
@@ -146,33 +175,34 @@ export class FuelPumpController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
-    return this.svc.getVarianceReport(businessId, storeId, startDate, endDate);
+    return this.control.getVarianceReport(businessId, storeId, startDate, endDate);
   }
 
   // ── Shifts ────────────────────────────────────────────────────────────────
   @Get('shifts')
   getShifts(@Query('businessId') businessId: string, @Query('storeId') storeId: string) {
-    return this.svc.getShifts(businessId, storeId);
+    return this.control.getShifts(businessId, storeId);
   }
 
   @Get('shifts/open')
   getOpenShift(@Query('businessId') businessId: string, @Query('storeId') storeId: string) {
-    return this.svc.getOpenShift(businessId, storeId);
+    return this.control.getOpenShift(businessId, storeId);
   }
 
   @Post('shifts/open')
   openShift(@Body() dto: any, @Req() req: Authed) {
-    return this.svc.openShift({ ...dto, businessId: req.user.businessId, cashierId: req.user.id, cashierName: dto?.cashierName || req.user.name });
+    return this.control.openShift({ ...dto, businessId: req.user.businessId, cashierId: req.user.id, cashierName: dto?.cashierName || req.user.name });
   }
 
+  /** Closing meter of every nozzle and the cash each attendant hands in; the reconciliation is kept on the shift. */
   @Post('shifts/:id/close')
-  closeShift(@Param('id') id: string, @Body('readings') readings: any[], @Req() req: Authed) {
-    return this.svc.closeShift(id, req.user.businessId, readings ?? []);
+  closeShift(@Param('id') id: string, @Body() body: any, @Req() req: Authed) {
+    return this.control.closeShift(id, req.user.businessId, { id: req.user.id, name: req.user.name }, body ?? {});
   }
 
   @Get('shifts/:id/summary')
   getShiftSummary(@Param('id') id: string, @Req() req: Authed) {
-    return this.svc.getShiftSummary(id, req.user.businessId);
+    return this.control.getShiftSummary(id, req.user.businessId);
   }
 
   // ── Fleet ─────────────────────────────────────────────────────────────────

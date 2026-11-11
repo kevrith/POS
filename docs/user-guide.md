@@ -500,7 +500,8 @@ waiting for a table.
 
 ## 14. Fuel station, cyber café and other trades
 
-- **Fuel station** — authorise a pump, sell the fuel it dispensed, close the pump. A manager can void a sale from the Sales list
+- **Fuel station** — see [Running a fuel station](#running-a-fuel-station) below. The shop, lubricants and LPG are sold on **Shop & Lubricants** in the menu;
+  the **Point of Sale** entry is the forecourt.
 - **Cyber café** — start and stop timed sessions per station, bill the time. Stations
   are counter-managed on the web app. When your business records cyber takings as sales (ask the owner to check), ending a
   session gives a proper receipt that goes to KRA, with the time (or package), printing and other services on separate
@@ -527,6 +528,35 @@ waiting for a table.
 ---
 
 # Stock and suppliers
+
+### Running a fuel station
+
+The fuel screen has tabs. Attendants see **Forecourt**, **Shift**, **Tanks**, **Prices** and **Sales**; managers also see **Wet stock**, **Fleet accounts**, **Reports** and **Setup**.
+
+**Set up once (manager).** Under **Prices**, add each grade you sell with today's pump price. Under **Tanks**, add each underground tank, then **Measure** it once to set how much fuel it holds. Under **Setup**, add each pump and its **nozzles**. Every nozzle sells one grade, draws from one tank and has its own meter, so a pump that sells petrol and diesel gets two nozzles.
+
+**Every day: the shift.** Fuel can only be sold inside a shift, so every litre has someone answering for it.
+1. **Shift, Open a shift.** Add the attendants on duty, give each nozzle to one attendant and enter what each pump meter reads. If a meter does not read what it closed at last time, you must say why (a replaced meter, for example); the difference is kept.
+2. **Forecourt.** Tap the nozzle the customer used, enter the litres from the pump display, choose how they paid and record the sale. Payment can be cash, M-Pesa, card, a **fleet account**, or **customer credit** (registered customers only).
+3. **Shift, Close shift.** Enter each nozzle's closing meter and the cash each attendant hands in. The system compares what each meter says with what was rung up (and with any pump tests), and each attendant's cash with their cash sales. Fuel through a meter that nobody rang up, and cash that is short, are shown in red and kept with the shift. Sales in a closed shift cannot be added to it.
+
+A **voided** sale (manager, from **Sales**) puts the litres back into the tank. The fuel still went through the meter, so it still shows as unrecorded at the shift close: that is intended, because a drive-off is a loss.
+
+**Pump tests.** Fuel drawn to test a pump and poured back moves the meter but is not a sale. A manager records it from the live shift (**Record test**), so the meter check does not count it as missing.
+
+**Tanks and wet stock.**
+- **Measure** a tank every day from the dip stick or gauge. The system keeps what it found against what the books said it should hold; the difference is fuel lost or gained. The first measurement of a new tank sets its opening level and is not counted as a gain.
+- **Wet stock** shows each tank's gain or loss as a share of what was sold from it. Past a quarter percent is **Watch**, past half a percent is **Investigate**. A tank not measured for over a day is flagged.
+- **Delivery.** Enter the litres on the delivery note, and measure the tank before and after the offload. The litres received are then what the tank really took, and any shortage against the note is recorded and flagged (over half a percent). Enter the supplier's **cost per litre** and the system keeps each tank's average cost, so **Reports** can show your margin. Fuel sold before a cost was known is left out of the margin and reported separately.
+
+**Prices.** Every change of a pump price is kept with who made it, when, and from what to what (**History**). If you enter the regulator's monthly cap for a grade, a price above it is refused.
+
+**Fleet accounts.** Companies that fuel on credit have a credit limit and a KRA PIN. Their sales are invoiced to them, a sale over the limit is refused, and payments are recorded from the account.
+
+**Pump controller.** Under **Setup** there is an optional connection to a pump controller. It has not been tested with a real controller, and you do not need it: the shift meter check catches any litre that is missed.
+
+**Older shifts.** A shift that was already open when the nozzle meters were introduced cannot sell; close it (enter each pump's closing reading) and open a new one.
+
 
 ## 15. Stock, receiving and counting
 

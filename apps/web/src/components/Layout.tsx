@@ -64,6 +64,7 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
     items: [
       // /pos is the universal entry-point; POSRouterPage redirects to the right UI per posMode
       { to: '/pos', icon: ShoppingCart, label: 'Point of Sale', roles: ['OWNER', 'MANAGER', 'CASHIER', 'WAITER'] },
+      { to: '/shop-till', icon: ShoppingCart, label: 'Shop & Lubricants', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
       { to: '/kds', icon: Monitor, label: 'Kitchen Display', roles: ['OWNER', 'MANAGER', 'WAITER', 'KITCHEN'] },
       // A fuel station or shop that runs a restaurant on the side: the till stays its main POS, tables live here.
       { to: '/hospitality', icon: Coffee, label: 'Restaurant Tables', roles: ['OWNER', 'MANAGER', 'WAITER', 'CASHIER'] },
@@ -1029,7 +1030,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
         <main
           className={`flex-1 flex flex-col bg-gray-100 dark:bg-gray-950 relative ${
-            ['/pos', '/supermart', '/hospitality', '/kds', '/fuel-pump', '/cybercafe'].some(p => location.pathname.startsWith(p))
+            ['/pos', '/supermart', '/shop-till', '/hospitality', '/kds', '/fuel-pump', '/cybercafe'].some(p => location.pathname.startsWith(p))
               ? 'overflow-hidden'
               : 'overflow-y-auto'
           } ${
@@ -1051,7 +1052,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               background pattern, so `relative` alone is enough. */}
           <div className="relative"><UpdateBanner /><LicenseBanner /></div>
           <div className={`relative ${
-            ['/pos', '/supermart', '/hospitality', '/kds', '/fuel-pump', '/cybercafe'].some(p => location.pathname.startsWith(p))
+            ['/pos', '/supermart', '/shop-till', '/hospitality', '/kds', '/fuel-pump', '/cybercafe'].some(p => location.pathname.startsWith(p))
               ? 'flex-1 flex flex-col overflow-hidden'
               : ''
           }`}>

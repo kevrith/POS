@@ -5,11 +5,21 @@ import { DirectSaleService } from '../sales/direct-sale.service';
 function makeGrade(o: Record<string, any> = {}) {
   return { id: 'grade-1', businessId: 'biz-1', storeId: 'store-1', name: 'Petrol', code: 'PMS', pricePerLitreCents: 19500, isActive: true, ...o };
 }
+function makeNozzle(o: Record<string, any> = {}) {
+  return { id: 'noz-1', businessId: 'biz-1', storeId: 'store-1', pumpId: 'pump-1', nozzleNumber: 1, gradeId: 'grade-1', tankId: 'tank-1', isActive: true, grade: makeGrade(), ...o };
+}
 function makePump(o: Record<string, any> = {}) {
-  return { id: 'pump-1', businessId: 'biz-1', storeId: 'store-1', pumpNumber: 1, label: 'Pump 1', status: 'IDLE', gradeId: 'grade-1', grade: makeGrade(), ...o };
+  return { id: 'pump-1', businessId: 'biz-1', storeId: 'store-1', pumpNumber: 1, label: 'Pump 1', status: 'IDLE', gradeId: 'grade-1', grade: makeGrade(), nozzles: [makeNozzle()], ...o };
+}
+function makeShift(o: Record<string, any> = {}) {
+  return {
+    id: 'shift-1', businessId: 'biz-1', storeId: 'store-1', status: 'OPEN',
+    readings: [{ id: 'r-1', pumpId: 'pump-1', nozzleId: 'noz-1', openingLitres: 100 }],
+    attendants: [{ id: 'att-1', name: 'Ann', userId: 'user-1', nozzleIds: ['noz-1'] }], ...o,
+  };
 }
 function makeTank(o: Record<string, any> = {}) {
-  return { id: 'tank-1', businessId: 'biz-1', storeId: 'store-1', tankNumber: 1, gradeId: 'grade-1', capacityLitres: 1000, currentLitres: 500, isActive: true, ...o };
+  return { id: 'tank-1', businessId: 'biz-1', storeId: 'store-1', tankNumber: 1, gradeId: 'grade-1', capacityLitres: 1000, currentLitres: 500, avgCostCents: 0, isActive: true, ...o };
 }
 
 /** The tx handed to the interactive transaction is the same object as the client, as with Prisma. */
@@ -17,13 +27,16 @@ function makePrisma() {
   const p: any = {
     store: { findFirst: jest.fn().mockResolvedValue({ id: 'store-1' }) },
     fuelGrade: { findMany: jest.fn(), findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
-    fuelPump: { findMany: jest.fn(), findFirst: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn(), count: jest.fn() },
+    fuelPump: { findMany: jest.fn(), findFirst: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 1 }), count: jest.fn() },
     fuelSale: { create: jest.fn(), findFirst: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 1 }), findMany: jest.fn(), aggregate: jest.fn(), groupBy: jest.fn() },
     fuelTank: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
     fuelTankDipping: { create: jest.fn(), findMany: jest.fn() },
     fuelDelivery: { create: jest.fn(), findMany: jest.fn() },
-    fuelShift: { findMany: jest.fn(), findFirst: jest.fn(), create: jest.fn(), updateMany: jest.fn() },
-    fuelShiftReading: { updateMany: jest.fn() },
+    fuelShift: { findMany: jest.fn(), findFirst: jest.fn().mockResolvedValue(makeShift()), create: jest.fn(), updateMany: jest.fn() },
+    fuelShiftReading: { updateMany: jest.fn(), findFirst: jest.fn() },
+    fuelNozzle: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
+    fuelPriceChange: { create: jest.fn(), findMany: jest.fn() },
+    $queryRaw: jest.fn().mockResolvedValue([{ id: 'shift-1' }]),
     fleetAccount: { findMany: jest.fn(), findFirst: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     customer: { count: jest.fn().mockResolvedValue(1) },
     item: { findFirst: jest.fn(), create: jest.fn(), updateMany: jest.fn() },
@@ -131,6 +144,7 @@ describe('FuelPumpService.recordSale', () => {
 
   it('falls through to a second tank of the same grade', async () => {
     const { svc, prisma } = ready([makeTank({ id: 'tank-1', currentLitres: 5 }), makeTank({ id: 'tank-2', tankNumber: 2 })]);
+    prisma.fuelPump.findFirst.mockResolvedValue(makePump({ nozzles: [makeNozzle({ tankId: null })] }));
     prisma.fuelTank.updateMany.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 1 });
     await svc.recordSale(SALE);
     expect(prisma.fuelTank.updateMany.mock.calls.map((c: any[]) => c[0].where.id)).toEqual(['tank-1', 'tank-2']);
@@ -139,6 +153,7 @@ describe('FuelPumpService.recordSale', () => {
 
   it('sells normally when the grade has no tank set up', async () => {
     const { svc, prisma } = ready([]);
+    prisma.fuelPump.findFirst.mockResolvedValue(makePump({ nozzles: [makeNozzle({ tankId: null })] }));
     await svc.recordSale(SALE);
     expect(prisma.fuelTank.updateMany).not.toHaveBeenCalled();
     expect(prisma.fuelSale.create).toHaveBeenCalled();
@@ -196,7 +211,7 @@ describe('FuelPumpService.recordSale: the invoice', () => {
 
   function ready(opts: { invoice?: boolean; gradeItem?: any; grade?: Record<string, any> } = {}) {
     const ctx = setup({ invoice: opts.invoice });
-    ctx.prisma.fuelPump.findFirst.mockResolvedValue(makePump({ grade: makeGrade({ itemId: 'item-fuel', ...(opts.grade ?? {}) }) }));
+    ctx.prisma.fuelPump.findFirst.mockResolvedValue(makePump({ nozzles: [makeNozzle({ grade: makeGrade({ itemId: 'item-fuel', ...(opts.grade ?? {}) }) })] }));
     ctx.prisma.fuelTank.findMany.mockResolvedValue([makeTank()]);
     ctx.prisma.fuelTank.updateMany.mockResolvedValue({ count: 1 });
     ctx.prisma.fuelSale.create.mockImplementation(async ({ data }: any) => ({ id: 'sale-1', ...data }));
@@ -408,9 +423,7 @@ describe('FuelPumpService ownership and field whitelists', () => {
     prisma.fuelShift.findFirst.mockResolvedValue(null);
     prisma.fleetAccount.findFirst.mockResolvedValue(null);
     await expect(svc.updateGrade('g', 'biz-1', { pricePerLitreCents: 1 })).rejects.toThrow(NotFoundException);
-    await expect(svc.getDippings('biz-1', 't')).rejects.toThrow(NotFoundException);
     await expect(svc.getFleetTransactions('biz-1', 'f')).rejects.toThrow(NotFoundException);
-    await expect(svc.getShiftSummary('s', 'biz-1')).rejects.toThrow(NotFoundException);
     await expect(svc.recordFleetPayment({ businessId: 'biz-1', fleetAccountId: 'f', amountCents: 5 })).rejects.toThrow(NotFoundException);
     expect(prisma.fuelGrade.update).not.toHaveBeenCalled();
   });
@@ -457,11 +470,12 @@ describe('FuelPumpService ownership and field whitelists', () => {
 });
 
 describe('FuelPumpService.authorizePump', () => {
+  const hose = (litres: number) => ({ ...makeNozzle(), grade: makeGrade(), tank: makeTank({ currentLitres: litres }) });
+
   it('claims an idle pump with a conditional update', async () => {
     const { svc, prisma } = setup();
     prisma.fuelPump.findFirst.mockResolvedValue(makePump());
-    prisma.fuelGrade.findFirst.mockResolvedValue(makeGrade());
-    prisma.fuelTank.findFirst.mockResolvedValue(makeTank());
+    prisma.fuelNozzle.findMany.mockResolvedValue([hose(500)]);
     prisma.fuelPump.updateMany.mockResolvedValue({ count: 1 });
     await svc.authorizePump('pump-1', 'biz-1');
     expect(prisma.fuelPump.updateMany).toHaveBeenCalledWith({ where: { id: 'pump-1', businessId: 'biz-1', status: 'IDLE' }, data: { status: 'AUTHORIZED' } });
@@ -469,94 +483,24 @@ describe('FuelPumpService.authorizePump', () => {
 
   it('refuses a busy pump, an empty tank and a lost race', async () => {
     const { svc, prisma } = setup();
-    prisma.fuelGrade.findFirst.mockResolvedValue(makeGrade());
     prisma.fuelPump.findFirst.mockResolvedValue(makePump({ status: 'DISPENSING' }));
     await expect(svc.authorizePump('pump-1', 'biz-1')).rejects.toThrow(/DISPENSING/);
 
     prisma.fuelPump.findFirst.mockResolvedValue(makePump());
-    prisma.fuelTank.findFirst.mockResolvedValue(makeTank({ currentLitres: 0 }));
+    prisma.fuelNozzle.findMany.mockResolvedValue([hose(0)]);
     await expect(svc.authorizePump('pump-1', 'biz-1')).rejects.toThrow(/empty/);
 
-    prisma.fuelTank.findFirst.mockResolvedValue(makeTank());
+    prisma.fuelNozzle.findMany.mockResolvedValue([hose(500)]);
     prisma.fuelPump.updateMany.mockResolvedValue({ count: 0 });
     await expect(svc.authorizePump('pump-1', 'biz-1')).rejects.toThrow(/someone else/);
   });
-});
 
-describe('FuelPumpService tanks', () => {
-  it('rejects a dipping above the tank capacity or below zero', async () => {
+  it('lets a pump through while one of its tanks still has fuel', async () => {
     const { svc, prisma } = setup();
-    prisma.fuelTank.findFirst.mockResolvedValue(makeTank());
-    for (const litres of [1001, -1, NaN]) {
-      await expect(svc.recordDipping({ businessId: 'biz-1', tankId: 'tank-1', litres, recordedBy: 'Ann' })).rejects.toThrow(BadRequestException);
-    }
-    expect(prisma.fuelTankDipping.create).not.toHaveBeenCalled();
-  });
-
-  it('adds a delivery that fits, as an increment rather than an overwrite', async () => {
-    const { svc, prisma } = setup();
-    prisma.fuelTank.findFirst.mockResolvedValue(makeTank({ currentLitres: 500 }));
-    prisma.fuelDelivery.create.mockResolvedValue({ id: 'd1' });
-    prisma.fuelTank.update.mockResolvedValue({});
-    await svc.recordDelivery({ businessId: 'biz-1', tankId: 'tank-1', litresDelivered: 400 });
-    expect(prisma.fuelTank.update).toHaveBeenCalledWith({ where: { id: 'tank-1' }, data: { currentLitres: { increment: 400 } } });
-  });
-
-  it('refuses a delivery bigger than the room on the books instead of capping it silently', async () => {
-    const { svc, prisma } = setup();
-    prisma.fuelTank.findFirst.mockResolvedValue(makeTank({ currentLitres: 900 }));
-    await expect(svc.recordDelivery({ businessId: 'biz-1', tankId: 'tank-1', litresDelivered: 400 })).rejects.toThrow(/does not fit/);
-    for (const litresDelivered of [0, -10, NaN]) {
-      await expect(svc.recordDelivery({ businessId: 'biz-1', tankId: 'tank-1', litresDelivered })).rejects.toThrow(BadRequestException);
-    }
-    expect(prisma.fuelDelivery.create).not.toHaveBeenCalled();
-  });
-});
-
-describe('FuelPumpService shifts', () => {
-  const openShift = (o: Record<string, any> = {}) => ({
-    id: 'shift-1', businessId: 'biz-1', storeId: 'store-1', status: 'OPEN',
-    readings: [{ pumpId: 'pump-1', openingLitres: 100 }], ...o,
-  });
-
-  it('will not open a second shift while one is open', async () => {
-    const { svc, prisma } = setup();
-    prisma.fuelPump.count.mockResolvedValue(1);
-    prisma.fuelShift.findFirst.mockResolvedValue(openShift());
-    await expect(svc.openShift({ businessId: 'biz-1', storeId: 'store-1', cashierName: 'Ann', readings: [{ pumpId: 'pump-1', openingLitres: 0 }] })).rejects.toThrow(/already open/);
-    expect(prisma.fuelShift.create).not.toHaveBeenCalled();
-  });
-
-  it('rejects readings for pumps outside the store, duplicates and negatives', async () => {
-    const { svc, prisma } = setup();
-    prisma.fuelPump.count.mockResolvedValue(0);
-    await expect(svc.openShift({ businessId: 'biz-1', storeId: 'store-1', cashierName: 'Ann', readings: [{ pumpId: 'x', openingLitres: 0 }] })).rejects.toThrow(/not in this store/);
-    await expect(svc.openShift({ businessId: 'biz-1', storeId: 'store-1', cashierName: 'Ann', readings: [{ pumpId: 'x', openingLitres: 0 }, { pumpId: 'x', openingLitres: 1 }] })).rejects.toThrow(/only one/);
-    await expect(svc.openShift({ businessId: 'biz-1', storeId: 'store-1', cashierName: 'Ann', readings: [{ pumpId: 'x', openingLitres: -4 }] })).rejects.toThrow(BadRequestException);
-  });
-
-  it('closes an open shift and stores the closing readings', async () => {
-    const { svc, prisma } = setup();
-    prisma.fuelShift.findFirst.mockResolvedValue(openShift());
-    prisma.fuelShift.updateMany.mockResolvedValue({ count: 1 });
-    prisma.fuelShiftReading.updateMany.mockResolvedValue({ count: 1 });
-    await svc.closeShift('shift-1', 'biz-1', [{ pumpId: 'pump-1', closingLitres: 250 }]);
-    expect(prisma.fuelShift.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'shift-1', businessId: 'biz-1', status: 'OPEN' } }));
-    expect(prisma.fuelShiftReading.updateMany).toHaveBeenCalledWith({ where: { shiftId: 'shift-1', pumpId: 'pump-1' }, data: { closingLitres: 250 } });
-  });
-
-  it('refuses a second close, a lost race and bad readings', async () => {
-    const { svc, prisma } = setup();
-    prisma.fuelShift.findFirst.mockResolvedValue(openShift({ status: 'CLOSED' }));
-    await expect(svc.closeShift('shift-1', 'biz-1', [])).rejects.toThrow(/already closed/);
-
-    prisma.fuelShift.findFirst.mockResolvedValue(openShift());
-    prisma.fuelShift.updateMany.mockResolvedValue({ count: 0 });
-    await expect(svc.closeShift('shift-1', 'biz-1', [])).rejects.toThrow(/already closed/);
-
-    await expect(svc.closeShift('shift-1', 'biz-1', [{ pumpId: 'other', closingLitres: 5 }])).rejects.toThrow(/not in this shift/);
-    await expect(svc.closeShift('shift-1', 'biz-1', [{ pumpId: 'pump-1', closingLitres: 50 }])).rejects.toThrow(BadRequestException); // below the 100 opening
-    expect(prisma.fuelShiftReading.updateMany).not.toHaveBeenCalled();
+    prisma.fuelPump.findFirst.mockResolvedValue(makePump());
+    prisma.fuelNozzle.findMany.mockResolvedValue([hose(0), hose(300)]);
+    prisma.fuelPump.updateMany.mockResolvedValue({ count: 1 });
+    await expect(svc.authorizePump('pump-1', 'biz-1')).resolves.not.toThrow();
   });
 });
 
@@ -646,5 +590,203 @@ describe('FuelPumpService.voidSale', () => {
     await expect(svc.voidSale('fs-1', 'biz-1', MANAGER, '  ')).rejects.toBeInstanceOf(BadRequestException);
     prisma.fuelSale.findFirst.mockResolvedValue(null);
     await expect(svc.voidSale('fs-1', 'biz-2', MANAGER, 'x')).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe('FuelPumpService.recordSale: shift, nozzle and attendant', () => {
+  function ready(pump = makePump(), opts: { shift?: any } = {}) {
+    const ctx = setup();
+    ctx.prisma.fuelPump.findFirst.mockResolvedValue(pump);
+    ctx.prisma.fuelTank.findMany.mockResolvedValue([makeTank({ avgCostCents: 17234.6 })]);
+    ctx.prisma.fuelTank.updateMany.mockResolvedValue({ count: 1 });
+    ctx.prisma.fuelSale.create.mockImplementation(async ({ data }: any) => ({ id: 'sale-1', ...data }));
+    ctx.prisma.fuelPump.update.mockResolvedValue({});
+    if ('shift' in opts) ctx.prisma.fuelShift.findFirst.mockResolvedValue(opts.shift);
+    return ctx;
+  }
+
+  it('refuses to sell fuel when no shift is open, and touches nothing', async () => {
+    const { svc, prisma } = ready(makePump(), { shift: null });
+    await expect(svc.recordSale(SALE)).rejects.toThrow(/No shift is open/);
+    expect(prisma.fuelTank.updateMany).not.toHaveBeenCalled();
+    expect(prisma.fuelSale.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses a nozzle that was not read when the shift opened', async () => {
+    const { svc } = ready(makePump(), { shift: makeShift({ readings: [{ id: 'r-9', pumpId: 'pump-2', nozzleId: 'noz-9', openingLitres: 0 }] }) });
+    await expect(svc.recordSale(SALE)).rejects.toThrow(/not on the open shift/);
+  });
+
+  it('tells the manager to close a shift opened before nozzles had meters', async () => {
+    const { svc } = ready(makePump(), { shift: makeShift({ readings: [{ id: 'r-0', pumpId: 'pump-1', nozzleId: null, openingLitres: 0 }] }) });
+    await expect(svc.recordSale(SALE)).rejects.toThrow(/Close it and open a new shift/);
+  });
+
+  it('records the nozzle, shift, attendant on that pump and the tank\'s cost per litre', async () => {
+    const { svc, prisma } = ready();
+    await svc.recordSale({ ...SALE, cashierId: 'user-7' });
+    expect(prisma.fuelSale.create.mock.calls[0][0].data).toEqual(expect.objectContaining({
+      nozzleId: 'noz-1', shiftId: 'shift-1', attendantId: 'att-1', attendantName: 'Ann', cashierId: 'user-7', tankId: 'tank-1', unitCostCents: 17235,
+    }));
+  });
+
+  it('draws only from the tank the nozzle is plumbed to', async () => {
+    const { svc, prisma } = ready();
+    await svc.recordSale(SALE);
+    expect(prisma.fuelTank.findMany).toHaveBeenCalledWith({ where: { id: 'tank-1', businessId: 'biz-1', isActive: true } });
+  });
+
+  it('refuses a nozzle whose tank was switched off, rather than selling without a stock draw', async () => {
+    const { svc, prisma } = ready();
+    prisma.fuelTank.findMany.mockResolvedValue([]);
+    await expect(svc.recordSale(SALE)).rejects.toThrow(/switched off/);
+    expect(prisma.fuelSale.create).not.toHaveBeenCalled();
+  });
+
+  it('makes the attendant choose the hose on a pump with several, and prices by the one chosen', async () => {
+    const diesel = makeGrade({ id: 'grade-2', name: 'Diesel', pricePerLitreCents: 18000 });
+    const pump = makePump({ nozzles: [makeNozzle(), makeNozzle({ id: 'noz-2', nozzleNumber: 2, gradeId: 'grade-2', grade: diesel, tankId: 'tank-2' })] });
+    const ctx = ready(pump, { shift: makeShift({
+      readings: [{ id: 'r-1', pumpId: 'pump-1', nozzleId: 'noz-1', openingLitres: 0 }, { id: 'r-2', pumpId: 'pump-1', nozzleId: 'noz-2', openingLitres: 0 }],
+      attendants: [{ id: 'att-1', name: 'Ann', nozzleIds: ['noz-1'] }, { id: 'att-2', name: 'Bob', nozzleIds: ['noz-2'] }],
+    }) });
+    await expect(ctx.svc.recordSale(SALE)).rejects.toThrow(/Choose the nozzle/);
+    await expect(ctx.svc.recordSale({ ...SALE, nozzleId: 'elsewhere' })).rejects.toThrow(/not on this pump/);
+    const sale: any = await ctx.svc.recordSale({ ...SALE, nozzleId: 'noz-2' });
+    expect(sale).toEqual(expect.objectContaining({ pricePerLitreCents: 18000, totalCents: 180000, gradeId: 'grade-2', attendantName: 'Bob' }));
+  });
+
+  it('is refused if the shift was closed while the sale was being written', async () => {
+    const { svc, prisma } = ready();
+    prisma.$queryRaw.mockResolvedValue([]);
+    await expect(svc.recordSale(SALE)).rejects.toThrow(/just closed/);
+    expect(prisma.fuelSale.create).not.toHaveBeenCalled();
+  });
+
+  it('a pump with no active hose cannot sell', async () => {
+    const { svc } = ready(makePump({ nozzles: [] }));
+    await expect(svc.recordSale(SALE)).rejects.toThrow(/no active nozzle/);
+  });
+});
+
+describe('FuelPumpService price changes', () => {
+  it('writes the old and new price, who changed it and why, with the change', async () => {
+    const { svc, prisma } = setup();
+    prisma.fuelGrade.findFirst.mockResolvedValue(makeGrade());
+    prisma.fuelGrade.update.mockResolvedValue(makeGrade({ pricePerLitreCents: 20100 }));
+    await svc.updateGrade('grade-1', 'biz-1', { pricePerLitreCents: 20100, note: 'EPRA review' }, 'Grace');
+    expect(prisma.fuelPriceChange.create).toHaveBeenCalledWith({
+      data: { businessId: 'biz-1', gradeId: 'grade-1', oldPriceCents: 19500, newPriceCents: 20100, changedBy: 'Grace', note: 'EPRA review' },
+    });
+  });
+
+  it('leaves no price-history line when the price did not change', async () => {
+    const { svc, prisma } = setup();
+    prisma.fuelGrade.findFirst.mockResolvedValue(makeGrade());
+    prisma.fuelGrade.update.mockResolvedValue(makeGrade());
+    await svc.updateGrade('grade-1', 'biz-1', { name: 'Renamed', pricePerLitreCents: 19500 }, 'Grace');
+    expect(prisma.fuelPriceChange.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses a price above the regulator\'s cap, and a cap set below the current price', async () => {
+    const { svc, prisma } = setup();
+    prisma.fuelGrade.findFirst.mockResolvedValue(makeGrade({ maxPricePerLitreCents: 20000 }));
+    await expect(svc.updateGrade('grade-1', 'biz-1', { pricePerLitreCents: 20001 })).rejects.toThrow(/above the cap/);
+    await expect(svc.updateGrade('grade-1', 'biz-1', { maxPricePerLitreCents: 19000 })).rejects.toThrow(/above the cap/);
+    expect(prisma.fuelGrade.update).not.toHaveBeenCalled();
+    prisma.fuelGrade.update.mockResolvedValue(makeGrade());
+    await expect(svc.updateGrade('grade-1', 'biz-1', { pricePerLitreCents: 20000 })).resolves.toBeDefined();
+  });
+
+  it('lets the cap be removed', async () => {
+    const { svc, prisma } = setup();
+    prisma.fuelGrade.findFirst.mockResolvedValue(makeGrade({ maxPricePerLitreCents: 19500 }));
+    prisma.fuelGrade.update.mockResolvedValue(makeGrade());
+    await svc.updateGrade('grade-1', 'biz-1', { maxPricePerLitreCents: null, pricePerLitreCents: 21000 });
+    expect(prisma.fuelGrade.update.mock.calls[0][0].data).toEqual(expect.objectContaining({ maxPricePerLitreCents: null, pricePerLitreCents: 21000 }));
+  });
+});
+
+describe('FuelPumpService pumps and nozzles', () => {
+  function pumpCtx() {
+    const ctx = setup();
+    ctx.prisma.fuelGrade.findFirst.mockImplementation(async ({ where }: any) => (where.id === 'grade-2' ? makeGrade({ id: 'grade-2', name: 'Diesel' }) : makeGrade()));
+    ctx.prisma.fuelPump.findFirst.mockResolvedValue(null);
+    ctx.prisma.fuelTank.findFirst.mockImplementation(async ({ where }: any) => makeTank({ id: where.id ?? `tank-for-${where.gradeId}`, gradeId: where.gradeId ?? 'grade-1' }));
+    ctx.prisma.fuelPump.create.mockImplementation(async ({ data }: any) => ({ id: 'pump-new', ...data }));
+    return ctx;
+  }
+
+  it('a pump with nozzles of two grades gets each one its grade and the grade\'s tank', async () => {
+    const { svc, prisma } = pumpCtx();
+    await svc.createPump({ businessId: 'biz-1', storeId: 'store-1', pumpNumber: 3, nozzles: [{ gradeId: 'grade-1' }, { gradeId: 'grade-2' }] });
+    const data = prisma.fuelPump.create.mock.calls[0][0].data;
+    expect(data.nozzleCount).toBe(2);
+    expect(data.gradeId).toBe('grade-1');
+    expect(data.nozzles.create).toEqual([
+      expect.objectContaining({ nozzleNumber: 1, gradeId: 'grade-1', tankId: 'tank-for-grade-1' }),
+      expect.objectContaining({ nozzleNumber: 2, gradeId: 'grade-2', tankId: 'tank-for-grade-2' }),
+    ]);
+  });
+
+  it('a plain pump gets one nozzle per nozzle count on its grade', async () => {
+    const { svc, prisma } = pumpCtx();
+    await svc.createPump({ businessId: 'biz-1', storeId: 'store-1', pumpNumber: 4, gradeId: 'grade-1', nozzleCount: 3 });
+    expect(prisma.fuelPump.create.mock.calls[0][0].data.nozzles.create).toHaveLength(3);
+  });
+
+  it('refuses a tank that holds a different grade than its nozzle sells', async () => {
+    const { svc, prisma } = pumpCtx();
+    prisma.fuelTank.findFirst.mockResolvedValue(makeTank({ id: 'diesel-tank', gradeId: 'grade-2' }));
+    await expect(svc.createPump({ businessId: 'biz-1', storeId: 'store-1', pumpNumber: 5, nozzles: [{ gradeId: 'grade-1', tankId: 'diesel-tank' }] })).rejects.toThrow(/different grade/);
+    expect(prisma.fuelPump.create).not.toHaveBeenCalled();
+  });
+
+  it('will not move a nozzle\'s grade, tank or status while it is on the open shift', async () => {
+    const { svc, prisma } = setup();
+    prisma.fuelNozzle.findFirst.mockResolvedValue(makeNozzle());
+    prisma.fuelShiftReading.findFirst.mockResolvedValue({ id: 'r-1' });
+    await expect(svc.updateNozzle('noz-1', 'biz-1', { tankId: 'tank-2' })).rejects.toThrow(/open shift/);
+    await expect(svc.updateNozzle('noz-1', 'biz-1', { isActive: false })).rejects.toThrow(/open shift/);
+    expect(prisma.fuelNozzle.update).not.toHaveBeenCalled();
+  });
+
+  it('moves a nozzle to a tank of its grade when no shift is open', async () => {
+    const { svc, prisma } = setup();
+    prisma.fuelNozzle.findFirst.mockResolvedValue(makeNozzle());
+    prisma.fuelShiftReading.findFirst.mockResolvedValue(null);
+    prisma.fuelTank.findFirst.mockResolvedValue(makeTank({ id: 'tank-2' }));
+    prisma.fuelNozzle.update.mockResolvedValue({});
+    await svc.updateNozzle('noz-1', 'biz-1', { tankId: 'tank-2' });
+    expect(prisma.fuelNozzle.update.mock.calls[0][0].data).toEqual({ tankId: 'tank-2' });
+  });
+
+  it('a pump update no longer takes a grade, which belongs to the nozzles', async () => {
+    const { svc, prisma } = setup();
+    prisma.fuelPump.findFirst.mockResolvedValue(makePump());
+    prisma.fuelPump.update.mockResolvedValue({});
+    await svc.updatePump('pump-1', 'biz-1', { label: 'Island A', gradeId: 'grade-9' } as any);
+    expect(prisma.fuelPump.update.mock.calls[0][0].data).toEqual({ label: 'Island A' });
+  });
+});
+
+describe('FuelPumpService.getSaleStats margin', () => {
+  it('works margin out from the cost each sale carried, and reports the fuel whose cost was unknown apart', async () => {
+    const { svc, prisma } = setup();
+    prisma.fuelSale.aggregate.mockResolvedValue({ _sum: { totalCents: 585000, litresDispensed: 30 }, _count: 3 });
+    prisma.fuelSale.groupBy
+      .mockResolvedValueOnce([{ gradeId: 'grade-1', _sum: { totalCents: 585000, litresDispensed: 30 }, _count: 3 }])
+      .mockResolvedValueOnce([
+        { gradeId: 'grade-1', unitCostCents: 18000, _sum: { totalCents: 390000, litresDispensed: 20 } },
+        { gradeId: 'grade-1', unitCostCents: null, _sum: { totalCents: 195000, litresDispensed: 10 } },
+      ])
+      .mockResolvedValueOnce([{ paymentMethod: 'CASH', _sum: { totalCents: 585000, litresDispensed: 30 }, _count: 3 }]);
+    prisma.fuelGrade.findMany.mockResolvedValue([makeGrade()]);
+    const r = await svc.getSaleStats('biz-1', 'store-1');
+    expect(r.marginCents).toBe(30_000);
+    expect(r.costedRevenueCents).toBe(390_000);
+    expect(r.uncostedRevenueCents).toBe(195_000);
+    expect(r.byGrade[0].marginCents).toBe(30_000);
+    expect(r.byPayment).toEqual([{ method: 'CASH', revenueCents: 585000, litres: 30, transactions: 3 }]);
   });
 });

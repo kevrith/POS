@@ -2595,12 +2595,16 @@ model FuelGrade {
   pricePerLitreCents Int
   /// The catalogue item this grade is sold as on the invoice (made on the first sale after cutover).
   itemId             String?
+  /// The highest pump price the regulator allows for this grade (EPRA's monthly cap); a price above it is refused. Null = no cap kept.
+  maxPricePerLitreCents Int?
   isActive     Boolean    @default(true)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   pumps        FuelPump[]
   fuelSales    FuelSale[]
   tanks        FuelTank[]
+  nozzles      FuelNozzle[]
+  priceChanges FuelPriceChange[]
   item         Item?      @relation(fields: [itemId], references: [id], onDelete: SetNull)
 
   @@index([businessId, storeId])
@@ -2620,6 +2624,7 @@ model FuelPump {
   grade       FuelGrade  @relation(fields: [gradeId], references: [id])
   fuelSales   FuelSale[]
   maintenance FuelPumpMaintenance[]
+  nozzles     FuelNozzle[]
 
   @@unique([businessId, storeId, pumpNumber])
   @@index([businessId, storeId, status])
@@ -2642,6 +2647,13 @@ model FuelSale {
   saleId          String?   @unique
   /// The tank the litres came from, so a void puts them back where they were drawn (null for a sale from before this was kept).
   tankId          String?
+  /// The nozzle the fuel came out of, the shift it was sold in, and who was on that pump (the attendant answers for it).
+  nozzleId        String?
+  shiftId         String?
+  attendantId     String?
+  attendantName   String?
+  /// What a litre cost when it was sold (the tank's average cost), so margin never changes after the fact.
+  unitCostCents   Int?
   voidedAt        DateTime?
   voidedBy        String?
   voidReason      String?
@@ -2655,6 +2667,8 @@ model FuelSale {
   @@index([businessId, storeId, createdAt])
   @@index([pumpId])
   @@index([status])
+  @@index([shiftId])
+  @@index([nozzleId])
 }
 
 // ─── Fuel Pump Enterprise Extensions ─────────────────────────────────────────
@@ -2669,12 +2683,15 @@ model FuelTank {
   capacityLitres Float
   currentLitres  Float    @default(0)
   minLevelLitres Float    @default(500)
+  /// Weighted average cost of a litre in the tank, in cents (moves with each priced delivery). 0 = not known.
+  avgCostCents   Float    @default(0)
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   grade          FuelGrade @relation(fields: [gradeId], references: [id])
   dippings       FuelTankDipping[]
   deliveries     FuelDelivery[]
+  nozzles        FuelNozzle[]
 
   @@unique([businessId, storeId, tankNumber])
   @@index([businessId, storeId])
@@ -2687,6 +2704,13 @@ model FuelTankDipping {
   litres      Float
   recordedBy  String
   notes       String?
+  /// What the books said the tank held a moment before this reading, and measured minus book (negative = fuel missing).
+  bookLitres     Float?
+  varianceLitres Float?
+  /// Water found at the bottom of the tank, in millimetres.
+  waterMm     Float?
+  /// DIP | BEFORE_DELIVERY | AFTER_DELIVERY
+  kind        String   @default("DIP")
   recordedAt  DateTime @default(now())
   createdAt   DateTime @default(now())
   tank        FuelTank @relation(fields: [tankId], references: [id])
@@ -2698,7 +2722,17 @@ model FuelDelivery {
   id             String   @id @default(uuid())
   businessId     String
   tankId         String
+  /// Litres that went into the tank: measured (dip after minus dip before) when both were taken, else the docket's.
   litresDelivered Float
+  /// Litres on the supplier's delivery note, and how far short of it the tank received.
+  docketLitres   Float?
+  shortLitres    Float?
+  dipBeforeLitres Float?
+  dipAfterLitres  Float?
+  /// What the supplier charged per litre, in cents, and the total.
+  unitCostCents  Int?
+  totalCostCents Int?
+  vehiclePlate   String?
   supplierName   String?
   docketNumber   String?
   deliveredBy    String?
@@ -2720,7 +2754,10 @@ model FuelShift {
   closedAt    DateTime?
   status      String    @default("OPEN")
   notes       String?
+  closedBy    String?
+  closeNotes  String?
   readings    FuelShiftReading[]
+  attendants  FuelShiftAttendant[]
 
   @@index([businessId, storeId, status])
 }
@@ -2729,12 +2766,104 @@ model FuelShiftReading {
   id            String    @id @default(uuid())
   shiftId       String
   pumpId        String
+  /// Null on a reading from before nozzles existed (that reading was for the whole pump).
+  nozzleId      String?
+  attendantId   String?
   openingLitres Float
   closingLitres Float?
+  /// Where the nozzle's meter stood when the last shift closed, when it differs from this opening reading.
+  previousClosingLitres Float?
+  openingNote   String?
+  /// Worked out at close and kept: meter movement, litres sold and tested, and the litres nobody rang up.
+  meterLitres      Float?
+  soldLitres       Float?
+  testLitres       Float?
+  unrecordedLitres Float?
   createdAt     DateTime  @default(now())
   shift         FuelShift @relation(fields: [shiftId], references: [id])
 
   @@index([shiftId])
+  @@index([nozzleId])
+}
+
+/// One hose on a dispenser: it sells one grade, draws from one tank and has its own meter (totalizer).
+model FuelNozzle {
+  id             String    @id @default(uuid())
+  businessId     String
+  storeId        String
+  pumpId         String
+  nozzleNumber   Int
+  gradeId        String
+  /// The tank this hose is plumbed to. Null = not tracked against a tank.
+  tankId         String?
+  /// Where the meter stood at the last shift opening or closing, in litres.
+  totalizerLitres Float    @default(0)
+  lastReadingAt  DateTime?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  pump           FuelPump  @relation(fields: [pumpId], references: [id], onDelete: Cascade)
+  grade          FuelGrade @relation(fields: [gradeId], references: [id])
+  tank           FuelTank? @relation(fields: [tankId], references: [id], onDelete: SetNull)
+  tests          FuelPumpTest[]
+
+  @@unique([pumpId, nozzleNumber])
+  @@index([businessId, storeId])
+  @@index([tankId])
+}
+
+/// One attendant on a shift: the pumps they answer for, the cash they hand in and what the books expected.
+model FuelShiftAttendant {
+  id               String    @id @default(uuid())
+  shiftId          String
+  businessId       String
+  userId           String?
+  name             String
+  nozzleIds        String[]
+  expectedCashCents Int?
+  declaredCashCents Int?
+  cashVarianceCents Int?
+  declaredAt       DateTime?
+  createdAt        DateTime  @default(now())
+  shift            FuelShift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  @@index([shiftId])
+}
+
+/// Fuel drawn through a nozzle to test the pump, then poured back: it moves the meter but is not a sale and does not change the tank.
+model FuelPumpTest {
+  id          String     @id @default(uuid())
+  businessId  String
+  storeId     String
+  nozzleId    String
+  shiftId     String?
+  litres      Float
+  /// CALIBRATION | INSPECTION | ROUTINE
+  reason      String     @default("ROUTINE")
+  recordedBy  String
+  notes       String?
+  createdAt   DateTime   @default(now())
+  nozzle      FuelNozzle @relation(fields: [nozzleId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, storeId, createdAt])
+  @@index([shiftId])
+  @@index([nozzleId])
+}
+
+/// Every change to a grade's pump price: who, when, from what to what.
+model FuelPriceChange {
+  id            String    @id @default(uuid())
+  businessId    String
+  gradeId       String
+  oldPriceCents Int
+  newPriceCents Int
+  changedBy     String
+  note          String?
+  createdAt     DateTime  @default(now())
+  grade         FuelGrade @relation(fields: [gradeId], references: [id], onDelete: Cascade)
+
+  @@index([gradeId, createdAt])
+  @@index([businessId, createdAt])
 }
 
 model FleetAccount {

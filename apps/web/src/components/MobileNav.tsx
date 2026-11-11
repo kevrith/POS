@@ -41,6 +41,7 @@ const MENU_GROUPS: NavGroup[] = [
     label: 'Sales',
     items: [
       { to: '/pos',           icon: ShoppingCart,   label: 'Point of Sale',   roles: ['OWNER','MANAGER','CASHIER','WAITER'] },
+      { to: '/shop-till',     icon: ShoppingCart,   label: 'Shop & Lubricants', roles: ['OWNER','MANAGER','CASHIER'] },
       { to: '/kds',           icon: Monitor,        label: 'Kitchen Display', roles: ['OWNER','MANAGER','WAITER','KITCHEN'] },
       { to: '/hospitality',   icon: ClipboardList,  label: 'Restaurant Tables', roles: ['OWNER','MANAGER','WAITER','CASHIER'] },
       { to: '/layaway',       icon: Layers,         label: 'Layaway',         roles: ['OWNER','MANAGER','CASHIER'] },

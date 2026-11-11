@@ -52,6 +52,13 @@ export const MENU_RULES: Record<string, MenuRule> = {
   '/pharmacy': { businessTypes: ['CLINIC'] },
   '/appointments': { businessTypes: ['CLINIC', 'SALON'] },
   '/fuel-pump': { businessTypes: ['FUEL_PUMP'] },
+  // A fuel station's /pos is the forecourt; its shop, lubricants and LPG are sold on the standard till here
+  '/shop-till': { businessTypes: ['FUEL_PUMP'] },
+  // Tools a fuel station has no use for (kits of goods, tenders to suppliers for a shop range, demand forecasts, gift cards)
+  '/bundle': { notForTypes: ['FUEL_PUMP'] },
+  '/rfq': { notForTypes: ['FUEL_PUMP'] },
+  '/forecasting': { notForTypes: ['FUEL_PUMP'] },
+  '/gift-cards': { notForTypes: ['FUEL_PUMP'] },
   '/cybercafe': { businessTypes: ['CYBERCAFE'] },
 };
 

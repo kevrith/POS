@@ -275,6 +275,24 @@ Trust boundaries in `hospitality` (the global `TenantGuard` already rejects a fo
 
 Rules these modules enforce on the server (the web and mobile screens are not trusted to):
 
+- **Fuel pump: forecourt controls.** `FuelPumpService` (setup, sales, fleet) and `FuelControlService` (shifts, tank
+  readings, deliveries, pump tests, wet-stock report; the arithmetic is in `fuel-control.ts`, pure and unit tested).
+  A pump has **nozzles** (`FuelNozzle`: grade, tank, meter `totalizerLitres`); the grade, price and tank of a sale come
+  from the nozzle chosen (`nozzleId`; required on a pump with more than one active nozzle). A sale needs an open shift
+  and a nozzle that was read when it opened; it carries `shiftId`, the attendant on that pump and the tank's average
+  cost (`unitCostCents`). The sale takes `FOR SHARE` on the shift row and the close claims it, so a sale either lands
+  before the close counts the shift or is refused. A shift opens with `attendants[{name, nozzleIds}]` and
+  `readings[{nozzleId, openingLitres, note}]` (every nozzle one attendant, one reading; an opening that does not
+  continue from the nozzle's last closing needs a note; one open shift per store via an advisory lock). Closing takes
+  every nozzle's `closingLitres` and every attendant's `declaredCashCents` and stores, per nozzle, meter litres, sold,
+  tested and unrecorded litres, and per attendant expected cash and the difference. Voided litres stay unrecorded (the
+  fuel passed the meter). A tank reading stores the book level and `varianceLitres` before replacing the level (the
+  first reading of a never-filled tank is kind `OPENING`, variance 0); a delivery with dips before and after takes the
+  measured litres, records `shortLitres` against the note and moves `FuelTank.avgCostCents` (weighted by litres). Price
+  changes write `FuelPriceChange`; `FuelGrade.maxPricePerLitreCents` refuses a price above it. Tests: `fuel-control.spec.ts`,
+  `fuel-control.service.spec.ts`, `fuel-pump.service.spec.ts`. Migration `20261112100000_fuel_forecourt_controls` gives each
+  existing pump one nozzle per `nozzleCount` and changes no sale, tank level or reading; a shift open at that moment
+  (readings with no nozzle) cannot sell and closes by pump.
 - **Fuel pump.** The price of a sale is the grade's `pricePerLitreCents`; a price in the request is
   ignored. Litres must be above zero and at most 5,000. The tank draw, the fleet charge, the sale and
   the pump reset are one transaction, and the tank and fleet balance move through conditional updates,

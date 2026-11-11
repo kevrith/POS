@@ -10,6 +10,7 @@ export const routeLoaders: Record<string, () => Promise<unknown>> = {
   '/dashboard': () => import('../pages/DashboardPage'),
   '/pos': () => import('../pages/POSRouterPage'),
   '/supermart': () => import('../pages/SupermarketPOSPage'),
+  '/shop-till': () => import('../pages/POSPage'),
   '/hospitality': () => import('../pages/HospitalityPage'),
   '/layaway': () => import('../pages/LayawayPage'),
   '/proforma': () => import('../pages/ProformaPage'),

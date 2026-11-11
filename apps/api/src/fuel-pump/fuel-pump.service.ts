@@ -8,6 +8,7 @@ import { DirectSaleService, type DirectSaleInput, type DirectSaleResult } from '
 import { postSettlementJournal } from '../sales/sale-ledger';
 import { parseFilterDate } from '../common/dates';
 import { intInRange, numberInRange, oneOf, optionalKraPin, optionalText, text } from '../common/validate';
+import { marginCents } from './fuel-control';
 
 export const FUEL_PAYMENT_METHODS = ['CASH', 'MPESA', 'CARD', 'FLEET', 'CREDIT'] as const;
 
@@ -23,7 +24,17 @@ const FLEET_PAYMENT_METHODS = ['CASH', 'MPESA', 'CARD', 'BANK'] as const;
 /** How long a pump sale waits for KRA's answer so the receipt can carry the QR code. */
 const ETIMS_WAIT_MS = 5000;
 
-type OwnedModel = 'fuelGrade' | 'fuelSale' | 'fuelPump' | 'fuelTank' | 'fuelShift' | 'fleetAccount' | 'fuelPumpMaintenance';
+type OwnedModel = 'fuelGrade' | 'fuelSale' | 'fuelPump' | 'fuelTank' | 'fuelShift' | 'fleetAccount' | 'fuelPumpMaintenance' | 'fuelNozzle';
+
+/** A pump with the hoses on it, each with its grade and the tank it draws from. */
+const PUMP_INCLUDE = {
+  grade: true,
+  nozzles: {
+    orderBy: { nozzleNumber: 'asc' as const },
+    include: { grade: true, tank: { select: { id: true, tankNumber: true, label: true, currentLitres: true, gradeId: true } } },
+  },
+};
+const MAX_NOZZLES_PER_PUMP = 12;
 
 @Injectable()
 export class FuelPumpService {
@@ -75,28 +86,69 @@ export class FuelPumpService {
     });
   }
 
+  /**
+   * Change a grade. A new price is checked against the regulator's cap, changes the catalogue item the grade is
+   * invoiced as, and leaves a line in the price history: who, when, from what to what.
+   */
   async updateGrade(
     id: string,
     businessId: string,
-    dto: { name?: string; code?: string; pricePerLitreCents?: number; isActive?: boolean },
+    dto: { name?: string; code?: string; pricePerLitreCents?: number; maxPricePerLitreCents?: number | null; isActive?: boolean; note?: string },
+    changedBy = 'System',
   ) {
     const grade = await this.owned('fuelGrade', id, businessId, 'Grade');
-    const updated = await this.prisma.fuelGrade.update({
-      where: { id },
-      data: {
-        ...(dto.name !== undefined && { name: text(dto.name, 'Name', 60) }),
-        ...(dto.code !== undefined && { code: text(dto.code, 'Code', 20) }),
-        ...(dto.pricePerLitreCents !== undefined && {
-          pricePerLitreCents: intInRange(dto.pricePerLitreCents, 'Price per litre', 1, MAX_PRICE_PER_LITRE_CENTS),
-        }),
-        ...(dto.isActive !== undefined && { isActive: Boolean(dto.isActive) }),
-      },
+    const newPrice = dto.pricePerLitreCents === undefined
+      ? undefined
+      : intInRange(dto.pricePerLitreCents, 'Price per litre', 1, MAX_PRICE_PER_LITRE_CENTS);
+    const newCap = dto.maxPricePerLitreCents === undefined
+      ? undefined
+      : dto.maxPricePerLitreCents === null
+        ? null
+        : intInRange(dto.maxPricePerLitreCents, 'Price cap', 1, MAX_PRICE_PER_LITRE_CENTS);
+    const capAfter = newCap === undefined ? (grade.maxPricePerLitreCents ?? null) : newCap;
+    const priceAfter = newPrice ?? grade.pricePerLitreCents;
+    if (capAfter !== null && priceAfter > capAfter) {
+      throw new BadRequestException(
+        `That price is above the cap of KES ${(capAfter / 100).toFixed(2)} a litre. Raise the cap only if the regulator has.`,
+      );
+    }
+    const priceChanged = newPrice !== undefined && newPrice !== grade.pricePerLitreCents;
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.fuelGrade.update({
+        where: { id },
+        data: {
+          ...(dto.name !== undefined && { name: text(dto.name, 'Name', 60) }),
+          ...(dto.code !== undefined && { code: text(dto.code, 'Code', 20) }),
+          ...(newPrice !== undefined && { pricePerLitreCents: newPrice }),
+          ...(newCap !== undefined && { maxPricePerLitreCents: newCap }),
+          ...(dto.isActive !== undefined && { isActive: Boolean(dto.isActive) }),
+        },
+      });
+      if (priceChanged) {
+        await tx.fuelPriceChange.create({
+          data: {
+            businessId,
+            gradeId: id,
+            oldPriceCents: grade.pricePerLitreCents,
+            newPriceCents: newPrice as number,
+            changedBy: text(changedBy, 'Changed by', 100),
+            note: optionalText(dto.note, 'Note', 200),
+          },
+        });
+      }
+      return row;
     });
     // The catalogue item the grade is invoiced as follows its price.
-    if (grade.itemId && dto.pricePerLitreCents !== undefined) {
+    if (grade.itemId && priceChanged) {
       await this.prisma.item.updateMany({ where: { id: grade.itemId, businessId }, data: { retailPriceCents: updated.pricePerLitreCents } });
     }
     return updated;
+  }
+
+  async getPriceHistory(businessId: string, gradeId: string) {
+    await this.owned('fuelGrade', gradeId, businessId, 'Grade');
+    return this.prisma.fuelPriceChange.findMany({ where: { gradeId, businessId }, orderBy: { createdAt: 'desc' }, take: 100 });
   }
 
   /**
@@ -132,21 +184,51 @@ export class FuelPumpService {
     return item;
   }
 
-  // ── Pumps ─────────────────────────────────────────────────────────────────
+  // ── Pumps and nozzles ──────────────────────────────────────────────────────
 
   getPumps(businessId: string, storeId: string) {
     return this.prisma.fuelPump.findMany({
       where: { businessId, storeId },
-      include: { grade: true },
+      include: PUMP_INCLUDE,
       orderBy: { pumpNumber: 'asc' },
     });
   }
 
-  async createPump(dto: { businessId: string; storeId: string; pumpNumber: number; label?: string; gradeId: string; nozzleCount?: number }) {
+  /** The tank a new nozzle draws from: the one asked for (it must hold that grade), else the grade's first active tank. */
+  private async tankForNozzle(businessId: string, storeId: string, gradeId: string, tankId?: string | null) {
+    if (tankId) {
+      const tank = await this.owned('fuelTank', tankId, businessId, 'Tank');
+      if (tank.storeId !== storeId) throw new BadRequestException('That tank belongs to a different store');
+      if (tank.gradeId !== gradeId) throw new BadRequestException('That tank holds a different grade');
+      return tank.id as string;
+    }
+    const first = await this.prisma.fuelTank.findFirst({ where: { businessId, storeId, gradeId, isActive: true }, orderBy: { tankNumber: 'asc' } });
+    return (first?.id as string | undefined) ?? null;
+  }
+
+  /**
+   * A dispenser and its hoses. Send `nozzles` (each with its grade and, if you like, its tank) for a pump that
+   * sells more than one grade; send only `gradeId` and `nozzleCount` for a plain one-grade pump.
+   */
+  async createPump(dto: {
+    businessId: string; storeId: string; pumpNumber: number; label?: string; gradeId?: string; nozzleCount?: number;
+    nozzles?: Array<{ gradeId?: string; tankId?: string | null }>;
+  }) {
     await this.assertStore(dto.storeId, dto.businessId);
-    const grade = await this.owned('fuelGrade', dto.gradeId, dto.businessId, 'Grade');
-    if (grade.storeId !== dto.storeId) throw new BadRequestException('That grade belongs to a different store');
     const pumpNumber = intInRange(dto.pumpNumber, 'Pump number', 1, 999);
+    const specs = Array.isArray(dto.nozzles) && dto.nozzles.length > 0
+      ? dto.nozzles
+      : Array.from({ length: dto.nozzleCount === undefined ? 1 : intInRange(dto.nozzleCount, 'Nozzles', 1, MAX_NOZZLES_PER_PUMP) }, () => ({ gradeId: dto.gradeId, tankId: null as string | null }));
+    if (specs.length > MAX_NOZZLES_PER_PUMP) throw new BadRequestException(`A pump has at most ${MAX_NOZZLES_PER_PUMP} nozzles`);
+
+    const resolved: Array<{ gradeId: string; tankId: string | null }> = [];
+    for (const spec of specs) {
+      const gradeId = spec.gradeId ?? dto.gradeId;
+      const grade = await this.owned('fuelGrade', gradeId, dto.businessId, 'Grade');
+      if (grade.storeId !== dto.storeId) throw new BadRequestException('That grade belongs to a different store');
+      resolved.push({ gradeId: grade.id, tankId: await this.tankForNozzle(dto.businessId, dto.storeId, grade.id, spec.tankId) });
+    }
+
     const clash = await this.prisma.fuelPump.findFirst({ where: { businessId: dto.businessId, storeId: dto.storeId, pumpNumber } });
     if (clash) throw new BadRequestException(`Pump ${pumpNumber} already exists`);
     return this.prisma.fuelPump.create({
@@ -155,30 +237,75 @@ export class FuelPumpService {
         storeId: dto.storeId,
         pumpNumber,
         label: optionalText(dto.label, 'Label', 60),
-        gradeId: dto.gradeId,
-        ...(dto.nozzleCount !== undefined && { nozzleCount: intInRange(dto.nozzleCount, 'Nozzles', 1, 12) }),
+        gradeId: resolved[0].gradeId,
+        nozzleCount: resolved.length,
+        nozzles: {
+          create: resolved.map((r, k) => ({ businessId: dto.businessId, storeId: dto.storeId, nozzleNumber: k + 1, gradeId: r.gradeId, tankId: r.tankId })),
+        },
       },
-      include: { grade: true },
+      include: PUMP_INCLUDE,
     });
   }
 
-  async updatePump(
-    id: string,
-    businessId: string,
-    dto: { label?: string; gradeId?: string; nozzleCount?: number; status?: string },
-  ) {
-    const pump = await this.owned('fuelPump', id, businessId, 'Pump');
-    if (dto.gradeId !== undefined) {
-      const grade = await this.owned('fuelGrade', dto.gradeId, businessId, 'Grade');
-      if (grade.storeId !== pump.storeId) throw new BadRequestException('That grade belongs to a different store');
-    }
+  /** A pump's grade lives on its nozzles now, so only its label and status change here. */
+  async updatePump(id: string, businessId: string, dto: { label?: string; status?: string }) {
+    await this.owned('fuelPump', id, businessId, 'Pump');
     return this.prisma.fuelPump.update({
       where: { id },
       data: {
         ...(dto.label !== undefined && { label: optionalText(dto.label, 'Label', 60) ?? null }),
-        ...(dto.gradeId !== undefined && { gradeId: dto.gradeId }),
-        ...(dto.nozzleCount !== undefined && { nozzleCount: intInRange(dto.nozzleCount, 'Nozzles', 1, 12) }),
         ...(dto.status !== undefined && { status: oneOf(dto.status, 'Status', MANUAL_PUMP_STATUSES) }),
+      },
+      include: PUMP_INCLUDE,
+    });
+  }
+
+  /** Is this nozzle on a shift that is still open? Its grade, tank and meter must not move under that shift. */
+  private async inOpenShift(nozzleId: string, businessId: string) {
+    const reading = await this.prisma.fuelShiftReading.findFirst({ where: { nozzleId, shift: { businessId, status: 'OPEN' } } });
+    return !!reading;
+  }
+
+  async addNozzle(pumpId: string, businessId: string, dto: { gradeId?: string; tankId?: string | null }) {
+    const pump = await this.owned('fuelPump', pumpId, businessId, 'Pump');
+    const grade = await this.owned('fuelGrade', dto.gradeId ?? pump.gradeId, businessId, 'Grade');
+    if (grade.storeId !== pump.storeId) throw new BadRequestException('That grade belongs to a different store');
+    const existing = await this.prisma.fuelNozzle.findMany({ where: { pumpId, businessId }, select: { nozzleNumber: true } });
+    if (existing.length >= MAX_NOZZLES_PER_PUMP) throw new BadRequestException(`A pump has at most ${MAX_NOZZLES_PER_PUMP} nozzles`);
+    const nozzleNumber = existing.reduce((m, n) => Math.max(m, n.nozzleNumber), 0) + 1;
+    const tankId = await this.tankForNozzle(businessId, pump.storeId, grade.id, dto.tankId);
+    const nozzle = await this.prisma.fuelNozzle.create({
+      data: { businessId, storeId: pump.storeId, pumpId, nozzleNumber, gradeId: grade.id, tankId },
+      include: { grade: true },
+    });
+    await this.prisma.fuelPump.update({ where: { id: pumpId }, data: { nozzleCount: existing.length + 1 } });
+    return nozzle;
+  }
+
+  async updateNozzle(id: string, businessId: string, dto: { gradeId?: string; tankId?: string | null; isActive?: boolean }) {
+    const nozzle = await this.owned('fuelNozzle', id, businessId, 'Nozzle');
+    const changesRouting = dto.gradeId !== undefined || dto.tankId !== undefined || dto.isActive === false;
+    if (changesRouting && (await this.inOpenShift(id, businessId))) {
+      throw new BadRequestException('This nozzle is on the open shift. Close the shift before changing its grade, tank or status.');
+    }
+    const gradeId = dto.gradeId ?? nozzle.gradeId;
+    if (dto.gradeId !== undefined) {
+      const grade = await this.owned('fuelGrade', dto.gradeId, businessId, 'Grade');
+      if (grade.storeId !== nozzle.storeId) throw new BadRequestException('That grade belongs to a different store');
+    }
+    let tankId: string | null | undefined;
+    if (dto.tankId !== undefined) {
+      tankId = dto.tankId === null ? null : await this.tankForNozzle(businessId, nozzle.storeId, gradeId, dto.tankId);
+    } else if (dto.gradeId !== undefined && dto.gradeId !== nozzle.gradeId) {
+      // A different grade needs a tank that holds it.
+      tankId = await this.tankForNozzle(businessId, nozzle.storeId, gradeId, null);
+    }
+    return this.prisma.fuelNozzle.update({
+      where: { id },
+      data: {
+        ...(dto.gradeId !== undefined && { gradeId: dto.gradeId }),
+        ...(tankId !== undefined && { tankId }),
+        ...(dto.isActive !== undefined && { isActive: Boolean(dto.isActive) }),
       },
       include: { grade: true },
     });
@@ -188,24 +315,22 @@ export class FuelPumpService {
     const pump = await this.owned('fuelPump', id, businessId, 'Pump');
     if (pump.status !== 'IDLE') throw new BadRequestException(`Pump is ${pump.status}`);
 
-    const grade = await this.prisma.fuelGrade.findFirst({ where: { id: pump.gradeId, businessId } });
-    // Check the linked tank has fuel (block if empty)
-    const tank = await this.prisma.fuelTank.findFirst({
-      where: { gradeId: pump.gradeId, businessId, storeId: pump.storeId, isActive: true },
-    });
-    if (tank && tank.currentLitres <= 0) {
-      throw new BadRequestException(`Tank for ${grade?.name ?? 'this grade'} is empty. Cannot authorize pump.`);
+    // Block when every tank this pump draws from is empty.
+    const nozzles = await this.prisma.fuelNozzle.findMany({ where: { pumpId: id, businessId, isActive: true }, include: { tank: true, grade: true } });
+    const tracked = nozzles.filter((n) => n.tank && n.tank.isActive);
+    if (tracked.length > 0 && tracked.every((n) => (n.tank as { currentLitres: number }).currentLitres <= 0)) {
+      throw new BadRequestException(`Tank for ${tracked[0].grade?.name ?? 'this grade'} is empty. Cannot authorize pump.`);
     }
 
     // Claim the pump only if it is still idle: two attendants pressing Authorize cannot both win.
     const claimed = await this.prisma.fuelPump.updateMany({ where: { id, businessId, status: 'IDLE' }, data: { status: 'AUTHORIZED' } });
     if (claimed.count !== 1) throw new BadRequestException('Pump was just authorized by someone else');
-    return this.prisma.fuelPump.findFirst({ where: { id, businessId }, include: { grade: true } });
+    return this.prisma.fuelPump.findFirst({ where: { id, businessId }, include: PUMP_INCLUDE });
   }
 
   async stopPump(id: string, businessId: string) {
     await this.owned('fuelPump', id, businessId, 'Pump');
-    return this.prisma.fuelPump.update({ where: { id }, data: { status: 'IDLE' }, include: { grade: true } });
+    return this.prisma.fuelPump.update({ where: { id }, data: { status: 'IDLE' }, include: PUMP_INCLUDE });
   }
 
   // ── Fuel Sales ────────────────────────────────────────────────────────────
@@ -241,6 +366,7 @@ export class FuelPumpService {
     businessId: string;
     storeId?: string;
     pumpId: string;
+    nozzleId?: string;
     gradeId?: string;
     cashierId?: string;
     customerId?: string;
@@ -262,25 +388,69 @@ export class FuelPumpService {
       if (!known) throw new BadRequestException('Customer not found');
     }
 
-    const pump = await this.prisma.fuelPump.findFirst({ where: { id: dto.pumpId, businessId: dto.businessId }, include: { grade: true } });
+    const pump = await this.prisma.fuelPump.findFirst({
+      where: { id: dto.pumpId, businessId: dto.businessId },
+      include: { nozzles: { where: { isActive: true }, orderBy: { nozzleNumber: 'asc' }, include: { grade: true } } },
+    });
     if (!pump) throw new NotFoundException('Pump not found');
-    if (dto.gradeId && dto.gradeId !== pump.gradeId) throw new BadRequestException('This pump dispenses a different grade');
-    if (!pump.grade?.isActive) throw new BadRequestException('This grade is switched off');
 
-    const pricePerLitreCents = pump.grade.pricePerLitreCents;
+    // Which hose the fuel came out of: it sets the grade, the price and the tank.
+    const hoses = pump.nozzles ?? [];
+    let nozzle: (typeof hoses)[number] | undefined;
+    if (dto.nozzleId) {
+      nozzle = hoses.find((n) => n.id === dto.nozzleId);
+      if (!nozzle) throw new BadRequestException('That nozzle is not on this pump');
+    } else if (hoses.length === 1) {
+      nozzle = hoses[0];
+    } else if (hoses.length === 0) {
+      throw new BadRequestException('This pump has no active nozzle');
+    } else {
+      throw new BadRequestException('Choose the nozzle the fuel came from');
+    }
+    const grade = nozzle.grade;
+    if (dto.gradeId && dto.gradeId !== nozzle.gradeId) throw new BadRequestException('This pump dispenses a different grade');
+    if (!grade?.isActive) throw new BadRequestException('This grade is switched off');
+
+    // Fuel is only sold inside a shift, on a nozzle that was read when the shift opened, so every litre has an attendant.
+    const shift = await this.prisma.fuelShift.findFirst({
+      where: { businessId: dto.businessId, storeId: pump.storeId, status: 'OPEN' },
+      include: { readings: true, attendants: true },
+    });
+    if (!shift) throw new BadRequestException('No shift is open. Open a shift before selling fuel.');
+    if (!shift.readings.some((r) => r.nozzleId === nozzle.id)) {
+      throw new BadRequestException(
+        shift.readings.some((r) => !r.nozzleId)
+          ? 'This shift was opened before each nozzle had its own meter. Close it and open a new shift.'
+          : `Pump ${pump.pumpNumber} nozzle ${nozzle.nozzleNumber} is not on the open shift. Close the shift and open one that includes it.`,
+      );
+    }
+    const attendant = shift.attendants.find((a) => a.nozzleIds.includes(nozzle.id));
+
+    const pricePerLitreCents = grade.pricePerLitreCents;
     const totalCents = Math.round(litres * pricePerLitreCents);
     const businessId = dto.businessId;
     // Past the business's cutover, the sale also becomes a real Sale: receipt, eTIMS, Z-report, drawer, ledger.
     const invoice = await this.directSales.isEnabled(businessId);
 
     const outcome = await this.prisma.$transaction(async (tx) => {
-      // 1. Take the fuel out of a tank that has it. Several tanks can hold one grade; use the first that can
-      //    cover the sale. A grade with no tank set up is not stock-tracked and sells as before.
-      const tanks = await tx.fuelTank.findMany({
-        where: { gradeId: pump.gradeId, businessId, storeId: pump.storeId, isActive: true },
-        orderBy: { tankNumber: 'asc' },
-      });
+      // 0. The shift must still be open at the moment the sale is written: closing it takes the same row, so a
+      //    sale either lands before the close counts the shift or is refused.
+      const stillOpen = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "FuelShift" WHERE "id" = ${shift.id} AND "status" = 'OPEN' FOR SHARE`;
+      if (stillOpen.length !== 1) throw new BadRequestException('The shift was just closed. Open a new shift to sell fuel.');
+
+      // 1. Take the fuel out of the tank this hose is plumbed to (or, for a hose with no tank set, any tank of the
+      //    grade that can cover it). A grade with no tank at all is not stock-tracked and sells as before.
+      const tanks = nozzle.tankId
+        ? await tx.fuelTank.findMany({ where: { id: nozzle.tankId, businessId, isActive: true } })
+        : await tx.fuelTank.findMany({
+            where: { gradeId: nozzle.gradeId, businessId, storeId: pump.storeId, isActive: true },
+            orderBy: { tankNumber: 'asc' },
+          });
+      if (nozzle.tankId && tanks.length === 0) {
+        throw new BadRequestException(`The tank for pump ${pump.pumpNumber} nozzle ${nozzle.nozzleNumber} is switched off. Choose another tank for the nozzle first.`);
+      }
       let drawnFrom: string | null = null;
+      let unitCostCents: number | null = null;
       if (tanks.length > 0) {
         let drawn = false;
         for (const tank of tanks) {
@@ -288,7 +458,12 @@ export class FuelPumpService {
             where: { id: tank.id, currentLitres: { gte: litres } },
             data: { currentLitres: { decrement: litres } },
           });
-          if (taken.count === 1) { drawn = true; drawnFrom = tank.id; break; }
+          if (taken.count === 1) {
+            drawn = true;
+            drawnFrom = tank.id;
+            unitCostCents = tank.avgCostCents > 0 ? Math.round(tank.avgCostCents) : null;
+            break;
+          }
         }
         if (!drawn) {
           const most = Math.max(...tanks.map((t) => t.currentLitres));
@@ -304,7 +479,12 @@ export class FuelPumpService {
           businessId,
           storeId: pump.storeId,
           pumpId: pump.id,
-          gradeId: pump.gradeId,
+          gradeId: nozzle.gradeId,
+          nozzleId: nozzle.id,
+          shiftId: shift.id,
+          attendantId: attendant?.id,
+          attendantName: attendant?.name,
+          unitCostCents,
           cashierId: dto.cashierId,
           customerId,
           vehiclePlate: optionalText(dto.vehiclePlate, 'Vehicle plate', 20)?.toUpperCase(),
@@ -334,7 +514,7 @@ export class FuelPumpService {
       // 4. The invoice, in the same transaction: if it cannot be written, nothing above is kept.
       let direct: { result: DirectSaleResult; input: DirectSaleInput } | null = null;
       if (invoice) {
-        const gradeItem = await this.ensureGradeItem(tx, pump.grade);
+        const gradeItem = await this.ensureGradeItem(tx, grade);
         const onAccount = paymentMethod === 'FLEET' || paymentMethod === 'CREDIT';
         const input: DirectSaleInput = {
           businessId,
@@ -343,7 +523,7 @@ export class FuelPumpService {
           source: 'FUEL',
           lines: [{
             itemId: gradeItem.id,
-            name: `${pump.grade.name} (Pump ${pump.pumpNumber})`,
+            name: `${grade.name} (Pump ${pump.pumpNumber})`,
             quantity: litres,
             unitPriceCents: pricePerLitreCents,
             totalCents,
@@ -497,33 +677,49 @@ export class FuelPumpService {
         : {}),
     };
 
-    const [totals, byGrade] = await Promise.all([
-      this.prisma.fuelSale.aggregate({
-        where,
-        _sum: { totalCents: true, litresDispensed: true },
-        _count: true,
-      }),
-      this.prisma.fuelSale.groupBy({
-        by: ['gradeId'],
-        where,
-        _sum: { totalCents: true, litresDispensed: true },
-        _count: true,
-      }),
+    const [totals, byGrade, byCost, byPayment] = await Promise.all([
+      this.prisma.fuelSale.aggregate({ where, _sum: { totalCents: true, litresDispensed: true }, _count: true }),
+      this.prisma.fuelSale.groupBy({ by: ['gradeId'], where, _sum: { totalCents: true, litresDispensed: true }, _count: true }),
+      // A handful of rows: one per grade per distinct cost, so margin is exact without reading every sale.
+      this.prisma.fuelSale.groupBy({ by: ['gradeId', 'unitCostCents'], where, _sum: { totalCents: true, litresDispensed: true } }),
+      this.prisma.fuelSale.groupBy({ by: ['paymentMethod'], where, _sum: { totalCents: true, litresDispensed: true }, _count: true }),
     ]);
 
     const grades = await this.prisma.fuelGrade.findMany({ where: { businessId, storeId } });
     const gradeMap = Object.fromEntries(grades.map((g) => [g.id, g.name]));
 
+    // Margin counts only the fuel whose cost was known; the rest is reported so the figure is not mistaken for all of it.
+    const margin: Record<string, { marginCents: number; costedRevenueCents: number; uncostedRevenueCents: number }> = {};
+    for (const row of byCost) {
+      const m = (margin[row.gradeId] ??= { marginCents: 0, costedRevenueCents: 0, uncostedRevenueCents: 0 });
+      const revenue = row._sum.totalCents ?? 0;
+      const gained = marginCents(revenue, row._sum.litresDispensed ?? 0, row.unitCostCents);
+      if (gained === null) m.uncostedRevenueCents += revenue;
+      else { m.marginCents += gained; m.costedRevenueCents += revenue; }
+    }
+    const sum = (k: 'marginCents' | 'costedRevenueCents' | 'uncostedRevenueCents') => Object.values(margin).reduce((t, m) => t + m[k], 0);
+
     return {
       totalRevenueCents: totals._sum.totalCents ?? 0,
       totalLitres: totals._sum.litresDispensed ?? 0,
       totalTransactions: totals._count,
+      marginCents: sum('marginCents'),
+      costedRevenueCents: sum('costedRevenueCents'),
+      uncostedRevenueCents: sum('uncostedRevenueCents'),
       byGrade: byGrade.map((g) => ({
         gradeId: g.gradeId,
         gradeName: gradeMap[g.gradeId] ?? g.gradeId,
         revenueCents: g._sum.totalCents ?? 0,
         litres: g._sum.litresDispensed ?? 0,
         transactions: g._count,
+        marginCents: margin[g.gradeId]?.marginCents ?? 0,
+        costedRevenueCents: margin[g.gradeId]?.costedRevenueCents ?? 0,
+      })),
+      byPayment: byPayment.map((p) => ({
+        method: p.paymentMethod,
+        revenueCents: p._sum.totalCents ?? 0,
+        litres: p._sum.litresDispensed ?? 0,
+        transactions: p._count,
       })),
     };
   }
@@ -571,317 +767,6 @@ export class FuelPumpService {
       },
       include: { grade: true },
     });
-  }
-
-  async recordDipping(dto: { businessId: string; tankId: string; litres: number; recordedBy: string; notes?: string }) {
-    const tank = await this.owned('fuelTank', dto.tankId, dto.businessId, 'Tank');
-    const litres = numberInRange(dto.litres, 'Dipping reading', { min: 0, max: tank.capacityLitres });
-    const [dipping] = await this.prisma.$transaction([
-      this.prisma.fuelTankDipping.create({
-        data: { businessId: dto.businessId, tankId: tank.id, litres, recordedBy: text(dto.recordedBy, 'Recorded by', 100), notes: optionalText(dto.notes, 'Notes', 500) },
-      }),
-      this.prisma.fuelTank.update({ where: { id: tank.id }, data: { currentLitres: litres } }),
-    ]);
-    return dipping;
-  }
-
-  async getDippings(businessId: string, tankId: string) {
-    await this.owned('fuelTank', tankId, businessId, 'Tank');
-    return this.prisma.fuelTankDipping.findMany({
-      where: { tankId, businessId },
-      orderBy: { recordedAt: 'desc' },
-      take: 30,
-    });
-  }
-
-  async recordDelivery(dto: { businessId: string; tankId: string; litresDelivered: number; supplierName?: string; docketNumber?: string; deliveredBy?: string; notes?: string }) {
-    const tank = await this.owned('fuelTank', dto.tankId, dto.businessId, 'Tank');
-    const litresDelivered = numberInRange(dto.litresDelivered, 'Litres delivered', { min: 0, max: tank.capacityLitres, exclusiveMin: true });
-    const room = tank.capacityLitres - tank.currentLitres;
-    // A delivery that does not fit means the book level is wrong, not that fuel vanished. Silently capping
-    // it would record litres the tank never received.
-    if (litresDelivered > room + 0.0005) {
-      throw new BadRequestException(
-        `That delivery does not fit: the tank has ${room.toFixed(2)}L of room on the books. Record a dipping first if the level is out of date.`,
-      );
-    }
-    const [delivery] = await this.prisma.$transaction([
-      this.prisma.fuelDelivery.create({
-        data: {
-          businessId: dto.businessId,
-          tankId: tank.id,
-          litresDelivered,
-          supplierName: optionalText(dto.supplierName, 'Supplier', 100),
-          docketNumber: optionalText(dto.docketNumber, 'Docket number', 50),
-          deliveredBy: optionalText(dto.deliveredBy, 'Delivered by', 100),
-          notes: optionalText(dto.notes, 'Notes', 500),
-        },
-      }),
-      this.prisma.fuelTank.update({ where: { id: tank.id }, data: { currentLitres: { increment: litresDelivered } } }),
-    ]);
-    return delivery;
-  }
-
-  getDeliveries(businessId: string, startDate?: string, endDate?: string) {
-    return this.prisma.fuelDelivery.findMany({
-      where: {
-        businessId,
-        ...(startDate || endDate
-          ? {
-              deliveredAt: {
-                ...(startDate ? { gte: parseFilterDate(startDate, 'start', 'Start date') } : {}),
-                ...(endDate ? { lte: parseFilterDate(endDate, 'end', 'End date') } : {}),
-              },
-            }
-          : {}),
-      },
-      include: { tank: { include: { grade: true } } },
-      orderBy: { deliveredAt: 'desc' },
-      take: 100,
-    });
-  }
-
-  // ── Variance Report ───────────────────────────────────────────────────────
-  // Compare dispensed sales vs dipping readings to detect shrinkage/losses
-
-  async getVarianceReport(businessId: string, storeId: string, startDate?: string, endDate?: string) {
-    const dateFilter = startDate || endDate
-      ? {
-          createdAt: {
-            ...(startDate ? { gte: parseFilterDate(startDate, 'start', 'Start date') } : {}),
-            ...(endDate ? { lte: parseFilterDate(endDate, 'end', 'End date') } : {}),
-          },
-        }
-      : {};
-
-    const tanks = await this.prisma.fuelTank.findMany({
-      where: { businessId, storeId, isActive: true },
-      include: {
-        grade: true,
-        dippings: {
-          where: startDate || endDate
-            ? {
-                recordedAt: {
-                  ...(startDate ? { gte: parseFilterDate(startDate, 'start', 'Start date') } : {}),
-                  ...(endDate ? { lte: parseFilterDate(endDate, 'end', 'End date') } : {}),
-                },
-              }
-            : {},
-          orderBy: { recordedAt: 'asc' },
-        },
-        deliveries: {
-          where: startDate || endDate
-            ? {
-                deliveredAt: {
-                  ...(startDate ? { gte: parseFilterDate(startDate, 'start', 'Start date') } : {}),
-                  ...(endDate ? { lte: parseFilterDate(endDate, 'end', 'End date') } : {}),
-                },
-              }
-            : {},
-        },
-      },
-    });
-
-    const results = await Promise.all(
-      tanks.map(async (tank) => {
-        // Total dispensed by grade via sales
-        const salesAgg = await this.prisma.fuelSale.aggregate({
-          where: { businessId, storeId, gradeId: tank.gradeId, status: 'COMPLETED', ...dateFilter },
-          _sum: { litresDispensed: true },
-        });
-        const dispensedLitres = salesAgg._sum.litresDispensed ?? 0;
-
-        // Total delivered into this tank
-        const deliveredLitres = tank.deliveries.reduce((s, d) => s + d.litresDelivered, 0);
-
-        // Opening and closing dipping readings
-        const openingDipping = tank.dippings[0];
-        const closingDipping = tank.dippings[tank.dippings.length - 1];
-        const openingLitres = openingDipping?.litres ?? tank.currentLitres + dispensedLitres - deliveredLitres;
-        const closingLitres = closingDipping?.litres ?? tank.currentLitres;
-
-        // Expected closing = opening + deliveries - dispensed
-        const expectedClosing = openingLitres + deliveredLitres - dispensedLitres;
-        const varianceLitres = closingLitres - expectedClosing;
-        const variancePct = expectedClosing !== 0 ? (varianceLitres / expectedClosing) * 100 : 0;
-
-        return {
-          tankId: tank.id,
-          tankNumber: tank.tankNumber,
-          label: tank.label ?? `Tank ${tank.tankNumber}`,
-          gradeName: tank.grade.name,
-          openingLitres,
-          deliveredLitres,
-          dispensedLitres,
-          expectedClosingLitres: expectedClosing,
-          actualClosingLitres: closingLitres,
-          varianceLitres: parseFloat(varianceLitres.toFixed(2)),
-          variancePct: parseFloat(variancePct.toFixed(2)),
-          status: Math.abs(variancePct) > 1 ? 'ALERT' : 'OK',
-        };
-      }),
-    );
-
-    return results;
-  }
-
-  // ── Shift Management ───────────────────────────────────────────────────────
-
-  getShifts(businessId: string, storeId: string) {
-    return this.prisma.fuelShift.findMany({
-      where: { businessId, storeId },
-      include: { readings: true },
-      orderBy: { openedAt: 'desc' },
-      take: 20,
-    });
-  }
-
-  getOpenShift(businessId: string, storeId: string) {
-    return this.prisma.fuelShift.findFirst({
-      where: { businessId, storeId, status: 'OPEN' },
-      include: { readings: true },
-    });
-  }
-
-  async openShift(dto: {
-    businessId: string;
-    storeId: string;
-    cashierId?: string;
-    cashierName: string;
-    readings: Array<{ pumpId: string; openingLitres: number }>;
-  }) {
-    await this.assertStore(dto.storeId, dto.businessId);
-    const cashierName = text(dto.cashierName, 'Cashier name', 100);
-    const readings = (Array.isArray(dto.readings) ? dto.readings : []).map((r) => ({
-      pumpId: text(r?.pumpId, 'Pump', 64),
-      openingLitres: numberInRange(r?.openingLitres, 'Opening reading', { min: 0, max: 1e9 }),
-    }));
-    if (new Set(readings.map((r) => r.pumpId)).size !== readings.length) {
-      throw new BadRequestException('Each pump can have only one opening reading');
-    }
-    if (readings.length > 0) {
-      const found = await this.prisma.fuelPump.count({
-        where: { id: { in: readings.map((r) => r.pumpId) }, businessId: dto.businessId, storeId: dto.storeId },
-      });
-      if (found !== readings.length) throw new BadRequestException('A reading names a pump that is not in this store');
-    }
-
-    return this.prisma.$transaction(async (tx) => {
-      const open = await tx.fuelShift.findFirst({ where: { businessId: dto.businessId, storeId: dto.storeId, status: 'OPEN' } });
-      if (open) throw new BadRequestException('A shift is already open. Close it before opening another.');
-      return tx.fuelShift.create({
-        data: {
-          businessId: dto.businessId,
-          storeId: dto.storeId,
-          cashierId: dto.cashierId,
-          cashierName,
-          readings: { create: readings },
-        },
-        include: { readings: true },
-      });
-    });
-  }
-
-  async closeShift(id: string, businessId: string, closingReadings: Array<{ pumpId: string; closingLitres: number }>) {
-    const shift = await this.prisma.fuelShift.findFirst({ where: { id, businessId }, include: { readings: true } });
-    if (!shift) throw new NotFoundException('Shift not found');
-    if (shift.status !== 'OPEN') throw new BadRequestException('This shift is already closed');
-
-    const opening = new Map(shift.readings.map((r) => [r.pumpId, r.openingLitres]));
-    const readings = (Array.isArray(closingReadings) ? closingReadings : []).map((r) => {
-      const pumpId = text(r?.pumpId, 'Pump', 64);
-      if (!opening.has(pumpId)) throw new BadRequestException('A closing reading names a pump that was not in this shift');
-      const closingLitres = numberInRange(r?.closingLitres, 'Closing reading', { min: opening.get(pumpId) as number, max: 1e9 });
-      return { pumpId, closingLitres };
-    });
-
-    await this.prisma.$transaction(async (tx) => {
-      // Claim the close: a second close, or two at once, finds the shift no longer OPEN.
-      const claimed = await tx.fuelShift.updateMany({ where: { id, businessId, status: 'OPEN' }, data: { status: 'CLOSED', closedAt: new Date() } });
-      if (claimed.count !== 1) throw new BadRequestException('This shift is already closed');
-      for (const r of readings) {
-        await tx.fuelShiftReading.updateMany({ where: { shiftId: id, pumpId: r.pumpId }, data: { closingLitres: r.closingLitres } });
-      }
-    });
-    return this.prisma.fuelShift.findFirst({ where: { id, businessId }, include: { readings: true } });
-  }
-
-  async getShiftSummary(shiftId: string, businessId: string) {
-    const shift = await this.prisma.fuelShift.findFirst({
-      where: { id: shiftId, businessId },
-      include: { readings: true },
-    });
-    if (!shift) throw new NotFoundException('Shift not found');
-
-    const dateFilter = {
-      createdAt: {
-        gte: shift.openedAt,
-        ...(shift.closedAt ? { lte: shift.closedAt } : {}),
-      },
-    };
-
-    // Sales during shift
-    const sales = await this.prisma.fuelSale.findMany({
-      where: { businessId: shift.businessId, storeId: shift.storeId, status: 'COMPLETED', ...dateFilter },
-      include: { pump: true, grade: true },
-    });
-
-    // Group by pump
-    const pumpMap: Record<string, {
-      pumpId: string; pumpLabel: string; pumpNumber: number;
-      litres: number; revenueCents: number; transactions: number;
-      openingLitres: number; closingLitres: number | null;
-    }> = {};
-
-    for (const r of shift.readings) {
-      pumpMap[r.pumpId] = {
-        pumpId: r.pumpId,
-        pumpLabel: '',
-        pumpNumber: 0,
-        litres: 0,
-        revenueCents: 0,
-        transactions: 0,
-        openingLitres: r.openingLitres,
-        closingLitres: r.closingLitres ?? null,
-      };
-    }
-
-    for (const s of sales) {
-      if (!pumpMap[s.pumpId]) {
-        pumpMap[s.pumpId] = {
-          pumpId: s.pumpId,
-          pumpLabel: s.pump?.label ?? `Pump ${s.pump?.pumpNumber}`,
-          pumpNumber: s.pump?.pumpNumber ?? 0,
-          litres: 0,
-          revenueCents: 0,
-          transactions: 0,
-          openingLitres: 0,
-          closingLitres: null,
-        };
-      }
-      pumpMap[s.pumpId].pumpLabel = s.pump?.label ?? `Pump ${s.pump?.pumpNumber}`;
-      pumpMap[s.pumpId].pumpNumber = s.pump?.pumpNumber ?? 0;
-      pumpMap[s.pumpId].litres += s.litresDispensed;
-      pumpMap[s.pumpId].revenueCents += s.totalCents;
-      pumpMap[s.pumpId].transactions += 1;
-    }
-
-    // Group by payment method
-    const byPayment: Record<string, { method: string; count: number; totalCents: number }> = {};
-    for (const s of sales) {
-      if (!byPayment[s.paymentMethod]) byPayment[s.paymentMethod] = { method: s.paymentMethod, count: 0, totalCents: 0 };
-      byPayment[s.paymentMethod].count += 1;
-      byPayment[s.paymentMethod].totalCents += s.totalCents;
-    }
-
-    return {
-      shift,
-      totalLitres: sales.reduce((s, x) => s + x.litresDispensed, 0),
-      totalRevenueCents: sales.reduce((s, x) => s + x.totalCents, 0),
-      totalTransactions: sales.length,
-      byPump: Object.values(pumpMap),
-      byPayment: Object.values(byPayment),
-    };
   }
 
   // ── Fleet Accounts ─────────────────────────────────────────────────────────

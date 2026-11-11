@@ -1887,7 +1887,7 @@ dependencies = [
 
 [[package]]
 name = "kastra-pos-desktop"
-version = "1.1.9"
+version = "1.2.0"
 dependencies = [
  "base64 0.22.1",
  "dirs-next",

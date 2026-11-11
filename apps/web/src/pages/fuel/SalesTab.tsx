@@ -5,6 +5,9 @@ import { formatKES } from '@pos/shared';
 import { api } from '../../lib/api';
 import { Badge, Card, Input, Select } from '../../components/ui';
 import { useDialog } from '../../components/Dialog';
+import { buildDirectSaleReceipt, type DirectSaleResponse } from '../../lib/directSaleReceipt';
+import DirectSaleReceiptModal from '../../components/DirectSaleReceiptModal';
+import type { ReceiptData } from '../../lib/printer';
 import { litres } from './money';
 import { PAYMENT_LABEL } from './types';
 import { useFuelScope, usePumps } from './useFuelData';
@@ -18,7 +21,7 @@ interface SaleRow {
 export default function SalesTab() {
   const qc = useQueryClient();
   const { prompt } = useDialog();
-  const { businessId, storeId, isManager } = useFuelScope();
+  const { user, businessId, storeId, isManager } = useFuelScope();
   const { data: pumps = [] } = usePumps();
   const [pumpId, setPumpId] = useState('');
   const [from, setFrom] = useState('');
@@ -28,6 +31,24 @@ export default function SalesTab() {
     queryKey: ['fuel-sales', businessId, storeId, pumpId, from, to],
     queryFn: () => api.get<SaleRow[]>(`/fuel-pump/sales?businessId=${businessId}&storeId=${storeId}${pumpId ? `&pumpId=${pumpId}` : ''}${from ? `&startDate=${from}` : ''}${to ? `&endDate=${to}` : ''}`),
     enabled: !!storeId,
+  });
+
+  const { data: biz } = useQuery<{ name?: string; receiptHeader?: string; receiptFooter?: string }>({
+    queryKey: ['biz-settings', businessId],
+    queryFn: () => api.get(`/business/${businessId}/settings`),
+    enabled: !!businessId,
+    staleTime: 5 * 60_000,
+  });
+  const [receipt, setReceipt] = useState<ReceiptData | null>(null);
+  // Opens a sale's receipt again, to print for a customer who asks later. A sale KRA was not yet told about is sent now.
+  const reprint = useMutation({
+    mutationFn: (id: string) => api.get<DirectSaleResponse>(`/fuel-pump/sales/${id}/receipt`),
+    onSuccess: (res) => {
+      const r = buildDirectSaleReceipt(res, { businessName: biz?.name, cashierName: user?.name, receiptHeader: biz?.receiptHeader, receiptFooter: biz?.receiptFooter, fallbackName: 'Fuel station' });
+      if (r) setReceipt(r);
+      else toast.error('There is no receipt for this sale');
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const voidSale = useMutation({
@@ -56,7 +77,7 @@ export default function SalesTab() {
               <tr>
                 <th className="text-left px-4 py-2">Time</th><th className="text-left px-3 py-2">Pump</th><th className="text-left px-3 py-2">Attendant</th>
                 <th className="text-right px-3 py-2">Litres</th><th className="text-right px-3 py-2">Price</th><th className="text-right px-3 py-2">Total</th>
-                <th className="text-left px-3 py-2">Paid by</th><th className="text-left px-3 py-2">Plate</th>{isManager && <th className="px-3 py-2" />}
+                <th className="text-left px-3 py-2">Paid by</th><th className="text-left px-3 py-2">Plate</th><th className="px-3 py-2" />
               </tr>
             </thead>
             <tbody>
@@ -70,17 +91,21 @@ export default function SalesTab() {
                   <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatKES(s.totalCents)}</td>
                   <td className="px-3 py-2"><Badge>{PAYMENT_LABEL[s.paymentMethod] ?? s.paymentMethod}</Badge></td>
                   <td className="px-3 py-2">{s.vehiclePlate ?? '-'}</td>
-                  {isManager && (
-                    <td className="px-3 py-2 text-right">
-                      {s.status === 'VOIDED' ? <Badge tone="danger">Voided</Badge> : (
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
+                    {s.status !== 'VOIDED' && (
+                      <button type="button" className="text-xs font-semibold text-brand-700 hover:underline disabled:opacity-50 mr-3" disabled={reprint.isPending} onClick={() => reprint.mutate(s.id)}>Receipt</button>
+                    )}
+                    {isManager && (
+                      s.status === 'VOIDED' ? <Badge tone="danger">Voided</Badge> : (
                         <button type="button" className="text-xs font-semibold text-red-700 hover:underline disabled:opacity-50" disabled={voidSale.isPending}
                           onClick={async () => {
                             const reason = await prompt({ title: 'Void this sale', message: 'The litres go back into the tank and any invoice is cancelled. The litres still show as unrecorded at the shift close, because they did pass the meter.', placeholder: 'Reason', confirmLabel: 'Void sale' });
                             if (reason) voidSale.mutate({ id: s.id, reason });
                           }}>Void</button>
-                      )}
-                    </td>
-                  )}
+                      )
+                    )}
+                    {!isManager && s.status === 'VOIDED' && <Badge tone="danger">Voided</Badge>}
+                  </td>
                 </tr>
               ))}
               {!isLoading && sales.length === 0 && <tr><td colSpan={9} className="px-4 py-10 text-center text-gray-500">No sales found</td></tr>}
@@ -88,6 +113,7 @@ export default function SalesTab() {
           </table>
         </div>
       </Card>
+      {receipt && <DirectSaleReceiptModal receipt={receipt} onClose={() => setReceipt(null)} title="Receipt" quantityLabel={(q) => `${q} L`} />}
       {sales.length === 200 && <p className="text-xs text-gray-600">Showing the latest 200. Narrow the dates to see older sales.</p>}
     </div>
   );

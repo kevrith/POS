@@ -365,6 +365,10 @@ Rules these modules enforce on the server (the web and mobile screens are not tr
   `PrescriptionsController.create`. `prescriptions/clinical-roles.ts` says who may approve a safety override or a prescription-free sale
   (owner, manager, pharmacist); `AuthService.verifyManagerPin` takes the roles that may approve (default owner and manager, as before).
   `packages/shared/dist` is not committed, so run `npm run build` in `packages/shared` after pulling shared changes.
+- **Fuel receipts and buyer PIN.** `POST fuel-pump/sales` takes an optional `buyerKraPin` (and `buyerName`) for a walk-in or a customer with no PIN on file; it is
+  validated (`optionalKraPin`), refused with a clear message when the business is not on the real-sales pipeline (so it is never silently dropped), and a fleet
+  account's own PIN still wins on a fleet sale. `GET fuel-pump/sales/:id/receipt` returns the invoice and KRA's answer again (`DirectSaleService.receiptFor`;
+  eTIMS submission is idempotent, so a reprint is also the retry); a voided sale or one with no invoice has none.
 - **Hotel.** The dates decide the nights (a `nightCount` that disagrees is ignored). A room cannot be
   booked for overlapping nights: bookings, check-in, cancel and check-out all take a row lock on the
   room first, and a guest still checked in past their date keeps holding it. A booking due today shows

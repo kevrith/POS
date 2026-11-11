@@ -247,6 +247,34 @@ export class DirectSaleService {
    * can put the QR code on the receipt. The server owns the submission: a screen that also submitted would risk
    * sending KRA the same invoice twice.
    */
+  /**
+   * An invoice this module wrote, as a receipt needs it, with KRA's answer. eTIMS submission is idempotent: an invoice
+   * already sent returns the same control number and QR, one not yet sent is sent now (so a reprint is also the retry).
+   */
+  async receiptFor(saleId: string, businessId: string): Promise<{ invoice: Record<string, unknown>; etims: EtimsOutcome | null }> {
+    const sale = await this.prisma.sale.findFirst({ where: { id: saleId, businessId }, include: { items: true, payments: true, customer: true } });
+    if (!sale) throw new NotFoundException('Receipt not found');
+    const etims = await this.etims.submitSale(sale.id).then(
+      (r) => r as EtimsOutcome,
+      (e: unknown) => {
+        this.logger.warn(`eTIMS submission for ${sale.receiptNumber} failed on reprint, left pending: ${String(e)}`);
+        return null;
+      },
+    );
+    const { customer, items, payments, ...rest } = sale as any;
+    return {
+      invoice: {
+        ...rest,
+        customerName: rest.customerName ?? customer?.name ?? null,
+        // The customer's own PIN wins, as it did on the original receipt.
+        buyerKraPin: customer?.kraPin ?? rest.buyerKraPin ?? null,
+        items: items.map((i: any) => ({ name: i.name, quantity: i.quantity, unitPriceCents: i.unitPriceCents, totalCents: i.totalCents })),
+        payments: payments.map((p: any) => ({ method: p.method, amountCents: p.amountCents })),
+      },
+      etims,
+    };
+  }
+
   afterCommit(result: DirectSaleResult, input: DirectSaleInput): { etims: Promise<EtimsOutcome | null> } {
     const { sale } = result;
     void this.audit.createEntry({

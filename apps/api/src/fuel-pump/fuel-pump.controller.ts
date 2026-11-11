@@ -82,6 +82,12 @@ export class FuelPumpController {
   }
 
   // ── Sales ─────────────────────────────────────────────────────────────────
+  /** The receipt of a pump sale, to print again. */
+  @Get('sales/:id/receipt')
+  getReceipt(@Param('id') id: string, @Req() req: Request & { user: AuthUser }) {
+    return this.svc.getReceipt(id, req.user.businessId);
+  }
+
   @Get('sales')
   getSales(
     @Query('businessId') businessId: string,

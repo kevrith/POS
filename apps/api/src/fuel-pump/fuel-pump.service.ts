@@ -376,6 +376,9 @@ export class FuelPumpService {
     paymentMethod: string;
     paymentRef?: string;
     fleetAccountId?: string;
+    /** A buyer who asks for their KRA PIN on the receipt (a walk-in, or a customer without one on file), and optionally the name to print. */
+    buyerKraPin?: string;
+    buyerName?: string;
   }) {
     const litres = numberInRange(dto.litresDispensed, 'Litres dispensed', { min: 0, max: MAX_LITRES_PER_SALE, exclusiveMin: true });
     const paymentMethod = oneOf(String(dto.paymentMethod ?? '').toUpperCase(), 'Payment method', FUEL_PAYMENT_METHODS);
@@ -431,6 +434,12 @@ export class FuelPumpService {
     const businessId = dto.businessId;
     // Past the business's cutover, the sale also becomes a real Sale: receipt, eTIMS, Z-report, drawer, ledger.
     const invoice = await this.directSales.isEnabled(businessId);
+    // A PIN can only be put on a fiscal receipt. Taking it and then printing a receipt without it would be worse than saying so.
+    const buyerKraPin = optionalKraPin(dto.buyerKraPin, 'Buyer KRA PIN');
+    const buyerName = optionalText(dto.buyerName, 'Buyer name', 120);
+    if ((buyerKraPin || buyerName) && !invoice) {
+      throw new BadRequestException('A KRA PIN can only go on a fiscal receipt. Switch on "Fuel, hotel, pharmacy and cyber takings" in Settings first.');
+    }
 
     const outcome = await this.prisma.$transaction(async (tx) => {
       // 0. The shift must still be open at the moment the sale is written: closing it takes the same row, so a
@@ -533,8 +542,9 @@ export class FuelPumpService {
           onAccount,
           customerId: paymentMethod === 'CREDIT' ? customerId : undefined,
           externalAccount: paymentMethod === 'FLEET',
-          customerName: fleet?.companyName,
-          buyerKraPin: fleet?.kraPin ?? undefined,
+          customerName: fleet?.companyName ?? buyerName,
+          // The fleet account's own PIN is the buyer on a fleet sale; otherwise what the buyer asked for.
+          buyerKraPin: fleet?.kraPin ?? buyerKraPin,
           notes: `Fuel ${litres.toFixed(3)} L, pump ${pump.pumpNumber}${sale.vehiclePlate ? `, ${sale.vehiclePlate}` : ''}`,
         };
         const result = await this.directSales.createInTx(tx, input);
@@ -567,6 +577,18 @@ export class FuelPumpService {
         etims,
       }),
     };
+  }
+
+  /**
+   * The receipt of a pump sale again: the invoice as it was written, and KRA's answer (the QR code). A sale KRA has not
+   * yet been told about is sent now, so a reprint is also the retry. A voided sale, or one made before real sales were
+   * switched on (no invoice behind it), has no receipt to print.
+   */
+  async getReceipt(id: string, businessId: string) {
+    const found = await this.owned('fuelSale', id, businessId, 'Sale');
+    if (found.status === 'VOIDED') throw new BadRequestException('This sale was voided, so it has no receipt to print');
+    if (!found.saleId) throw new NotFoundException('This sale was recorded before real sales were switched on, so there is no fiscal receipt for it');
+    return this.directSales.receiptFor(found.saleId, businessId);
   }
 
   /**

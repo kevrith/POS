@@ -236,3 +236,49 @@ describe('DirectSaleService.afterCommit', () => {
     await flush();
   });
 });
+
+describe('DirectSaleService.receiptFor', () => {
+  const sale = (o: Record<string, any> = {}) => ({
+    id: 'sale-9', businessId: 'biz-1', receiptNumber: 'NRB01-2026-0000009', customerName: null, buyerKraPin: 'A012345678Z', subtotalCents: 100, vatCents: 16, totalCents: 116, status: 'PAID',
+    items: [{ name: 'Super (Pump 1)', quantity: 10, unitPriceCents: 1000, totalCents: 10000, id: 'x', saleId: 'sale-9' }],
+    payments: [{ method: 'CASH', amountCents: 116, id: 'p', offlineId: 'o' }],
+    customer: null,
+    ...o,
+  });
+  const make = (found: any, submit: jest.Mock) => {
+    const prisma: any = { sale: { findFirst: jest.fn().mockResolvedValue(found) } };
+    const svc = new DirectSaleService(prisma, {} as any, { submitSale: submit } as any, {} as any, {} as any);
+    return { svc, prisma };
+  };
+
+  it('gives the invoice lines and payments a receipt needs, and KRA\'s answer', async () => {
+    const submit = jest.fn().mockResolvedValue({ success: true, controlNumber: 'CN-1', qrUrl: 'https://itax/qr' });
+    const { svc, prisma } = make(sale(), submit);
+    const r: any = await svc.receiptFor('sale-9', 'biz-1');
+    expect(prisma.sale.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'sale-9', businessId: 'biz-1' } }));
+    expect(r.etims).toEqual({ success: true, controlNumber: 'CN-1', qrUrl: 'https://itax/qr' });
+    expect(r.invoice.items).toEqual([{ name: 'Super (Pump 1)', quantity: 10, unitPriceCents: 1000, totalCents: 10000 }]);
+    expect(r.invoice.payments).toEqual([{ method: 'CASH', amountCents: 116 }]);
+    expect(r.invoice.buyerKraPin).toBe('A012345678Z');
+  });
+
+  it('the customer\'s own PIN and name win, as on the original receipt', async () => {
+    const { svc } = make(sale({ customer: { name: 'Acme', kraPin: 'P051234567Z' } }), jest.fn().mockResolvedValue({ success: true }));
+    const r: any = await svc.receiptFor('sale-9', 'biz-1');
+    expect(r.invoice.buyerKraPin).toBe('P051234567Z');
+    expect(r.invoice.customerName).toBe('Acme');
+    expect(r.invoice.customer).toBeUndefined();
+  });
+
+  it('still returns the receipt when KRA cannot be reached', async () => {
+    const { svc } = make(sale(), jest.fn().mockRejectedValue(new Error('KRA down')));
+    const r: any = await svc.receiptFor('sale-9', 'biz-1');
+    expect(r.etims).toBeNull();
+    expect(r.invoice.id).toBe('sale-9');
+  });
+
+  it('another business\'s sale is not found', async () => {
+    const { svc } = make(null, jest.fn());
+    await expect(svc.receiptFor('sale-x', 'biz-1')).rejects.toThrow(/not found/i);
+  });
+});

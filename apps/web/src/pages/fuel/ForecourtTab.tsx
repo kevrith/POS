@@ -7,6 +7,7 @@ import { api } from '../../lib/api';
 import { Badge, Button, Card, EmptyState, Input, Select } from '../../components/ui';
 import type { ReceiptData } from '../../lib/printer';
 import { buildDirectSaleReceipt } from '../../lib/directSaleReceipt';
+import { isValidKraPin } from '../../lib/kraPin';
 import DirectSaleReceiptModal from '../../components/DirectSaleReceiptModal';
 import { autoPrintReceipt, printErrorMessage } from '../../lib/receiptPrint';
 import { Modal } from './Modal';
@@ -176,6 +177,9 @@ function SaleDialog({
   const [plate, setPlate] = useState('');
   const [fleetId, setFleetId] = useState('');
   const [customerId, setCustomerId] = useState('');
+  // A buyer who wants their KRA PIN on the receipt. A fleet account's own PIN is used for fleet sales, so it is not asked there.
+  const [buyerPin, setBuyerPin] = useState('');
+  const [buyerName, setBuyerName] = useState('');
 
   const { data: fleet = [] } = useFleetAccounts(method === 'FLEET');
   const { data: customers = [] } = useQuery<Array<{ id: string; name: string }>>({
@@ -210,8 +214,10 @@ function SaleDialog({
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const pinProblem = method !== 'FLEET' && buyerPin.trim() !== '' && !isValidKraPin(buyerPin) ? 'A KRA PIN looks like A012345678Z or P051234567Z' : null;
+
   const submit = () => {
-    if (amount === null || amount <= 0 || missingFor) return;
+    if (amount === null || amount <= 0 || missingFor || pinProblem) return;
     sale.mutate({
       businessId, storeId, pumpId: pump.id, nozzleId: nozzle.id, cashierId: user?.id,
       litresDispensed: amount, paymentMethod: method,
@@ -219,6 +225,8 @@ function SaleDialog({
       paymentRef: reference.trim() || undefined,
       fleetAccountId: method === 'FLEET' ? fleetId : undefined,
       customerId: method === 'CREDIT' ? customerId : undefined,
+      buyerKraPin: method !== 'FLEET' && buyerPin.trim() ? buyerPin.trim() : undefined,
+      buyerName: method !== 'FLEET' && buyerPin.trim() && buyerName.trim() ? buyerName.trim() : undefined,
     });
   };
 
@@ -262,10 +270,18 @@ function SaleDialog({
           {(method === 'MPESA' || method === 'CARD') && <Input label={method === 'MPESA' ? 'M-Pesa code' : 'Card slip number'} value={reference} onChange={(e) => setReference(e.target.value)} />}
         </div>
 
+        {method !== 'FLEET' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Input label="Buyer's KRA PIN (optional)" value={buyerPin} onChange={(e) => setBuyerPin(e.target.value.toUpperCase())} placeholder="A012345678Z"
+              hint="Only if the buyer asks for it on the receipt" error={pinProblem ?? undefined} />
+            {buyerPin.trim() !== '' && <Input label="Name on the receipt (optional)" value={buyerName} onChange={(e) => setBuyerName(e.target.value)} />}
+          </div>
+        )}
+
         {missingFor && <p className="text-sm text-amber-800">{missingFor}</p>}
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={sale.isPending} disabled={amount === null || amount <= 0 || !!missingFor}>
+          <Button type="submit" loading={sale.isPending} disabled={amount === null || amount <= 0 || !!missingFor || !!pinProblem}>
             Record sale {total !== null && amount !== null && amount > 0 ? `(${fmtL(amount, 3)})` : ''}
           </Button>
         </div>

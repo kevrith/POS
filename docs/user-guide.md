@@ -588,6 +588,8 @@ A **voided** sale (manager, from **Sales**) puts the litres back into the tank. 
 
 **Fleet accounts.** Companies that fuel on credit have a credit limit and a KRA PIN. Their sales are invoiced to them, a sale over the limit is refused, and payments are recorded from the account.
 
+**Receipts and the buyer's KRA PIN.** When your business records fuel takings as sales (Settings, "Fuel, hotel, pharmacy and cyber takings"), recording a sale opens its receipt with the KRA status and a **Print** button, and prints it by itself if a receipt printer is set up. A customer who wants their KRA PIN on the receipt gives it in **Buyer's KRA PIN** on the sale screen (and, if they like, the name to print); it is checked for the right shape and goes to KRA with the receipt. A **fleet account** needs none: its own PIN is used. If real-sales is off, the screen says a PIN needs it rather than ignoring it. To print a receipt again later, open **Sales** and press **Receipt** on the sale (a sale KRA was not yet told about is sent then). A voided sale, or one from before real-sales was switched on, has no receipt.
+
 **Pump controller.** Under **Setup** there is an optional connection to a pump controller. It has not been tested with a real controller, and you do not need it: the shift meter check catches any litre that is missed.
 
 **Older shifts.** A shift that was already open when the nozzle meters were introduced cannot sell; close it (enter each pump's closing reading) and open a new one.

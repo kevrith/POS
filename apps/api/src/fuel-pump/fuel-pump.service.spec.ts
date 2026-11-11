@@ -328,6 +328,32 @@ describe('FuelPumpService.recordSale: the invoice', () => {
     expect(input).toEqual(expect.objectContaining({ onAccount: true, externalAccount: false, customerId: 'cust-1', payments: [] }));
   });
 
+  it('a buyer who asks for their KRA PIN gets it on the invoice, with the name they gave', async () => {
+    const { svc, directSales } = ready({ invoice: true });
+    await svc.recordSale({ ...CASH_SALE, buyerKraPin: ' a012345678z ', buyerName: ' Wanjiru Kamau ' });
+    const input = directSales.createInTx.mock.calls[0][1];
+    expect(input).toEqual(expect.objectContaining({ buyerKraPin: 'A012345678Z', customerName: 'Wanjiru Kamau' }));
+  });
+
+  it('a fleet account\'s own PIN is the buyer on a fleet sale, whatever else is sent', async () => {
+    const { svc, directSales } = ready({ invoice: true });
+    await svc.recordSale({ ...CASH_SALE, paymentMethod: 'FLEET', fleetAccountId: 'fleet-1', buyerKraPin: 'A012345678Z', buyerName: 'Someone' });
+    expect(directSales.createInTx.mock.calls[0][1]).toEqual(expect.objectContaining({ buyerKraPin: 'P051234567Z', customerName: 'Acme Logistics' }));
+  });
+
+  it('a PIN of the wrong shape is refused before anything is taken', async () => {
+    const { svc, directSales, prisma } = ready({ invoice: true });
+    await expect(svc.recordSale({ ...CASH_SALE, buyerKraPin: 'X123' })).rejects.toThrow(/KRA PIN/);
+    expect(directSales.createInTx).not.toHaveBeenCalled();
+    expect(prisma.fuelSale.create).not.toHaveBeenCalled();
+  });
+
+  it('a PIN is refused, not silently dropped, when there is no fiscal receipt to put it on', async () => {
+    const { svc, prisma } = ready({ invoice: false });
+    await expect(svc.recordSale({ ...CASH_SALE, buyerKraPin: 'A012345678Z' })).rejects.toThrow(/fiscal receipt/);
+    expect(prisma.fuelSale.create).not.toHaveBeenCalled();
+  });
+
   it('credit needs a registered customer, with or without the cutover', async () => {
     for (const invoice of [false, true]) {
       const { svc, prisma, directSales } = ready({ invoice });
@@ -788,5 +814,31 @@ describe('FuelPumpService.getSaleStats margin', () => {
     expect(r.uncostedRevenueCents).toBe(195_000);
     expect(r.byGrade[0].marginCents).toBe(30_000);
     expect(r.byPayment).toEqual([{ method: 'CASH', revenueCents: 585000, litres: 30, transactions: 3 }]);
+  });
+});
+
+describe('FuelPumpService.getReceipt', () => {
+  const found = (o: Record<string, any> = {}) => ({ id: 'fs-1', businessId: 'biz-1', status: 'COMPLETED', saleId: 'sale-9', ...o });
+
+  it('returns the invoice and KRA\'s answer for a sale that was invoiced', async () => {
+    const { svc, prisma, directSales } = setup({ invoice: true });
+    (directSales as any).receiptFor = jest.fn().mockResolvedValue({ invoice: { id: 'sale-9' }, etims: { success: true } });
+    prisma.fuelSale.findFirst.mockResolvedValue(found());
+    expect(await svc.getReceipt('fs-1', 'biz-1')).toEqual({ invoice: { id: 'sale-9' }, etims: { success: true } });
+    expect((directSales as any).receiptFor).toHaveBeenCalledWith('sale-9', 'biz-1');
+  });
+
+  it('says so for a sale made before real sales were switched on', async () => {
+    const { svc, prisma } = setup({ invoice: true });
+    prisma.fuelSale.findFirst.mockResolvedValue(found({ saleId: null }));
+    await expect(svc.getReceipt('fs-1', 'biz-1')).rejects.toThrow(/no fiscal receipt/);
+  });
+
+  it('has none for a voided sale, and none for another business\'s sale', async () => {
+    const { svc, prisma } = setup({ invoice: true });
+    prisma.fuelSale.findFirst.mockResolvedValue(found({ status: 'VOIDED' }));
+    await expect(svc.getReceipt('fs-1', 'biz-1')).rejects.toThrow(/voided/);
+    prisma.fuelSale.findFirst.mockResolvedValue(null);
+    await expect(svc.getReceipt('fs-x', 'biz-1')).rejects.toThrow(/not found/i);
   });
 });

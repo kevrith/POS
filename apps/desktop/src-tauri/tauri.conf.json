@@ -1,6 +1,6 @@
 {
   "productName": "KASTRA POS",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "identifier": "co.ke.kastra.pos",
   "build": {
     "beforeDevCommand": "cd ../../ && npm run dev:web",

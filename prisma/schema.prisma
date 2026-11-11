@@ -1587,12 +1587,73 @@ model Prescription {
   nextFillDate       DateTime?
   patientIdNumber    String?
   referralNotes      String?
+  /// The patient record this was written for. The name, phone and DOB above stay as a snapshot of what was on the paper.
+  patientId          String?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   business           Business  @relation(fields: [businessId], references: [id])
   store              Store     @relation(fields: [storeId], references: [id])
 
   @@index([businessId, storeId, status])
+  @@index([businessId, patientId])
+}
+
+/// A person the clinic or pharmacy treats. One record per person: prescriptions, history and the safety checks
+/// (allergies, interactions, dose) hang off it.
+model Patient {
+  id                    String   @id @default(uuid())
+  businessId            String
+  /// PT-0001, counted per business.
+  patientNumber         String
+  name                  String
+  phone                 String?
+  email                 String?
+  dateOfBirth           DateTime?
+  /// F, M or O.
+  sex                   String?
+  /// National ID or passport. At most one live patient per business has a given number.
+  idNumber              String?
+  address               String?
+  /// JSON list of { substance, reaction?, severity? }. Checked against every medicine at dispensing.
+  allergies             String   @default("[]")
+  /// JSON list of strings (hypertension, diabetes, asthma ...).
+  conditions            String   @default("[]")
+  weightKg              Float?
+  pregnant              Boolean  @default(false)
+  breastfeeding         Boolean  @default(false)
+  bloodGroup            String?
+  nextOfKinName         String?
+  nextOfKinPhone        String?
+  insuranceProviderId   String?
+  insuranceMemberNumber String?
+  notes                 String?
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([businessId, patientNumber])
+  @@index([businessId, name])
+  @@index([businessId, phone])
+  @@index([businessId, idNumber])
+}
+
+/// A safety rule that was set aside on purpose: who, why, and what it was. Written when a dispense goes ahead over a
+/// warning, and when a restricted medicine is sold on an ordinary till.
+model RxSafetyOverride {
+  id               String   @id @default(uuid())
+  businessId       String
+  prescriptionId   String?
+  saleId           String?
+  /// ALLERGY, INTERACTION, MAX_DOSE or RESTRICTED_SALE.
+  kind             String
+  detail           String
+  reason           String
+  approvedById     String
+  approvedByName   String
+  createdAt        DateTime @default(now())
+
+  @@index([businessId, createdAt])
+  @@index([prescriptionId])
 }
 
 /// One dispense or refill that was invoiced as a sale. Voiding that sale takes the fill back through this row.

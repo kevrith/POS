@@ -27,6 +27,8 @@ interface CheckoutDto {
   serviceChargeCents?: number;
   tipCents?: number;
   orderId?: string; // hospitality order — if provided, close it and free the table
+  /** Selling a prescription-only or controlled medicine here without a prescription. The approver is a manager (PIN or login). */
+  restrictedOverride?: { reason?: string; managerPin?: string; patientName?: string; patientIdNumber?: string; prescriberName?: string };
 }
 
 interface VoidDto {
@@ -65,7 +67,22 @@ export class SalesController {
       serviceChargeCents: dto.serviceChargeCents,
       tipCents: dto.tipCents,
       orderId: dto.orderId,
+      restrictedOverride: dto.restrictedOverride
+        ? await this.restrictedApproval(dto.restrictedOverride, dto.businessId, req)
+        : undefined,
     });
+  }
+
+  private async restrictedApproval(o: NonNullable<CheckoutDto['restrictedOverride']>, businessId: string, req: Request & { user: AuthUser }) {
+    const approver = await this.salesService.resolveRestrictedApprover(req.user, businessId, { managerPin: o.managerPin });
+    return {
+      reason: String(o.reason ?? ''),
+      approvedById: approver.id,
+      approvedByName: approver.name,
+      patientName: o.patientName,
+      patientIdNumber: o.patientIdNumber,
+      prescriberName: o.prescriberName,
+    };
   }
 
   @Get()

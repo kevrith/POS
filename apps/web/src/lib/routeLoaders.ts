@@ -33,6 +33,7 @@ export const routeLoaders: Record<string, () => Promise<unknown>> = {
   '/transfers': () => import('../pages/TransfersPage'),
   '/owner-dashboard': () => import('../pages/OwnerDashboardPage'),
   '/prescriptions': () => import('../pages/PrescriptionsPage'),
+  '/patients': () => import('../pages/PatientsPage'),
   '/pharmacy': () => import('../pages/PharmacyPage'),
   '/appointments': () => import('../pages/AppointmentsPage'),
   '/delivery': () => import('../pages/DeliveryPage'),

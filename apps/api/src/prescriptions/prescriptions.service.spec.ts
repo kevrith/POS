@@ -20,7 +20,7 @@ function setup() {
   const p: any = {
     store: { findFirst: jest.fn().mockResolvedValue({ id: 'store-1' }) },
     prescription: { findFirst: jest.fn(), create: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 1 }), update: jest.fn(), findMany: jest.fn() },
-    item: { count: jest.fn().mockResolvedValue(1), findFirst: jest.fn().mockResolvedValue(makeItem()) },
+    item: { count: jest.fn().mockResolvedValue(1), findFirst: jest.fn().mockResolvedValue(makeItem()), findMany: jest.fn().mockResolvedValue([]) },
     business: { findUnique: jest.fn().mockResolvedValue({ negativePolicyDefault: 'WARN' }) },
     $queryRaw: jest.fn().mockResolvedValue([]),
     inventoryMovement: { create: jest.fn(), aggregate: jest.fn().mockResolvedValue({ _sum: { quantity: 100 } }) },
@@ -28,6 +28,9 @@ function setup() {
     controlledSubstanceLog: { create: jest.fn(), findMany: jest.fn() },
     drugInteraction: { findMany: jest.fn().mockResolvedValue([]) },
     drugCatalogue: { findMany: jest.fn().mockResolvedValue([]) },
+    formularyEntry: { findMany: jest.fn().mockResolvedValue([]) },
+    patient: { findFirst: jest.fn().mockResolvedValue(null) },
+    rxSafetyOverride: { create: jest.fn().mockResolvedValue({}) },
     insuranceProvider: { findFirst: jest.fn().mockResolvedValue({ id: 'ins-1' }) },
     prescriptionFill: { create: jest.fn().mockResolvedValue({}) },
     insuranceClaim: { create: jest.fn().mockImplementation(async ({ data }: any) => ({ id: 'claim-1', ...data })) },
@@ -483,5 +486,120 @@ describe('dispensing on the sales pipeline', () => {
     prisma.prescription.findFirst.mockResolvedValue(makeRx({ status: 'DISPENSED', refillsAllowed: 2, refillsUsed: 1, nextFillDate: null }));
     await svc.refill('rx-1', 'biz-1', PHARMACIST, cash(42000));
     expect(directSales.createInTx.mock.calls[0][1].notes).toBe('Prescription RX-AAAAA-20261105-0001, refill 1');
+  });
+});
+
+describe('dose details on a prescription', () => {
+  it('keeps dose, unit, frequency and duration on the line', async () => {
+    const { svc, prisma } = setup();
+    await svc.create({ ...NEW_RX, items: [{ name: 'Amoxicillin', qty: 21, dose: 1, doseUnit: 'capsule', frequency: 'tds', durationDays: 7 }] });
+    const stored = JSON.parse(prisma.prescription.create.mock.calls[0][0].data.items);
+    expect(stored[0]).toEqual({ name: 'Amoxicillin', qty: 21, dose: 1, doseUnit: 'capsule', frequency: 'TDS', durationDays: 7 });
+  });
+
+  it.each([
+    ['a frequency it does not know', { frequency: 'sometimes' }, /Frequency/],
+    ['a dose unit it does not know', { doseUnit: 'bucket' }, /Dose unit/],
+    ['a zero dose', { dose: 0 }, /Dose/],
+    ['a 400-day course', { durationDays: 400 }, /Duration/],
+  ])('refuses %s', async (_l, extra, expected) => {
+    const { svc } = setup();
+    await expect(svc.create({ ...NEW_RX, items: [{ name: 'X', qty: 1, ...extra } as any] })).rejects.toThrow(expected as any);
+  });
+});
+
+describe('a patient record on a prescription', () => {
+  const PATIENT = { id: 'pt-1', name: 'Wanjiru Kamau', phone: '0711000111', dateOfBirth: new Date('1990-04-23T00:00:00Z'), idNumber: '12345678', isActive: true };
+
+  it('copies the patient details from the record and links it', async () => {
+    const { svc, prisma } = setup();
+    prisma.patient.findFirst.mockResolvedValue(PATIENT);
+    await svc.create({ ...NEW_RX, patientName: 'typed wrong', patientId: 'pt-1' });
+    expect(prisma.prescription.create.mock.calls[0][0].data).toMatchObject({ patientId: 'pt-1', patientName: 'Wanjiru Kamau', patientPhone: '0711000111', patientDOB: '1990-04-23', patientIdNumber: '12345678' });
+  });
+
+  it('refuses a patient from another business (or a switched-off one)', async () => {
+    const { svc, prisma } = setup();
+    prisma.patient.findFirst.mockResolvedValue(null);
+    await expect(svc.create({ ...NEW_RX, patientId: 'pt-x' })).rejects.toThrow(/Patient not found/);
+    expect(prisma.patient.findFirst).toHaveBeenCalledWith({ where: { id: 'pt-x', businessId: 'biz-1', isActive: true } });
+  });
+});
+
+describe('safety at dispensing', () => {
+  const allergic = { id: 'pt-1', name: 'Jane Doe', allergies: JSON.stringify([{ substance: 'Penicillin', reaction: 'rash' }]), pregnant: false, breastfeeding: false };
+  const ready = () => {
+    const s = setup();
+    s.prisma.prescription.findFirst.mockResolvedValue(makeRx({ patientId: 'pt-1' }));
+    s.prisma.patient.findFirst.mockResolvedValue(allergic);
+    return s;
+  };
+  const refused = async (p: Promise<unknown>) => p.then(() => null, (e) => e);
+
+  it('refuses a medicine the patient is allergic to, with the reason, and claims nothing', async () => {
+    const { svc, prisma } = ready();
+    const err = await refused(svc.dispense('rx-1', 'biz-1', PHARMACIST));
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect(err.getResponse()).toMatchObject({ code: 'SAFETY_BLOCK', details: [expect.objectContaining({ kind: 'ALLERGY', severity: 'BLOCK' })] });
+    expect(err.message).toMatch(/allergic to Penicillin/);
+    expect(prisma.prescription.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('goes ahead over it only with a reason and a named approver, and records the override', async () => {
+    const { svc, prisma } = ready();
+    await expect(svc.dispense('rx-1', 'biz-1', PHARMACIST, { override: { reason: 'ok', approvedById: 'u-mgr', approvedByName: 'Grace' } })).rejects.toThrow(/Say why/);
+    expect(prisma.prescription.updateMany).not.toHaveBeenCalled();
+
+    await svc.dispense('rx-1', 'biz-1', PHARMACIST, { override: { reason: 'Prescriber confirmed the history was a rash only', approvedById: 'u-mgr', approvedByName: 'Grace' } });
+    expect(prisma.prescription.updateMany).toHaveBeenCalled();
+    expect(prisma.rxSafetyOverride.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ businessId: 'biz-1', prescriptionId: 'rx-1', kind: 'ALLERGY', approvedById: 'u-mgr', approvedByName: 'Grace', reason: 'Prescriber confirmed the history was a rash only' }),
+    });
+  });
+
+  it('checks a refill too (the allergy may have been added since the first fill)', async () => {
+    const { svc, prisma } = ready();
+    prisma.prescription.findFirst.mockResolvedValue(makeRx({ patientId: 'pt-1', status: 'DISPENSED', refillsAllowed: 2, refillsUsed: 1, nextFillDate: null }));
+    await expect(svc.refill('rx-1', 'biz-1', PHARMACIST)).rejects.toThrow(/allergic/);
+    expect(prisma.prescription.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('refuses a daily dose above the formulary maximum', async () => {
+    const { svc, prisma } = setup();
+    prisma.prescription.findFirst.mockResolvedValue(makeRx({ items: JSON.stringify([{ itemId: 'item-1', name: 'Paracetamol 500mg', qty: 56, dose: 3, doseUnit: 'tablet', frequency: 'QDS' }]) }));
+    prisma.formularyEntry.findMany.mockResolvedValue([{ genericName: 'Paracetamol', maxDailyDose: 4000, unit: 'mg' }]);
+    await expect(svc.dispense('rx-1', 'biz-1', PHARMACIST)).rejects.toThrow(/above the usual maximum/);
+  });
+
+  it('does not stop a prescription with only warnings (no patient record, a duplicate)', async () => {
+    const { svc, prisma } = setup();
+    prisma.prescription.findFirst.mockResolvedValue(makeRx({ items: JSON.stringify([{ name: 'Paracetamol', qty: 10 }, { name: 'Paracetamol 1g', qty: 10 }]) }));
+    await svc.dispense('rx-1', 'biz-1', PHARMACIST);
+    expect(prisma.prescription.updateMany).toHaveBeenCalled();
+    expect(prisma.rxSafetyOverride.create).not.toHaveBeenCalled();
+  });
+
+  it('includes what the patient already takes from other recent prescriptions', async () => {
+    const { svc, prisma } = setup();
+    prisma.prescription.findFirst.mockResolvedValue(makeRx({ patientId: 'pt-1', items: JSON.stringify([{ name: 'Aspirin 75mg', qty: 30 }]) }));
+    prisma.patient.findFirst.mockResolvedValue({ id: 'pt-1', name: 'Jane', allergies: '[]' });
+    prisma.prescription.findMany.mockResolvedValue([{ prescriptionNumber: 'RX-OLD', items: JSON.stringify([{ name: 'Warfarin 5mg', qty: 30 }]) }]);
+    prisma.drugInteraction.findMany.mockResolvedValue([{ drug1Name: 'Warfarin', drug2Name: 'Aspirin', severity: 'SEVERE', description: 'Bleeding' }]);
+    await expect(svc.dispense('rx-1', 'biz-1', PHARMACIST)).rejects.toThrow(/Aspirin 75mg and Warfarin 5mg/);
+    expect(prisma.prescription.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ patientId: 'pt-1', status: 'DISPENSED', id: { not: 'rx-1' } }) }));
+  });
+
+  it('safety() reports the warnings and whether they block', async () => {
+    const { svc } = ready();
+    const res = await svc.safety('rx-1', 'biz-1');
+    expect(res.blocked).toBe(true);
+    expect(res.warnings[0].kind).toBe('ALLERGY');
+  });
+
+  it('previewSafety works on an unsaved prescription', async () => {
+    const { svc, prisma } = setup();
+    prisma.patient.findFirst.mockResolvedValue(allergic);
+    const res = await svc.previewSafety('biz-1', { patientId: 'pt-1', items: [{ name: 'Amoxicillin 500mg', qty: 21 }, { name: '  ' }] });
+    expect(res.blocked).toBe(true);
   });
 });

@@ -73,6 +73,13 @@ list is the `['salon-staff']` query.
 For a cyber cafe, ending a session shows the buyer KRA PIN field, a customer picker when it is paid on credit (credit is only for a
 registered customer), and then the fiscal receipt (number, KRA status, Print) instead of the plain one.
 
+Clinic and pharmacy screens: `PatientsPage` (`/patients`, one record per person) with `components/clinical/` (`PatientFormModal` registers and
+edits, warning of a record that may already exist; `PatientPicker` is used in the prescription form; `SafetyPanel` shows the findings
+and, for a "Stop", asks a manager for a reason and PIN; `RestrictedSaleModal` is the till's manager approval for a prescription-only or
+controlled medicine; `MedicineFields` is the medicine section of an item). Shared shapes and rules are in `lib/clinical.ts`. The server's
+coded refusals (`SAFETY_BLOCK`, `RESTRICTED_SALE`) arrive as `ApiError.code` / `.details`. The till (`POSPage`) retries the same sale with
+the approval, and `canQueueOffline` refuses to queue a cart with a restricted medicine.
+
 For a pharmacy, Dispense and Process Refill open one window (`DispenseModal`): it prices the fill from the catalogue, lets the
 pharmacist tick that an insurer covers part (insurer, member number, the percentage the patient pays), takes the patient's
 payment (cash change shown) and an optional company KRA PIN, then ends in the same receipt window as fuel

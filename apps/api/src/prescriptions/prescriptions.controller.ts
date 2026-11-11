@@ -1,21 +1,40 @@
 import { Feature } from '@pos/shared';
 import { RequiresFeature } from '../auth/subscription.guard';
-import { Controller, Get, Post, Patch, Body, Param, Query, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, Req, UseGuards, ForbiddenException } from '@nestjs/common';
 import type { Request } from 'express';
 import type { AuthUser } from '../auth/auth.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { PrescriptionsService, type FillOptions } from './prescriptions.service';
+import { AuthService } from '../auth/auth.service';
+import { PrescriptionsService, type FillOptions, type SafetyOverride } from './prescriptions.service';
 
 type Authed = Request & { user: AuthUser };
 const actorOf = (req: Authed) => ({ id: req.user.id, name: req.user.name, role: String(req.user.role) });
 /** Only the fields a fill uses; anything else in the body (the old screens sent `dispensedBy`) is ignored. */
 const fillOptions = (b?: FillOptions): FillOptions => ({ payments: b?.payments, insurance: b?.insurance, buyerKraPin: b?.buyerKraPin });
+type FillBody = FillOptions & { override?: { reason?: string; managerPin?: string } };
+const MANAGERS = ['OWNER', 'ADMIN', 'MANAGER'];
 
 @UseGuards(JwtAuthGuard)
 @RequiresFeature(Feature.PRESCRIPTIONS)
 @Controller('prescriptions')
 export class PrescriptionsController {
-  constructor(private svc: PrescriptionsService) {}
+  constructor(private svc: PrescriptionsService, private auth: AuthService) {}
+
+  /**
+   * Setting a blocking safety warning aside needs a manager: their PIN, or their own login. What the body claims about who
+   * approved is never used; the approver is always a verified person.
+   */
+  private async resolveOverride(body: FillBody | undefined, req: Authed): Promise<SafetyOverride | undefined> {
+    const o = body?.override;
+    if (!o) return undefined;
+    const reason = String(o.reason ?? '');
+    if (o.managerPin) {
+      const m = await this.auth.verifyManagerPin(o.managerPin, req.user.businessId);
+      return { reason, approvedById: m.userId, approvedByName: m.name };
+    }
+    if (MANAGERS.includes(String(req.user.role))) return { reason, approvedById: req.user.id, approvedByName: req.user.name };
+    throw new ForbiddenException('A manager must approve this. Enter a manager PIN.');
+  }
 
   @Get()
   findAll(
@@ -40,6 +59,12 @@ export class PrescriptionsController {
     return this.svc.getControlledLog(businessId, startDate, endDate);
   }
 
+  /** The safety checks on a prescription still being written. */
+  @Post('safety-check')
+  safetyCheck(@Body() body: { patientId?: string; items?: unknown }, @Req() req: Authed) {
+    return this.svc.previewSafety(req.user.businessId, body ?? {});
+  }
+
   @Post('check-interactions')
   checkInteractions(@Body() body: { drugNames: string[] }, @Req() req: Authed) {
     return this.svc.checkInteractions(req.user.businessId, body?.drugNames);
@@ -61,6 +86,12 @@ export class PrescriptionsController {
     return this.svc.create({ ...dto, businessId: req.user.businessId });
   }
 
+  /** The safety checks on a saved prescription, as of now. */
+  @Get(':id/safety')
+  safety(@Param('id') id: string, @Req() req: Authed) {
+    return this.svc.safety(id, req.user.businessId);
+  }
+
   /** What the next fill costs, for the pharmacist to collect against. */
   @Get(':id/quote')
   quote(@Param('id') id: string, @Req() req: Authed) {
@@ -68,13 +99,13 @@ export class PrescriptionsController {
   }
 
   @Patch(':id/dispense')
-  dispense(@Param('id') id: string, @Body() body: FillOptions | undefined, @Req() req: Authed) {
-    return this.svc.dispense(id, req.user.businessId, actorOf(req), fillOptions(body));
+  async dispense(@Param('id') id: string, @Body() body: FillBody | undefined, @Req() req: Authed) {
+    return this.svc.dispense(id, req.user.businessId, actorOf(req), { ...fillOptions(body), override: await this.resolveOverride(body, req) });
   }
 
   @Patch(':id/refill')
-  refill(@Param('id') id: string, @Body() body: FillOptions | undefined, @Req() req: Authed) {
-    return this.svc.refill(id, req.user.businessId, actorOf(req), fillOptions(body));
+  async refill(@Param('id') id: string, @Body() body: FillBody | undefined, @Req() req: Authed) {
+    return this.svc.refill(id, req.user.businessId, actorOf(req), { ...fillOptions(body), override: await this.resolveOverride(body, req) });
   }
 
   @Patch(':id/refer')

@@ -463,7 +463,7 @@ p,li,td,th,h1,h2,h3,h4,code{overflow-wrap:break-word;word-wrap:break-word}
       <span class="badge">User Guide</span>
       <h1>KASTRA POS</h1>
       <div class="sub">For owners, managers and shop-floor staff</div>
-      <div class="meta">Last updated 11 November 2026</div>
+      <div class="meta">Last updated 12 November 2026</div>
     </div>
 
 <h1 id="kastra-pos-user-guide">KASTRA POS — User Guide</h1>
@@ -1058,20 +1058,30 @@ is not offered Delivery. Three more features can be switched on the same
 way (Settings, <em>Also run</em>): <strong>Delivery &amp; online
 orders</strong> (Delivery, Online Orders, Delivery Dispatch),
 <strong>Field sales</strong> (Agent Dashboard, Field Orders, Delivery
-Routes) and <strong>Quotes (proforma invoices)</strong>. They are on by
-default for the main tills that use them:</p>
+Routes), <strong>Quotes (proforma invoices)</strong> and <strong>Goods
+trading tools</strong> (Bundles / Kits, RFQ, AI Forecasting). They are
+on by default for the main tills that use them:</p>
 <table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
 <thead>
 <tr class="header">
 <th>Main till</th>
 <th>Delivery &amp; online orders</th>
 <th>Field sales</th>
 <th>Quotes</th>
+<th>Goods trading tools</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
 <td>Retail, Supermarket</td>
+<td>on</td>
 <td>on</td>
 <td>on</td>
 <td>on</td>
@@ -1081,15 +1091,33 @@ default for the main tills that use them:</p>
 <td>on</td>
 <td>off</td>
 <td>off</td>
+<td>on</td>
 </tr>
 <tr class="odd">
-<td>Hospitality, Bar, Salon, Clinic, Fuel, Cybercafe</td>
+<td>Hospitality, Bar, Clinic</td>
+<td>off</td>
+<td>off</td>
+<td>off</td>
+<td>on</td>
+</tr>
+<tr class="even">
+<td>Salon, Fuel, Cybercafe</td>
+<td>off</td>
 <td>off</td>
 <td>off</td>
 <td>off</td>
 </tr>
 </tbody>
 </table>
+<p>Stock, suppliers, stocktake, finance, staff and payroll are never
+hidden, whatever your main till.</p>
+<p><strong>The till entry is named for your business.</strong> The first
+entry under Sales opens your main till, and it is labelled for it:
+<em>Supermarket POS</em>, <em>Restaurant POS</em>, <em>Counter POS</em>,
+<em>Bar POS</em>, <em>Fuel Forecourt</em>, <em>Cybercafe POS</em>,
+<em>Clinic POS</em> or <em>Salon POS</em> (<em>Point of Sale</em> for a
+shop). A fuel station and a cybercafe no longer list their till
+twice.</p>
 <p>A feature that is off <strong>turns itself on the first time you
 really use it</strong>: an online order placed on your store, a delivery
 you create, a field order or route, or a proforma you write. Its menu
@@ -1135,8 +1163,41 @@ booking sites</li>
 </ul>
 <h2 id="pharmacy">13. Pharmacy</h2>
 <ul>
-<li><strong>Prescriptions</strong> captured at the till against the
-patient</li>
+<li><strong>Patients</strong> — every person you treat has one record
+(<strong>Patients</strong> in the menu): name, phone, ID number, date of
+birth, weight, <strong>allergies</strong>, conditions, whether pregnant
+or breastfeeding, next of kin and insurer. Register someone once; when
+you type a name, phone or ID the screen warns if they may already be
+registered. An ID number can belong to only one patient. Earlier
+prescriptions written with just a name can be added to the right record
+from the patient’s page (manager)</li>
+<li><strong>Prescriptions</strong> are written against a patient record.
+Each medicine keeps its dose, how often and for how many days, and the
+prescription prints them. While it is being written the <strong>safety
+check</strong> shows problems before it is saved</li>
+<li><strong>Safety check</strong> — before anything is dispensed the
+system checks the patient’s allergies (a medicine or its whole family,
+so a penicillin allergy stops amoxicillin), medicines that interact with
+each other or with what the patient is already taking from another
+prescription in the last month, the same medicine written twice, a daily
+dose above the usual maximum (set in the <strong>Formulary</strong>),
+and pregnancy. A <strong>Stop</strong> cannot be passed except by a
+manager, with a reason: their PIN is entered on the screen and the name,
+reason and what was set aside are kept on record. Other findings are
+shown for the pharmacist to judge. The check only knows what has been
+entered: keep the patient’s allergies, the interaction list and the
+formulary up to date</li>
+<li><strong>Medicine details</strong> — on each item (Items &amp; Stock,
+for a clinic) enter the generic name, strength, form and drug class,
+choose a <strong>controlled schedule</strong> (II to V) if it is
+controlled, and tick <strong>Needs a prescription</strong> if it is sold
+on prescription only. The safety check and the controlled-drug register
+run on these, so a medicine without them is not checked</li>
+<li><strong>Selling without a prescription</strong> — a medicine marked
+<em>Needs a prescription</em>, or any controlled drug, is refused on the
+ordinary till. A manager can approve the sale with a reason (a
+controlled drug also needs the buyer’s name); it is recorded and a
+controlled drug goes on the register. This cannot be done offline</li>
 <li><strong>Dispensing and payment</strong> — when your business records
 pharmacy takings as sales (ask the owner to check), pressing
 <strong>Dispense</strong> (or <strong>Process Refill</strong>) shows the
@@ -1159,9 +1220,11 @@ href="#16-expiry-dates-and-batches">section 16</a></li>
 <h2 id="fuel-station-cyber-café-and-other-trades">14. Fuel station,
 cyber café and other trades</h2>
 <ul>
-<li><p><strong>Fuel station</strong> — authorise a pump, sell the fuel
-it dispensed, close the pump. A manager can void a sale from the Sales
-list</p></li>
+<li><p><strong>Fuel station</strong> — see <a
+href="#running-a-fuel-station">Running a fuel station</a> below. The
+shop, lubricants and LPG are sold on <strong>Shop &amp;
+Lubricants</strong> in the menu; the <strong>Point of Sale</strong>
+entry is the forecourt.</p></li>
 <li><p><strong>Cyber café</strong> — start and stop timed sessions per
 station, bill the time. Stations are counter-managed on the web app.
 When your business records cyber takings as sales (ask the owner to
@@ -1206,6 +1269,74 @@ built for queues</p></li>
 </ul>
 <hr />
 <h1 id="stock-and-suppliers">Stock and suppliers</h1>
+<h3 id="running-a-fuel-station">Running a fuel station</h3>
+<p>The fuel screen has tabs. Attendants see <strong>Forecourt</strong>,
+<strong>Shift</strong>, <strong>Tanks</strong>, <strong>Prices</strong>
+and <strong>Sales</strong>; managers also see <strong>Wet
+stock</strong>, <strong>Fleet accounts</strong>,
+<strong>Reports</strong> and <strong>Setup</strong>.</p>
+<p><strong>Set up once (manager).</strong> Under
+<strong>Prices</strong>, add each grade you sell with today’s pump
+price. Under <strong>Tanks</strong>, add each underground tank, then
+<strong>Measure</strong> it once to set how much fuel it holds. Under
+<strong>Setup</strong>, add each pump and its <strong>nozzles</strong>.
+Every nozzle sells one grade, draws from one tank and has its own meter,
+so a pump that sells petrol and diesel gets two nozzles.</p>
+<p><strong>Every day: the shift.</strong> Fuel can only be sold inside a
+shift, so every litre has someone answering for it. 1. <strong>Shift,
+Open a shift.</strong> Add the attendants on duty, give each nozzle to
+one attendant and enter what each pump meter reads. If a meter does not
+read what it closed at last time, you must say why (a replaced meter,
+for example); the difference is kept. 2. <strong>Forecourt.</strong> Tap
+the nozzle the customer used, enter the litres from the pump display,
+choose how they paid and record the sale. Payment can be cash, M-Pesa,
+card, a <strong>fleet account</strong>, or <strong>customer
+credit</strong> (registered customers only). 3. <strong>Shift, Close
+shift.</strong> Enter each nozzle’s closing meter and the cash each
+attendant hands in. The system compares what each meter says with what
+was rung up (and with any pump tests), and each attendant’s cash with
+their cash sales. Fuel through a meter that nobody rang up, and cash
+that is short, are shown in red and kept with the shift. Sales in a
+closed shift cannot be added to it.</p>
+<p>A <strong>voided</strong> sale (manager, from <strong>Sales</strong>)
+puts the litres back into the tank. The fuel still went through the
+meter, so it still shows as unrecorded at the shift close: that is
+intended, because a drive-off is a loss.</p>
+<p><strong>Pump tests.</strong> Fuel drawn to test a pump and poured
+back moves the meter but is not a sale. A manager records it from the
+live shift (<strong>Record test</strong>), so the meter check does not
+count it as missing.</p>
+<p><strong>Tanks and wet stock.</strong> - <strong>Measure</strong> a
+tank every day from the dip stick or gauge. The system keeps what it
+found against what the books said it should hold; the difference is fuel
+lost or gained. The first measurement of a new tank sets its opening
+level and is not counted as a gain. - <strong>Wet stock</strong> shows
+each tank’s gain or loss as a share of what was sold from it. Past a
+quarter percent is <strong>Watch</strong>, past half a percent is
+<strong>Investigate</strong>. A tank not measured for over a day is
+flagged. - <strong>Delivery.</strong> Enter the litres on the delivery
+note, and measure the tank before and after the offload. The litres
+received are then what the tank really took, and any shortage against
+the note is recorded and flagged (over half a percent). Enter the
+supplier’s <strong>cost per litre</strong> and the system keeps each
+tank’s average cost, so <strong>Reports</strong> can show your margin.
+Fuel sold before a cost was known is left out of the margin and reported
+separately.</p>
+<p><strong>Prices.</strong> Every change of a pump price is kept with
+who made it, when, and from what to what (<strong>History</strong>). If
+you enter the regulator’s monthly cap for a grade, a price above it is
+refused.</p>
+<p><strong>Fleet accounts.</strong> Companies that fuel on credit have a
+credit limit and a KRA PIN. Their sales are invoiced to them, a sale
+over the limit is refused, and payments are recorded from the
+account.</p>
+<p><strong>Pump controller.</strong> Under <strong>Setup</strong> there
+is an optional connection to a pump controller. It has not been tested
+with a real controller, and you do not need it: the shift meter check
+catches any litre that is missed.</p>
+<p><strong>Older shifts.</strong> A shift that was already open when the
+nozzle meters were introduced cannot sell; close it (enter each pump’s
+closing reading) and open a new one.</p>
 <h2 id="stock-receiving-and-counting">15. Stock, receiving and
 counting</h2>
 <p><strong>Stock is never simply typed in.</strong> Every change is a

@@ -7,6 +7,7 @@ import { parseFilterDate } from '../common/dates';
 import { drawStock } from '../batch/batch-allocation';
 import { assertStockAvailable, blocksOversell } from '../sales/stock-guard';
 import { taxClassOf } from '@pos/shared';
+import { blockers, evaluateSafety, parseAllergies, DOSE_UNITS, FREQUENCIES, normalizeDrugName, normalizeFrequency, sameDrug, type SafetyLine, type SafetyWarning } from './clinical-safety';
 import { DirectSaleService, type DirectSaleInput, type DirectSaleLine, type DirectSaleResult, type EtimsOutcome } from '../sales/direct-sale.service';
 
 const MAX_NUMBER_ATTEMPTS = 10;
@@ -29,33 +30,26 @@ export interface FillOptions {
   /** The insurer covers the rest of the bill: the patient pays `patientPct` percent. */
   insurance?: { providerId: string; memberNumber?: string; patientPct: number };
   buyerKraPin?: string;
+  /** A manager's decision to go ahead over a blocking safety warning. Resolved by the controller (a PIN or the manager's own login). */
+  override?: SafetyOverride;
 }
 
-export interface RxLine { itemId?: string; name: string; qty: number; instructions?: string }
+export interface SafetyOverride { reason: string; approvedById: string; approvedByName: string }
+
+export interface RxLine {
+  itemId?: string;
+  name: string;
+  qty: number;
+  instructions?: string;
+  /** How it is taken: 2 tablets, three times a day, for 5 days. Kept so the label, the dose check and the history all read the same. */
+  dose?: number;
+  doseUnit?: string;
+  frequency?: string;
+  durationDays?: number;
+}
 export interface Actor { id: string; name: string; role: string }
 
-/** Words that describe a pack, not the drug: stripped before two drug names are compared. */
-const FORM_WORDS = /\b(tablets?|tabs?|capsules?|caps?|syrup|suspension|injection|inj|cream|ointment|gel|drops|sachets?|solution|oral|iv|im|sr|xr|er|film[- ]coated)\b/g;
-const STRENGTH = /\b\d+(\.\d+)?\s*(mg|mcg|µg|g|ml|iu|%|units?)(\/\d*\.?\d*\s*(ml|mg|g))?\b/g;
-
-/** "Warfarin 5 mg tablets" and "WARFARIN" are the same drug for an interaction check. */
-export function normalizeDrugName(name: string): string {
-  return String(name ?? '')
-    .toLowerCase()
-    .replace(/\([^)]*\)/g, ' ')
-    .replace(STRENGTH, ' ')
-    .replace(FORM_WORDS, ' ')
-    .replace(/[^a-z0-9\s-]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function sameDrug(a: string, b: string): boolean {
-  if (!a || !b) return false;
-  if (a === b) return true;
-  const within = (needle: string, hay: string) => new RegExp(`(^|\\s)${needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$)`).test(hay);
-  return within(a, b) || within(b, a);
-}
+export { normalizeDrugName };
 
 @Injectable()
 export class PrescriptionsService {
@@ -124,9 +118,11 @@ export class PrescriptionsService {
     doctorName: string;
     doctorLicense?: string;
     diagnosis?: string;
-    items: Array<{ itemId?: string; name: string; qty: number; instructions?: string }>;
+    items: Array<RxLine>;
     notes?: string;
     refillsAllowed?: number;
+    /** A patient record. When given, the patient details on the prescription are copied from it. */
+    patientId?: string;
   }) {
     if (typeof dto.storeId !== 'string' || !dto.storeId) throw new BadRequestException('storeId is required');
     const store = await this.prisma.store.findFirst({ where: { id: dto.storeId, businessId: dto.businessId }, select: { id: true } });
@@ -137,11 +133,19 @@ export class PrescriptionsService {
     const lines: RxLine[] = rawLines.map((l, i) => {
       const qty = numberInRange(l?.qty, `Quantity of line ${i + 1}`, { min: 0, max: MAX_LINE_QTY, exclusiveMin: true });
       if (hasTooManyDecimals(qty)) throw new BadRequestException(`Quantity of line ${i + 1} can have at most 3 decimal places`);
+      const dose = l?.dose === undefined || l.dose === null || (l.dose as unknown) === '' ? undefined : numberInRange(l.dose, `Dose of line ${i + 1}`, { min: 0, max: 10_000, exclusiveMin: true });
+      const frequency = l?.frequency ? oneOf(normalizeFrequency(String(l.frequency)), `Frequency of line ${i + 1}`, FREQUENCIES) : undefined;
+      const doseUnit = l?.doseUnit ? oneOf(String(l.doseUnit).toLowerCase(), `Dose unit of line ${i + 1}`, DOSE_UNITS) : undefined;
+      const durationDays = l?.durationDays === undefined || l.durationDays === null || (l.durationDays as unknown) === '' ? undefined : intInRange(l.durationDays, `Duration of line ${i + 1}`, 1, 365);
       return {
         ...(l?.itemId ? { itemId: text(l.itemId, 'Item', 64) } : {}),
         name: text(l?.name, `Medicine name on line ${i + 1}`, 120),
         qty,
         ...(l?.instructions ? { instructions: text(l.instructions, 'Instructions', 300) } : {}),
+        ...(dose !== undefined ? { dose } : {}),
+        ...(doseUnit ? { doseUnit } : {}),
+        ...(frequency ? { frequency } : {}),
+        ...(durationDays !== undefined ? { durationDays } : {}),
       };
     });
     const itemIds = [...new Set(lines.map((l) => l.itemId).filter(Boolean) as string[])];
@@ -150,13 +154,21 @@ export class PrescriptionsService {
       if (found !== itemIds.length) throw new BadRequestException('A line names an item that is not in this business');
     }
 
+    // A linked patient is the source of the patient details: what the screen typed is only a fallback.
+    let patient: { id: string; name: string; phone: string | null; dateOfBirth: Date | null; idNumber: string | null } | null = null;
+    if (dto.patientId) {
+      patient = await this.prisma.patient.findFirst({ where: { id: text(dto.patientId, 'Patient', 64), businessId: dto.businessId, isActive: true } });
+      if (!patient) throw new BadRequestException('Patient not found');
+    }
+
     const data = {
       businessId: dto.businessId,
       storeId: dto.storeId,
-      patientName: text(dto.patientName, 'Patient name', 120),
-      patientPhone: optionalText(dto.patientPhone, 'Patient phone', 30),
-      patientDOB: optionalText(dto.patientDOB, 'Patient date of birth', 30),
-      patientIdNumber: optionalText(dto.patientIdNumber, 'Patient ID number', 30),
+      patientId: patient?.id,
+      patientName: patient ? patient.name : text(dto.patientName, 'Patient name', 120),
+      patientPhone: patient ? patient.phone ?? undefined : optionalText(dto.patientPhone, 'Patient phone', 30),
+      patientDOB: patient ? patient.dateOfBirth?.toISOString().slice(0, 10) : optionalText(dto.patientDOB, 'Patient date of birth', 30),
+      patientIdNumber: patient ? patient.idNumber ?? undefined : optionalText(dto.patientIdNumber, 'Patient ID number', 30),
       doctorName: text(dto.doctorName, 'Doctor name', 120),
       doctorLicense: optionalText(dto.doctorLicense, 'Doctor licence', 60),
       diagnosis: optionalText(dto.diagnosis, 'Diagnosis', 300),
@@ -262,6 +274,8 @@ export class PrescriptionsService {
     // Check what was sent before anything is claimed, so a typo costs the pharmacist nothing.
     const invoice = await this.directSales.isEnabled(businessId);
     const terms = invoice ? await this.fillTerms(businessId, opts) : null;
+    // Allergies, interactions and dose are checked against the record as it is NOW (an allergy may have been added since it was written).
+    const safe = this.assertSafe(await this.safetyCheck(businessId, lines, rx.patientId, rx.id), opts.override);
 
     const outcome = await this.prisma.$transaction(async (tx) => {
       // Claim the fill. Conditioning on the status AND the fill count means two pharmacists pressing Dispense
@@ -278,6 +292,15 @@ export class PrescriptionsService {
         },
       });
       if (claimed.count !== 1) throw new BadRequestException('This prescription was just dispensed by someone else. Reload it.');
+
+      // A warning set aside is on record: what it was, who approved it and why.
+      if (safe) {
+        for (const w of safe.hard) {
+          await tx.rxSafetyOverride.create({
+            data: { businessId, prescriptionId: rx.id, kind: w.kind, detail: w.message.slice(0, 500), reason: safe.reason.slice(0, 300), approvedById: safe.approvedById, approvedByName: safe.approvedByName },
+          });
+        }
+      }
 
       // The sale first, so the stock leaving can be tied to it.
       let direct: { result: DirectSaleResult; input: DirectSaleInput } | null = null;
@@ -467,6 +490,87 @@ export class PrescriptionsService {
     return all.filter(
       (rx) => rx.refillsUsed < rx.refillsAllowed + 1 && (!rx.nextFillDate || rx.nextFillDate <= now),
     );
+  }
+
+  // ── Safety ───────────────────────────────────────────────────────────────
+
+  /**
+   * Run the pharmacist's checks on these lines for this patient: allergies, interactions (with each other and with what the
+   * patient is already taking from their other recent prescriptions), duplicates, the daily dose against the formulary and
+   * pregnancy. Reads only; the decision is the caller's.
+   */
+  async safetyCheck(businessId: string, lines: RxLine[], patientId?: string | null, excludeRxId?: string): Promise<SafetyWarning[]> {
+    const itemIds = [...new Set(lines.map((l) => l.itemId).filter(Boolean) as string[])];
+    const since = new Date(Date.now() - 35 * 86_400_000);
+    const [items, patient, interactions, formulary, catalogue, recent] = await Promise.all([
+      itemIds.length ? this.prisma.item.findMany({ where: { id: { in: itemIds }, businessId }, select: { id: true, genericName: true, drugClass: true, strength: true } }) : Promise.resolve([] as any[]),
+      patientId ? this.prisma.patient.findFirst({ where: { id: patientId, businessId } }) : Promise.resolve(null),
+      this.prisma.drugInteraction.findMany({ where: { businessId } }),
+      this.prisma.formularyEntry.findMany({ where: { businessId, isActive: true } }),
+      this.prisma.drugCatalogue.findMany({ where: { businessId, isActive: true }, select: { genericName: true, brandName: true } }),
+      patientId
+        ? this.prisma.prescription.findMany({ where: { businessId, patientId, status: 'DISPENSED', lastFillDate: { gte: since }, ...(excludeRxId ? { id: { not: excludeRxId } } : {}) }, select: { prescriptionNumber: true, items: true } })
+        : Promise.resolve([] as any[]),
+    ]);
+    const byId = new Map<string, any>((items ?? []).map((i: any) => [i.id, i]));
+    const safetyLines: SafetyLine[] = lines.map((l) => {
+      const item = l.itemId ? byId.get(l.itemId) : undefined;
+      return { name: l.name, genericName: item?.genericName, drugClass: item?.drugClass, strength: item?.strength, dose: l.dose, doseUnit: l.doseUnit, frequency: l.frequency };
+    });
+    const brandToGeneric = new Map<string, string>();
+    for (const d of catalogue ?? []) if (d.brandName) brandToGeneric.set(normalizeDrugName(d.brandName), normalizeDrugName(d.genericName));
+    const alsoTaking = (recent ?? []).flatMap((r: any) => this.lines(r).map((l) => ({ name: l.name, from: r.prescriptionNumber })));
+    return evaluateSafety({
+      patient: patient ? { name: patient.name, allergies: patient.allergies, pregnant: patient.pregnant, breastfeeding: patient.breastfeeding } : null,
+      lines: safetyLines,
+      alsoTaking,
+      interactions: interactions ?? [],
+      formulary: formulary ?? [],
+      brandToGeneric,
+    });
+  }
+
+  /** The checks for a saved prescription, as the dispense screen shows them. */
+  async safety(id: string, businessId: string) {
+    const rx = await this.owned(id, businessId);
+    const warnings = await this.safetyCheck(businessId, this.lines(rx), rx.patientId, rx.id);
+    return { warnings, blocked: blockers(warnings).length > 0 };
+  }
+
+  /** The same checks on a prescription still being written, so the doctor or pharmacist sees them before saving. */
+  async previewSafety(businessId: string, dto: { patientId?: string; items?: unknown }) {
+    const raw = requireArray<Partial<RxLine>>(dto?.items ?? [], 'items');
+    const lines: RxLine[] = raw
+      .filter((l) => typeof l?.name === 'string' && l.name.trim())
+      .map((l) => ({
+        ...(l.itemId ? { itemId: String(l.itemId) } : {}),
+        name: String(l.name).trim().slice(0, 120),
+        qty: Number(l.qty) > 0 ? Number(l.qty) : 1,
+        ...(Number(l.dose) > 0 ? { dose: Number(l.dose) } : {}),
+        ...(l.doseUnit ? { doseUnit: String(l.doseUnit).toLowerCase() } : {}),
+        ...(l.frequency ? { frequency: normalizeFrequency(String(l.frequency)) } : {}),
+      }));
+    const warnings = await this.safetyCheck(businessId, lines, dto?.patientId ? String(dto.patientId) : null);
+    return { warnings, blocked: blockers(warnings).length > 0 };
+  }
+
+  /**
+   * Go ahead over blocking warnings only with a reason and a manager's name against it. The refusal says what stopped it
+   * so the screen can show the same list.
+   */
+  private assertSafe(warnings: SafetyWarning[], override?: SafetyOverride) {
+    const hard = blockers(warnings);
+    if (hard.length === 0) return null;
+    if (!override) {
+      throw new BadRequestException({
+        message: `Safety check: ${hard[0].message}${hard.length > 1 ? ` (and ${hard.length - 1} more)` : ''} A manager must approve before this is dispensed.`,
+        code: 'SAFETY_BLOCK',
+        details: hard,
+      });
+    }
+    const reason = String(override.reason ?? '').trim();
+    if (reason.length < 5) throw new BadRequestException('Say why the safety warning is being set aside (at least a few words)');
+    return { reason, approvedById: override.approvedById, approvedByName: override.approvedByName, hard };
   }
 
   // ── Interactions ─────────────────────────────────────────────────────────

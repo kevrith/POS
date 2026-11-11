@@ -33,7 +33,8 @@ import { barcodeSvg, downloadZPL, printZPLviaUSB } from '../lib/printer';
 import { printHtml } from '../lib/printHtml';
 import { escapeHtml } from '@pos/print-core';
 import { KOT_STATIONS, KOT_STATION_LABELS, TAX_CLASSES, TAX_CLASS_INFO, taxClassOf, type TaxClass } from '@pos/shared';
-import { useRestaurantAccess } from '../lib/useRestaurantAccess';
+import { useBusinessModules, useRestaurantAccess } from '../lib/useRestaurantAccess';
+import MedicineFields, { emptyMedicine, medicineBody, medicineFromItem, type MedicineForm } from '../components/clinical/MedicineFields';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -268,6 +269,7 @@ function StationSelect({ value, onChange, className }: { value: string; onChange
 function AddItemModal({ businessId, storeId, categories, posMode, existingItems = [], onClose }: AddItemModalProps) {
   const qc = useQueryClient();
   const isRestaurant = useRestaurantAccess();
+  const isClinic = useBusinessModules().posMode === 'CLINIC';
   const [form, setForm] = useState({
     name: '',
     barcode: '',
@@ -285,6 +287,7 @@ function AddItemModal({ businessId, storeId, categories, posMode, existingItems 
     prepTimeMinutes: 5,
     durationMinutes: '', // services only: how long it takes, in minutes
     station: '',
+    medicine: { ...emptyMedicine } as MedicineForm,
     blockOversell: false, // false = allow selling when OOS (ALLOW policy); true = hard block (BLOCK policy)
   });
   const [error, setError] = useState('');
@@ -394,6 +397,7 @@ function AddItemModal({ businessId, storeId, categories, posMode, existingItems 
       taxClass: form.taxClass,
       prepTimeMinutes: form.prepTimeMinutes,
       ...(form.type === 'SERVICE' && form.durationMinutes && { durationMinutes: Number(form.durationMinutes) }),
+      ...(isClinic && form.type !== 'SERVICE' && medicineBody(form.medicine)),
       station: form.station,
       negativeStockPolicy: form.blockOversell ? 'BLOCK' : 'ALLOW',
       businessId,
@@ -527,6 +531,7 @@ function AddItemModal({ businessId, storeId, categories, posMode, existingItems 
             </div>
           )}
 
+          {isClinic && form.type !== 'SERVICE' && <MedicineFields value={form.medicine} onChange={(medicine) => setForm(f => ({ ...f, medicine }))} />}
           {form.type === 'SERVICE' && field('How long it takes (minutes)', <input type="number" min="5" max="720" step="5" value={form.durationMinutes} onChange={(e) => setForm(f => ({ ...f, durationMinutes: e.target.value }))} className={inputCls} placeholder="45" />)}
           <div className="grid grid-cols-2 gap-4">
             {isRestaurant && field('Prep Time (minutes)', <input type="number" min="1" value={form.prepTimeMinutes} onChange={(e) => setForm(f => ({ ...f, prepTimeMinutes: parseInt(e.target.value) || 5 }))} className={inputCls} placeholder="5" />)}
@@ -590,6 +595,7 @@ interface EditItemModalProps {
 function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
   const qc = useQueryClient();
   const isRestaurant = useRestaurantAccess();
+  const isClinic = useBusinessModules().posMode === 'CLINIC';
   const businessId = useAuthStore((s) => s.user?.businessId ?? '');
   const [form, setForm] = useState({
     name: item.name,
@@ -606,6 +612,7 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
     prepTimeMinutes: (item as any).prepTimeMinutes ?? 5,
     durationMinutes: (item as any).durationMinutes != null ? String((item as any).durationMinutes) : '',
     station: (item as any).station ?? '',
+    medicine: medicineFromItem(item as unknown as Record<string, unknown>),
     imageUrl: item.imageUrl ?? '',
     allergens: (() => { try { return JSON.parse(item.allergens ?? '[]') as string[]; } catch { return [] as string[]; } })(),
     reorderQty: item.reorderQty ?? 1,
@@ -653,6 +660,7 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
       trackStock: form.trackStock,
       prepTimeMinutes: form.prepTimeMinutes,
       ...(form.type === 'SERVICE' && { durationMinutes: form.durationMinutes ? Number(form.durationMinutes) : null }),
+      ...(isClinic && form.type !== 'SERVICE' && medicineBody(form.medicine)),
       station: form.station,
       imageUrl: form.imageUrl.trim() || undefined,
       allergens: form.allergens,
@@ -720,6 +728,7 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
               <input type="number" min="0" step="0.01" value={form.costPrice} onChange={(e) => setForm(f => ({ ...f, costPrice: e.target.value }))} className={inputCls} /></div>
           </div>
 
+          {isClinic && form.type !== 'SERVICE' && <MedicineFields value={form.medicine} onChange={(medicine) => setForm(f => ({ ...f, medicine }))} />}
           {form.type === 'SERVICE' && (
             <div><label className="block text-sm font-medium text-gray-700 mb-1">How long it takes (minutes)</label>
               <input type="number" min="5" max="720" step="5" value={form.durationMinutes} onChange={(e) => setForm(f => ({ ...f, durationMinutes: e.target.value }))} className={inputCls} placeholder="45" />

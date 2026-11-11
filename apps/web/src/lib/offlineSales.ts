@@ -20,8 +20,10 @@ export const NEEDS_SERVER_METHODS = ['GIFT_CARD', 'CREDIT', 'LOYALTY', 'ROOM', '
 /** How long to wait for the checkout reply before saving the sale offline instead. */
 export const SEND_TIMEOUT_MS = 20_000;
 
-export function canQueueOffline(input: { payments: Array<{ method: string }>; loyaltyRedeemed?: boolean }): boolean {
+export function canQueueOffline(input: { payments: Array<{ method: string }>; loyaltyRedeemed?: boolean; hasRestrictedMedicine?: boolean }): boolean {
   if (input.loyaltyRedeemed) return false;
+  // A prescription-only or controlled medicine needs a manager's approval from the server: it cannot be promised later.
+  if (input.hasRestrictedMedicine) return false;
   return input.payments.length > 0 && !input.payments.some((p) => NEEDS_SERVER_METHODS.includes(p.method.toUpperCase()));
 }
 

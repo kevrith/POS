@@ -340,6 +340,21 @@ Rules these modules enforce on the server (the web and mobile screens are not tr
   nothing. The claim endpoints only move status, number, approved/paid amounts and rejection reason, and are scoped to the
   caller's business. A fill is not undone by voiding its sale: the stock and register entry stay (no pharmacy return flow
   yet). Off the pipeline none of this runs and dispensing behaves as before.
+- **Clinic and pharmacy safety (phase 1).** `Patient` (PT-0001 per business, allergies and conditions as JSON text, a live-ID partial
+  unique index so one ID is one patient) with `patients/*` routes; `Prescription.patientId` links a prescription, and when given the
+  patient details on it are copied from the record. Prescription lines keep `dose`, `doseUnit`, `frequency` (QID/ON/OM read as
+  QDS/NOCTE/MANE) and `durationDays`. `prescriptions/clinical-safety.ts` is the pure rule set (allergy classes and cross-reactivity,
+  interactions with the patient's other prescriptions filled in the last 35 days, duplicates, daily dose against
+  `FormularyEntry.maxDailyDose`, pregnancy text): a `BLOCK` finding stops `dispense` and `refill` unless `override: { reason,
+  managerPin? }` is sent, which the controller turns into a verified approver (PIN, or the signed-in manager) and the fill writes
+  `RxSafetyOverride` rows in its own transaction. `GET prescriptions/:id/safety` and `POST prescriptions/safety-check` give the same
+  findings to the screens. `sales/restricted-sale.ts`: an item with `requiresPrescription` or a controlled `scheduleClass` is refused
+  by `POST sales/checkout` (`code: RESTRICTED_SALE`) unless `restrictedOverride` carries a manager's approval; the sale is then
+  logged in `RxSafetyOverride` and a controlled drug is written to `ControlledSubstanceLog` (patient name required). Items can now
+  set `genericName`, `drugClass`, `strength`, `dosageForm`, `scheduleClass`, `requiresPrescription` (`items/item-medicine.ts`):
+  before, nothing could set them, so the register and these checks never had anything to run on. `AllExceptionsFilter` passes a
+  `code` and `details` through when an exception carries them. Not covered yet: proforma conversion, orders and the vertical takings
+  do not apply the restricted-sale rule.
 - **Hotel.** The dates decide the nights (a `nightCount` that disagrees is ignored). A room cannot be
   booked for overlapping nights: bookings, check-in, cancel and check-out all take a row lock on the
   room first, and a guest still checked in past their date keeps holding it. A booking due today shows

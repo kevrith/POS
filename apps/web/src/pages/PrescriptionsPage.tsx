@@ -5,6 +5,9 @@ import { useAuthStore } from '../stores/auth';
 import { Plus, Pill, CheckCircle, XCircle, Clock, Search, Printer, History, AlertTriangle, ExternalLink } from 'lucide-react';
 import { printHtml } from '../lib/printHtml';
 import DispenseModal from '../components/DispenseModal';
+import PatientPicker from '../components/clinical/PatientPicker';
+import SafetyPanel from '../components/clinical/SafetyPanel';
+import { DOSE_UNITS, FREQUENCIES, doctorLabel, frequencyLabel, type Patient, type SafetyResult } from '../lib/clinical';
 
 interface RxItem {
   itemId?: string;
@@ -13,29 +16,22 @@ interface RxItem {
   dose?: number;         // units per intake e.g. 1
   doseUnit?: string;     // tablet / capsule / ml / mg
   frequency?: string;    // OD / BD / TDS / QID / PRN / ON / OM
-  duration?: number;     // days
+  duration?: number;     // days, while the form is open
+  durationDays?: number; // days, as stored
   instructions?: string;
 }
 
-const FREQ_OPTIONS = [
-  { value: 'OD',   label: 'OD — Once daily' },
-  { value: 'BD',   label: 'BD — Twice daily' },
-  { value: 'TDS',  label: 'TDS — Three times daily' },
-  { value: 'QID',  label: 'QID — Four times daily' },
-  { value: 'ON',   label: 'ON — At night' },
-  { value: 'OM',   label: 'OM — Morning only' },
-  { value: 'PRN',  label: 'PRN — As needed' },
-  { value: 'STAT', label: 'STAT — Immediately (once)' },
-];
+const FREQ_OPTIONS = FREQUENCIES;
 
-const UNIT_OPTIONS = ['tablet', 'capsule', 'ml', 'mg', 'sachet', 'drop', 'puff', 'patch', 'injection'];
+const UNIT_OPTIONS = DOSE_UNITS;
 
 function formatDosage(item: RxItem): string {
   if (!item.dose && !item.frequency) return '';
   const parts: string[] = [];
   if (item.dose) parts.push(`${item.dose} ${item.doseUnit ?? 'tablet'}${item.dose > 1 ? 's' : ''}`);
-  if (item.frequency) parts.push(`× ${item.frequency}`);
-  if (item.duration) parts.push(`× ${item.duration} day${item.duration > 1 ? 's' : ''}`);
+  if (item.frequency) parts.push(`× ${frequencyLabel(item.frequency)}`);
+  const days = item.durationDays ?? item.duration;
+  if (days) parts.push(`× ${days} day${days > 1 ? 's' : ''}`);
   return parts.join(' ');
 }
 
@@ -84,6 +80,8 @@ export default function PrescriptionsPage() {
   const [showReferModal, setShowReferModal] = useState(false);
   const [referNotes, setReferNotes] = useState('');
 
+  const [patient, setPatient] = useState<Patient | null>(null);
+  const [typedPatient, setTypedPatient] = useState(false);
   const [form, setForm] = useState({
     patientName: '',
     patientPhone: '',
@@ -108,6 +106,16 @@ export default function PrescriptionsPage() {
     queryKey: ['items-for-rx', businessId, storeId],
     queryFn: () => api.get(`/items?businessId=${businessId}&storeId=${storeId}&activeOnly=true`),
     enabled: showCreate && !!businessId,
+  });
+
+  // The pharmacist's checks, run while the prescription is being written so the doctor sees them before it is saved.
+  const previewLines = form.items.filter((i) => i.name.trim()).map((i) => ({ itemId: i.itemId, name: i.name, qty: i.qty, dose: i.dose, doseUnit: i.doseUnit, frequency: i.frequency }));
+  const previewKey = JSON.stringify([patient?.id ?? null, previewLines]);
+  const { data: preview } = useQuery<SafetyResult>({
+    queryKey: ['rx-safety-preview', previewKey],
+    queryFn: () => api.post('/prescriptions/safety-check', { patientId: patient?.id, items: previewLines }),
+    enabled: showCreate && previewLines.length > 0,
+    staleTime: 10_000,
   });
 
   const createMutation = useMutation({
@@ -136,6 +144,8 @@ export default function PrescriptionsPage() {
   });
 
   const resetForm = () => {
+    setPatient(null);
+    setTypedPatient(false);
     setForm({
       patientName: '', patientPhone: '', patientDOB: '', doctorName: '',
       doctorLicense: '', diagnosis: '', notes: '',
@@ -283,7 +293,7 @@ export default function PrescriptionsPage() {
                     </span>
                   </div>
                   <p className="font-medium text-gray-900 dark:text-white mt-0.5">{rx.patientName}</p>
-                  <p className="text-sm text-gray-500">Dr. {rx.doctorName}{rx.diagnosis ? ` · ${rx.diagnosis}` : ''}</p>
+                  <p className="text-sm text-gray-500">{doctorLabel(rx.doctorName)}{rx.diagnosis ? ` · ${rx.diagnosis}` : ''}</p>
                 </div>
               </div>
               <div className="text-right flex-shrink-0">
@@ -313,7 +323,7 @@ export default function PrescriptionsPage() {
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   {selected.patientPhone && <div><span className="text-gray-500">Phone:</span> <span className="font-medium">{selected.patientPhone}</span></div>}
                   {selected.patientDOB && <div><span className="text-gray-500">DOB:</span> <span className="font-medium">{selected.patientDOB}</span></div>}
-                  <div><span className="text-gray-500">Doctor:</span> <span className="font-medium">Dr. {selected.doctorName}</span></div>
+                  <div><span className="text-gray-500">Doctor:</span> <span className="font-medium">{doctorLabel(selected.doctorName)}</span></div>
                   {selected.doctorLicense && <div><span className="text-gray-500">License:</span> <span className="font-medium">{selected.doctorLicense}</span></div>}
                   {selected.diagnosis && <div className="col-span-2"><span className="text-gray-500">Diagnosis:</span> <span className="font-medium">{selected.diagnosis}</span></div>}
                 </div>
@@ -468,7 +478,7 @@ export default function PrescriptionsPage() {
                       return (
                         <tr key={rx.id} className="border-t hover:bg-gray-50 dark:hover:bg-gray-700/50">
                           <td className="px-4 py-2 font-mono text-xs text-blue-600">{rx.prescriptionNumber}</td>
-                          <td className="px-4 py-2 text-gray-600 dark:text-gray-400">Dr. {rx.doctorName}</td>
+                          <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{doctorLabel(rx.doctorName)}</td>
                           <td className="px-4 py-2">
                             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[rx.status] ?? ''}`}>{rx.status}</span>
                           </td>
@@ -546,24 +556,36 @@ export default function PrescriptionsPage() {
             <div className="p-6 overflow-y-auto space-y-5 flex-1">
               {/* Patient */}
               <div>
-                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Patient Information</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="col-span-2">
-                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Patient Name *</label>
-                    <input value={form.patientName} onChange={(e) => setForm((f) => ({ ...f, patientName: e.target.value }))}
-                      className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="Full name" />
+                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Patient</p>
+                {!typedPatient ? (
+                  <div className="space-y-2">
+                    <PatientPicker value={patient} onChange={setPatient} />
+                    {!patient && (
+                      <button type="button" onClick={() => setTypedPatient(true)} className="text-xs text-gray-500 underline hover:text-gray-700">
+                        Enter the patient's details without a record (allergies will not be checked)
+                      </button>
+                    )}
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Phone</label>
-                    <input value={form.patientPhone} onChange={(e) => setForm((f) => ({ ...f, patientPhone: e.target.value }))}
-                      className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="0712 345 678" />
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Patient Name *</label>
+                      <input value={form.patientName} onChange={(e) => setForm((f) => ({ ...f, patientName: e.target.value }))}
+                        className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="Full name" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Phone</label>
+                      <input value={form.patientPhone} onChange={(e) => setForm((f) => ({ ...f, patientPhone: e.target.value }))}
+                        className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="0712 345 678" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Date of Birth</label>
+                      <input type="date" value={form.patientDOB} onChange={(e) => setForm((f) => ({ ...f, patientDOB: e.target.value }))}
+                        className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" aria-label="Date" />
+                    </div>
+                    <button type="button" onClick={() => setTypedPatient(false)} className="col-span-2 text-left text-xs text-teal-700 underline">Use a patient record instead</button>
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Date of Birth</label>
-                    <input type="date" value={form.patientDOB} onChange={(e) => setForm((f) => ({ ...f, patientDOB: e.target.value }))}
-                      className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" aria-label="Date" />
-                  </div>
-                </div>
+                )}
               </div>
               {/* Doctor */}
               <div>
@@ -632,7 +654,7 @@ export default function PrescriptionsPage() {
                                 {suggestions.map((it: any) => (
                                   <button key={it.id} type="button"
                                     onMouseDown={() => {
-                                      updateItem({ itemId: it.id, name: it.name, doseUnit: it.unit ?? 'tablet' });
+                                      updateItem({ itemId: it.id, name: it.name, ...(UNIT_OPTIONS.includes(String(it.unit ?? '').toLowerCase()) ? { doseUnit: String(it.unit).toLowerCase() } : {}) });
                                       setItemSearches((s) => { const n = [...s]; n[i] = ''; return n; });
                                       setOpenSearchIdx(null);
                                     }}
@@ -710,6 +732,9 @@ export default function PrescriptionsPage() {
                   })}
                 </div>
               </div>
+              {preview && preview.warnings.length > 0 && (
+                <SafetyPanel warnings={preview.warnings} override={{ reason: '', pin: '' }} onOverride={() => undefined} showOverride={false} />
+              )}
               {/* Notes */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Notes</label>
@@ -719,8 +744,12 @@ export default function PrescriptionsPage() {
             </div>
             <div className="p-4 border-t dark:border-gray-700 flex gap-2 justify-end">
               <button onClick={() => { setShowCreate(false); resetForm(); }} className="px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">Cancel</button>
-              <button onClick={() => createMutation.mutate({ businessId, storeId, ...form })}
-                disabled={!form.patientName || !form.doctorName || form.items.some((i) => !i.name) || createMutation.isPending}
+              <button onClick={() => createMutation.mutate({
+                  businessId, storeId, ...form,
+                  ...(patient ? { patientId: patient.id } : {}),
+                  items: form.items.map(({ duration, ...line }) => ({ ...line, ...(duration ? { durationDays: duration } : {}) })),
+                })}
+                disabled={(!patient && !form.patientName) || !form.doctorName || form.items.some((i) => !i.name) || createMutation.isPending}
                 className="px-6 py-2 text-sm bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50">
                 {createMutation.isPending ? 'Creating…' : 'Create Prescription'}
               </button>

@@ -17,9 +17,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const res = host.switchToHttp().getResponse();
     let status = 500;
     let message = 'Internal server error';
+    // A refusal the screen has to act on (not just show) carries a machine-readable `code` and the facts behind it.
+    let extra: { code?: string; details?: unknown } = {};
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       message = exception.message;
+      const body = exception.getResponse();
+      if (body && typeof body === 'object' && typeof (body as { code?: unknown }).code === 'string') {
+        extra = { code: (body as { code: string }).code, details: (body as { details?: unknown }).details };
+      }
     } else if (exception instanceof Prisma.PrismaClientValidationError) {
       // Bad or missing argument (e.g. an unparseable date from the query string).
       status = 400;
@@ -41,6 +47,6 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const logged = exception instanceof Error ? exception.message : message;
     if (status >= 500) this.logger.error(`[${status}] ${logged}`, exception instanceof Error ? exception.stack : '');
     else this.logger.warn(`[${status}] ${logged.split('\n').pop()}`);
-    res.status(status).json({ statusCode: status, message });
+    res.status(status).json({ statusCode: status, message, ...extra });
   }
 }

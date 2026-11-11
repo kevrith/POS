@@ -9,6 +9,8 @@ import { autoPrintReceipt, printErrorMessage } from '../lib/receiptPrint';
 import { buildDirectSaleReceipt, type DirectSaleResponse } from '../lib/directSaleReceipt';
 import type { ReceiptData } from '../lib/printer';
 import DirectSaleReceiptModal from './DirectSaleReceiptModal';
+import SafetyPanel, { type OverrideState } from './clinical/SafetyPanel';
+import { overridePayload, overrideReady, type SafetyResult } from '../lib/clinical';
 
 interface Quote {
   invoice: boolean;
@@ -54,10 +56,17 @@ export default function DispenseModal({
   const [memberNumber, setMemberNumber] = useState('');
   const [patientPct, setPatientPct] = useState('20');
   const [receipt, setReceipt] = useState<{ data: ReceiptData; res: FillResponse } | null>(null);
+  const [override, setOverride] = useState<OverrideState>({ reason: '', pin: '' });
 
   const { data: quote, isError: quoteFailed } = useQuery<Quote>({
     queryKey: ['rx-quote', rx.id],
     queryFn: () => api.get(`/prescriptions/${rx.id}/quote`),
+    staleTime: 0,
+  });
+  // Allergies, interactions and dose, checked against the patient's record as it is now.
+  const { data: safety, isError: safetyFailed, refetch: refetchSafety } = useQuery<SafetyResult>({
+    queryKey: ['rx-safety', rx.id],
+    queryFn: () => api.get(`/prescriptions/${rx.id}/safety`),
     staleTime: 0,
   });
   const { data: providers = [] } = useQuery<Array<{ id: string; name: string; isActive: boolean }>>({
@@ -83,11 +92,14 @@ export default function DispenseModal({
 
   const fill = useMutation({
     mutationFn: () =>
-      api.patch<FillResponse>(`/prescriptions/${rx.id}/${mode}`, quote?.invoice ? {
-        payments: patientShare > 0 ? [{ method, amountCents: paying }] : [],
-        ...(insured && { insurance: { providerId, memberNumber: memberNumber.trim() || undefined, patientPct: pct } }),
-        buyerKraPin: kraPin.trim() || undefined,
-      } : {}),
+      api.patch<FillResponse>(`/prescriptions/${rx.id}/${mode}`, {
+        ...(quote?.invoice ? {
+          payments: patientShare > 0 ? [{ method, amountCents: paying }] : [],
+          ...(insured && { insurance: { providerId, memberNumber: memberNumber.trim() || undefined, patientPct: pct } }),
+          buyerKraPin: kraPin.trim() || undefined,
+        } : {}),
+        ...(safety?.blocked ? { override: overridePayload(override, user?.role) } : {}),
+      }),
     onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['prescriptions'] });
       void qc.invalidateQueries({ queryKey: ['pharmacy-refill-queue'] });
@@ -99,7 +111,11 @@ export default function DispenseModal({
       setReceipt({ data, res });
       void autoPrintReceipt(data, false).catch((err) => toast.error(`Auto-print failed: ${printErrorMessage(err)}`));
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) => {
+      toast.error(err.message);
+      // The record may have changed under us (an allergy added a moment ago): show what it says now.
+      if ((err as { code?: string }).code === 'SAFETY_BLOCK') void refetchSafety();
+    },
   });
 
   if (receipt) {
@@ -116,8 +132,11 @@ export default function DispenseModal({
     );
   }
 
+  const needsOverride = !!safety?.blocked;
   const blocked =
     !quote ||
+    !safety ||
+    (needsOverride && !overrideReady(override, user?.role)) ||
     (quote.invoice && (quote.unpriced.length > 0 || (insured && !providerId) || paying < patientShare));
 
   return (
@@ -131,6 +150,8 @@ export default function DispenseModal({
         </div>
 
         <div className="p-5 space-y-4 max-h-[65vh] overflow-y-auto">
+          {safetyFailed && <p className="text-sm text-red-600">Could not run the safety check. Close this and try again.</p>}
+          {safety && <SafetyPanel warnings={safety.warnings} override={override} onOverride={setOverride} role={user?.role} />}
           {quoteFailed && <p className="text-sm text-red-600">Could not price this prescription. Close this and try again.</p>}
           {!quote && !quoteFailed && <div className="flex justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-green-600" /></div>}
 
@@ -207,7 +228,7 @@ export default function DispenseModal({
           <button onClick={onClose} className="py-2 border rounded-lg text-sm font-medium text-gray-700">Cancel</button>
           <button onClick={() => fill.mutate()} disabled={blocked || fill.isPending}
             className="py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium disabled:opacity-50">
-            {fill.isPending ? 'Working…' : quote?.invoice ? 'Take payment and dispense' : mode === 'refill' ? 'Refill and deduct stock' : 'Dispense and deduct stock'}
+            {fill.isPending ? 'Working…' : needsOverride ? 'Approve and dispense' : quote?.invoice ? 'Take payment and dispense' : mode === 'refill' ? 'Refill and deduct stock' : 'Dispense and deduct stock'}
           </button>
         </div>
       </div>

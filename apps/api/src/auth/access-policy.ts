@@ -243,6 +243,10 @@ export const ACCESS_RULES: readonly AccessRule[] = [
   r('POST', '/prescriptions/controlled-log', DISPATCH),
   r('PATCH', '/prescriptions/:id/cancel', MGMT),
   r('*', '/prescriptions/**', DISPATCH),
+  // Patient records hold allergies, conditions, ID numbers and contacts: the front line registers and edits them, nobody on the floor staff sees them.
+  r('PATCH', '/patients/:id/active', MGMT),
+  r('POST', '/patients/:id/adopt-prescriptions', MGMT),
+  r('*', '/patients/**', DISPATCH),
   r('GET', '/pharmacy/claims', FIN),
   r('GET', '/pharmacy/claims/stats', FIN),
   r(['POST', 'PATCH'], '/pharmacy/claims/**', FIN),

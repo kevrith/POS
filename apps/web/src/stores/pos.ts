@@ -34,6 +34,9 @@ export interface CartItem {
   // UOM packaging support
   selectedUOM?: ItemUOM | null;       // which packaging was selected at POS
   stockDeductionPerUnit?: number;     // base units to deduct per cart qty (= conversionFactor)
+  /** Medicines: needs a prescription / controlled schedule. The till asks a manager before selling these. */
+  requiresPrescription?: boolean;
+  scheduleClass?: string | null;
 }
 
 export interface ApiItem {
@@ -61,6 +64,8 @@ export interface ApiItem {
   soldOut?: boolean;
   negativeStockPolicy?: string | null;
   uoms?: ItemUOM[];
+  requiresPrescription?: boolean;
+  scheduleClass?: string | null;
 }
 
 export interface HeldSale {
@@ -142,6 +147,8 @@ export const usePOSStore = create<POSState>()((set, _get) => ({
         totApplicable: item.totApplicable,
         selectedUOM: uom ?? null,
         stockDeductionPerUnit: deduction,
+        requiresPrescription: item.requiresPrescription,
+        scheduleClass: item.scheduleClass,
       };
       return { cart: [...state.cart, newItem] };
     }),
@@ -166,6 +173,8 @@ export const usePOSStore = create<POSState>()((set, _get) => ({
         taxClass: taxClassOf(item),
         totApplicable: item.totApplicable,
         weightGrams,
+        requiresPrescription: item.requiresPrescription,
+        scheduleClass: item.scheduleClass,
       };
       // Always add as new line (weight items are unique per scan)
       return { cart: [...state.cart, newItem] };

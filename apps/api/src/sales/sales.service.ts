@@ -20,6 +20,7 @@ import { postSaleJournal, postSettlementJournal, reverseJournalLines, type SaleJ
 import { drawStock, restoreStock } from '../batch/batch-allocation';
 import { assertStockAvailable, blocksOversell, sellsInFractions, type StockLine } from './stock-guard';
 import { ROOM_CHARGE_FOLIO_TYPE } from '../common/folio';
+import { assertRestrictedAllowed, restrictedItems, type RestrictedApproval } from './restricted-sale';
 
 /** How a customer may settle a credit sale. */
 const CREDIT_SETTLEMENT_METHODS = ['CASH', 'MPESA', 'CARD', 'BANK'] as const;
@@ -84,6 +85,8 @@ interface CreateSaleDto {
    * amount they were not shown. Optional, so tills that don't send it behave as before.
    */
   expectedTotalCents?: number;
+  /** A manager's approval to sell prescription-only or controlled medicines on this till without a prescription. Verified by the controller. */
+  restrictedOverride?: RestrictedApproval;
 }
 
 /** "Pilau" or "Pilau (Extra cheese, No onion)": the modifiers travel with the line they priced. */
@@ -262,6 +265,9 @@ export class SalesService {
     const items = await this.prisma.item.findMany({
       where: { id: { in: cart.map(i => i.itemId) }, businessId },
     });
+
+    // Prescription-only and controlled medicines are dispensed from a prescription; here only with a manager's approval.
+    const restrictedApproval = assertRestrictedAllowed(restrictedItems(items), dto.restrictedOverride);
 
     // Who performed each service line must be someone in this business: the id is only a pointer for commission.
     const staffIds = [...new Set(cart.map((c) => c.staffId).filter((id): id is string => typeof id === 'string' && id.length > 0))];
@@ -482,6 +488,32 @@ export class SalesService {
             saleId: createdSale.id,
             trackBatches: !!item.trackBatches,
           });
+        }
+      }
+
+      // A restricted sale went ahead on a manager's say-so: that is on record, and a controlled drug is on the register.
+      if (restrictedApproval) {
+        for (const r of restrictedItems(items.filter((i) => cart.some((c) => c.itemId === i.id)))) {
+          await tx.rxSafetyOverride.create({
+            data: { businessId, saleId: createdSale.id, kind: 'RESTRICTED_SALE', detail: `${r.name} sold without a prescription (${createdSale.receiptNumber})`, reason: restrictedApproval.reason.slice(0, 300), approvedById: restrictedApproval.approvedById, approvedByName: restrictedApproval.approvedByName },
+          });
+          if (r.controlled && r.schedule) {
+            const cashier = await tx.user.findFirst({ where: { id: dto.cashierId, businessId }, select: { name: true } });
+            await tx.controlledSubstanceLog.create({
+              data: {
+                businessId,
+                itemName: r.name,
+                scheduleClass: r.schedule,
+                quantityDispensed: cart.filter((c) => c.itemId === r.itemId).reduce((sum, c) => sum + c.quantity, 0),
+                unit: r.unit,
+                patientName: restrictedApproval.patientName ?? '',
+                patientIdNumber: restrictedApproval.patientIdNumber,
+                prescriberName: restrictedApproval.prescriberName ?? 'No prescription (manager approved)',
+                dispensedBy: cashier?.name ?? dto.cashierId,
+                notes: `Sold at the till without a prescription, receipt ${createdSale.receiptNumber}. Approved by ${restrictedApproval.approvedByName}: ${restrictedApproval.reason}`.slice(0, 500),
+              },
+            });
+          }
         }
       }
 
@@ -1002,6 +1034,19 @@ export class SalesService {
     const isManager = ['OWNER', 'ADMIN', 'MANAGER'].includes(user.role);
     if (isManager && (!dto.managerId || dto.managerId === user.id)) return user.id;
     throw new ForbiddenException('Voiding a sale needs a manager. Enter a manager PIN.');
+  }
+
+  /**
+   * Who approved selling a restricted medicine without a prescription: a manager's PIN, or the manager signed in. Never a
+   * name taken from the request.
+   */
+  async resolveRestrictedApprover(user: { id: string; role: string; name?: string }, businessId: string, dto: { managerPin?: string }): Promise<{ id: string; name: string }> {
+    if (dto.managerPin) {
+      const manager = await this.auth.verifyManagerPin(dto.managerPin, businessId);
+      return { id: manager.userId, name: manager.name };
+    }
+    if (['OWNER', 'ADMIN', 'MANAGER'].includes(user.role)) return { id: user.id, name: user.name ?? user.id };
+    throw new ForbiddenException('A manager must approve selling this without a prescription. Enter a manager PIN.');
   }
 
   async returnSale(

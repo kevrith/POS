@@ -37,6 +37,7 @@ const TransfersPage = lazy(() => import('./pages/TransfersPage'));
 const OwnerDashboardPage = lazy(() => import('./pages/OwnerDashboardPage'));
 const PoleDisplayPage = lazy(() => import('./pages/PoleDisplayPage'));
 const PrescriptionsPage = lazy(() => import('./pages/PrescriptionsPage'));
+const PatientsPage = lazy(() => import('./pages/PatientsPage'));
 const PharmacyPage = lazy(() => import('./pages/PharmacyPage'));
 const AppointmentsPage = lazy(() => import('./pages/AppointmentsPage'));
 const DeliveryPage = lazy(() => import('./pages/DeliveryPage'));
@@ -361,6 +362,7 @@ export default function App() {
               <Route path="/transfers" element={<TransfersPage />} />
               <Route path="/owner-dashboard" element={<OwnerDashboardPage />} />
               <Route path="/prescriptions" element={<PrescriptionsPage />} />
+              <Route path="/patients" element={<PatientsPage />} />
               <Route path="/pharmacy" element={<PharmacyPage />} />
               <Route path="/appointments" element={<AppointmentsPage />} />
               <Route path="/delivery" element={<DeliveryPage />} />

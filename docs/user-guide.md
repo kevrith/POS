@@ -493,7 +493,24 @@ waiting for a table.
 
 ## 13. Pharmacy
 
-- **Prescriptions** captured at the till against the patient
+- **Patients** — every person you treat has one record (**Patients** in the menu): name, phone, ID number, date of birth, weight,
+  **allergies**, conditions, whether pregnant or breastfeeding, next of kin and insurer. Register someone once; when you type a name,
+  phone or ID the screen warns if they may already be registered. An ID number can belong to only one patient. Earlier prescriptions
+  written with just a name can be added to the right record from the patient's page (manager)
+- **Prescriptions** are written against a patient record. Each medicine keeps its dose, how often and for how many days, and the
+  prescription prints them. While it is being written the **safety check** shows problems before it is saved
+- **Safety check** — before anything is dispensed the system checks the patient's allergies (a medicine or its whole family, so a
+  penicillin allergy stops amoxicillin), medicines that interact with each other or with what the patient is already taking from
+  another prescription in the last month, the same medicine written twice, a daily dose above the usual maximum (set in the
+  **Formulary**), and pregnancy. A **Stop** cannot be passed except by a manager, with a reason: their PIN is entered on the screen
+  and the name, reason and what was set aside are kept on record. Other findings are shown for the pharmacist to judge. The check
+  only knows what has been entered: keep the patient's allergies, the interaction list and the formulary up to date
+- **Medicine details** — on each item (Items & Stock, for a clinic) enter the generic name, strength, form and drug class, choose a
+  **controlled schedule** (II to V) if it is controlled, and tick **Needs a prescription** if it is sold on prescription only. The
+  safety check and the controlled-drug register run on these, so a medicine without them is not checked
+- **Selling without a prescription** — a medicine marked *Needs a prescription*, or any controlled drug, is refused on the ordinary
+  till. A manager can approve the sale with a reason (a controlled drug also needs the buyer's name); it is recorded and a controlled
+  drug goes on the register. This cannot be done offline
 - **Dispensing and payment** — when your business records pharmacy takings as sales (ask the owner to check), pressing
   **Dispense** (or **Process Refill**) shows the price of the medicines, takes the patient's payment and prints a receipt that
   goes to KRA. Every medicine on the prescription must be linked to a catalogue item with a price, otherwise the screen

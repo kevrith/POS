@@ -4,8 +4,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { ItemType, InventoryMovementType, normalizeStation, isTaxClass, parseTaxClass, TAX_CLASSES, type TaxClass } from '@pos/shared';
 import { v4 as uuidv4 } from 'uuid';
+import { cleanMedicine, type MedicineDto } from './item-medicine';
 
-interface CreateItemDto {
+interface CreateItemDto extends MedicineDto {
   name: string;
   type: ItemType;
   barcode?: string;
@@ -481,6 +482,7 @@ export class ItemsService {
         station: normalizeStation(dto.station),
         ...(cleanPrepTime(dto.prepTimeMinutes) !== undefined && { prepTimeMinutes: cleanPrepTime(dto.prepTimeMinutes) }),
         ...(cleanDuration(dto.durationMinutes) !== undefined && { durationMinutes: cleanDuration(dto.durationMinutes) }),
+        ...cleanMedicine(dto),
         storeId,
         businessId: dto.businessId,
       },
@@ -553,6 +555,7 @@ export class ItemsService {
         ...(dto.station !== undefined && { station: normalizeStation(dto.station) }),
         ...(cleanPrepTime(dto.prepTimeMinutes) !== undefined && { prepTimeMinutes: cleanPrepTime(dto.prepTimeMinutes) }),
         ...(cleanDuration(dto.durationMinutes) !== undefined && { durationMinutes: cleanDuration(dto.durationMinutes) }),
+        ...cleanMedicine(dto),
         ...(dto.soldOut !== undefined && { soldOut: dto.soldOut }),
         ...(dto.isFractional !== undefined && { isFractional: dto.isFractional }),
         ...(dto.unitLabel !== undefined && { unitLabel: dto.unitLabel }),

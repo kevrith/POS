@@ -128,7 +128,8 @@ async function maybeRefreshToken(): Promise<boolean> {
 
 /** An error response from the server. `status` tells a REFUSED request (4xx) from a server that is not there (502-504). */
 export class ApiError extends Error {
-  constructor(message: string, public readonly status: number) {
+  /** `code` and `details` are set when the server refused for a reason the screen can act on (a safety block, a restricted sale). */
+  constructor(message: string, public readonly status: number, public readonly code?: string, public readonly details?: unknown) {
     super(message);
     this.name = 'ApiError';
   }
@@ -143,13 +144,17 @@ async function handleResponse<T>(response: Response): Promise<T> {
   }
   if (!response.ok) {
     let message = `Request failed (${response.status})`;
+    let code: string | undefined;
+    let details: unknown;
     try {
-      const body = await response.json() as { message?: string };
+      const body = await response.json() as { message?: string; code?: string; details?: unknown };
       message = body.message ?? message;
+      code = body.code;
+      details = body.details;
     } catch {
       // ignore parse error
     }
-    throw new ApiError(message, response.status);
+    throw new ApiError(message, response.status, code, details);
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;

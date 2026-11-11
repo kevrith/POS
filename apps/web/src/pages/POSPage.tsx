@@ -23,6 +23,9 @@ import { autoPrintReceipt, printErrorMessage, printWithPreferredPrinter } from '
 import { subscribeToEvent, SocketEvents } from '../lib/socket';
 import { createAttemptKeys } from '../lib/checkoutKey';
 import { canQueueOffline, submitSaleOrQueue } from '../lib/offlineSales';
+import { ApiError } from '../lib/api';
+import { isRestrictedItem } from '../lib/clinical';
+import RestrictedSaleModal, { type RestrictedApprovalInput } from '../components/clinical/RestrictedSaleModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,6 +44,8 @@ interface SalePayload {
   promotionId?: string;
   serviceChargeCents?: number;
   tipCents?: number;
+  /** A manager's approval to sell a prescription-only or controlled medicine here. */
+  restrictedOverride?: RestrictedApprovalInput;
 }
 
 interface Promotion {
@@ -477,6 +482,10 @@ export default function POSPage() {
   // ─── Checkout ─────────────────────────────────────────────────────────────
 
   const attemptKeys = useRef(createAttemptKeys());
+  // A prescription-only or controlled medicine on the sale: the server refuses it until a manager approves (then it retries).
+  const lastPayments = useRef<Array<{ method: string; amountCents: number; reference?: string }>>([]);
+  const restrictedApproval = useRef<RestrictedApprovalInput | undefined>(undefined);
+  const [restrictedAsk, setRestrictedAsk] = useState<{ medicines: string[]; controlled: boolean } | null>(null);
 
   const checkoutMutation = useMutation<SaleResult, Error, Array<{ method: string; amountCents: number; reference?: string }>>({
     // Run even with no connection. TanStack Query's default ('online') PAUSES a mutation while the browser is offline,
@@ -498,6 +507,7 @@ export default function POSPage() {
         serviceChargeCents,
         ...(tipCents > 0 && { tipCents }),
         ...(totalDiscountCents > 0 && { discountCents: totalDiscountCents, promotionId: appliedPromotion?.id }),
+        ...(restrictedApproval.current && { restrictedOverride: restrictedApproval.current }),
       };
       payload.offlineId = attemptKeys.current.keyFor(
         JSON.stringify([payload.items, payload.payments, payload.type, payload.customerId, payload.discountCents, payload.serviceChargeCents, payload.tipCents]),
@@ -505,7 +515,7 @@ export default function POSPage() {
       const outcome = await submitSaleOrQueue<SaleResult, SalePayload & { offlineId: string }>(
         { ...payload, offlineId: payload.offlineId },
         {
-          canQueue: canQueueOffline({ payments, loyaltyRedeemed: loyaltyDiscountApplied }),
+          canQueue: canQueueOffline({ payments, loyaltyRedeemed: loyaltyDiscountApplied, hasRestrictedMedicine: cart.some(isRestrictedItem) }),
           user: { id: user?.id ?? '', name: user?.name },
           totalCents,
           customerName: customerName ?? undefined,
@@ -516,8 +526,20 @@ export default function POSPage() {
         ? { id: '', receiptNumber: outcome.provisionalNumber, totalCents, queued: true }
         : outcome.result;
     },
+    onError: (err) => {
+      // The till refused a restricted medicine: ask for a manager's approval and send the same sale again.
+      if (err instanceof ApiError && err.code === 'RESTRICTED_SALE') {
+        const found = (Array.isArray(err.details) ? err.details : []) as Array<{ name: string; controlled: boolean }>;
+        setRestrictedAsk({ medicines: found.map((d) => d.name), controlled: found.some((d) => d.controlled) });
+      } else if (restrictedApproval.current) {
+        // The approval was refused (a wrong PIN, a missing reason): say so while the form is still open.
+        toast.error(err.message);
+      }
+    },
     onSuccess: (result) => {
       attemptKeys.current.reset();
+      restrictedApproval.current = undefined;
+      setRestrictedAsk(null);
       const offline = result.queued === true;
       if (offline) {
         toast.info(`Sale saved offline as ${result.receiptNumber}. It uploads by itself when the connection is back.`, { duration: 9000 });
@@ -1060,6 +1082,8 @@ export default function POSPage() {
         <PaymentModal
           totalCents={totalCents}
           onComplete={(payments) => {
+            lastPayments.current = payments;
+            restrictedApproval.current = undefined;
             checkoutMutation.mutate(payments);
             setPendingC2BCount(0);
           }}
@@ -1069,6 +1093,17 @@ export default function POSPage() {
           businessId={businessId}
           customerName={customerName}
           customerId={customerId}
+        />
+      )}
+
+      {restrictedAsk && (
+        <RestrictedSaleModal
+          medicines={restrictedAsk.medicines}
+          controlled={restrictedAsk.controlled}
+          role={user?.role}
+          busy={checkoutMutation.isPending}
+          onCancel={() => { restrictedApproval.current = undefined; setRestrictedAsk(null); setShowPayment(false); }}
+          onApprove={(a) => { restrictedApproval.current = a; checkoutMutation.mutate(lastPayments.current); }}
         />
       )}
 

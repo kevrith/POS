@@ -7,6 +7,8 @@
  */
 import { create } from 'zustand';
 import { call, inDesktopApp } from './desktopServer';
+import { KASTRA_CLOUD_API } from './cloudUrl';
+import { isPrivateAddress } from './storeLink';
 
 export interface AppUpdateInfo {
   version: string;
@@ -75,6 +77,8 @@ interface AppUpdateState {
   progress: UpdateProgress;
   /** "Later" hides the banner until the next check finds it again. */
   dismissed: boolean;
+  /** The platform admin asked this computer to update: the banner stays, and "Later" is not offered. */
+  requested: boolean;
   check: (manual?: boolean) => Promise<void>;
   install: () => Promise<void>;
   /**
@@ -82,6 +86,8 @@ interface AppUpdateState {
    * refresh (or a new window) leaves it going while the page forgets it: this asks the program and follows it again.
    */
   resume: () => Promise<void>;
+  /** Tell the KASTRA server which version this computer runs, and learn whether an update has been requested. */
+  report: () => Promise<void>;
   dismiss: () => void;
 }
 
@@ -115,6 +121,7 @@ export const useAppUpdate = create<AppUpdateState>((set, get) => ({
   checking: false,
   progress: IDLE,
   dismissed: false,
+  requested: false,
 
   check: async (manual = false) => {
     if (!inDesktopApp() || get().checking || isInstalling(get().progress)) return;
@@ -162,8 +169,81 @@ export const useAppUpdate = create<AppUpdateState>((set, get) => ({
     }
   },
 
+  report: async () => {
+    if (!inDesktopApp()) return;
+    try {
+      const [machine, version] = await Promise.all([
+        call<{ machine_id: string; hostname: string }>('get_machine_id'),
+        call<string>('app_version'),
+      ]);
+      if (!get().version) set({ version });
+      const answer = await postHeartbeat(heartbeatBody(machine, version));
+      if (!answer) return;
+      set({ requested: answer.updateRequested });
+      // Asked to update: find the update now rather than waiting for the next scheduled check.
+      if (answer.updateRequested && !get().found) void get().check();
+    } catch {
+      // Offline or the server is asleep: nothing to report right now, try again at the next check.
+    }
+  },
+
   dismiss: () => set({ dismissed: true }),
 }));
+
+/** Which server to report to: the cloud, or the cloud again when this computer's own server is on its own premises. */
+export function heartbeatBase(serverUrl: string | null): string {
+  if (serverUrl && !isPrivateAddress(serverUrl)) return serverUrl.replace(/\/+$/, '') + '/api/v1';
+  return KASTRA_CLOUD_API;
+}
+
+export function systemName(userAgent: string): string {
+  if (/windows/i.test(userAgent)) return 'windows';
+  if (/mac os|macintosh/i.test(userAgent)) return 'macos';
+  if (/linux/i.test(userAgent)) return 'linux';
+  return 'unknown';
+}
+
+/** What this computer tells the server about itself. Nothing from the shop's sales or customers. */
+export function heartbeatBody(
+  machine: { machine_id: string; hostname: string },
+  appVersion: string,
+  extra: { businessId?: string; businessName?: string; userAgent?: string } = {},
+) {
+  return {
+    machineId: machine.machine_id,
+    hostname: machine.hostname,
+    os: systemName(extra.userAgent ?? (typeof navigator === 'undefined' ? '' : navigator.userAgent)),
+    appVersion,
+    businessId: extra.businessId ?? signedInBusinessId(),
+    businessName: extra.businessName ?? safeStored('desktop-business-name') ?? undefined,
+  };
+}
+
+/** The business of whoever is signed in, read from where the sign-in is kept (this file must not load the sign-in code). */
+function signedInBusinessId(): string | undefined {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem('pos-auth') ?? 'null') as { state?: { user?: { businessId?: string } } } | null;
+    return saved?.state?.user?.businessId;
+  } catch {
+    return undefined;
+  }
+}
+
+function safeStored(key: string): string | null {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+
+async function postHeartbeat(body: ReturnType<typeof heartbeatBody>): Promise<{ updateRequested: boolean; latestVersion: string | null } | null> {
+  const res = await fetch(`${heartbeatBase(safeStored('kastra-server-url'))}/desktop/heartbeat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) return null;
+  const json = (await res.json().catch(() => null)) as { updateRequested?: boolean; latestVersion?: string | null } | null;
+  return json ? { updateRequested: !!json.updateRequested, latestVersion: json.latestVersion ?? null } : null;
+}
 
 const FIRST_CHECK_MS = 20 * 1000;
 const EVERY_MS = 6 * 60 * 60 * 1000;
@@ -173,8 +253,12 @@ export function startUpdateChecks(): () => void {
   if (!inDesktopApp()) return () => undefined;
   // First of all: is an install already running from before this page loaded?
   void useAppUpdate.getState().resume();
-  const first = setTimeout(() => void useAppUpdate.getState().check(), FIRST_CHECK_MS);
-  const every = setInterval(() => void useAppUpdate.getState().check(), EVERY_MS);
+  const run = () => {
+    void useAppUpdate.getState().report();
+    void useAppUpdate.getState().check();
+  };
+  const first = setTimeout(run, FIRST_CHECK_MS);
+  const every = setInterval(run, EVERY_MS);
   return () => {
     clearTimeout(first);
     clearInterval(every);

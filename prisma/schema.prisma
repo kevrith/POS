@@ -1430,6 +1430,29 @@ model LocalLicense {
   updatedAt        DateTime  @updatedAt
 }
 
+/// One installed copy of the desktop app, as it last reported itself (every few hours, when it has internet). Used to show the
+/// platform admin which version each computer runs and to ask a computer to update. Reported by the app, so it is for display
+/// and targeting only: nothing here grants access to anything.
+model DesktopInstall {
+  id                 String    @id @default(uuid())
+  /// The computer's own id (the same one a licence is bound to). One row per computer.
+  machineId          String    @unique
+  hostname           String?
+  os                 String?
+  appVersion         String
+  /// What the app says it belongs to. Reported, not verified.
+  businessId         String?
+  businessName       String?
+  firstSeenAt        DateTime  @default(now())
+  lastSeenAt         DateTime  @default(now())
+  /// Set by the platform admin: this computer should update. Cleared when it reports the newest version.
+  updateRequestedAt  DateTime?
+  /// The newest version at the time of the request.
+  updateRequestedFor String?
+
+  @@index([lastSeenAt])
+}
+
 model SuperAdmin {
   id           String   @id @default(uuid())
   email        String   @unique

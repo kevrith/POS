@@ -114,6 +114,17 @@ export const adminApi = {
   regenerateLicenseKey: (id: string) =>
     request<{ success: boolean; newKey: string; sentTo: string }>(`/license-keys/${id}/regenerate`, { method: 'POST' }),
 
+  getDesktopInstalls: () => request<any>('/desktop-installs'),
+
+  requestDesktopUpdate: (id: string) =>
+    request<any>(`/desktop-installs/${id}/request-update`, { method: 'POST' }),
+
+  cancelDesktopUpdate: (id: string) =>
+    request<any>(`/desktop-installs/${id}/cancel-update`, { method: 'POST' }),
+
+  removeDesktopInstall: (id: string) =>
+    request<any>(`/desktop-installs/${id}`, { method: 'DELETE' }),
+
   getHealth: () => request<any>('/health'),
 
   getBusinessData: (id: string) => request<any>(`/businesses/${id}/data`),

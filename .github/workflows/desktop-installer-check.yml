@@ -63,7 +63,7 @@ jobs:
       - name: Check the app version is the same everywhere
         run: |
           node apps/desktop/scripts/app-version.mjs --check
-          node --test apps/desktop/scripts/app-version.test.mjs
+          node --test apps/desktop/scripts/app-version.test.mjs apps/desktop/scripts/build-update-manifest.test.mjs
 
       - name: Generate the Prisma client and build the API and the server program
         shell: bash

@@ -230,33 +230,30 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Copy latest.json to the address installed apps check
+      # The manifest is BUILT here from the signature files on the release, not copied from the latest.json tauri-action writes:
+      # the four platform builds edit that file at the same moment, and a re-run of one can overwrite the others' entries (the
+      # 1.1.6 release lost its Linux entry that way). See apps/desktop/scripts/build-update-manifest.mjs.
+      - name: Build latest.json from the release and publish it where installed apps check
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           VERSION=$(node apps/desktop/scripts/app-version.mjs)
-          mkdir out
-          gh release download "desktop-v$VERSION" --repo "$GITHUB_REPOSITORY" --pattern latest.json --dir out
-          node -e '
-            const m = JSON.parse(require("fs").readFileSync("out/latest.json", "utf8"));
-            const want = process.argv[1];
-            if (m.version !== want) throw new Error(`latest.json says ${m.version}, expected ${want}`);
-            const platforms = Object.entries(m.platforms || {});
-            for (const need of ["windows-x86_64", "linux-x86_64", "darwin-x86_64", "darwin-aarch64"]) {
-              if (!m.platforms || !m.platforms[need]) throw new Error(`latest.json has no ${need} entry`);
-            }
-            for (const [name, p] of platforms) {
-              if (!p.url || !p.signature) throw new Error(`${name} has no url or signature`);
-            }
-            console.log("manifest ok:", want, platforms.map(([n]) => n).join(", "));
-          ' "$VERSION"
+          TAG="desktop-v$VERSION"
+          mkdir -p out/sigs
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' > out/names.txt
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.sig' --dir out/sigs
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > out/notes.md
+          node apps/desktop/scripts/build-update-manifest.mjs --version "$VERSION" --repo "$GITHUB_REPOSITORY" --tag "$TAG" \
+            --names out/names.txt --sigs out/sigs --notes out/notes.md --out out/latest.json
           if ! gh release view desktop-updates --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create desktop-updates --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
               --title "Desktop update manifest" \
               --notes "Not a download. Installed KASTRA desktop apps read latest.json from here to find the newest version."
           fi
           gh release upload desktop-updates out/latest.json --repo "$GITHUB_REPOSITORY" --clobber
+          # the versioned release carries the same, correct file
+          gh release upload "$TAG" out/latest.json --repo "$GITHUB_REPOSITORY" --clobber
 
       # The website's download buttons point at these fixed names (apps/landing/index.html); see apps/desktop/README.md.
       - name: Publish the installers under stable names for the website

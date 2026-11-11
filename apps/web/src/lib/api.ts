@@ -6,7 +6,8 @@
  *  3. VITE_API_URL env var              — set at build time for web deployment
  *  4. /api/v1                           — relative path (works via Vite proxy in dev)
  */
-const KASTRA_CLOUD_API = 'https://pos-bhe5.onrender.com/api/v1';
+
+import { KASTRA_CLOUD_API } from './cloudUrl';
 
 function resolveApiUrl(): string {
   try {

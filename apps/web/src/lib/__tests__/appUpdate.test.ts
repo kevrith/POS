@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { canInstallUpdate, checkedAgo, describeProgress, isInstalling, percentDone, useAppUpdate, type UpdateProgress } from '../appUpdate';
+import { canInstallUpdate, checkedAgo, describeProgress, heartbeatBase, heartbeatBody, isInstalling, percentDone, systemName, useAppUpdate, type UpdateProgress } from '../appUpdate';
+import { KASTRA_CLOUD_API } from '../cloudUrl';
 
 const progress = (p: Partial<UpdateProgress>): UpdateProgress => ({ stage: 'idle', downloaded: 0, ...p });
 
@@ -65,7 +66,7 @@ describe('the update store, against a stand-in desktop app', () => {
         },
       },
     });
-    useAppUpdate.setState({ found: null, checking: false, checkedAt: undefined, checkError: undefined, progress: { stage: 'idle', downloaded: 0 }, dismissed: false, version: undefined });
+    useAppUpdate.setState({ found: null, checking: false, checkedAt: undefined, checkError: undefined, progress: { stage: 'idle', downloaded: 0 }, dismissed: false, requested: false, version: undefined });
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -167,6 +168,61 @@ describe('the update store, against a stand-in desktop app', () => {
     expect(useAppUpdate.getState().progress.stage).not.toBe('error');
   });
 
+  describe('reporting this computer to the KASTRA server', () => {
+    const machine = { machine_id: 'machine-1234567890', hostname: 'SHOP-PC' };
+    let sent: Array<{ url: string; body: Record<string, unknown> }>;
+    let answer: { ok: boolean; json: unknown } | 'offline';
+
+    beforeEach(() => {
+      sent = [];
+      answer = { ok: true, json: { updateRequested: false, latestVersion: '1.1.6' } };
+      handlers.get_machine_id = () => machine;
+      handlers.app_version = () => '1.1.2';
+      handlers.app_update_check = () => ({ version: '1.1.6', currentVersion: '1.1.2' });
+      vi.stubGlobal('fetch', async (url: string, init: { body: string }) => {
+        sent.push({ url, body: JSON.parse(init.body) });
+        if (answer === 'offline') throw new TypeError('Failed to fetch');
+        return { ok: answer.ok, json: async () => answer.json } as unknown as Response;
+      });
+      // the stand-in window has no storage, so reading settings must not break
+    });
+
+    it('sends the version and computer, and nothing else about the shop', async () => {
+      await useAppUpdate.getState().report();
+      expect(sent).toHaveLength(1);
+      expect(sent[0].url).toBe(`${KASTRA_CLOUD_API}/desktop/heartbeat`);
+      // only these fields may ever be sent (a field the app does not know is left out)
+      const allowed = ['appVersion', 'businessId', 'businessName', 'hostname', 'machineId', 'os'];
+      expect(Object.keys(sent[0].body).every((k) => allowed.includes(k))).toBe(true);
+      expect(Object.keys(sent[0].body)).toEqual(expect.arrayContaining(['appVersion', 'hostname', 'machineId', 'os']));
+      expect(sent[0].body).toMatchObject({ machineId: 'machine-1234567890', hostname: 'SHOP-PC', appVersion: '1.1.2' });
+      expect(useAppUpdate.getState().requested).toBe(false);
+    });
+
+    it('learns that an update was requested, and goes and finds it at once', async () => {
+      answer = { ok: true, json: { updateRequested: true, latestVersion: '1.1.6' } };
+      await useAppUpdate.getState().report();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(useAppUpdate.getState().requested).toBe(true);
+      expect(calls).toContain('app_update_check');
+      expect(useAppUpdate.getState().found?.version).toBe('1.1.6');
+    });
+
+    it('stays quiet when the server cannot be reached or refuses', async () => {
+      answer = 'offline';
+      await expect(useAppUpdate.getState().report()).resolves.toBeUndefined();
+      answer = { ok: false, json: null };
+      await expect(useAppUpdate.getState().report()).resolves.toBeUndefined();
+      expect(useAppUpdate.getState().requested).toBe(false);
+    });
+
+    it('reports nothing outside the desktop app', async () => {
+      vi.stubGlobal('window', {});
+      await useAppUpdate.getState().report();
+      expect(sent).toEqual([]);
+    });
+  });
+
   it('does nothing outside the desktop app', async () => {
     vi.stubGlobal('window', {}); // a plain browser: no desktop bridge
     await useAppUpdate.getState().check(true);
@@ -174,5 +230,26 @@ describe('the update store, against a stand-in desktop app', () => {
     await useAppUpdate.getState().resume();
     expect(calls).toEqual([]);
     expect(useAppUpdate.getState().progress.stage).toBe('idle');
+  });
+});
+
+describe('where a computer reports to', () => {
+  it('the cloud, unless the computer is set up against a public server, and never a private address', () => {
+    expect(heartbeatBase(null)).toBe(KASTRA_CLOUD_API);
+    expect(heartbeatBase('http://127.0.0.1:3010')).toBe(KASTRA_CLOUD_API);
+    expect(heartbeatBase('http://192.168.1.20:3010')).toBe(KASTRA_CLOUD_API);
+    expect(heartbeatBase('https://pos.example.com/')).toBe('https://pos.example.com/api/v1');
+  });
+
+  it('names the system from the browser string', () => {
+    expect(systemName('Mozilla/5.0 (Windows NT 10.0; Win64; x64) WebView2')).toBe('windows');
+    expect(systemName('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')).toBe('macos');
+    expect(systemName('Mozilla/5.0 (X11; Linux x86_64)')).toBe('linux');
+    expect(systemName('')).toBe('unknown');
+  });
+
+  it('builds the report from what the app knows', () => {
+    const body = heartbeatBody({ machine_id: 'abcdefgh1234', hostname: 'PC' }, '1.1.6', { businessId: 'b1', businessName: 'Premier', userAgent: 'Windows' });
+    expect(body).toEqual({ machineId: 'abcdefgh1234', hostname: 'PC', os: 'windows', appVersion: '1.1.6', businessId: 'b1', businessName: 'Premier' });
   });
 });

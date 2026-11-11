@@ -194,6 +194,14 @@ database before deploying code that reads them.
 **Hospitality & hotel** — `hospitality` `housekeeping` `channel-manager` `events`
 `waitlist` `appointments`
 
+Desktop installs (`desktop-installs/`, public `POST /desktop/heartbeat`; super-admin `GET /super-admin/desktop-installs`,
+`POST .../:id/request-update`, `POST .../:id/cancel-update`, `DELETE .../:id`): one `DesktopInstall` row per computer, written by the
+app's own report (version, computer name, system, optional business). It is for display and targeting only, so nothing there
+grants access; every input is validated and bounded (`appVersion` must be `x.y.z`), repeat reports within 10 minutes with
+nothing changed do not write, and a flag clears when the computer reports a version at least the newest. The newest version is
+read from the update manifest (`DESKTOP_UPDATE_MANIFEST_URL`, default the GitHub address in `tauri.conf.json`) and cached 30
+minutes; if it cannot be read the list says `UNKNOWN` instead of guessing.
+
 Kitchen tickets (`hospitality/orders/:id/kot`, `hospitality/kot/:id/status`,
 `hospitality/kds/orders`):
 - one ticket per station (`KITCHEN` / `BAR` / `DESSERT`, from `Item.station` or inferred

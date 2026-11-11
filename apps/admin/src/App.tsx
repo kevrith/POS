@@ -5,6 +5,7 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import BusinessesPage from './pages/BusinessesPage';
 import LicenseKeysPage from './pages/LicenseKeysPage';
+import DesktopAppsPage from './pages/DesktopAppsPage';
 import SupportPage from './pages/SupportPage';
 import ReferralsPage from './pages/ReferralsPage';
 import AffiliatesPage from './pages/AffiliatesPage';
@@ -15,7 +16,7 @@ import PlatformSettingsPage from './pages/PlatformSettingsPage';
 import HelpPage from './pages/HelpPage';
 import { C } from './generated/tokens';
 
-type Page = 'dashboard' | 'businesses' | 'users' | 'license-keys' | 'support' | 'referrals' | 'affiliates' | 'analytics' | 'webhooks' | 'platform-settings' | 'help';
+type Page = 'dashboard' | 'businesses' | 'users' | 'license-keys' | 'desktop-apps' | 'support' | 'referrals' | 'affiliates' | 'analytics' | 'webhooks' | 'platform-settings' | 'help';
 
 
 // Simple SVG icon components (no external dep required)
@@ -44,6 +45,7 @@ const MoreIcons = {
   analytics: 'M18 20V10 M12 20V4 M6 20v-6',
   webhooks:  'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71 M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71',
   settings:  'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
+  desktop:   'M2 3h20v14H2z M8 21h8 M12 17v4',
   help:      'M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z',
 };
 
@@ -53,6 +55,7 @@ const NAV: Array<{ id: Page; label: string; icon: string; color: string; group?:
   { id: 'users',             label: 'Users',            icon: MoreIcons.users,     color: C.accentText },
   { id: 'analytics',         label: 'Analytics',        icon: MoreIcons.analytics, color: C.green },
   { id: 'license-keys',      label: 'License Keys',     icon: Icons.license,       color: C.success },
+  { id: 'desktop-apps',      label: 'Desktop Apps',     icon: MoreIcons.desktop,   color: C.accentText },
   { id: 'referrals',         label: 'Referrals',        icon: MoreIcons.referral,  color: C.purple },
   { id: 'affiliates',        label: 'Affiliates',       icon: MoreIcons.referral,  color: C.purple },
   { id: 'webhooks',          label: 'Webhooks',         icon: MoreIcons.webhooks,  color: C.amber },
@@ -423,6 +426,7 @@ export default function App() {
           {page === 'users'              && <UsersPage />}
           {page === 'analytics'          && <AnalyticsPage />}
           {page === 'license-keys'       && <LicenseKeysPage />}
+          {page === 'desktop-apps'       && <DesktopAppsPage />}
           {page === 'referrals'          && <ReferralsPage />}
           {page === 'affiliates'         && <AffiliatesPage />}
           {page === 'webhooks'           && <WebhooksPage />}

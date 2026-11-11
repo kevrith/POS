@@ -48,6 +48,7 @@ import { PushModule } from './push/push.module';
 import { QueueModule } from './queue/queue.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { LicensingModule } from './licensing/licensing.module';
+import { DesktopInstallsModule } from './desktop-installs/desktop-installs.module';
 import { SuperAdminModule } from './super-admin/super-admin.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { AffiliateModule } from './affiliate/affiliate.module';
@@ -131,6 +132,7 @@ import { DbBackupModule } from './backup/db-backup.module';
     // New
     SubscriptionModule,
     LicensingModule,
+    DesktopInstallsModule,
     SuperAdminModule,
     ReferralsModule,
     AffiliateModule,

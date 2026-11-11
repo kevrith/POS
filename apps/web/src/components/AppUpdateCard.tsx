@@ -10,7 +10,7 @@ import { canInstallUpdate, checkedAgo, describeProgress, isInstalling, useAppUpd
 export default function AppUpdateCard() {
   const { confirm } = useDialog();
   const role = useAuthStore((s) => s.user?.role);
-  const { version, found, checking, checkedAt, checkError, progress, check, install } = useAppUpdate();
+  const { version, found, checking, checkedAt, checkError, progress, requested, check, install } = useAppUpdate();
   useEffect(() => {
     if (inDesktopApp() && !version) void check();
   }, [version, check]);
@@ -38,7 +38,7 @@ export default function AppUpdateCard() {
           </p>
         ) : found ? (
           <p className="text-sm text-gray-800">
-            <strong>KASTRA {found.version}</strong> is ready to install.
+            <strong>KASTRA {found.version}</strong> is ready to install.{requested ? ' KASTRA support has asked for this computer to be updated.' : ''}
           </p>
         ) : (
           <p className="text-sm text-gray-600">

@@ -9,6 +9,7 @@ import { SuperAdminService } from './super-admin.service';
 import { SuperAdminAuthGuard } from './super-admin-auth.guard';
 import { SkipSubscriptionCheck } from '../auth/subscription.guard';
 import { SecretsRotationService } from '../security/secrets-rotation.service';
+import { DesktopInstallsService } from '../desktop-installs/desktop-installs.service';
 
 @Public()
 @Controller('super-admin')
@@ -17,6 +18,7 @@ export class SuperAdminController implements OnModuleInit {
   constructor(
     private service: SuperAdminService,
     private rotation: SecretsRotationService,
+    private desktopInstalls: DesktopInstallsService,
   ) {}
 
   async onModuleInit() {
@@ -82,6 +84,32 @@ export class SuperAdminController implements OnModuleInit {
   @Post('businesses/:id/impersonate')
   impersonate(@Param('id') id: string) {
     return this.service.impersonate(id);
+  }
+
+  // ── Installed desktop apps: which version each computer runs, and asking one to update ──
+
+  @UseGuards(SuperAdminAuthGuard)
+  @Get('desktop-installs')
+  listDesktopInstalls() {
+    return this.desktopInstalls.list();
+  }
+
+  @UseGuards(SuperAdminAuthGuard)
+  @Post('desktop-installs/:id/request-update')
+  requestDesktopUpdate(@Param('id') id: string) {
+    return this.desktopInstalls.requestUpdate(id);
+  }
+
+  @UseGuards(SuperAdminAuthGuard)
+  @Post('desktop-installs/:id/cancel-update')
+  cancelDesktopUpdate(@Param('id') id: string) {
+    return this.desktopInstalls.cancelRequest(id);
+  }
+
+  @UseGuards(SuperAdminAuthGuard)
+  @Delete('desktop-installs/:id')
+  removeDesktopInstall(@Param('id') id: string) {
+    return this.desktopInstalls.remove(id);
   }
 
   @UseGuards(SuperAdminAuthGuard)

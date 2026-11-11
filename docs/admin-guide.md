@@ -339,6 +339,17 @@ The app saves a backup, closes for about a minute, installs and reopens by itsel
 start of the new version the database is backed up again before it is changed, and put back
 automatically if the change fails.
 
+**Which version does each computer run? (Admin console, Desktop Apps).** Each installed app reports its version, computer
+name, system and business name to the server a little after start-up and every few hours while it has internet. The page shows
+the newest version, how many computers are **Behind**, and when each was **last seen** (red after 30 days of silence, a good
+sign the computer is switched off or retired). For a computer that is behind, **Request update** shows it a banner that stays
+until it is installed ("KASTRA support has asked for this computer to be updated"); an owner or manager still presses install,
+and nothing installs by itself. The request clears on its own once the computer reports the newest version, or you can
+**Cancel request**. A computer that is switched off, or has no internet, picks the request up the next time it reports in
+(within about 20 seconds of opening the app, then every 6 hours it stays open). Apps older than the version that added this
+(1.1.7) cannot report, so each appears the first time it is updated by hand. The business name is what the app says about
+itself: treat it as a label, not proof. **Forget** removes a retired computer from the list.
+
 To publish one: `node apps/desktop/scripts/app-version.mjs --set 1.2.0`, commit, then
 `git tag desktop-v1.2.0 && git push origin desktop-v1.2.0`. The release workflow needs the
 GitHub secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (the update

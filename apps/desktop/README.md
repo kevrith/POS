@@ -115,6 +115,26 @@ once all of them are done.
 - A **till** (client) updates on its own. Updating tills and their server to different versions is possible for a while: update
   the server first. (A version check between them is not built yet.)
 
+### Which computers run which version, and asking one to update
+
+Apps report in: `report` in `lib/appUpdate.ts` sends `{ machineId, hostname, os, appVersion, businessId?, businessName? }` to
+`POST /api/v1/desktop/heartbeat` (public, rate-limited, `DesktopInstall` table) about 20 seconds after start and every 6 hours,
+to the cloud API even when the computer's own data is local (it never sends sales, customers or anything else). The admin console's
+**Desktop Apps** page lists them against the newest version (read server-side from the same `latest.json`, cached 30 minutes);
+**Request update** sets `updateRequestedAt`, the app's next report answers `updateRequested: true`, and `UpdateBanner` shows a
+banner without "Later" until the computer installs (the flag clears itself when it reports the newest version). Nothing installs
+without an owner or manager pressing the button, and nothing is pushed to a computer that is off or offline: it hears about the
+request the next time it reports. Apps built before this existed (up to 1.1.6) cannot report.
+
+### The update manifest is built, not copied
+
+`latest.json` is built by the `update-manifest` job with `scripts/build-update-manifest.mjs` from the `.sig` files on the
+versioned release, after every platform build has finished. It is not copied from the one tauri-action writes: the four platform
+builds edit that file at the same moment, and a re-run of one can overwrite the others' entries (the 1.1.6 release lost its
+Linux entry that way). The script refuses, naming the platform, if any of Windows, Linux, macOS Intel or macOS Apple Silicon is
+missing its installer or signature, so an incomplete manifest is never published. If a platform build fails with "Not Found" while
+uploading, re-run the failed job.
+
 ### Website download buttons
 
 The installers' file names carry the version, so a fixed link cannot point at them. After every successful release the

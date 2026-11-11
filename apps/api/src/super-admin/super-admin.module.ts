@@ -8,6 +8,7 @@ import { SecretsRotationService } from '../security/secrets-rotation.service';
 import { EmailModule } from '../email/email.module';
 import { DbBackupModule } from '../backup/db-backup.module';
 import { LicensingModule } from '../licensing/licensing.module';
+import { DesktopInstallsModule } from '../desktop-installs/desktop-installs.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { LicensingModule } from '../licensing/licensing.module';
     EmailModule,
     DbBackupModule,
     LicensingModule,
+    DesktopInstallsModule,
   ],
   providers: [SuperAdminService, SuperAdminAuthGuard, SecretsRotationService],
   controllers: [SuperAdminController],

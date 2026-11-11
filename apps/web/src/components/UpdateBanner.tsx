@@ -11,7 +11,7 @@ import { canInstallUpdate, describeProgress, isInstalling, startUpdateChecks, us
 export default function UpdateBanner() {
   const { confirm } = useDialog();
   const role = useAuthStore((s) => s.user?.role);
-  const { found, progress, dismissed, install, dismiss } = useAppUpdate();
+  const { found, progress, dismissed, requested, install, dismiss } = useAppUpdate();
   useEffect(() => startUpdateChecks(), []);
 
   const busy = isInstalling(progress);
@@ -34,7 +34,8 @@ export default function UpdateBanner() {
       </div>
     );
   }
-  if (!found || dismissed) return null;
+  // An update the platform admin asked for cannot be put off with "Later": it stays until it is installed.
+  if (!found || (dismissed && !requested)) return null;
 
   const mayInstall = canInstallUpdate(role);
   const installNow = async () => {
@@ -52,15 +53,22 @@ export default function UpdateBanner() {
   return (
     <div role="status" className="bg-brand-600 text-white text-sm font-semibold px-4 py-2 flex items-center justify-center gap-3 text-center flex-wrap">
       <Download className="w-4 h-4 flex-shrink-0" aria-hidden />
-      <span>KASTRA {found.version} is ready{mayInstall ? '' : '. Ask the owner or a manager to install it'}.</span>
+      <span>
+        {requested
+          ? `KASTRA support has asked for this computer to be updated to ${found.version}`
+          : `KASTRA ${found.version} is ready`}
+        {mayInstall ? '' : '. Ask the owner or a manager to install it'}.
+      </span>
       {mayInstall && (
         <button type="button" onClick={installNow} className="bg-white text-brand-700 rounded-md px-3 py-1 hover:bg-gray-100">
           Install and restart
         </button>
       )}
-      <button type="button" onClick={dismiss} aria-label="Remind me later" className="p-1 rounded hover:bg-white/15">
-        <X className="w-4 h-4" aria-hidden />
-      </button>
+      {!requested && (
+        <button type="button" onClick={dismiss} aria-label="Remind me later" className="p-1 rounded hover:bg-white/15">
+          <X className="w-4 h-4" aria-hidden />
+        </button>
+      )}
     </div>
   );
 }

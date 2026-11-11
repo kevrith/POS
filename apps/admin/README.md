@@ -39,6 +39,7 @@ session. `setAdminToken` / `getAdminToken` / `clearAdminToken` in
 | `UsersPage` | Cross-tenant user lookup and support actions |
 | `AnalyticsPage` | Growth, churn, plan mix |
 | `LicenseKeysPage` | Desktop/offline license key issuance |
+| `DesktopAppsPage` | Installed desktop apps as they report themselves: version, computer, last seen, **Request update** (`/super-admin/desktop-installs`) |
 | `ReferralsPage` | Referral programme payouts |
 | `AffiliatesPage` | Affiliate approval, commission rate, payouts |
 | `WebhooksPage` | Platform webhook endpoints + delivery log |

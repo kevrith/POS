@@ -5,7 +5,7 @@ import { isDesktopApp, getDesktopGoogleAccessToken } from '../lib/googleDesktop'
 import { useAuthStore } from '../stores/auth';
 import type { AuthUser } from '../stores/auth';
 import { Eye, EyeOff, Delete, ChevronLeft, Building2, Sparkles, Fingerprint, Settings } from 'lucide-react';
-import { isBiometricAvailable } from '../lib/biometric';
+import { explainBiometricError, isBiometricAvailable } from '../lib/biometric';
 import { setToken } from '../lib/api';
 import { reconfigureThisComputer } from '../lib/desktopServer';
 import { describeConnection, googleSignInAvailable } from '../lib/desktopSetup';
@@ -1062,9 +1062,9 @@ export default function LoginPage() {
                           // knows which credentials this person registered (nothing is kept in localStorage).
                           await loginWithBiometric(savedBusinessId, selectedUser.id);
                         } catch (err) {
-                          const msg = err instanceof Error ? err.message : 'Biometric failed';
-                          // Dismissing the system prompt is not an error worth showing.
-                          if (!/NotAllowedError|cancel|abort/i.test(msg)) setPinError(msg);
+                          // Always say something: the browser uses one error name for "cancelled", "timed out" and "nothing
+                          // registered here", and hiding it left people pressing a button that appeared to do nothing.
+                          setPinError(explainBiometricError(err, 'sign-in'));
                         } finally {
                           setBiometricLoading(false);
                         }

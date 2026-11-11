@@ -115,6 +115,14 @@ once all of them are done.
 - A **till** (client) updates on its own. Updating tills and their server to different versions is possible for a while: update
   the server first. (A version check between them is not built yet.)
 
+### Fingerprint sign-in (Windows Hello)
+
+The Windows app signs in with a fingerprint, face or Windows Hello PIN through the web view's WebAuthn, the same code as the website, with its
+own passkeys: the server gives `http://tauri.localhost` the RP ID `tauri.localhost` (`resolveRelyingParty`), so a passkey made on the website
+does not work here and the reverse; register once in each place (Settings, Users, Register This Device). The macOS and Linux app
+(`tauri://localhost`) is not supported. Checked in a Chromium page at exactly `http://tauri.localhost` with a virtual authenticator
+(register, then sign in); not yet checked on a PC with real Windows Hello.
+
 ### Which computers run which version, and asking one to update
 
 Apps report in: `report` in `lib/appUpdate.ts` sends `{ machineId, hostname, os, appVersion, businessId?, businessName? }` to

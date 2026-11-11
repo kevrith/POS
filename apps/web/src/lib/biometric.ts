@@ -224,3 +224,33 @@ export async function signInWithBiometric(
     userHandle: response.userHandle ? bufferToBase64url(response.userHandle) : undefined,
   });
 }
+
+// ─── Saying what went wrong ───────────────────────────────────────────────────
+
+/**
+ * Turn what the browser or the server said into a sentence a cashier can act on. The browser's own errors are terse
+ * ("NotAllowedError") and one name covers several different situations, so the sentence names all of them.
+ *
+ * Errors from our server (a plain Error with its own message, such as "No fingerprint is registered for this account") are
+ * passed through unchanged: they are already written for people.
+ */
+export function explainBiometricError(err: unknown, doing: 'register' | 'sign-in'): string {
+  const name = (err as { name?: string } | null)?.name ?? '';
+  const message = err instanceof Error ? err.message : String(err ?? '');
+  switch (name) {
+    case 'NotAllowedError':
+      return doing === 'register'
+        ? 'Fingerprint registration was cancelled or timed out. Try again, and touch the sensor (or approve the prompt) when it appears.'
+        : 'The fingerprint check was cancelled or timed out, or this device has no fingerprint saved for this site. If it has not been registered here, ask a manager to register it in Settings, Users. You can use your PIN meanwhile.';
+    case 'InvalidStateError':
+      return 'This device is already registered for this person. Remove the old entry first if you want to register it again.';
+    case 'SecurityError':
+      return 'Fingerprint sign-in is not allowed at this address. Open KASTRA through its https website address, or use the desktop app.';
+    case 'NotSupportedError':
+      return 'This device or browser does not support fingerprint sign-in. Use your PIN.';
+    case 'AbortError':
+      return 'The fingerprint check was stopped. Try again.';
+    default:
+      return message || (doing === 'register' ? 'Fingerprint registration failed.' : 'Fingerprint sign-in failed.');
+  }
+}

@@ -46,6 +46,7 @@ import {
 } from 'lucide-react';
 import { UserRole, OPTIONAL_MODULES, OPTIONAL_MODULE_LABELS, moduleIncludedByMode, parseEnabledModules, type OptionalModule } from '@pos/shared';
 import { hasFeature } from '../lib/featureGates';
+import { explainBiometricError } from '../lib/biometric';
 import { onlineStoreLink } from '../lib/storeLink';
 import { inDesktopApp } from '../lib/desktopServer';
 import SalesPipelineCard from '../components/SalesPipelineCard';
@@ -720,6 +721,10 @@ export default function SettingsPage() {
     enabled: !!businessId,
   });
 
+  // Registering a fingerprint is a PRO feature, but like every other feature it is open to a business on its trial. It used
+  // to read the raw plan name, so a trial (plan name FREE) never saw the button and could not register a device at all.
+  const canUseBiometric = hasFeature(user?.planName, 'biometric', (settings as { subscriptionStatus?: string } | undefined)?.subscriptionStatus ?? user?.subscriptionStatus, settings?.subscriptionTier);
+
   const { data: users = [] } = useQuery<StaffUser[]>({
     queryKey: ['business-users', businessId],
     queryFn: () => api.get(`/business/${businessId}/users`),
@@ -1035,10 +1040,7 @@ export default function SettingsPage() {
       toast.success(`Biometric registered for ${u.name}`);
       await loadBiometricCreds(u.id);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Registration failed';
-      if (!msg.includes('cancelled') && !msg.includes('NotAllowedError')) {
-        toast.error(`Biometric registration failed: ${msg}`);
-      }
+      toast.error(explainBiometricError(err, 'register'));
     } finally {
       setBiometricRegistering(false);
     }
@@ -2106,7 +2108,7 @@ export default function SettingsPage() {
                       </button>
                     )}
                     {/* Biometric button — PRO/ENTERPRISE only */}
-                    {['PRO', 'ENTERPRISE'].includes(settings?.subscriptionTier ?? '') && (
+                    {canUseBiometric && (
                       <button
                         onClick={() => {
                           const next = biometricUserId === u.id ? null : u.id;
@@ -2195,7 +2197,7 @@ export default function SettingsPage() {
           <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-blue-700">
             <strong>Tip:</strong> Cashiers, Waiters, and Kitchen Staff log in with a PIN at the
             POS terminal. Managers and Accountants use email + password.
-            {['PRO', 'ENTERPRISE'].includes(settings?.subscriptionTier ?? '') && (
+            {canUseBiometric && (
               <span> Staff can also use <strong>Fingerprint / Face ID</strong> — click the <Fingerprint className="inline w-3.5 h-3.5 mx-0.5" /> icon on each user to register their device.</span>
             )}
           </div>

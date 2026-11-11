@@ -53,6 +53,10 @@ export const FEATURE_PLANS: Record<string, Plan> = {
   'sales-list':   'FREE',
   'cash-drawer':  'FREE',
 
+  // Fingerprint / Face ID sign-in on the website and desktop app: registering a device in Settings > Users.
+  // (Not a route: the key is checked by SettingsPage. A trial gets every feature, like everything else here.)
+  'biometric':    'PRO',
+
   // ── STARTER (KES 999/mo) ─────────────────────────────────────────────────
   'batch':                  'STARTER',
   'reports':                'STARTER',

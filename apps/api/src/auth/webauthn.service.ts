@@ -5,6 +5,7 @@ import * as crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { UserRole } from '@pos/shared';
 import { RelyingParty } from './webauthn-origin';
+import { verifyAssertionSignature } from './webauthn-verify';
 import type { AuthUser } from './auth.service';
 
 interface JwtPayload {
@@ -226,7 +227,7 @@ export class WebAuthnService {
       throw new UnauthorizedException('Credential does not belong to this business');
     }
 
-    // Verify signature using Node.js WebCrypto (Node 18+)
+    // Verify the signature (ES256 and RS256; see verifyAssertionSignature for why this is not WebCrypto)
     const authDataBuf = Buffer.from(body.authenticatorData, 'base64url');
     if (authDataBuf.length < 37) throw new UnauthorizedException('Malformed authenticator data');
     // The authenticator signs a hash of the RP ID it used; it must be ours, and the user must have been verified.
@@ -242,42 +243,7 @@ export class WebAuthnService {
     const signatureBuf = Buffer.from(body.signature, 'base64url');
     const publicKeyDerBuf = Buffer.from(credential.publicKeyDer, 'base64url');
 
-    let verified = false;
-    try {
-      // Try ES256 (P-256 ECDSA) — most common for platform authenticators
-      const key = await globalThis.crypto.subtle.importKey(
-        'spki',
-        publicKeyDerBuf,
-        { name: 'ECDSA', namedCurve: 'P-256' },
-        false,
-        ['verify'],
-      );
-      verified = await globalThis.crypto.subtle.verify(
-        { name: 'ECDSA', hash: 'SHA-256' },
-        key,
-        signatureBuf,
-        signedData,
-      );
-    } catch {
-      // Fallback: try RS256 (RSA-PKCS1-v1_5)
-      try {
-        const key = await globalThis.crypto.subtle.importKey(
-          'spki',
-          publicKeyDerBuf,
-          { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-          false,
-          ['verify'],
-        );
-        verified = await globalThis.crypto.subtle.verify(
-          'RSASSA-PKCS1-v1_5',
-          key,
-          signatureBuf,
-          signedData,
-        );
-      } catch {
-        verified = false;
-      }
-    }
+    const verified = verifyAssertionSignature(publicKeyDerBuf, signedData, signatureBuf);
 
     if (!verified) throw new UnauthorizedException('Signature verification failed');
 

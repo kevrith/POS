@@ -49,6 +49,13 @@ build alive.
   `FRONTEND_URL` / `ADMIN_URL` / `EXTRA_ORIGINS`; `WEBAUTHN_RP_ID` optionally widens it to a parent
   domain. Browsers require HTTPS (only `http://localhost` is exempt) and refuse IP addresses, so it
   cannot work over a LAN IP. Managing credentials is limited to yourself, or owner/manager for staff.
+- Fingerprint sign-in on the website and the Windows desktop app: the signature is checked with Node's `crypto.verify`
+  (`webauthn-verify.ts`), which reads the DER signature a device writes for ES256 and the PKCS#1 one for RS256. It used to use
+  WebCrypto, whose ECDSA `verify` wants raw r||s, so every ES256 sign-in (Touch ID, Android, many Windows Hello setups) was refused
+  with "Signature verification failed" although registration worked. The desktop app runs on plain http at `http://tauri.localhost`,
+  which `resolveRelyingParty` accepts at exactly that origin with its own RP ID `tauri.localhost` (ignoring `WEBAUTHN_RP_ID`); a
+  passkey belongs to its RP ID, so the website and the desktop app each register their own. `tauri://localhost` (macOS/Linux) is refused
+  with a clear message.
 - Native-app fingerprint sign-in uses device tokens (`auth/device-login.service.ts`): `POST /auth/device-token`
   (signed in), `POST /auth/login/device` (public, throttled), `POST /auth/device-token/revoke`. Tokens are
   hashed in `UserSession` (`userAgent` starts `device:`), max 5 phones per user, 90 days sliding expiry.

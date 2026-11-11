@@ -113,7 +113,7 @@ Owners may also enable:
 - **Google sign-in**
 - **Two-factor (TOTP)** — an authenticator app code on top of your password.
   Recommended for owners, and often required
-- **Fingerprint / face unlock** where the device supports it. It only works when the app is opened through its secure `https://` web address, not an IP address or plain `http://`. An owner or manager registers each person's device under Settings -> Users
+- **Fingerprint / face unlock** where the device supports it (Windows Hello must be set up on the computer: Windows Settings, Accounts, Sign-in options). On the website it only works when the app is opened through its secure `https://` address, not an IP address or plain `http://`; the installed Windows app works too. **Each place keeps its own fingerprint**: one registered on the website does not work in the desktop app, and the phone apps have their own, so register it once in every place the person will use it. An owner or manager does this under **Settings, Users**: tap the fingerprint icon beside the person, then **Register This Device**, and the person touches the sensor. The button is available on the Pro and Enterprise plans, and to every business during its trial. To sign in, pick your name on the **Staff PIN** screen and tap **Use Fingerprint / Face ID**. If it is cancelled, times out or has nothing registered on that device, the screen now says so in words; use your PIN meanwhile. (The macOS and Linux desktop apps do not support it yet.)
 
 > **"No sales found" when you know there are sales?** Your session quietly expired.
 > Sign in again. If it keeps happening on a shared shop-floor device, ask the owner

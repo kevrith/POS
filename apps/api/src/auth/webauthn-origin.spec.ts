@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { pageOrigin, resolveRelyingParty } from './webauthn-origin';
+import { DESKTOP_RP_ID, pageOrigin, resolveRelyingParty } from './webauthn-origin';
 
 const env = { FRONTEND_URL: 'https://pos.example.com', ADMIN_URL: 'https://admin.example.com' } as NodeJS.ProcessEnv;
 
@@ -25,6 +25,34 @@ describe('resolveRelyingParty', () => {
   });
   it('needs an origin', () => {
     expect(() => resolveRelyingParty(undefined, env)).toThrow(BadRequestException);
+  });
+});
+
+describe('the installed desktop app', () => {
+  it('is accepted at its own address, with its own RP ID (it runs on http, which everyone else is refused)', () => {
+    expect(resolveRelyingParty('http://tauri.localhost', env)).toEqual({ rpId: DESKTOP_RP_ID, origin: 'http://tauri.localhost' });
+    expect(resolveRelyingParty('https://tauri.localhost', env).rpId).toBe('tauri.localhost');
+  });
+
+  it('is not affected by WEBAUTHN_RP_ID, which belongs to the website', () => {
+    const wide = { ...env, WEBAUTHN_RP_ID: 'example.com' };
+    expect(resolveRelyingParty('http://tauri.localhost', wide).rpId).toBe('tauri.localhost');
+    expect(resolveRelyingParty('https://pos.example.com', wide).rpId).toBe('example.com');
+  });
+
+  it('is accepted only at exactly that address: look-alikes and other ports are refused like any unknown site', () => {
+    for (const origin of ['http://tauri.localhost:8080', 'http://evil.tauri.localhost', 'http://tauri.localhost.evil.com', 'http://other.localhost']) {
+      expect(() => resolveRelyingParty(origin, env)).toThrow(BadRequestException);
+    }
+  });
+
+  it('says plainly that the macOS and Linux app cannot do it yet', () => {
+    expect(() => resolveRelyingParty('tauri://localhost', env)).toThrow(/macOS and Linux/);
+  });
+
+  it('does not change what the website gets', () => {
+    expect(resolveRelyingParty('https://pos.example.com', env).rpId).toBe('pos.example.com');
+    expect(() => resolveRelyingParty('http://pos.example.com', env)).toThrow(/https/);
   });
 });
 

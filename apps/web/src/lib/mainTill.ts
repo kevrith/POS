@@ -41,3 +41,13 @@ export const MAIN_TILL_ALIASES = ['/fuel-pump', '/cybercafe', '/supermart'] as c
 export function isMainTillPath(pathname: string): boolean {
   return pathname === '/pos' || MAIN_TILL_ALIASES.some((p) => pathname === p || pathname.startsWith(p + '/'));
 }
+
+/**
+ * What the till should show, from the business settings the rest of the app already holds.
+ * `loading` while there is nothing to go on, `unknown` when the settings could not be read (the till must not guess a
+ * retail till then: a fuel station was shown the shop till), otherwise the business's main till.
+ */
+export function tillStateFor(settings: { posMode?: string | null } | undefined, isLoading: boolean): 'loading' | 'unknown' | string {
+  if (settings) return settings.posMode || 'RETAIL';
+  return isLoading ? 'loading' : 'unknown';
+}

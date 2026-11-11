@@ -1,6 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../stores/auth';
 import { api } from '../lib/api';
+import { readLastKnown } from '../lib/lastKnown';
+import { tillStateFor } from '../lib/mainTill';
+import { ErrorState } from '../components/ui';
 import POSPage from './POSPage';
 import SupermarketPOSPage from './SupermarketPOSPage';
 import { lazy, Suspense } from 'react';
@@ -37,18 +40,23 @@ function POSLoader() {
  */
 export default function POSRouterPage() {
   const user = useAuthStore((s) => s.user);
+  const businessId = user?.businessId;
 
-  const { data: posMode, isLoading } = useQuery<string>({
-    queryKey: ['pos-mode', user?.businessId],
-    queryFn: () =>
-      api.get<any>(`/business/${user?.businessId}/settings`)
-        .then((d) => d.posMode ?? 'RETAIL'),
-    enabled: !!user?.businessId,
-    staleTime: 5 * 60_000,
+  // The same query the menu uses, so changing the kind of business changes the till at once. This used to have a query of
+  // its own that nothing refreshed: after the business type was changed the menu said "Fuel Forecourt" and the till
+  // stayed the shop till for minutes (until a reload). When settings cannot be read it used to fall back to the shop till too.
+  const { data, isLoading, refetch, error } = useQuery<{ posMode?: string | null }>({
+    queryKey: ['business-settings', businessId],
+    queryFn: () => api.get(`/business/${businessId}/settings`),
+    enabled: !!businessId,
+    staleTime: 10 * 60_000,
+    retry: false,
+    initialData: () => (businessId ? readLastKnown<{ posMode?: string }>(`settings:${businessId}`) : undefined),
   });
+  const posMode = tillStateFor(data, isLoading);
 
-  // Show branded loader only on first load (no posMode cached yet)
-  if (isLoading && !posMode) return <POSLoader />;
+  if (posMode === 'loading') return <POSLoader />;
+  if (posMode === 'unknown') return <ErrorState error={error} onRetry={() => void refetch()} subject="your till" />;
 
   switch (posMode) {
     case 'SUPERMARKET':

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import {
   ShoppingCart, DollarSign, TrendingUp, TrendingDown, Package,
   AlertTriangle, CreditCard, Users, BarChart3, ChevronRight,
@@ -119,7 +119,13 @@ const METHOD_COLORS: Record<string, string> = {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+/** A doctor has no sales dashboard: their home is the patient list. Everyone else gets the dashboard. */
 export default function DashboardPage() {
+  const role = useAuthStore((s) => s.user?.role);
+  return role === 'DOCTOR' ? <Navigate to="/patients" replace /> : <SalesDashboard />;
+}
+
+function SalesDashboard() {
   const user = useAuthStore((s) => s.user);
   const navigate = useNavigate();
   const qc = useQueryClient();

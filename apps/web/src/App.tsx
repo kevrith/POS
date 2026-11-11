@@ -172,6 +172,12 @@ async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Prom
   return null;
 }
 
+/** Where staff land: the till, except a doctor, whose home is the patient list. */
+function HomeRedirect() {
+  const role = useAuthStore((st) => st.user?.role);
+  return <Navigate to={role === 'DOCTOR' ? '/patients' : '/pos'} replace />;
+}
+
 export default function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const refreshUser = useAuthStore((s) => s.refreshUser);
@@ -335,7 +341,7 @@ export default function App() {
           <ErrorBoundaryForRoute>
           <Suspense fallback={<PageLoader />}>
             <Routes>
-              <Route path="/" element={<Navigate to="/pos" replace />} />
+              <Route path="/" element={<HomeRedirect />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/pos" element={<POSPage />} />
               <Route path="/supermart" element={<SupermarketPOSPage />} />
@@ -391,7 +397,7 @@ export default function App() {
               <Route path="/field-orders" element={<FieldOrdersPage />} />
               <Route path="/delivery-routes" element={<DeliveryRoutesPage />} />
               <Route path="/agent" element={<AgentPage />} />
-              <Route path="*" element={<Navigate to="/pos" replace />} />
+              <Route path="*" element={<HomeRedirect />} />
             </Routes>
           </Suspense>
           </ErrorBoundaryForRoute>

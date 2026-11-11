@@ -107,7 +107,7 @@ function btn(bg: string, color: string): React.CSSProperties {
 }
 
 // ── User Management Panel (enterprise) ────────────────────────────────────────
-const ROLES = ['OWNER', 'MANAGER', 'CASHIER', 'ACCOUNTANT', 'WAITER', 'KITCHEN'];
+const ROLES = ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST', 'DOCTOR', 'ACCOUNTANT', 'WAITER', 'KITCHEN'];
 
 function UserManagementPanel({ businessId, businessName }: { businessId: string; businessName: string }) {
   const { confirm } = useDialog();

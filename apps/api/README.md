@@ -355,6 +355,16 @@ Rules these modules enforce on the server (the web and mobile screens are not tr
   before, nothing could set them, so the register and these checks never had anything to run on. `AllExceptionsFilter` passes a
   `code` and `details` through when an exception carries them. Not covered yet: proforma conversion, orders and the vertical takings
   do not apply the restricted-sale rule.
+- **One drug list, starter data and clinical roles.** The drug catalogue and the formulary are one table, `FormularyEntry` (migration
+  `20261113100000_one_drug_list` copies `DrugCatalogue` across; that table is left in place and unused). `/pharmacy/drugs` is its API
+  (`pharmacy/drug-data.ts` validates, the same generic name, brand and strength is listed once, ids are checked against the caller's business), and
+  the safety check reads brands and dose limits from it. `POST /pharmacy/starter-data` (`pharmacy/starter-data.ts`) adds the starter drugs and
+  interactions that are missing, matching drugs by generic name and interactions as unordered normalised pairs, so it is idempotent. Roles `PHARMACIST`
+  (a cashier plus the drug list, the controlled register and clinical approvals) and `DOCTOR` (a narrow role: patients, prescriptions without
+  dispensing, the drug list, appointments, items read) are in `access-policy.ts`; a doctor's prescriber name is forced to their login in
+  `PrescriptionsController.create`. `prescriptions/clinical-roles.ts` says who may approve a safety override or a prescription-free sale
+  (owner, manager, pharmacist); `AuthService.verifyManagerPin` takes the roles that may approve (default owner and manager, as before).
+  `packages/shared/dist` is not committed, so run `npm run build` in `packages/shared` after pulling shared changes.
 - **Hotel.** The dates decide the nights (a `nightCount` that disagrees is ignored). A room cannot be
   booked for overlapping nights: bookings, check-in, cancel and check-out all take a row lock on the
   room first, and a guest still checked in past their date keeps holding it. A booking due today shows

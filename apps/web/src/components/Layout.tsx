@@ -64,18 +64,18 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
     label: 'Sales',
     items: [
       // /pos is the universal entry-point; POSRouterPage shows the right UI per posMode, and its label/icon follow (lib/mainTill.ts)
-      { to: '/pos', icon: ShoppingCart, label: 'Point of Sale', roles: ['OWNER', 'MANAGER', 'CASHIER', 'WAITER'] },
-      { to: '/shop-till', icon: ShoppingCart, label: 'Shop & Lubricants', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
+      { to: '/pos', icon: ShoppingCart, label: 'Point of Sale', roles: ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST', 'WAITER'] },
+      { to: '/shop-till', icon: ShoppingCart, label: 'Shop & Lubricants', roles: ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST'] },
       { to: '/kds', icon: Monitor, label: 'Kitchen Display', roles: ['OWNER', 'MANAGER', 'WAITER', 'KITCHEN'] },
       // A fuel station or shop that runs a restaurant on the side: the till stays its main POS, tables live here.
-      { to: '/hospitality', icon: Coffee, label: 'Restaurant Tables', roles: ['OWNER', 'MANAGER', 'WAITER', 'CASHIER'] },
+      { to: '/hospitality', icon: Coffee, label: 'Restaurant Tables', roles: ['OWNER', 'MANAGER', 'WAITER', 'CASHIER', 'PHARMACIST'] },
       // Kiosk mode is launched from within the POS page (not a permanent nav item)
-      { to: '/layaway', icon: Layers, label: 'Layaway', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
-      { to: '/proforma', icon: CreditCard, label: 'Proformas', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
-      { to: '/patients', icon: Users, label: 'Patients', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
-      { to: '/prescriptions', icon: Pill, label: 'Prescriptions', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
-      { to: '/pharmacy', icon: Pill, label: 'Pharmacy Mgmt', roles: ['OWNER', 'MANAGER'] },
-      { to: '/appointments', icon: CalendarClock, label: 'Appointments', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
+      { to: '/layaway', icon: Layers, label: 'Layaway', roles: ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST'] },
+      { to: '/proforma', icon: CreditCard, label: 'Proformas', roles: ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST'] },
+      { to: '/patients', icon: Users, label: 'Patients', roles: ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST', 'DOCTOR'] },
+      { to: '/prescriptions', icon: Pill, label: 'Prescriptions', roles: ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST', 'DOCTOR'] },
+      { to: '/pharmacy', icon: Pill, label: 'Pharmacy Mgmt', roles: ['OWNER', 'MANAGER', 'PHARMACIST'] },
+      { to: '/appointments', icon: CalendarClock, label: 'Appointments', roles: ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST', 'DOCTOR'] },
     ],
   },
   {
@@ -83,9 +83,9 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
     roles: ['OWNER', 'MANAGER'],
     items: [
       { to: '/delivery', icon: Truck, label: 'Delivery' },
-      { to: '/online-orders', icon: ShoppingBag, label: 'Online Orders', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
+      { to: '/online-orders', icon: ShoppingBag, label: 'Online Orders', roles: ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST'] },
       { to: '/delivery-management', icon: Truck, label: 'Delivery Dispatch', roles: ['OWNER', 'MANAGER'] },
-      { to: '/field-orders', icon: ClipboardList, label: 'Field Orders', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
+      { to: '/field-orders', icon: ClipboardList, label: 'Field Orders', roles: ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST'] },
       { to: '/delivery-routes', icon: MapPin, label: 'Delivery Routes', roles: ['OWNER', 'MANAGER'] },
       { to: '/waitlist', icon: Clock, label: 'Waitlist', roles: ['OWNER', 'MANAGER', 'WAITER'] },
       { to: '/hotel', icon: BedDouble, label: 'Hotel Integration', roles: ['OWNER', 'MANAGER'] },
@@ -111,7 +111,7 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
   },
   {
     label: 'Finance',
-    roles: ['OWNER', 'MANAGER', 'ACCOUNTANT', 'CASHIER'],
+    roles: ['OWNER', 'MANAGER', 'ACCOUNTANT', 'CASHIER', 'PHARMACIST'],
     items: [
       { to: '/owner-dashboard', icon: LayoutDashboard, label: 'Owner Dashboard', roles: ['OWNER'] },
       { to: '/cash-drawer', icon: Wallet, label: 'Cash Drawer' },
@@ -119,7 +119,7 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
       { to: '/cheques', icon: FileText, label: 'Cheques', roles: ['OWNER', 'MANAGER', 'ACCOUNTANT'] },
       { to: '/ledger', icon: BookOpen, label: 'General Ledger', roles: ['OWNER', 'MANAGER', 'ACCOUNTANT'] },
       { to: '/reconciliation', icon: Landmark, label: 'Reconciliation', roles: ['OWNER', 'MANAGER', 'ACCOUNTANT'] },
-      { to: '/payment-links', icon: Link2, label: 'Payment Links', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
+      { to: '/payment-links', icon: Link2, label: 'Payment Links', roles: ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST'] },
       { to: '/reports', icon: BarChart3, label: 'Reports', roles: ['OWNER', 'MANAGER', 'ACCOUNTANT'] },
       { to: '/sales-list', icon: ShoppingCart, label: 'Sales History', roles: ['OWNER', 'MANAGER', 'ACCOUNTANT'] },
     ],
@@ -949,7 +949,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <div className="hidden lg:block w-px h-5 bg-gray-200 dark:bg-white/[0.07] mx-1" />
 
             {/* Quick New Sale button */}
-            {['OWNER', 'MANAGER', 'CASHIER'].includes(user?.role ?? '') && location.pathname !== '/pos' && (
+            {['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST'].includes(user?.role ?? '') && location.pathname !== '/pos' && (
               <button
                 onClick={() => navigate('/pos')}
                 title="New Sale (go to POS)"

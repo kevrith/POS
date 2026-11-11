@@ -497,6 +497,17 @@ waiting for a table.
   **allergies**, conditions, whether pregnant or breastfeeding, next of kin and insurer. Register someone once; when you type a name,
   phone or ID the screen warns if they may already be registered. An ID number can belong to only one patient. Earlier prescriptions
   written with just a name can be added to the right record from the patient's page (manager)
+- **One drug list** — **Pharmacy Mgmt > Drug List** is the single list of the drugs you handle: generic and brand name, strength, form,
+  category, controlled schedule, default instructions, the **maximum a day** for an adult and **cautions** (such as pregnancy). It used to
+  be two lists (catalogue and formulary); anything in the old catalogue was copied across. **Load starter list** adds about thirty common
+  drugs with their usual daily limits and cautions, and common drug interactions, so the safety check works from day one. It only
+  adds what is missing and never changes what you already have, so it is safe to press again. It is general information: have your
+  pharmacist review it and set controlled schedules to match your licence
+- **Pharmacist and Doctor accounts** — add them under Settings (Staff). A **pharmacist** works the till and the dispensing counter like a
+  cashier, keeps the drug list and the controlled-drug register, and can set a safety warning aside or approve a sale without a
+  prescription with their own login (or by entering their PIN on a cashier's screen). A **doctor** signs in to the patient list, writes
+  prescriptions (the prescriber is their own name) and reads patient records and the drug list; a doctor cannot dispense, sell, or see
+  money, reports or staff
 - **Prescriptions** are written against a patient record. Each medicine keeps its dose, how often and for how many days, and the
   prescription prints them. While it is being written the **safety check** shows problems before it is saved
 - **Safety check** — before anything is dispensed the system checks the patient's allergies (a medicine or its whole family, so a

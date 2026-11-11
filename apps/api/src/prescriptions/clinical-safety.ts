@@ -303,7 +303,8 @@ export function evaluateSafety(input: SafetyInput): SafetyWarning[] {
     if (!entry) return;
     if (entry.maxDailyDose && entry.maxDailyDose > 0) {
       const max = maxDailyMg(entry.maxDailyDose, entry.unit);
-      const daily = dailyDoseMg(line, line.strength || entry.strength || line.name);
+      // The strength of what is actually on the line (its item, then its name) beats the list's typical strength.
+      const daily = dailyDoseMg(line, line.strength || (parseStrength(line.name) ? line.name : undefined) || entry.strength);
       if (max !== null && daily !== null && daily > max + 1e-9) {
         out.push({ kind: 'MAX_DOSE', severity: 'BLOCK', drugs: [line.name], message: `${line.name}: ${round(daily)} mg a day is above the usual maximum of ${round(max)} mg.` });
       }

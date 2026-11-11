@@ -20,6 +20,7 @@ import { postSaleJournal, postSettlementJournal, reverseJournalLines, type SaleJ
 import { drawStock, restoreStock } from '../batch/batch-allocation';
 import { assertStockAvailable, blocksOversell, sellsInFractions, type StockLine } from './stock-guard';
 import { ROOM_CHARGE_FOLIO_TYPE } from '../common/folio';
+import { CLINICAL_APPROVER_ROLES, CLINICAL_SELF_APPROVE } from '../prescriptions/clinical-roles';
 import { assertRestrictedAllowed, restrictedItems, type RestrictedApproval } from './restricted-sale';
 
 /** How a customer may settle a credit sale. */
@@ -1042,11 +1043,11 @@ export class SalesService {
    */
   async resolveRestrictedApprover(user: { id: string; role: string; name?: string }, businessId: string, dto: { managerPin?: string }): Promise<{ id: string; name: string }> {
     if (dto.managerPin) {
-      const manager = await this.auth.verifyManagerPin(dto.managerPin, businessId);
+      const manager = await this.auth.verifyManagerPin(dto.managerPin, businessId, CLINICAL_APPROVER_ROLES);
       return { id: manager.userId, name: manager.name };
     }
-    if (['OWNER', 'ADMIN', 'MANAGER'].includes(user.role)) return { id: user.id, name: user.name ?? user.id };
-    throw new ForbiddenException('A manager must approve selling this without a prescription. Enter a manager PIN.');
+    if (CLINICAL_SELF_APPROVE.includes(user.role)) return { id: user.id, name: user.name ?? user.id };
+    throw new ForbiddenException('A manager or pharmacist must approve selling this without a prescription. Enter their PIN.');
   }
 
   async returnSale(

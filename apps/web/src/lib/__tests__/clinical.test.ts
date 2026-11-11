@@ -15,8 +15,9 @@ describe('overrides', () => {
   });
 
   it('knows who can approve alone', () => {
-    expect(['OWNER', 'ADMIN', 'MANAGER'].every(canApproveAlone)).toBe(true);
+    expect(['OWNER', 'ADMIN', 'MANAGER', 'PHARMACIST'].every(canApproveAlone)).toBe(true);
     expect(canApproveAlone('CASHIER')).toBe(false);
+    expect(canApproveAlone('DOCTOR')).toBe(false);
     expect(canApproveAlone(undefined)).toBe(false);
   });
 });

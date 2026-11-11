@@ -2542,6 +2542,8 @@ model FormularyEntry {
   unit                 String   @default("mg")
   contraindicationsText String?
   notes                String?
+  /// Default label wording ("take with food"), carried over from the old drug catalogue.
+  defaultInstructions  String?
   isActive             Boolean  @default(true)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
@@ -2983,6 +2985,8 @@ model FuelPumpMaintenance {
 
 // ─── Pharmacy Enterprise Extensions ──────────────────────────────────────────
 
+/// Legacy. The drug catalogue and the formulary are one list now (FormularyEntry); rows here were copied across by
+/// migration 20261113100000 and nothing reads or writes this table any more.
 model DrugCatalogue {
   id           String   @id @default(uuid())
   businessId   String

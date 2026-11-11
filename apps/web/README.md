@@ -73,6 +73,11 @@ list is the `['salon-staff']` query.
 For a cyber cafe, ending a session shows the buyer KRA PIN field, a customer picker when it is paid on credit (credit is only for a
 registered customer), and then the fiscal receipt (number, KRA status, Print) instead of the plain one.
 
+Roles: `PHARMACIST` is a cashier in every menu plus Pharmacy Mgmt, and counts as an approver in `lib/clinical.ts` (`MANAGER_ROLES`, `canApproveAlone`);
+`DOCTOR` sees only Patients, Prescriptions and Appointments, lands on `/patients` (`HomeRedirect` in `App.tsx`, and `DashboardPage` redirects them),
+and `PrescriptionsPage` shows the dispense buttons to `canManage` roles only. The pharmacy drug list is one table (`FormularyEntry`): the Drug List tab
+carries the daily maximum and cautions, and `MedicineFields` can fill an item from it.
+
 Clinic and pharmacy screens: `PatientsPage` (`/patients`, one record per person) with `components/clinical/` (`PatientFormModal` registers and
 edits, warning of a record that may already exist; `PatientPicker` is used in the prescription form; `SafetyPanel` shows the findings
 and, for a "Stop", asks a manager for a reason and PIN; `RestrictedSaleModal` is the till's manager approval for a prescription-only or

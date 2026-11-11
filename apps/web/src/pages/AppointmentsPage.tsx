@@ -94,7 +94,7 @@ export default function AppointmentsPage() {
   const [pay, setPay] = useState({ method: 'CASH', tendered: '', refundMethod: 'CASH', keep: false });
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
   const isManager = user?.role === 'OWNER' || user?.role === 'MANAGER';
-  const canManage = isManager || user?.role === 'CASHIER';
+  const canManage = isManager || user?.role === 'CASHIER' || user?.role === 'PHARMACIST';
 
   const { data: appointments = [] } = useQuery<Appointment[]>({
     queryKey: ['appointments', businessId, storeId, viewDate],

@@ -5,14 +5,14 @@ import { useAuthStore } from '../stores/auth';
 import { useDialog } from '../components/Dialog';
 import {
   Pill, AlertTriangle, Shield, FileText, Plus, Trash2,
-  RefreshCw, TrendingUp, BookOpen, Pencil, Check, X, Tag, List,
+  RefreshCw, TrendingUp, BookOpen, Pencil, Check, X, Tag,
 } from 'lucide-react';
 import { formatKES } from '@pos/shared';
 import { printBarcodeLabel } from '../lib/printer';
 import { printHtml } from '../lib/printHtml';
 import DispenseModal from '../components/DispenseModal';
 
-type Tab = 'drugs' | 'interactions' | 'refill-queue' | 'controlled-log' | 'providers' | 'claims' | 'labels' | 'formulary';
+type Tab = 'drugs' | 'interactions' | 'refill-queue' | 'controlled-log' | 'providers' | 'claims' | 'labels';
 
 const SEV_COLOR: Record<string, string> = {
   MILD: 'bg-green-100 text-green-700',
@@ -29,6 +29,8 @@ const CLAIM_COLOR: Record<string, string> = {
   VOIDED: 'bg-gray-100 text-gray-500',
 };
 
+const EMPTY_DRUG = { genericName: '', brandName: '', strength: '', dosageForm: 'TABLET', category: 'OTHER', scheduleClass: 'OTC', defaultInstructions: '', maxDailyDose: '', unit: 'mg', contraindicationsText: '' };
+
 export default function PharmacyPage() {
   const user = useAuthStore((s) => s.user);
   const businessId = user?.businessId ?? '';
@@ -43,16 +45,27 @@ export default function PharmacyPage() {
     queryFn: () => api.get<any[]>(`/pharmacy/drugs?businessId=${businessId}${drugSearch ? `&search=${encodeURIComponent(drugSearch)}` : ''}`),
     enabled: tab === 'drugs' || tab === 'labels',
   });
-  const [drugForm, setDrugForm] = useState({ genericName: '', brandName: '', strength: '', dosageForm: 'TABLET', category: 'OTHER', scheduleClass: 'OTC', defaultInstructions: '' });
+  const [drugForm, setDrugForm] = useState({ ...EMPTY_DRUG });
   const [showDrugForm, setShowDrugForm] = useState(false);
   const [editDrug, setEditDrug] = useState<any>(null);
   const createDrug = useMutation({
-    mutationFn: (d: any) => api.post('/pharmacy/drugs', { ...d, businessId }),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['pharmacy-drugs'] }); setShowDrugForm(false); setDrugForm({ genericName: '', brandName: '', strength: '', dosageForm: 'TABLET', category: 'OTHER', scheduleClass: 'OTC', defaultInstructions: '' }); },
+    mutationFn: (d: any) => api.post('/pharmacy/drugs', { ...d, businessId, maxDailyDose: d.maxDailyDose === '' ? undefined : Number(d.maxDailyDose) }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['pharmacy-drugs'] }); setShowDrugForm(false); setDrugForm({ ...EMPTY_DRUG }); },
   });
   const updateDrug = useMutation({
-    mutationFn: ({ id, ...d }: any) => api.patch(`/pharmacy/drugs/${id}`, d),
+    mutationFn: ({ id, genericName, brandName, strength, dosageForm, category, scheduleClass, defaultInstructions, maxDailyDose, unit, contraindicationsText }: any) =>
+      api.patch(`/pharmacy/drugs/${id}`, { genericName, brandName, strength, dosageForm, category, scheduleClass, defaultInstructions, unit, contraindicationsText, maxDailyDose: maxDailyDose === '' || maxDailyDose == null ? null : Number(maxDailyDose) }),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['pharmacy-drugs'] }); setEditDrug(null); },
+  });
+  const [starterMsg, setStarterMsg] = useState('');
+  const loadStarter = useMutation({
+    mutationFn: () => api.post<{ interactionsAdded: number; drugsAdded: number }>('/pharmacy/starter-data', {}),
+    onSuccess: (r) => {
+      setStarterMsg(r.interactionsAdded + r.drugsAdded === 0 ? 'Everything in the starter list is already here.' : `Added ${r.drugsAdded} drugs and ${r.interactionsAdded} interactions. Ask your pharmacist to review them.`);
+      void qc.invalidateQueries({ queryKey: ['pharmacy-drugs'] });
+      void qc.invalidateQueries({ queryKey: ['pharmacy-interactions'] });
+    },
+    onError: (e: Error) => setStarterMsg(e.message),
   });
   const deleteDrug = useMutation({
     mutationFn: (id: string) => api.delete(`/pharmacy/drugs/${id}`),
@@ -143,14 +156,13 @@ export default function PharmacyPage() {
   });
 
   const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: 'drugs', label: 'Drug Catalogue', icon: <BookOpen className="w-4 h-4" /> },
+    { id: 'drugs', label: 'Drug List', icon: <BookOpen className="w-4 h-4" /> },
     { id: 'interactions', label: 'Drug Interactions', icon: <AlertTriangle className="w-4 h-4" /> },
     { id: 'refill-queue', label: 'Refill Queue', icon: <RefreshCw className="w-4 h-4" /> },
     { id: 'controlled-log', label: 'Controlled Substances', icon: <Shield className="w-4 h-4" /> },
     { id: 'providers', label: 'Insurance Providers', icon: <FileText className="w-4 h-4" /> },
     { id: 'claims', label: 'Claims', icon: <TrendingUp className="w-4 h-4" /> },
     { id: 'labels', label: 'Drug Labels', icon: <Tag className="w-4 h-4" /> },
-    { id: 'formulary', label: 'Formulary', icon: <List className="w-4 h-4" /> },
   ];
 
   return (
@@ -191,7 +203,15 @@ export default function PharmacyPage() {
             <button onClick={() => setShowDrugForm(true)} className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-medium flex items-center gap-1">
               <Plus className="w-4 h-4" />Add Drug
             </button>
+            <button onClick={() => loadStarter.mutate()} disabled={loadStarter.isPending} className="border px-4 py-1.5 rounded text-sm font-medium disabled:opacity-50" title="Adds common drugs with their daily limits and cautions, and common drug interactions. Anything you already have is left alone.">
+              {loadStarter.isPending ? 'Loading…' : 'Load starter list'}
+            </button>
           </div>
+          {starterMsg && <p className="text-sm text-gray-600" role="status">{starterMsg}</p>}
+          <p className="text-xs text-gray-500">
+            This one list feeds the safety check at dispensing: the <b>maximum a day</b> and <b>cautions</b> below are used for dose and pregnancy checks, and the brand name is read as its generic.
+            The starter list is common, general information: have your pharmacist review it and set controlled schedules to match your licence.
+          </p>
 
           {showDrugForm && (
             <div className="bg-white border rounded-lg p-4 space-y-3">
@@ -219,6 +239,15 @@ export default function PharmacyPage() {
               </div>
               <input className="border rounded px-3 py-1.5 text-sm w-full" placeholder="Default dispensing instructions (optional)"
                 value={drugForm.defaultInstructions} onChange={(e) => setDrugForm({ ...drugForm, defaultInstructions: e.target.value })} />
+              <div className="grid grid-cols-3 gap-3">
+                <input className="border rounded px-3 py-1.5 text-sm" type="number" min="0" placeholder="Maximum a day (adult)" aria-label="Maximum a day"
+                  value={drugForm.maxDailyDose} onChange={(e) => setDrugForm({ ...drugForm, maxDailyDose: e.target.value })} />
+                <select className="border rounded px-3 py-1.5 text-sm" value={drugForm.unit} aria-label="Unit of the daily maximum" onChange={(e) => setDrugForm({ ...drugForm, unit: e.target.value })}>
+                  {['mg', 'g', 'mcg'].map((u) => <option key={u} value={u}>{u}</option>)}
+                </select>
+                <input className="border rounded px-3 py-1.5 text-sm" placeholder="Cautions (pregnancy, conditions…)" aria-label="Cautions"
+                  value={drugForm.contraindicationsText} onChange={(e) => setDrugForm({ ...drugForm, contraindicationsText: e.target.value })} />
+              </div>
               <div className="flex gap-2">
                 <button onClick={() => createDrug.mutate(drugForm)} disabled={!drugForm.genericName || createDrug.isPending}
                   className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-medium disabled:opacity-50">Save Drug</button>
@@ -237,6 +266,7 @@ export default function PharmacyPage() {
                   <th className="text-left px-4 py-2">Form</th>
                   <th className="text-left px-4 py-2">Category</th>
                   <th className="text-left px-4 py-2">Schedule</th>
+                  <th className="text-left px-4 py-2">Max a day</th>
                   <th className="text-left px-4 py-2">Instructions</th>
                   <th className="px-4 py-2">Actions</th>
                 </tr>
@@ -278,6 +308,17 @@ export default function PharmacyPage() {
                           </select>
                         </td>
                         <td className="px-4 py-2">
+                          <div className="flex gap-1">
+                            <input className="border rounded px-2 py-1 text-xs w-20" type="number" min="0" aria-label="Maximum a day" value={editDrug.maxDailyDose ?? ''}
+                              onChange={(e) => setEditDrug({ ...editDrug, maxDailyDose: e.target.value })} />
+                            <select className="border rounded px-1 py-1 text-xs" aria-label="Unit" value={editDrug.unit ?? 'mg'} onChange={(e) => setEditDrug({ ...editDrug, unit: e.target.value })}>
+                              {['mg', 'g', 'mcg'].map((u) => <option key={u} value={u}>{u}</option>)}
+                            </select>
+                          </div>
+                          <input className="mt-1 border rounded px-2 py-1 text-xs w-full" placeholder="Cautions" aria-label="Cautions" value={editDrug.contraindicationsText ?? ''}
+                            onChange={(e) => setEditDrug({ ...editDrug, contraindicationsText: e.target.value })} />
+                        </td>
+                        <td className="px-4 py-2">
                           <input className="border rounded px-2 py-1 text-xs w-40" value={editDrug.defaultInstructions ?? ''}
                             onChange={(e) => setEditDrug({ ...editDrug, defaultInstructions: e.target.value })} />
                         </td>
@@ -303,6 +344,10 @@ export default function PharmacyPage() {
                             {drug.scheduleClass === 'OTC' ? 'OTC' : `Sch ${drug.scheduleClass}`}
                           </span>
                         </td>
+                        <td className="px-4 py-2 text-xs text-gray-700" title={drug.contraindicationsText ?? undefined}>
+                          {drug.maxDailyDose ? `${drug.maxDailyDose} ${drug.unit ?? 'mg'}` : '—'}
+                          {drug.contraindicationsText && <span className="block max-w-[10rem] truncate text-gray-400">{drug.contraindicationsText}</span>}
+                        </td>
                         <td className="px-4 py-2 text-gray-500 text-xs max-w-xs truncate">{drug.defaultInstructions ?? '—'}</td>
                         <td className="px-4 py-2">
                           <div className="flex gap-1">
@@ -319,7 +364,7 @@ export default function PharmacyPage() {
                   </tr>
                 ))}
                 {drugs.length === 0 && (
-                  <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No drugs in catalogue{drugSearch ? ` matching "${drugSearch}"` : '. Add drugs to get started.'}</td></tr>
+                  <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">No drugs on the list{drugSearch ? ` matching "${drugSearch}"` : '. Add drugs to get started.'}</td></tr>
                 )}
               </tbody>
             </table>
@@ -667,10 +712,6 @@ export default function PharmacyPage() {
         <DrugLabelsTab drugs={drugs} businessName={user?.businessId ?? 'Pharmacy'} />
       )}
 
-      {/* ── Formulary Tab ── */}
-      {tab === 'formulary' && (
-        <FormularyTab businessId={businessId} />
-      )}
       {refilling && <DispenseModal rx={refilling} mode="refill" onClose={() => setRefilling(null)} />}
     </div>
   );
@@ -827,180 +868,4 @@ ${opts.patient ? `<div class="row"><span>Patient:</span><span><b>${opts.patient}
 ${opts.qty ? `<div class="row"><span>Qty:</span><span>${opts.qty}</span></div>` : ''}
 ${opts.dose ? `<div class="dose">Sig: ${opts.dose}</div>` : ''}
 </body></html>`;
-}
-
-// ─── Formulary Tab ────────────────────────────────────────────────────────────
-
-function FormularyTab({ businessId }: { businessId: string }) {
-  const qc = useQueryClient();
-  const { confirm } = useDialog();
-  const [search, setSearch] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({
-    genericName: '', brandName: '', strength: '', dosageForm: 'TABLET',
-    category: 'OTHER', scheduleClass: 'OTC', maxDailyDose: '', unit: 'mg',
-    contraindicationsText: '', notes: '',
-  });
-
-  const { data: entries = [], isLoading } = useQuery<any[]>({
-    queryKey: ['formulary', businessId, search],
-    queryFn: () => api.get(`/pharmacy/formulary?businessId=${businessId}${search ? `&search=${encodeURIComponent(search)}` : ''}`),
-    enabled: !!businessId,
-  });
-
-  const create = useMutation({
-    mutationFn: () => api.post('/pharmacy/formulary', { ...form, businessId, maxDailyDose: form.maxDailyDose ? parseFloat(form.maxDailyDose) : undefined }),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['formulary'] }); setShowForm(false); setForm({ genericName: '', brandName: '', strength: '', dosageForm: 'TABLET', category: 'OTHER', scheduleClass: 'OTC', maxDailyDose: '', unit: 'mg', contraindicationsText: '', notes: '' }); },
-  });
-
-  const remove = useMutation({
-    mutationFn: (id: string) => api.delete(`/pharmacy/formulary/${id}`),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['formulary'] }),
-  });
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <input
-          type="text" placeholder="Search formulary..."
-          value={search} onChange={(e) => setSearch(e.target.value)}
-          className="border rounded-lg px-3 py-2 text-sm w-full sm:w-64"
-        />
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
-        >
-          <Plus className="w-4 h-4" /> Add Entry
-        </button>
-      </div>
-
-      {showForm && (
-        <div className="bg-white rounded-xl border p-5 space-y-4">
-          <h3 className="font-semibold text-gray-800">New Formulary Entry</h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Generic Name *</label>
-              <input value={form.genericName} onChange={(e) => setForm((f) => ({ ...f, genericName: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="e.g. Amoxicillin" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Brand Name</label>
-              <input value={form.brandName} onChange={(e) => setForm((f) => ({ ...f, brandName: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="e.g. Amoxil" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Strength</label>
-              <input value={form.strength} onChange={(e) => setForm((f) => ({ ...f, strength: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="e.g. 500mg" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Dosage Form</label>
-              <select value={form.dosageForm} onChange={(e) => setForm((f) => ({ ...f, dosageForm: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm">
-                {['TABLET','CAPSULE','SYRUP','INJECTION','CREAM','DROPS','INHALER','SUPPOSITORY','PATCH','OTHER'].map((v) => (
-                  <option key={v} value={v}>{v}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Schedule Class</label>
-              <select value={form.scheduleClass} onChange={(e) => setForm((f) => ({ ...f, scheduleClass: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm">
-                {['OTC','S1','S2','S3','S4','S5','S6','S7','S8'].map((v) => (
-                  <option key={v} value={v}>{v}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Max Daily Dose</label>
-              <div className="flex gap-1">
-                <input type="number" min={0} value={form.maxDailyDose}
-                  onChange={(e) => setForm((f) => ({ ...f, maxDailyDose: e.target.value }))}
-                  className="flex-1 border rounded-lg px-3 py-2 text-sm" placeholder="e.g. 3000" />
-                <input value={form.unit} onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
-                  className="w-16 border rounded-lg px-2 py-2 text-sm" placeholder="mg" />
-              </div>
-            </div>
-            <div className="col-span-2 md:col-span-3">
-              <label className="block text-xs font-medium text-gray-600 mb-1">Contraindications</label>
-              <textarea value={form.contraindicationsText}
-                onChange={(e) => setForm((f) => ({ ...f, contraindicationsText: e.target.value }))}
-                rows={2} placeholder="e.g. Penicillin allergy, renal impairment"
-                className="w-full border rounded-lg px-3 py-2 text-sm resize-none" />
-            </div>
-            <div className="col-span-2 md:col-span-3">
-              <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
-              <input value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Optional clinical notes" />
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={() => create.mutate()}
-              disabled={!form.genericName || create.isPending}
-              className="px-5 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-40 flex items-center gap-2"
-            >
-              {create.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              Save
-            </button>
-            <button onClick={() => setShowForm(false)} className="px-5 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
-          </div>
-        </div>
-      )}
-
-      <div className="bg-white rounded-xl border overflow-hidden">
-        {isLoading ? (
-          <div className="flex justify-center py-12"><RefreshCw className="w-6 h-6 animate-spin text-blue-500" /></div>
-        ) : entries.length === 0 ? (
-          <div className="text-center py-12">
-            <List className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-            <p className="text-gray-500">No formulary entries yet</p>
-          </div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase">
-              <tr>
-                <th className="px-4 py-3 text-left">Generic Name</th>
-                <th className="px-4 py-3 text-left hidden sm:table-cell">Brand</th>
-                <th className="px-4 py-3 text-left">Strength / Form</th>
-                <th className="px-4 py-3 text-center">Schedule</th>
-                <th className="px-4 py-3 text-left hidden md:table-cell">Max Daily Dose</th>
-                <th className="px-4 py-3 text-left hidden lg:table-cell">Contraindications</th>
-                <th className="w-10" />
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((e: any) => (
-                <tr key={e.id} className="border-t hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-800">{e.genericName}</td>
-                  <td className="px-4 py-3 text-gray-600 hidden sm:table-cell">{e.brandName ?? '—'}</td>
-                  <td className="px-4 py-3 text-gray-600">{[e.strength, e.dosageForm].filter(Boolean).join(' · ')}</td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                      e.scheduleClass === 'OTC' ? 'bg-green-100 text-green-700'
-                      : ['S4','S5','S6','S7','S8'].includes(e.scheduleClass) ? 'bg-red-100 text-red-700'
-                      : 'bg-amber-100 text-amber-700'
-                    }`}>{e.scheduleClass}</span>
-                  </td>
-                  <td className="px-4 py-3 text-gray-600 hidden md:table-cell">
-                    {e.maxDailyDose ? `${e.maxDailyDose} ${e.unit ?? 'mg'}` : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs hidden lg:table-cell max-w-xs truncate">
-                    {e.contraindicationsText ?? '—'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={async () => { const ok = await confirm({ title: 'Remove from Formulary', message: 'Remove this item from the formulary?', variant: 'warning', confirmLabel: 'Remove' }); if (ok) remove.mutate(e.id); }}
-                      className="text-red-400 hover:text-red-600" aria-label="Delete">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  );
 }

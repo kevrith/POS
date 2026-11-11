@@ -501,7 +501,7 @@ export default function ExpensesPage() {
 
   const { start, end } = dateRangeForPeriod(period);
 
-  const isCashier = user?.role === 'CASHIER' || user?.role === 'WAITER';
+  const isCashier = user?.role === 'CASHIER' || user?.role === 'PHARMACIST' || user?.role === 'WAITER';
 
   const { data: expenses = [], isLoading, refetch } = useQuery<Expense[]>({
     queryKey: ['expenses', businessId, start, end, categoryFilter, statusFilter, isCashier ? userId : ''],

@@ -5,6 +5,7 @@ import type { Request } from 'express';
 import type { AuthUser } from '../auth/auth.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PharmacyService } from './pharmacy.service';
+import type { DrugInput } from './drug-data';
 
 @UseGuards(JwtAuthGuard)
 @RequiresFeature(Feature.PHARMACY)
@@ -65,40 +66,30 @@ export class PharmacyController {
     return this.svc.updateClaim(id, req.user.businessId, dto);
   }
 
-  // Drug Catalogue
+  /** A manager loads the starter interactions and drug limits. What is already there is left alone. */
+  @Post('starter-data')
+  loadStarterData(@Req() req: Request & { user: AuthUser }) {
+    return this.svc.loadStarterData(req.user.businessId);
+  }
+
+  // The drug list (what used to be two lists, the drug catalogue and the formulary).
   @Get('drugs')
   getDrugs(@Query('businessId') businessId: string, @Query('search') search?: string) {
     return this.svc.getDrugs(businessId, search);
   }
 
   @Post('drugs')
-  createDrug(@Body() dto: any) {
-    return this.svc.createDrug(dto);
+  createDrug(@Body() dto: DrugInput & { businessId?: string }, @Req() req: Request & { user: AuthUser }) {
+    return this.svc.createDrug(req.user.businessId, dto ?? {});
   }
 
   @Patch('drugs/:id')
-  updateDrug(@Param('id') id: string, @Body() dto: any) {
-    return this.svc.updateDrug(id, dto);
+  updateDrug(@Param('id') id: string, @Body() dto: DrugInput, @Req() req: Request & { user: AuthUser }) {
+    return this.svc.updateDrug(id, req.user.businessId, dto ?? {});
   }
 
   @Delete('drugs/:id')
-  deleteDrug(@Param('id') id: string) {
-    return this.svc.deleteDrug(id);
-  }
-
-  @Get('formulary')
-  getFormulary(@Query('businessId') businessId: string, @Query('search') search?: string) {
-    return this.svc.getFormulary(businessId, search);
-  }
-
-  @Post('formulary')
-  createFormularyEntry(@Body() dto: any) {
-    const { businessId, ...rest } = dto;
-    return this.svc.createFormularyEntry(businessId, rest);
-  }
-
-  @Delete('formulary/:id')
-  deleteFormularyEntry(@Param('id') id: string) {
-    return this.svc.deleteFormularyEntry(id);
+  deleteDrug(@Param('id') id: string, @Req() req: Request & { user: AuthUser }) {
+    return this.svc.deleteDrug(id, req.user.businessId);
   }
 }

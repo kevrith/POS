@@ -143,6 +143,11 @@ describe('doses', () => {
     expect(evaluateSafety(base({ lines: [{ name: 'Paracetamol 500mg' }], formulary: [para] }))).toEqual([]);
   });
 
+  it('reads the strength from the medicine\'s own name before the list\'s typical strength', () => {
+    const w = evaluateSafety(base({ lines: [{ name: 'Paracetamol 1g tablets', dose: 2, doseUnit: 'tablet', frequency: 'QDS' }], formulary: [{ ...para, strength: '500mg' }] }));
+    expect(w).toEqual([expect.objectContaining({ kind: 'MAX_DOSE' })]);
+  });
+
   it('takes the maximum in grams', () => {
     const w = evaluateSafety(base({ lines: [{ name: 'Paracetamol 500mg', dose: 3, doseUnit: 'tablet', frequency: 'QDS' }], formulary: [{ genericName: 'Paracetamol', maxDailyDose: 4, unit: 'g' }] }));
     expect(w).toHaveLength(1);

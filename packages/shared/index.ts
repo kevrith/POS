@@ -109,6 +109,10 @@ export enum UserRole {
   MANAGER = 'MANAGER',
   ACCOUNTANT = 'ACCOUNTANT',
   CASHIER = 'CASHIER',
+  /** Dispenses and sells at a clinic or pharmacy; may approve clinical safety overrides. */
+  PHARMACIST = 'PHARMACIST',
+  /** Writes prescriptions and reads patient records; does not dispense or sell. */
+  DOCTOR = 'DOCTOR',
   WAITER = 'WAITER',
   KITCHEN = 'KITCHEN',
   /** Delivery driver — signs in on the Kastra Driver app with email + password. */
@@ -191,6 +195,15 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   [UserRole.CASHIER]: [
     'pos.*', 'customers.read', 'customers.create',
     'cash-drawer.own.*', 'reports.own.*',
+  ],
+  [UserRole.PHARMACIST]: [
+    'pos.*', 'customers.read', 'customers.create',
+    'cash-drawer.own.*', 'reports.own.*',
+    'patients.*', 'prescriptions.*', 'pharmacy.*',
+  ],
+  [UserRole.DOCTOR]: [
+    'patients.*', 'prescriptions.create', 'prescriptions.read',
+    'pharmacy.read', 'appointments.read',
   ],
   [UserRole.WAITER]: [
     'hospitality.orders.*',

@@ -13,7 +13,7 @@
  *     call the route. Routes no rule matches stay open to every authenticated
  *     role, so adding this guard cannot break an endpoint nobody classified yet.
  *     New management-only endpoints must be added here.
- *  2. NARROW_ROLE_ALLOWLIST: DRIVER, SALES_AGENT and KITCHEN sign in to a single
+ *  2. NARROW_ROLE_ALLOWLIST: DRIVER, SALES_AGENT, KITCHEN and DOCTOR sign in to a single
  *     purpose-built screen, so for them the default flips to deny: they reach
  *     only the prefixes their app uses.
  *
@@ -27,19 +27,24 @@ import { BadRequestException, ForbiddenException } from '@nestjs/common';
 export type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export const ALL_ROLES = [
-  'OWNER', 'ADMIN', 'MANAGER', 'ACCOUNTANT', 'CASHIER', 'WAITER', 'KITCHEN', 'DRIVER', 'SALES_AGENT',
+  'OWNER', 'ADMIN', 'MANAGER', 'ACCOUNTANT', 'CASHIER', 'PHARMACIST', 'DOCTOR', 'WAITER', 'KITCHEN', 'DRIVER', 'SALES_AGENT',
 ] as const;
 
 /** ADMIN is a legacy owner-level role string still present in older data. */
 const OWN = ['OWNER', 'ADMIN'] as const;
 const MGMT = [...OWN, 'MANAGER'] as const;
 const FIN = [...MGMT, 'ACCOUNTANT'] as const;
-const FLOOR = [...MGMT, 'CASHIER', 'WAITER'] as const;
+// A pharmacist works the till and the dispensing counter: everything a cashier does, plus the clinical rules below.
+const FLOOR = [...MGMT, 'CASHIER', 'PHARMACIST', 'WAITER'] as const;
 const FLOOR_ACC = [...FLOOR, 'ACCOUNTANT'] as const;
-const DISPATCH = [...MGMT, 'CASHIER'] as const;
+const DISPATCH = [...MGMT, 'CASHIER', 'PHARMACIST'] as const;
+/** Who may see patient records and write prescriptions: the front line, pharmacists and doctors. Never the floor staff. */
+const CLINICAL = [...DISPATCH, 'DOCTOR'] as const;
+/** Who may keep the drug list and interaction table: management and the pharmacist. */
+const PHARMACY_ADMIN = [...MGMT, 'PHARMACIST'] as const;
 const ALL: readonly string[] = ALL_ROLES;
 
-export const NARROW_ROLES = ['DRIVER', 'SALES_AGENT', 'KITCHEN'] as const;
+export const NARROW_ROLES = ['DRIVER', 'SALES_AGENT', 'KITCHEN', 'DOCTOR'] as const;
 
 export interface AccessRule {
   /** Omitted = every method. */
@@ -235,23 +240,27 @@ export const ACCESS_RULES: readonly AccessRule[] = [
   r('GET', '/cybercafe/stats', FIN),
   r(WRITE, '/cybercafe/**', MGMT),
 
-  // ── Pharmacy ──────────────────────────────────────────────────────────────
-  // Patient names, ID numbers and diagnoses are in these records, so waiters get no access at all. There is
-  // no pharmacist role yet: dispensing sits with cashiers and above, and everything that edits clinical
-  // reference data or cancels a prescription with management.
-  r('GET', '/prescriptions/controlled-log', MGMT),
+  // ── Pharmacy and clinic ───────────────────────────────────────────────────
+  // Patient names, ID numbers, allergies and diagnoses are in these records, so waiters get no access at all.
+  // A pharmacist dispenses, keeps the drug list and the controlled-drug register; a doctor writes prescriptions and
+  // reads patient records but does not dispense. Cancelling a prescription is management's or the doctor's own.
+  r('GET', '/prescriptions/controlled-log', PHARMACY_ADMIN),
   r('POST', '/prescriptions/controlled-log', DISPATCH),
-  r('PATCH', '/prescriptions/:id/cancel', MGMT),
+  r('PATCH', '/prescriptions/:id/cancel', [...PHARMACY_ADMIN, 'DOCTOR']),
+  r('POST', '/prescriptions', CLINICAL),
+  r('POST', '/prescriptions/safety-check', CLINICAL),
+  r('POST', '/prescriptions/check-interactions', CLINICAL),
+  r('GET', '/prescriptions/**', CLINICAL),
   r('*', '/prescriptions/**', DISPATCH),
-  // Patient records hold allergies, conditions, ID numbers and contacts: the front line registers and edits them, nobody on the floor staff sees them.
-  r('PATCH', '/patients/:id/active', MGMT),
-  r('POST', '/patients/:id/adopt-prescriptions', MGMT),
-  r('*', '/patients/**', DISPATCH),
+  // Patient records hold allergies, conditions, ID numbers and contacts.
+  r('PATCH', '/patients/:id/active', PHARMACY_ADMIN),
+  r('POST', '/patients/:id/adopt-prescriptions', PHARMACY_ADMIN),
+  r('*', '/patients/**', CLINICAL),
   r('GET', '/pharmacy/claims', FIN),
   r('GET', '/pharmacy/claims/stats', FIN),
   r(['POST', 'PATCH'], '/pharmacy/claims/**', FIN),
-  r('GET', '/pharmacy/**', DISPATCH),
-  r(WRITE, '/pharmacy/**', MGMT),
+  r('GET', '/pharmacy/**', CLINICAL),
+  r(WRITE, '/pharmacy/**', PHARMACY_ADMIN),
 
   // ── Hotel ─────────────────────────────────────────────────────────────────
   // Reception works bookings and the folio; removing a guest's charge or changing the room list is not theirs.
@@ -286,6 +295,20 @@ export const NARROW_ROLE_ALLOWLIST: Readonly<Record<string, readonly AccessRule[
     r('GET', '/inventory/stock/:id', ALL),
     r('*', '/businesses/:id/customers/**', ALL),
     r('*', '/businesses/:id/customers', ALL),
+  ],
+  // A doctor sees patients, writes prescriptions and reads the drug list and the day's appointments; nothing else.
+  DOCTOR: [
+    ...SELF_SERVICE,
+    r('*', '/patients/**', ALL),
+    r('*', '/prescriptions/**', ALL),
+    r('GET', '/pharmacy/**', ALL),
+    r('GET', '/appointments/**', ALL),
+    r('GET', '/items', ALL),
+    r('GET', '/items/:id', ALL),
+    r('GET', '/business/:id/settings', ALL),
+    r('GET', '/business/:id/stores', ALL),
+    r('GET', '/subscription/**', ALL),
+    r('GET', '/notifications/**', ALL),
   ],
   KITCHEN: [
     ...SELF_SERVICE,

@@ -5,6 +5,7 @@ import type { Request } from 'express';
 import type { AuthUser } from '../auth/auth.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthService } from '../auth/auth.service';
+import { CLINICAL_APPROVER_ROLES, CLINICAL_SELF_APPROVE } from './clinical-roles';
 import { PrescriptionsService, type FillOptions, type SafetyOverride } from './prescriptions.service';
 
 type Authed = Request & { user: AuthUser };
@@ -12,7 +13,6 @@ const actorOf = (req: Authed) => ({ id: req.user.id, name: req.user.name, role: 
 /** Only the fields a fill uses; anything else in the body (the old screens sent `dispensedBy`) is ignored. */
 const fillOptions = (b?: FillOptions): FillOptions => ({ payments: b?.payments, insurance: b?.insurance, buyerKraPin: b?.buyerKraPin });
 type FillBody = FillOptions & { override?: { reason?: string; managerPin?: string } };
-const MANAGERS = ['OWNER', 'ADMIN', 'MANAGER'];
 
 @UseGuards(JwtAuthGuard)
 @RequiresFeature(Feature.PRESCRIPTIONS)
@@ -29,11 +29,11 @@ export class PrescriptionsController {
     if (!o) return undefined;
     const reason = String(o.reason ?? '');
     if (o.managerPin) {
-      const m = await this.auth.verifyManagerPin(o.managerPin, req.user.businessId);
+      const m = await this.auth.verifyManagerPin(o.managerPin, req.user.businessId, CLINICAL_APPROVER_ROLES);
       return { reason, approvedById: m.userId, approvedByName: m.name };
     }
-    if (MANAGERS.includes(String(req.user.role))) return { reason, approvedById: req.user.id, approvedByName: req.user.name };
-    throw new ForbiddenException('A manager must approve this. Enter a manager PIN.');
+    if (CLINICAL_SELF_APPROVE.includes(String(req.user.role))) return { reason, approvedById: req.user.id, approvedByName: req.user.name };
+    throw new ForbiddenException('A manager or pharmacist must approve this. Enter their PIN.');
   }
 
   @Get()
@@ -83,7 +83,9 @@ export class PrescriptionsController {
 
   @Post()
   create(@Body() dto: any, @Req() req: Authed) {
-    return this.svc.create({ ...dto, businessId: req.user.businessId });
+    // A doctor signed in is the prescriber: the name comes from the login, not from what the form says.
+    const prescriber = String(req.user.role) === 'DOCTOR' ? { doctorName: req.user.name } : {};
+    return this.svc.create({ ...dto, ...prescriber, businessId: req.user.businessId });
   }
 
   /** The safety checks on a saved prescription, as of now. */

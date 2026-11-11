@@ -622,6 +622,8 @@ export class AuthService {
   async verifyManagerPin(
     pin: string,
     businessId: string,
+    /** Who may approve. Voids and the like are for owners and managers; clinical safety overrides also accept a pharmacist. */
+    roles: UserRole[] = [UserRole.OWNER, UserRole.MANAGER],
   ): Promise<{ userId: string; name: string }> {
     if (typeof pin !== 'string' || !pin || !businessId) {
       throw new BadRequestException('pin and businessId are required');
@@ -629,7 +631,7 @@ export class AuthService {
     const users = await this.prisma.user.findMany({
       where: {
         businessId,
-        role: { in: [UserRole.OWNER, UserRole.MANAGER] },
+        role: { in: roles },
         pinHash: { not: null },
       },
     });

@@ -24,7 +24,7 @@ export default function PriceOverrideModal({ item, userRole, businessId, onApply
   const handleApply = async () => {
     const newPrice = Math.round(parseFloat(priceInput) * 100);
     if (!newPrice || newPrice <= 0) { setError('Enter a valid price'); return; }
-    if (userRole === 'CASHIER') {
+    if (userRole === 'CASHIER' || userRole === 'PHARMACIST') {
       if (!pin) { setError('Manager PIN required'); return; }
       setPending(true);
       try {
@@ -65,7 +65,7 @@ export default function PriceOverrideModal({ item, userRole, businessId, onApply
               autoFocus
             />
           </div>
-          {userRole === 'CASHIER' && (
+          {(userRole === 'CASHIER' || userRole === 'PHARMACIST') && (
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Manager PIN (required)</label>
               <input

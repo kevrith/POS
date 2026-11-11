@@ -105,6 +105,8 @@ const ROLE_LABELS: Record<string, string> = {
   MANAGER: 'Manager',
   ACCOUNTANT: 'Accountant',
   CASHIER: 'Cashier',
+  PHARMACIST: 'Pharmacist',
+  DOCTOR: 'Doctor',
   WAITER: 'Waiter',
   KITCHEN: 'Kitchen Staff',
   DRIVER: 'Driver',
@@ -116,6 +118,8 @@ const ROLE_COLORS: Record<string, string> = {
   MANAGER: 'bg-blue-100 text-blue-700',
   ACCOUNTANT: 'bg-green-100 text-green-700',
   CASHIER: 'bg-yellow-100 text-yellow-700',
+  PHARMACIST: 'bg-cyan-100 text-cyan-700',
+  DOCTOR: 'bg-rose-100 text-rose-700',
   WAITER: 'bg-orange-100 text-orange-700',
   KITCHEN: 'bg-gray-100 text-gray-700',
   DRIVER: 'bg-teal-100 text-teal-700',
@@ -165,7 +169,7 @@ function AddUserModal({
   const needsPassword = ['OWNER', 'MANAGER', 'ACCOUNTANT', 'DRIVER', 'SALES_AGENT'].includes(form.role);
   // Drivers and agents sign in to their phones by PIN — a PIN login lasts 12 hours
   // against 15 minutes for email, which is what keeps them signed in out in the field.
-  const needsPin = ['CASHIER', 'WAITER', 'KITCHEN', 'DRIVER', 'SALES_AGENT'].includes(form.role);
+  const needsPin = ['CASHIER', 'PHARMACIST', 'DOCTOR', 'WAITER', 'KITCHEN', 'DRIVER', 'SALES_AGENT'].includes(form.role);
   const pinIsField = ['DRIVER', 'SALES_AGENT'].includes(form.role);
   const isDriver = form.role === 'DRIVER';
 
@@ -199,6 +203,8 @@ function AddUserModal({
               <option value="MANAGER">Manager — Full store access</option>
               <option value="ACCOUNTANT">Accountant — Reports only</option>
               <option value="CASHIER">Cashier — POS + PIN login</option>
+              <option value="PHARMACIST">Pharmacist — dispenses, sells, approves safety overrides + PIN</option>
+              <option value="DOCTOR">Doctor — writes prescriptions, reads patient records + PIN</option>
               <option value="WAITER">Waiter — Hospitality + PIN login</option>
               <option value="KITCHEN">Kitchen Staff — KDS only + PIN</option>
               <option value="DRIVER">Driver — Kastra Driver app (email + password)</option>

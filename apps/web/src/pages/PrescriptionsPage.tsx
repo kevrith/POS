@@ -82,11 +82,13 @@ export default function PrescriptionsPage() {
 
   const [patient, setPatient] = useState<Patient | null>(null);
   const [typedPatient, setTypedPatient] = useState(false);
+  // A doctor signed in is the prescriber (the server takes the name from the login too).
+  const ownDoctorName = user?.role === 'DOCTOR' ? user.name ?? '' : '';
   const [form, setForm] = useState({
     patientName: '',
     patientPhone: '',
     patientDOB: '',
-    doctorName: '',
+    doctorName: ownDoctorName,
     doctorLicense: '',
     diagnosis: '',
     notes: '',
@@ -147,7 +149,7 @@ export default function PrescriptionsPage() {
     setPatient(null);
     setTypedPatient(false);
     setForm({
-      patientName: '', patientPhone: '', patientDOB: '', doctorName: '',
+      patientName: '', patientPhone: '', patientDOB: '', doctorName: ownDoctorName,
       doctorLicense: '', diagnosis: '', notes: '',
       items: [{ name: '', qty: 1, dose: 1, doseUnit: 'tablet', frequency: 'BD', duration: 7, instructions: '' }],
     });
@@ -231,7 +233,9 @@ export default function PrescriptionsPage() {
     enabled: showHistory && !!selected,
   });
 
-  const canManage = user?.role === 'OWNER' || user?.role === 'MANAGER' || user?.role === 'CASHIER';
+  // Doctors write prescriptions; only the dispensing counter (and management) hands medicines over.
+  const canWrite = ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST', 'DOCTOR'].includes(user?.role ?? '');
+  const canManage = ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST'].includes(user?.role ?? '');
 
   return (
     <div className="p-4 md:p-6 space-y-4">
@@ -243,7 +247,7 @@ export default function PrescriptionsPage() {
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">{counts.PENDING} pending</p>
         </div>
-        {canManage && (
+        {canWrite && (
           <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
             <Plus className="w-4 h-4" /> New Prescription
           </button>

@@ -3,6 +3,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { buildClaimJournalLines, buildUnmatchedClaimReceiptLines } from '../sales/sale-ledger';
 import { intInRange, oneOf, optionalText } from '../common/validate';
+import { drugData, type DrugInput } from './drug-data';
+import { STARTER_DRUGS, STARTER_INTERACTIONS } from './starter-data';
+import { normalizeDrugName } from '../prescriptions/clinical-safety';
 
 /** Claim statuses after which the money is settled (or written off) and the claim no longer moves. */
 const CLOSED_CLAIM_STATUSES = ['PAID', 'REJECTED', 'VOIDED'];
@@ -143,9 +146,11 @@ export class PharmacyService {
     return this.prisma.insuranceClaim.findFirst({ where: { id, businessId }, include: { provider: true } });
   }
 
-  // ---------- Drug Catalogue ----------
+  // ---------- Drug list (the formulary) ----------
+  // One list: what the screen calls the drug catalogue and the formulary are the same rows, so the dose limit and cautions the
+  // safety check reads are on the same drug the pharmacist sees.
   getDrugs(businessId: string, search?: string) {
-    return this.prisma.drugCatalogue.findMany({
+    return this.prisma.formularyEntry.findMany({
       where: {
         businessId,
         isActive: true,
@@ -162,25 +167,76 @@ export class PharmacyService {
     });
   }
 
-  createDrug(dto: {
-    businessId: string;
-    genericName: string;
-    brandName?: string;
-    strength?: string;
-    dosageForm?: string;
-    category?: string;
-    scheduleClass?: string;
-    defaultInstructions?: string;
-  }) {
-    return this.prisma.drugCatalogue.create({ data: dto });
+  async createDrug(businessId: string, dto: DrugInput) {
+    const data = drugData(dto, true);
+    await this.assertNotListed(businessId, data);
+    return this.prisma.formularyEntry.create({ data: { ...(data as { genericName: string }), businessId } });
   }
 
-  updateDrug(id: string, dto: any) {
-    return this.prisma.drugCatalogue.update({ where: { id }, data: dto });
+  /** The same drug (generic, brand and strength) is listed once. */
+  private async assertNotListed(businessId: string, data: Record<string, unknown>, exceptId?: string) {
+    const clash = await this.prisma.formularyEntry.findFirst({
+      where: {
+        businessId,
+        isActive: true,
+        genericName: { equals: String(data.genericName ?? ''), mode: 'insensitive' },
+        brandName: data.brandName ? { equals: String(data.brandName), mode: 'insensitive' } : null,
+        strength: data.strength ? { equals: String(data.strength), mode: 'insensitive' } : null,
+        ...(exceptId ? { id: { not: exceptId } } : {}),
+      },
+      select: { id: true },
+    });
+    if (clash) throw new BadRequestException('That drug is already on the list');
   }
 
-  deleteDrug(id: string) {
-    return this.prisma.drugCatalogue.update({ where: { id }, data: { isActive: false } });
+  async updateDrug(id: string, businessId: string, dto: DrugInput) {
+    const current = await this.prisma.formularyEntry.findFirst({ where: { id, businessId } });
+    if (!current) throw new NotFoundException('Drug not found');
+    const data = drugData(dto, false);
+    if (data.genericName !== undefined || data.brandName !== undefined || data.strength !== undefined) {
+      await this.assertNotListed(businessId, { genericName: data.genericName ?? current.genericName, brandName: data.brandName !== undefined ? data.brandName : current.brandName, strength: data.strength !== undefined ? data.strength : current.strength }, id);
+    }
+    return this.prisma.formularyEntry.update({ where: { id }, data });
+  }
+
+  async deleteDrug(id: string, businessId: string) {
+    const current = await this.prisma.formularyEntry.findFirst({ where: { id, businessId } });
+    if (!current) throw new NotFoundException('Drug not found');
+    return this.prisma.formularyEntry.update({ where: { id }, data: { isActive: false } });
+  }
+
+  /**
+   * Add the starter interactions and drugs this business does not have yet. Anything already on the lists, including one the
+   * pharmacist changed, is left exactly as it is, so loading it a second time adds nothing.
+   */
+  async loadStarterData(businessId: string) {
+    const [interactions, drugs] = await Promise.all([
+      this.prisma.drugInteraction.findMany({ where: { businessId }, select: { drug1Name: true, drug2Name: true } }),
+      this.prisma.formularyEntry.findMany({ where: { businessId }, select: { genericName: true, brandName: true, strength: true } }),
+    ]);
+    const pairKey = (a: string, b: string) => [normalizeDrugName(a), normalizeDrugName(b)].sort().join('|');
+    const havePairs = new Set(interactions.map((i) => pairKey(i.drug1Name, i.drug2Name)));
+    const newInteractions = STARTER_INTERACTIONS.filter((i) => {
+      const key = pairKey(i.drug1Name, i.drug2Name);
+      if (havePairs.has(key)) return false;
+      havePairs.add(key);
+      return true;
+    });
+    const drugKey = (g: string, b?: string | null, s?: string | null) => [g, b ?? '', s ?? ''].map((x) => x.trim().toLowerCase()).join('|');
+    const haveDrugs = new Set(drugs.map((d) => drugKey(d.genericName, d.brandName, d.strength)));
+    // A drug the pharmacy already lists under its generic name is theirs: do not add a second row for another strength.
+    const haveGenerics = new Set(drugs.map((d) => d.genericName.trim().toLowerCase()));
+    const newDrugs = STARTER_DRUGS.filter((d) => !haveDrugs.has(drugKey(d.genericName, d.brandName, d.strength)) && !haveGenerics.has(d.genericName.toLowerCase()));
+
+    if (newInteractions.length > 0) {
+      await this.prisma.drugInteraction.createMany({ data: newInteractions.map((i) => ({ ...i, businessId })) });
+    }
+    if (newDrugs.length > 0) {
+      await this.prisma.formularyEntry.createMany({
+        data: newDrugs.map((d) => ({ ...d, businessId, scheduleClass: 'OTC', unit: d.unit ?? 'mg' })),
+      });
+    }
+    return { interactionsAdded: newInteractions.length, drugsAdded: newDrugs.length };
   }
 
   async getClaimStats(businessId: string) {
@@ -191,30 +247,5 @@ export class PharmacyService {
       this.prisma.insuranceClaim.aggregate({ where: { businessId, status: 'REJECTED' }, _count: true, _sum: { billedCents: true } }),
     ]);
     return { submitted, approved, paid, rejected };
-  }
-
-  // ── Formulary ──────────────────────────────────────────────────────────────────────────────
-
-  getFormulary(businessId: string, search?: string) {
-    return this.prisma.formularyEntry.findMany({
-      where: {
-        businessId,
-        isActive: true,
-        ...(search ? { genericName: { contains: search, mode: 'insensitive' as const } } : {}),
-      },
-      orderBy: { genericName: 'asc' },
-    });
-  }
-
-  createFormularyEntry(businessId: string, dto: {
-    genericName: string; brandName?: string; strength?: string;
-    dosageForm?: string; category?: string; scheduleClass?: string;
-    maxDailyDose?: number; unit?: string; contraindicationsText?: string; notes?: string;
-  }) {
-    return this.prisma.formularyEntry.create({ data: { businessId, ...dto } });
-  }
-
-  deleteFormularyEntry(id: string) {
-    return this.prisma.formularyEntry.update({ where: { id }, data: { isActive: false } });
   }
 }

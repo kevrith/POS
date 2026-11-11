@@ -17,7 +17,7 @@ const MAX_REFILLS = 12;
 const FILL_INTERVAL_DAYS = 30;
 /** Item.scheduleClass values that put a drug on the controlled-substance register. OTC and blank do not. */
 const CONTROLLED_SCHEDULES = ['II', 'III', 'IV', 'V'] as const;
-const MANAGER_ROLES = ['OWNER', 'ADMIN', 'MANAGER'];
+const MANAGER_ROLES = ['OWNER', 'ADMIN', 'MANAGER', 'PHARMACIST'];
 /** How a patient may pay for a fill. The insurer's share is added by the fill itself, never sent. */
 const PAYMENT_METHODS = ['CASH', 'MPESA', 'CARD', 'BANK'] as const;
 /** How long a dispense waits for KRA so the receipt can carry the QR code. */
@@ -502,12 +502,11 @@ export class PrescriptionsService {
   async safetyCheck(businessId: string, lines: RxLine[], patientId?: string | null, excludeRxId?: string): Promise<SafetyWarning[]> {
     const itemIds = [...new Set(lines.map((l) => l.itemId).filter(Boolean) as string[])];
     const since = new Date(Date.now() - 35 * 86_400_000);
-    const [items, patient, interactions, formulary, catalogue, recent] = await Promise.all([
+    const [items, patient, interactions, formulary, recent] = await Promise.all([
       itemIds.length ? this.prisma.item.findMany({ where: { id: { in: itemIds }, businessId }, select: { id: true, genericName: true, drugClass: true, strength: true } }) : Promise.resolve([] as any[]),
       patientId ? this.prisma.patient.findFirst({ where: { id: patientId, businessId } }) : Promise.resolve(null),
       this.prisma.drugInteraction.findMany({ where: { businessId } }),
       this.prisma.formularyEntry.findMany({ where: { businessId, isActive: true } }),
-      this.prisma.drugCatalogue.findMany({ where: { businessId, isActive: true }, select: { genericName: true, brandName: true } }),
       patientId
         ? this.prisma.prescription.findMany({ where: { businessId, patientId, status: 'DISPENSED', lastFillDate: { gte: since }, ...(excludeRxId ? { id: { not: excludeRxId } } : {}) }, select: { prescriptionNumber: true, items: true } })
         : Promise.resolve([] as any[]),
@@ -518,7 +517,7 @@ export class PrescriptionsService {
       return { name: l.name, genericName: item?.genericName, drugClass: item?.drugClass, strength: item?.strength, dose: l.dose, doseUnit: l.doseUnit, frequency: l.frequency };
     });
     const brandToGeneric = new Map<string, string>();
-    for (const d of catalogue ?? []) if (d.brandName) brandToGeneric.set(normalizeDrugName(d.brandName), normalizeDrugName(d.genericName));
+    for (const d of formulary ?? []) if (d.brandName) brandToGeneric.set(normalizeDrugName(d.brandName), normalizeDrugName(d.genericName));
     const alsoTaking = (recent ?? []).flatMap((r: any) => this.lines(r).map((l) => ({ name: l.name, from: r.prescriptionNumber })));
     return evaluateSafety({
       patient: patient ? { name: patient.name, allergies: patient.allergies, pregnant: patient.pregnant, breastfeeding: patient.breastfeeding } : null,
@@ -585,7 +584,7 @@ export class PrescriptionsService {
     if (drugNames.length < 2) return [];
     const [interactions, catalogue] = await Promise.all([
       this.prisma.drugInteraction.findMany({ where: { businessId } }),
-      this.prisma.drugCatalogue.findMany({ where: { businessId, isActive: true }, select: { genericName: true, brandName: true } }),
+      this.prisma.formularyEntry.findMany({ where: { businessId, isActive: true }, select: { genericName: true, brandName: true } }),
     ]);
     const brandToGeneric = new Map<string, string>();
     for (const d of catalogue) {

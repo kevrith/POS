@@ -33,8 +33,9 @@ export interface Patient {
   isActive: boolean;
 }
 
-export const MANAGER_ROLES = ['OWNER', 'ADMIN', 'MANAGER'];
-/** A manager can set a warning aside with their own login; anyone else needs a manager to type a PIN. */
+/** Who may set a safety warning aside, or approve a sale without a prescription, with their own login: an owner, a manager or a pharmacist. */
+export const MANAGER_ROLES = ['OWNER', 'ADMIN', 'MANAGER', 'PHARMACIST'];
+/** An approver can set a warning aside with their own login; anyone else needs one of them to type a PIN. */
 export const canApproveAlone = (role?: string) => MANAGER_ROLES.includes(String(role));
 
 /** Frequencies as the server stores them. */

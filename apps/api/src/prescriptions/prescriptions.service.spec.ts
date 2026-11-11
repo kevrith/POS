@@ -27,7 +27,6 @@ function setup() {
     batch: { findMany: jest.fn().mockResolvedValue([]), updateMany: jest.fn(), findFirst: jest.fn() },
     controlledSubstanceLog: { create: jest.fn(), findMany: jest.fn() },
     drugInteraction: { findMany: jest.fn().mockResolvedValue([]) },
-    drugCatalogue: { findMany: jest.fn().mockResolvedValue([]) },
     formularyEntry: { findMany: jest.fn().mockResolvedValue([]) },
     patient: { findFirst: jest.fn().mockResolvedValue(null) },
     rxSafetyOverride: { create: jest.fn().mockResolvedValue({}) },
@@ -330,7 +329,7 @@ describe('interaction matching', () => {
   it('matches a brand through the drug catalogue', async () => {
     const { svc, prisma } = setup();
     prisma.drugInteraction.findMany.mockResolvedValue([IX]);
-    prisma.drugCatalogue.findMany.mockResolvedValue([{ genericName: 'Warfarin', brandName: 'Coumadin' }]);
+    prisma.formularyEntry.findMany.mockResolvedValue([{ genericName: 'Warfarin', brandName: 'Coumadin' }]);
     expect(await svc.checkInteractions('biz-1', ['Coumadin 5mg', 'Aspirin'])).toHaveLength(1);
   });
 

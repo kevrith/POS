@@ -41,15 +41,15 @@ const MENU_GROUPS: NavGroup[] = [
   {
     label: 'Sales',
     items: [
-      { to: '/pos',           icon: ShoppingCart,   label: 'Point of Sale',   roles: ['OWNER','MANAGER','CASHIER','WAITER'] },
-      { to: '/shop-till',     icon: ShoppingCart,   label: 'Shop & Lubricants', roles: ['OWNER','MANAGER','CASHIER'] },
+      { to: '/pos',           icon: ShoppingCart,   label: 'Point of Sale',   roles: ['OWNER','MANAGER','CASHIER','PHARMACIST','WAITER'] },
+      { to: '/shop-till',     icon: ShoppingCart,   label: 'Shop & Lubricants', roles: ['OWNER','MANAGER','CASHIER','PHARMACIST'] },
       { to: '/kds',           icon: Monitor,        label: 'Kitchen Display', roles: ['OWNER','MANAGER','WAITER','KITCHEN'] },
-      { to: '/hospitality',   icon: ClipboardList,  label: 'Restaurant Tables', roles: ['OWNER','MANAGER','WAITER','CASHIER'] },
-      { to: '/layaway',       icon: Layers,         label: 'Layaway',         roles: ['OWNER','MANAGER','CASHIER'] },
-      { to: '/proforma',      icon: CreditCard,     label: 'Proformas',       roles: ['OWNER','MANAGER','CASHIER'] },
-      { to: '/patients',      icon: Users,          label: 'Patients',        roles: ['OWNER','MANAGER','CASHIER'] },
-      { to: '/prescriptions', icon: Pill,           label: 'Prescriptions',   roles: ['OWNER','MANAGER','CASHIER'] },
-      { to: '/appointments',  icon: CalendarClock,  label: 'Appointments',    roles: ['OWNER','MANAGER','CASHIER'] },
+      { to: '/hospitality',   icon: ClipboardList,  label: 'Restaurant Tables', roles: ['OWNER','MANAGER','WAITER','CASHIER','PHARMACIST'] },
+      { to: '/layaway',       icon: Layers,         label: 'Layaway',         roles: ['OWNER','MANAGER','CASHIER','PHARMACIST'] },
+      { to: '/proforma',      icon: CreditCard,     label: 'Proformas',       roles: ['OWNER','MANAGER','CASHIER','PHARMACIST'] },
+      { to: '/patients',      icon: Users,          label: 'Patients',        roles: ['OWNER','MANAGER','CASHIER','PHARMACIST','DOCTOR'] },
+      { to: '/prescriptions', icon: Pill,           label: 'Prescriptions',   roles: ['OWNER','MANAGER','CASHIER','PHARMACIST','DOCTOR'] },
+      { to: '/appointments',  icon: CalendarClock,  label: 'Appointments',    roles: ['OWNER','MANAGER','CASHIER','PHARMACIST','DOCTOR'] },
     ],
   },
   {
@@ -57,7 +57,7 @@ const MENU_GROUPS: NavGroup[] = [
     roles: ['OWNER','MANAGER'],
     items: [
       { to: '/delivery',            icon: Truck,         label: 'Delivery' },
-      { to: '/online-orders',       icon: ShoppingBag,   label: 'Online Orders',    roles: ['OWNER','MANAGER','CASHIER'] },
+      { to: '/online-orders',       icon: ShoppingBag,   label: 'Online Orders',    roles: ['OWNER','MANAGER','CASHIER','PHARMACIST'] },
       { to: '/delivery-management', icon: Truck,         label: 'Delivery Dispatch' },
       { to: '/field-orders',        icon: ClipboardList, label: 'Field Orders' },
       { to: '/delivery-routes',     icon: MapPin,        label: 'Delivery Routes' },
@@ -84,7 +84,7 @@ const MENU_GROUPS: NavGroup[] = [
   },
   {
     label: 'Finance',
-    roles: ['OWNER','MANAGER','ACCOUNTANT','CASHIER'],
+    roles: ['OWNER','MANAGER','ACCOUNTANT','CASHIER','PHARMACIST'],
     items: [
       { to: '/cash-drawer',    icon: Wallet,         label: 'Cash Drawer' },
       { to: '/expenses',       icon: DollarSign,     label: 'Expenses',       roles: ['OWNER','MANAGER','ACCOUNTANT'] },

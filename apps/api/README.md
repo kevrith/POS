@@ -201,6 +201,13 @@ database before deploying code that reads them.
 **Hospitality & hotel** — `hospitality` `housekeeping` `channel-manager` `events`
 `waitlist` `appointments`
 
+Optional modules (`OPTIONAL_MODULES` in `@pos/shared`: RESTAURANT, HOTEL, DELIVERY, FIELD_SALES, QUOTES) are menu and feature switches a business
+can turn on whatever its main till; `MODULE_POS_MODES` says which tills already include each. DELIVERY, FIELD_SALES and QUOTES only
+decide what the web menu shows (the API is not gated by them). `enableBusinessModule` (`common/business-modules.ts`) switches one on the
+first time the business really uses the feature (a delivery or online order, a field order or route, a proforma), so a feature that
+is hidden by default can never leave an order unseen; it never throws. Migration `20261111100000_menu_modules_for_existing_use`
+switched them on once for businesses that already had that data.
+
 Desktop installs (`desktop-installs/`, public `POST /desktop/heartbeat`; super-admin `GET /super-admin/desktop-installs`,
 `POST .../:id/request-update`, `POST .../:id/cancel-update`, `DELETE .../:id`): one `DesktopInstall` row per computer, written by the
 app's own report (version, computer name, system, optional business). It is for display and targeting only, so nothing there
@@ -371,6 +378,19 @@ Rules these modules enforce on the server (the web and mobile screens are not tr
     as income (4300, a `FORFEIT` row); an unrecorded way of paying needs `refundMethod`. `sales/deposit-register.ts` is the
     shared rule with the hotel. Voiding the invoice marks the appointment cancelled; a deposit it had used is not paid back
     automatically (refund it by hand).
+  **Salon (phase 1).** A visit is one `Appointment` plus ordered `AppointmentService` rows (each service has its own
+  `staffId`, price and length; they run back to back and the appointment's end is the last one's). `ServiceStaff` marks who can be
+  booked and holds weekly working hours as JSON (Nairobi time, `salon-schedule.ts`); booking checks hours and overlaps per
+  stylist. `Item.durationMinutes` gives a service its length (`items/item-duration.ts`), `Customer.notes` the client notes.
+  Routes: `GET/PUT appointments/staff[/:userId]`, `GET appointments/earnings` (manager), `GET appointments/clients/:id`,
+  `PATCH appointments/clients/:id/notes`. Completing takes `lines` (services and products, each with an optional `staffId`)
+  and `tipCents`/`tipMethod`; product lines draw stock in the same transaction (batch allocation, honouring the BLOCK
+  negative-stock policy). `SaleItem.staffId` names the stylist on a line, and payroll's commission credits that line to them
+  (`hr/commission-base.ts`); the cashier keeps unnamed lines. A tip is NOT on the invoice: it is a `CashMovement` PAY_IN
+  (`APPOINTMENT_TIP`) with a journal Dr tender account / Cr 2200 Tips Payable (`sale-ledger.ts`), so eTIMS totals stay exact.
+  `POST sales/checkout` also accepts `staffId` per item and refuses an unknown one.
+  **Gotcha:** the tenant layer in `PrismaService` rewrites `findUnique` to `findFirst`, so a compound-unique `findUnique`
+  (`businessId_userId`) fails with "Unknown argument". Use `findFirst` with plain fields.
 - **Days are Nairobi days.** `common/dates.ts` draws day boundaries at +03:00. A UTC server using
   `setHours(0,0,0,0)` or `new Date('2026-11-05T23:59:59')` is three hours off. Use these helpers for
   anything new that filters by day.

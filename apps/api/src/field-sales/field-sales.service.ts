@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { enableBusinessModule } from '../common/business-modules';
 import { NotificationsService } from '../notifications/notifications.service';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -89,6 +90,8 @@ export class FieldSalesService {
   // ─── Routes ──────────────────────────────────────────────────────────────
 
   async createRoute(businessId: string, dto: CreateRouteDto) {
+    // A hidden-by-default feature switches itself on the first time it is used, so its menu entry is there.
+    void enableBusinessModule(this.prisma, businessId, 'FIELD_SALES');
     return this.prisma.salesRoute.create({
       data: {
         businessId,
@@ -322,6 +325,9 @@ export class FieldSalesService {
         }
       }
     }
+
+    // A hidden-by-default feature switches itself on the first time it is used, so its menu entry is there.
+    void enableBusinessModule(this.prisma, businessId, 'FIELD_SALES');
 
     const order = await this.prisma.fieldOrder.create({
       data: {

@@ -29,6 +29,8 @@ export interface DirectSaleLine {
   /** Value of the line, VAT included. May be negative (a discount line). */
   totalCents: number;
   taxClass: TaxClass;
+  /** The staff member who performed this line (a stylist). Commission goes to them. The caller has checked they belong to the business. */
+  staffId?: string;
 }
 
 export interface DirectSalePayment { method: string; amountCents: number; reference?: string }
@@ -223,6 +225,7 @@ export class DirectSaleService {
             taxClass: taxes.lines[i].taxClass,
             vatCents: taxes.lines[i].vatCents,
             discountCents: taxes.lines[i].discountCents,
+            staffId: l.staffId ?? null,
           })),
         },
         payments: {

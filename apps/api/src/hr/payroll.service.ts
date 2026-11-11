@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { commissionBase, commissionCents as commissionAmount } from './commission-base';
 
 // ─── Kenya statutory constants ────────────────────────────────────────────────
 //
@@ -203,9 +204,9 @@ export class PayrollService {
 
   async createPayrollRun(businessId: string, storeId: string | undefined, month: number, year: number) {
     // Check for duplicate
-    const existing = await this.prisma.payrollRun.findUnique({
-      where: { businessId_month_year: { businessId, month, year } },
-    });
+    // findFirst, not findUnique by the compound key: the tenant layer turns findUnique into a findFirst, which does not know the
+    // key's name, so this used to fail with "Invalid or missing request parameter" and no payroll run could be created.
+    const existing = await this.prisma.payrollRun.findFirst({ where: { businessId, month, year } });
     if (existing) {
       throw new BadRequestException(`Payroll for ${month}/${year} already exists (status: ${existing.status}). Delete it first or use the existing one.`);
     }
@@ -251,26 +252,25 @@ export class PayrollService {
     let totalDeductionsCents = 0;
 
     for (const emp of employees) {
-      // Get commission earned by this employee in the target month
+      // Commission earned in the target month: on the sales credited to this employee (see commission-base.ts). A sale is
+      // credited to the cashier unless its lines name who performed them, in which case those people earn their own lines.
       let commissionCents = 0;
       try {
-        const sales = await this.prisma.sale.findMany({
-          where: {
-            cashierId: emp.userId,
-            status: { in: ['PAID', 'COMPLETED', 'AMENDED'] },
-            createdAt: { gte: startOfMonth, lte: endOfMonth },
-          },
-          select: { totalCents: true },
+        const counted = { in: ['PAID', 'COMPLETED', 'AMENDED'] };
+        const cashierSales = await this.prisma.sale.findMany({
+          where: { cashierId: emp.userId, status: counted, createdAt: { gte: startOfMonth, lte: endOfMonth } },
+          select: { id: true, totalCents: true, items: { select: { totalCents: true, staffId: true } } },
         });
-
-        const totalSalesCents = sales.reduce((sum, s) => sum + s.totalCents, 0);
-
-        if (emp.commissionBasis === 'SALES_VALUE') {
-          commissionCents = Math.round(totalSalesCents * (emp.commissionRate / 100));
-        } else if (emp.commissionBasis === 'TRANSACTION_COUNT') {
-          commissionCents = Math.round(sales.length * emp.commissionRate * 100);
+        let servedLines: Array<{ saleId: string; totalCents: number }> = [];
+        try {
+          servedLines = await this.prisma.saleItem.findMany({
+            where: { staffId: emp.userId, sale: { businessId, status: counted, createdAt: { gte: startOfMonth, lte: endOfMonth } } },
+            select: { saleId: true, totalCents: true },
+          });
+        } catch {
+          // lines naming staff are an addition: without them the cashier's own commission is still right
         }
-        // GROSS_MARGIN would require cost data — skip for now
+        commissionCents = commissionAmount(emp.commissionBasis, emp.commissionRate, commissionBase(cashierSales, servedLines));
       } catch {
         // commission calculation is best-effort
       }

@@ -6,11 +6,12 @@ import {
   Hash, ChefHat, Box, ArrowRightLeft, Wallet, UserCheck, Tag, Gift,
   TrendingUp, Landmark, GitBranch, LayoutDashboard, LogOut, Bell,
   Home, MoreHorizontal, ClipboardList, MapPin, Fuel, BedDouble,
-  Radio, CheckCircle2, Trash2, Send, FileText, Shield, Wand2,
+  Radio, CheckCircle2, Trash2, Send, FileText, Shield, Wand2, ShoppingBag, Clock,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/auth';
 import { useThemeStore } from '../stores/theme';
 import { hasFeature } from '../lib/featureGates';
+import { menuVisible } from '../lib/menuRules';
 import { prefetchRoute } from '../lib/routeLoaders';
 
 /* ── Bottom tab bar items (always visible) ────────────────────────────────── */
@@ -26,44 +27,42 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   roles?: string[];
-  businessTypes?: string[];
-  modules?: string[];
-  notForTypes?: string[];
 }
 
 interface NavGroup {
   label: string;
   roles?: string[];
-  businessTypes?: string[];
   items: NavItem[];
 }
 
-/* ── Full navigation groups — mirrors Layout.tsx NAV_GROUPS ──────────────── */
+/* ── Full navigation groups — mirrors Layout.tsx NAV_GROUPS; which businesses use an entry is lib/menuRules.ts ── */
 const MENU_GROUPS: NavGroup[] = [
   {
     label: 'Sales',
     items: [
       { to: '/pos',           icon: ShoppingCart,   label: 'Point of Sale',   roles: ['OWNER','MANAGER','CASHIER','WAITER'] },
-      { to: '/kds',           icon: Monitor,        label: 'Kitchen Display', roles: ['OWNER','MANAGER','WAITER','KITCHEN'], businessTypes: ['HOSPITALITY','FAST_FOOD','BAR_TAB'], modules: ['RESTAURANT'] },
-      { to: '/hospitality',   icon: ClipboardList,  label: 'Restaurant Tables', roles: ['OWNER','MANAGER','WAITER','CASHIER'], businessTypes: [], modules: ['RESTAURANT'], notForTypes: ['HOSPITALITY','FAST_FOOD','BAR_TAB'] },
-      { to: '/layaway',       icon: Layers,         label: 'Layaway',         roles: ['OWNER','MANAGER','CASHIER'], businessTypes: ['RETAIL','SUPERMARKET'] },
+      { to: '/kds',           icon: Monitor,        label: 'Kitchen Display', roles: ['OWNER','MANAGER','WAITER','KITCHEN'] },
+      { to: '/hospitality',   icon: ClipboardList,  label: 'Restaurant Tables', roles: ['OWNER','MANAGER','WAITER','CASHIER'] },
+      { to: '/layaway',       icon: Layers,         label: 'Layaway',         roles: ['OWNER','MANAGER','CASHIER'] },
       { to: '/proforma',      icon: CreditCard,     label: 'Proformas',       roles: ['OWNER','MANAGER','CASHIER'] },
-      { to: '/prescriptions', icon: Pill,           label: 'Prescriptions',   roles: ['OWNER','MANAGER','CASHIER'], businessTypes: ['CLINIC'] },
-      { to: '/appointments',  icon: CalendarClock,  label: 'Appointments',    roles: ['OWNER','MANAGER','CASHIER'], businessTypes: ['CLINIC','SALON'] },
+      { to: '/prescriptions', icon: Pill,           label: 'Prescriptions',   roles: ['OWNER','MANAGER','CASHIER'] },
+      { to: '/appointments',  icon: CalendarClock,  label: 'Appointments',    roles: ['OWNER','MANAGER','CASHIER'] },
     ],
   },
   {
     label: 'Operations',
     roles: ['OWNER','MANAGER'],
     items: [
-      { to: '/delivery',            icon: Truck,         label: 'Delivery',         businessTypes: ['HOSPITALITY','FAST_FOOD','RETAIL','SUPERMARKET'] },
-      { to: '/delivery-management', icon: Truck,         label: 'Delivery Dispatch', businessTypes: ['HOSPITALITY','FAST_FOOD','RETAIL','SUPERMARKET'] },
+      { to: '/delivery',            icon: Truck,         label: 'Delivery' },
+      { to: '/online-orders',       icon: ShoppingBag,   label: 'Online Orders',    roles: ['OWNER','MANAGER','CASHIER'] },
+      { to: '/delivery-management', icon: Truck,         label: 'Delivery Dispatch' },
       { to: '/field-orders',        icon: ClipboardList, label: 'Field Orders' },
       { to: '/delivery-routes',     icon: MapPin,        label: 'Delivery Routes' },
-      { to: '/hotel',               icon: BedDouble,     label: 'Hotel',            businessTypes: ['HOSPITALITY'], modules: ['HOTEL'] },
-      { to: '/channel-manager',     icon: Radio,         label: 'Channel Manager',  businessTypes: ['HOSPITALITY'], modules: ['HOTEL'] },
-      { to: '/fuel-pump',           icon: Fuel,          label: 'Fuel Pumps',       roles: ['OWNER','MANAGER','CASHIER'], businessTypes: ['FUEL_PUMP'] },
-      { to: '/cybercafe',           icon: Monitor,       label: 'Cybercafe',        roles: ['OWNER','MANAGER','CASHIER'], businessTypes: ['CYBERCAFE'] },
+      { to: '/waitlist',            icon: Clock,         label: 'Waitlist',         roles: ['OWNER','MANAGER','WAITER'] },
+      { to: '/hotel',               icon: BedDouble,     label: 'Hotel' },
+      { to: '/channel-manager',     icon: Radio,         label: 'Channel Manager' },
+      { to: '/fuel-pump',           icon: Fuel,          label: 'Fuel Pumps',       roles: ['OWNER','MANAGER','CASHIER'] },
+      { to: '/cybercafe',           icon: Monitor,       label: 'Cybercafe',        roles: ['OWNER','MANAGER','CASHIER'] },
     ],
   },
   {
@@ -71,9 +70,9 @@ const MENU_GROUPS: NavGroup[] = [
     roles: ['OWNER','MANAGER'],
     items: [
       { to: '/inventory',    icon: Package,        label: 'Items & Stock' },
-      { to: '/batch',        icon: Layers,         label: 'Batch & Expiry',  businessTypes: ['CLINIC','SUPERMARKET'] },
-      { to: '/serial',       icon: Hash,           label: 'Serial Tracking', businessTypes: ['RETAIL'] },
-      { to: '/recipe',       icon: ChefHat,        label: 'Recipes / BOM',   businessTypes: ['HOSPITALITY','FAST_FOOD'] },
+      { to: '/batch',        icon: Layers,         label: 'Batch & Expiry' },
+      { to: '/serial',       icon: Hash,           label: 'Serial Tracking' },
+      { to: '/recipe',       icon: ChefHat,        label: 'Recipes / BOM' },
       { to: '/bundle',       icon: Box,            label: 'Bundles / Kits' },
       { to: '/suppliers',    icon: Truck,          label: 'Suppliers & POs' },
       { to: '/rfq',          icon: Send,           label: 'RFQ' },
@@ -160,19 +159,14 @@ export default function MobileNav({ isOpen, onOpen, onClose, businessType = 'RET
     to === '/' ? location.pathname === '/' : location.pathname === to || location.pathname.startsWith(to + '/');
 
   const canSee = (roles?: string[]) => !roles || roles.includes(userRole);
-  const canSeeType = (types?: string[], modules?: string[], notForTypes?: string[]) => {
-    if (notForTypes?.includes(businessType)) return false;
-    if (!types && !modules) return true;
-    if (types?.includes(businessType)) return true;
-    return !!modules?.some((m) => enabledModules.includes(m));
-  };
+  const usedByBusiness = (to: string) => menuVisible(to, { posMode: businessType, enabledModules, role: userRole });
   const canSeePlan = (to: string) => hasFeature(userPlan, to.replace(/^\//, ''), subscriptionStatus, subscriptionTier);
 
   const visibleGroups = MENU_GROUPS
-    .filter((g) => canSee(g.roles) && canSeeType(g.businessTypes))
+    .filter((g) => canSee(g.roles))
     .map((g) => ({
       ...g,
-      items: g.items.filter((i) => canSee(i.roles) && canSeeType(i.businessTypes, i.modules, i.notForTypes) && canSeePlan(i.to)),
+      items: g.items.filter((i) => canSee(i.roles) && usedByBusiness(i.to) && canSeePlan(i.to)),
     }))
     .filter((g) => g.items.length > 0);
 

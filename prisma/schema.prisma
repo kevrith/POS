@@ -244,6 +244,8 @@ model Item {
   category            String?
   ageRestricted       Boolean              @default(false)
   minAgeYears         Int                  @default(18)
+  /// How long a SERVICE takes, in minutes (a haircut 45). Fills the duration when it is booked. Null = not set.
+  durationMinutes     Int?
   prepTimeMinutes     Int                  @default(5)
   station             String?
   unitWeightGrams     Int?
@@ -544,11 +546,15 @@ model SaleItem {
   vatCents       Int      @default(0)
   /// This line's share of the sale-level discount.
   discountCents  Int      @default(0)
+  /// The staff member who performed the service on this line (a stylist, a therapist). Commission goes to them, not to the
+  /// cashier who rang it up. Null = nobody in particular: the cashier is credited, as before.
+  staffId        String?
   createdAt      DateTime @default(now())
   item           Item?    @relation(fields: [itemId], references: [id])
   sale           Sale     @relation(fields: [saleId], references: [id])
 
   @@index([saleId])
+  @@index([staffId])
 }
 
 /// Permanent record of every line (or whole order) taken off a table order after it was entered: who, why, how much,
@@ -902,6 +908,8 @@ model Customer {
   creditApprovedAt        DateTime?
   gpsLat                  Float?
   gpsLng                  Float?
+  /// Free notes about the client for the staff: allergies, colour formula, preferences.
+  notes                   String?
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
   appointments            Appointment[]
@@ -1628,6 +1636,42 @@ model Appointment {
 
   @@index([businessId, storeId, status])
   @@index([scheduledAt])
+}
+
+/// One service within an appointment (a haircut, then a colour). Appointments with one service have one row, written from the
+/// appointment's own serviceItemId, so older appointments without rows still read as one service.
+model AppointmentService {
+  id             String   @id @default(uuid())
+  appointmentId  String
+  itemId         String?
+  name           String
+  /// The price at the time of booking (a manager may change it when the appointment is completed).
+  unitPriceCents Int      @default(0)
+  durationMin    Int      @default(30)
+  /// Who performs it. Services run one after another in `position` order.
+  staffId        String?
+  position       Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  @@index([appointmentId])
+  @@index([staffId])
+}
+
+/// A user who takes appointments (a stylist, a therapist), and when they work. A business with no rows here has no
+/// restriction: any user can be booked at any time, as before.
+model ServiceStaff {
+  id         String   @id @default(uuid())
+  businessId String
+  userId     String
+  active     Boolean  @default(true)
+  /// Weekly hours as JSON text: { "1": ["09:00","18:00"], ... } keyed by weekday (0 = Sunday); a day left out is a day off.
+  /// Empty = no restriction.
+  workingHours String @default("{}")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([businessId, userId])
+  @@index([businessId])
 }
 
 model DeliveryOrder {

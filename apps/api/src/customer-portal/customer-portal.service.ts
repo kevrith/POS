@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
+import { enableBusinessModule } from '../common/business-modules';
 import { NotificationsService } from '../notifications/notifications.service';
 import { normalizeKePhone, kePhoneVariants } from '../common/phone';
 import { createHash, randomBytes } from 'crypto';
@@ -586,6 +587,8 @@ export class CustomerPortalService {
     if (!original) throw new NotFoundException('Field order not found');
 
     // Duplicate as DRAFT
+    // A hidden-by-default feature switches itself on the first time it is used, so its menu entry is there.
+    void enableBusinessModule(this.prisma, original.businessId, 'FIELD_SALES');
     const newOrder = await this.prisma.fieldOrder.create({
       data: {
         offlineId: uuidv4(),

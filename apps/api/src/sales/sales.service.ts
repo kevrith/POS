@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { enableBusinessModule } from '../common/business-modules';
 import { InventoryService } from '../inventory/inventory.service';
 import { AuditService } from '../audit/audit.service';
 import { AuthService } from '../auth/auth.service';
@@ -66,7 +67,8 @@ interface CreateSaleDto {
   customerId?: string;
   type: SaleType;
   priceLevel: 'RETAIL' | 'WHOLESALE' | 'VIP';
-  items: Array<{ itemId: string; quantity: number }>;
+  /** `staffId`: who performed a service line (a stylist). Commission goes to them rather than to the cashier. */
+  items: Array<{ itemId: string; quantity: number; staffId?: string }>;
   payments: Array<{ method: string; amountCents: number; reference?: string; roomNumber?: string }>;
   discountCents?: number;
   promotionId?: string;
@@ -245,7 +247,7 @@ export class SalesService {
       if (order.items.length === 0) throw new BadRequestException('This order has nothing on it');
     }
 
-    interface CartLine { itemId: string; quantity: number; name?: string; totalCents?: number }
+    interface CartLine { itemId: string; quantity: number; name?: string; totalCents?: number; staffId?: string }
     const cart: CartLine[] = order
       ? order.items.map((l) => ({
           itemId: l.itemId,
@@ -260,6 +262,12 @@ export class SalesService {
     const items = await this.prisma.item.findMany({
       where: { id: { in: cart.map(i => i.itemId) }, businessId },
     });
+
+    // Who performed each service line must be someone in this business: the id is only a pointer for commission.
+    const staffIds = [...new Set(cart.map((c) => c.staffId).filter((id): id is string => typeof id === 'string' && id.length > 0))];
+    const knownStaff = new Set(
+      staffIds.length === 0 ? [] : (await this.prisma.user.findMany({ where: { id: { in: staffIds }, businessId }, select: { id: true } })).map((u) => u.id),
+    );
 
     let subtotalCents = 0;
     const saleItems = [];
@@ -290,9 +298,14 @@ export class SalesService {
       // An order line carries its own total (price plus modifiers, times quantity).
       const totalCents = cartItem.totalCents ?? unitPrice * cartItem.quantity;
 
+      if (cartItem.staffId && !knownStaff.has(cartItem.staffId)) {
+        throw new BadRequestException(`The staff member chosen for ${item.name} was not found`);
+      }
+
       subtotalCents += totalCents;
       saleItems.push({
         itemId: item.id,
+        staffId: cartItem.staffId || undefined,
         name: cartItem.name ?? item.name,
         quantity: cartItem.quantity,
         unitPriceCents: cartItem.totalCents !== undefined ? Math.round(cartItem.totalCents / cartItem.quantity) : unitPrice,
@@ -1144,6 +1157,9 @@ export class SalesService {
       const disc = i.discountPercent ? i.discountPercent / 100 : 0;
       return sum + Math.round(i.unitPriceCents * i.quantity * (1 - disc));
     }, 0);
+
+    // A hidden-by-default feature switches itself on the first time it is used, so its menu entry is there.
+    void enableBusinessModule(this.prisma, dto.businessId, 'QUOTES');
 
     return this.prisma.sale.create({
       data: {

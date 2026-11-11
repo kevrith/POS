@@ -440,6 +440,23 @@ and these features are refused by the server (not just hidden) for a business th
 not enabled them. A Hospitality till already includes both; Fast Food and Bar include
 the restaurant.
 
+**What the menu shows for your kind of business.** The menu only lists what your kind of business uses, so a salon is
+not offered Field Orders or Delivery Routes and a table-service restaurant is not offered Delivery. Three more
+features can be switched on the same way (Settings, *Also run*): **Delivery & online orders** (Delivery, Online Orders,
+Delivery Dispatch), **Field sales** (Agent Dashboard, Field Orders, Delivery Routes) and **Quotes (proforma invoices)**.
+They are on by default for the main tills that use them:
+
+| Main till | Delivery & online orders | Field sales | Quotes |
+|---|---|---|---|
+| Retail, Supermarket | on | on | on |
+| Fast Food | on | off | off |
+| Hospitality, Bar, Salon, Clinic, Fuel, Cybercafe | off | off | off |
+
+A feature that is off **turns itself on the first time you really use it**: an online order placed on your store, a
+delivery you create, a field order or route, or a proforma you write. Its menu entry then appears, so an order or a quote
+can never arrive somewhere you cannot see it. Businesses that already had delivery, field sales or quotes data were
+switched on for them when this was introduced.
+
 **Modifiers.** "No onions", "extra shot", "well done" — and they can carry a price.
 
 **Bar tabs.** Open a tab against a customer or a name, keep adding to it, settle at
@@ -494,6 +511,17 @@ waiting for a table.
   was paid; **Deposit** adds more); **Complete** takes the payment (the deposit is used first, anything left over is paid back) and
   gives a receipt that goes to KRA; **Cancel** or **No-Show** pays the deposit back, or a manager can keep it. Only a manager can
   change a service's price. To undo a completed appointment, void its sale from the sales list
+
+  **Salon: stylists, visits and clients.** Open **Team** (managers) to switch on the people who take appointments and set their
+  weekly working hours; a booking outside someone's hours, or on top of another of their appointments, is refused. Give a
+  service a **length in minutes** in Items & Stock and booking fills in the price and works out when the visit ends. One visit
+  can have several services in a row, each with its own stylist (for example a cut and then a colour). **By stylist** shows the
+  day as a board, one column per stylist. At **Complete** you can add retail products (they come off stock) and record a **tip**.
+  The tip is kept apart from the tax invoice, so the receipt total stays exact, and is booked as money owed to staff. Each
+  stylist earns commission on the lines that name them, not the cashier; on the till, pick **Served by** on a service line.
+  Pick the client when booking to see their past visits, no-shows and **notes** (allergies, colour formula, preferences).
+  Completing only creates a receipt when the owner has switched on real sales for this kind of business (Settings); otherwise
+  it just marks the visit done, and the screen says so.
 - **Supermarket** — a denser, faster scan-first layout built for queues
 
 ---

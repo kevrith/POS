@@ -1,3 +1,4 @@
+import { cleanDuration } from './item-duration';
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
@@ -33,6 +34,8 @@ interface CreateItemDto {
   /** KITCHEN / BAR / DESSERT, or empty to let the system guess from the name. */
   station?: string | null;
   prepTimeMinutes?: number;
+  /** How long a SERVICE takes, in minutes (a haircut 45). Fills the duration when it is booked. */
+  durationMinutes?: number | null;
 }
 
 /**
@@ -477,6 +480,7 @@ export class ItemsService {
         negativeStockPolicy: (dto as any).negativeStockPolicy ?? 'ALLOW',
         station: normalizeStation(dto.station),
         ...(cleanPrepTime(dto.prepTimeMinutes) !== undefined && { prepTimeMinutes: cleanPrepTime(dto.prepTimeMinutes) }),
+        ...(cleanDuration(dto.durationMinutes) !== undefined && { durationMinutes: cleanDuration(dto.durationMinutes) }),
         storeId,
         businessId: dto.businessId,
       },
@@ -548,6 +552,7 @@ export class ItemsService {
         ...(dto.reorderQty !== undefined && { reorderQty: dto.reorderQty }),
         ...(dto.station !== undefined && { station: normalizeStation(dto.station) }),
         ...(cleanPrepTime(dto.prepTimeMinutes) !== undefined && { prepTimeMinutes: cleanPrepTime(dto.prepTimeMinutes) }),
+        ...(cleanDuration(dto.durationMinutes) !== undefined && { durationMinutes: cleanDuration(dto.durationMinutes) }),
         ...(dto.soldOut !== undefined && { soldOut: dto.soldOut }),
         ...(dto.isFractional !== undefined && { isFractional: dto.isFractional }),
         ...(dto.unitLabel !== undefined && { unitLabel: dto.unitLabel }),

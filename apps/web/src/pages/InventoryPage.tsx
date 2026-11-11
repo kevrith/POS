@@ -283,6 +283,7 @@ function AddItemModal({ businessId, storeId, categories, posMode, existingItems 
     unit: 'pcs',
     taxClass: 'B' as TaxClass,
     prepTimeMinutes: 5,
+    durationMinutes: '', // services only: how long it takes, in minutes
     station: '',
     blockOversell: false, // false = allow selling when OOS (ALLOW policy); true = hard block (BLOCK policy)
   });
@@ -392,6 +393,7 @@ function AddItemModal({ businessId, storeId, categories, posMode, existingItems 
       unit: form.unit,
       taxClass: form.taxClass,
       prepTimeMinutes: form.prepTimeMinutes,
+      ...(form.type === 'SERVICE' && form.durationMinutes && { durationMinutes: Number(form.durationMinutes) }),
       station: form.station,
       negativeStockPolicy: form.blockOversell ? 'BLOCK' : 'ALLOW',
       businessId,
@@ -525,6 +527,7 @@ function AddItemModal({ businessId, storeId, categories, posMode, existingItems 
             </div>
           )}
 
+          {form.type === 'SERVICE' && field('How long it takes (minutes)', <input type="number" min="5" max="720" step="5" value={form.durationMinutes} onChange={(e) => setForm(f => ({ ...f, durationMinutes: e.target.value }))} className={inputCls} placeholder="45" />)}
           <div className="grid grid-cols-2 gap-4">
             {isRestaurant && field('Prep Time (minutes)', <input type="number" min="1" value={form.prepTimeMinutes} onChange={(e) => setForm(f => ({ ...f, prepTimeMinutes: parseInt(e.target.value) || 5 }))} className={inputCls} placeholder="5" />)}
             {isRestaurant && field('Made at', <StationSelect value={form.station} onChange={(station) => setForm(f => ({ ...f, station }))} className={inputCls} />)}
@@ -601,6 +604,7 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
     taxClass: taxClassOf(item),
     trackStock: item.trackStock,
     prepTimeMinutes: (item as any).prepTimeMinutes ?? 5,
+    durationMinutes: (item as any).durationMinutes != null ? String((item as any).durationMinutes) : '',
     station: (item as any).station ?? '',
     imageUrl: item.imageUrl ?? '',
     allergens: (() => { try { return JSON.parse(item.allergens ?? '[]') as string[]; } catch { return [] as string[]; } })(),
@@ -648,6 +652,7 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
       taxClass: form.taxClass,
       trackStock: form.trackStock,
       prepTimeMinutes: form.prepTimeMinutes,
+      ...(form.type === 'SERVICE' && { durationMinutes: form.durationMinutes ? Number(form.durationMinutes) : null }),
       station: form.station,
       imageUrl: form.imageUrl.trim() || undefined,
       allergens: form.allergens,
@@ -715,6 +720,11 @@ function EditItemModal({ item, categories, onClose }: EditItemModalProps) {
               <input type="number" min="0" step="0.01" value={form.costPrice} onChange={(e) => setForm(f => ({ ...f, costPrice: e.target.value }))} className={inputCls} /></div>
           </div>
 
+          {form.type === 'SERVICE' && (
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">How long it takes (minutes)</label>
+              <input type="number" min="5" max="720" step="5" value={form.durationMinutes} onChange={(e) => setForm(f => ({ ...f, durationMinutes: e.target.value }))} className={inputCls} placeholder="45" />
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <div><label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
               <select value={form.unit} onChange={(e) => setForm(f => ({ ...f, unit: e.target.value }))} className={inputCls}>

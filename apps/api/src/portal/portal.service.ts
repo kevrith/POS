@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { enableBusinessModule } from '../common/business-modules';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MpesaService } from '../payments/mpesa.service';
 import { SalesService } from '../sales/sales.service';
@@ -298,6 +299,8 @@ export class PortalService {
     });
     const seq = String(count + 1).padStart(5, '0');
     const orderNumber = `PRT-${year}-${seq}`;
+    // A hidden-by-default feature switches itself on the first time it is used, so its menu entry is there.
+    void enableBusinessModule(this.prisma, dto.businessId, 'DELIVERY');
 
     const order = await this.prisma.deliveryOrder.create({
       data: {

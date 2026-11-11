@@ -27,6 +27,7 @@ import UpdateBanner from './UpdateBanner';
 import { useLicense } from '../lib/license';
 import MobileNav from './MobileNav';
 import { hasFeature } from '../lib/featureGates';
+import { menuVisible } from '../lib/menuRules';
 import { parseEnabledModules } from '@pos/shared';
 
 interface NavItem {
@@ -43,16 +44,10 @@ interface NavGroup {
 }
 
 interface NavItemWithBusinessTypes extends NavItem {
-  businessTypes?: string[];
-  /** Optional modules that also reveal this item, whatever the business type. */
-  modules?: string[];
-  /** Business types that already have this elsewhere, so the module entry is hidden for them. */
-  notForTypes?: string[];
   newTab?: boolean; // open in new browser tab
 }
 
 interface NavGroupWithBusinessTypes extends Omit<NavGroup, 'items'> {
-  businessTypes?: string[];
   items: NavItemWithBusinessTypes[];
 }
 
@@ -69,31 +64,31 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
     items: [
       // /pos is the universal entry-point; POSRouterPage redirects to the right UI per posMode
       { to: '/pos', icon: ShoppingCart, label: 'Point of Sale', roles: ['OWNER', 'MANAGER', 'CASHIER', 'WAITER'] },
-      { to: '/kds', icon: Monitor, label: 'Kitchen Display', roles: ['OWNER', 'MANAGER', 'WAITER', 'KITCHEN'], businessTypes: ['HOSPITALITY', 'FAST_FOOD', 'BAR_TAB'], modules: ['RESTAURANT'] },
+      { to: '/kds', icon: Monitor, label: 'Kitchen Display', roles: ['OWNER', 'MANAGER', 'WAITER', 'KITCHEN'] },
       // A fuel station or shop that runs a restaurant on the side: the till stays its main POS, tables live here.
-      { to: '/hospitality', icon: Coffee, label: 'Restaurant Tables', roles: ['OWNER', 'MANAGER', 'WAITER', 'CASHIER'], businessTypes: [], modules: ['RESTAURANT'], notForTypes: ['HOSPITALITY', 'FAST_FOOD', 'BAR_TAB'] },
+      { to: '/hospitality', icon: Coffee, label: 'Restaurant Tables', roles: ['OWNER', 'MANAGER', 'WAITER', 'CASHIER'] },
       // Kiosk mode is launched from within the POS page (not a permanent nav item)
-      { to: '/layaway', icon: Layers, label: 'Layaway', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['RETAIL', 'SUPERMARKET'] },
+      { to: '/layaway', icon: Layers, label: 'Layaway', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
       { to: '/proforma', icon: CreditCard, label: 'Proformas', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
-      { to: '/prescriptions', icon: Pill, label: 'Prescriptions', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['CLINIC'] },
-      { to: '/pharmacy', icon: Pill, label: 'Pharmacy Mgmt', roles: ['OWNER', 'MANAGER'], businessTypes: ['CLINIC'] },
-      { to: '/appointments', icon: CalendarClock, label: 'Appointments', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['CLINIC', 'SALON'] },
+      { to: '/prescriptions', icon: Pill, label: 'Prescriptions', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
+      { to: '/pharmacy', icon: Pill, label: 'Pharmacy Mgmt', roles: ['OWNER', 'MANAGER'] },
+      { to: '/appointments', icon: CalendarClock, label: 'Appointments', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
     ],
   },
   {
     label: 'Operations',
     roles: ['OWNER', 'MANAGER'],
     items: [
-      { to: '/delivery', icon: Truck, label: 'Delivery', businessTypes: ['HOSPITALITY', 'FAST_FOOD', 'RETAIL', 'SUPERMARKET'] },
-      { to: '/online-orders', icon: ShoppingBag, label: 'Online Orders', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['HOSPITALITY', 'FAST_FOOD', 'RETAIL', 'SUPERMARKET'] },
-      { to: '/delivery-management', icon: Truck, label: 'Delivery Dispatch', roles: ['OWNER', 'MANAGER'], businessTypes: ['HOSPITALITY', 'FAST_FOOD', 'RETAIL', 'SUPERMARKET'] },
+      { to: '/delivery', icon: Truck, label: 'Delivery' },
+      { to: '/online-orders', icon: ShoppingBag, label: 'Online Orders', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
+      { to: '/delivery-management', icon: Truck, label: 'Delivery Dispatch', roles: ['OWNER', 'MANAGER'] },
       { to: '/field-orders', icon: ClipboardList, label: 'Field Orders', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
       { to: '/delivery-routes', icon: MapPin, label: 'Delivery Routes', roles: ['OWNER', 'MANAGER'] },
-      { to: '/waitlist', icon: Clock, label: 'Waitlist', roles: ['OWNER', 'MANAGER', 'WAITER'], businessTypes: ['HOSPITALITY', 'FAST_FOOD'] },
-      { to: '/hotel', icon: BedDouble, label: 'Hotel Integration', roles: ['OWNER', 'MANAGER'], businessTypes: ['HOSPITALITY'], modules: ['HOTEL'] },
-      { to: '/channel-manager', icon: Radio, label: 'Channel Manager', roles: ['OWNER', 'MANAGER'], businessTypes: ['HOSPITALITY'], modules: ['HOTEL'] },
-      { to: '/fuel-pump', icon: Fuel, label: 'Fuel Pumps', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['FUEL_PUMP'] },
-      { to: '/cybercafe', icon: Monitor, label: 'Cybercafe', roles: ['OWNER', 'MANAGER', 'CASHIER'], businessTypes: ['CYBERCAFE'] },
+      { to: '/waitlist', icon: Clock, label: 'Waitlist', roles: ['OWNER', 'MANAGER', 'WAITER'] },
+      { to: '/hotel', icon: BedDouble, label: 'Hotel Integration', roles: ['OWNER', 'MANAGER'] },
+      { to: '/channel-manager', icon: Radio, label: 'Channel Manager', roles: ['OWNER', 'MANAGER'] },
+      { to: '/fuel-pump', icon: Fuel, label: 'Fuel Pumps', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
+      { to: '/cybercafe', icon: Monitor, label: 'Cybercafe', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
     ],
   },
   {
@@ -101,9 +96,9 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
     roles: ['OWNER', 'MANAGER'],
     items: [
       { to: '/inventory', icon: Package, label: 'Items & Stock' },
-      { to: '/batch', icon: Layers, label: 'Batch & Expiry', businessTypes: ['CLINIC', 'SUPERMARKET'] },
-      { to: '/serial', icon: Hash, label: 'Serial Tracking', businessTypes: ['RETAIL'] },
-      { to: '/recipe', icon: ChefHat, label: 'Recipes / BOM', businessTypes: ['HOSPITALITY', 'FAST_FOOD'] },
+      { to: '/batch', icon: Layers, label: 'Batch & Expiry' },
+      { to: '/serial', icon: Hash, label: 'Serial Tracking' },
+      { to: '/recipe', icon: ChefHat, label: 'Recipes / BOM' },
       { to: '/bundle', icon: Box, label: 'Bundles / Kits' },
       { to: '/suppliers', icon: Truck, label: 'Suppliers & POs' },
       { to: '/rfq', icon: Send, label: 'RFQ', roles: ['OWNER', 'MANAGER'] },
@@ -515,12 +510,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   })();
 
   const canSee = (roles?: string[]) => !roles || roles.includes(userRole);
-  const canSeeBusinessType = (businessTypes?: string[], modules?: string[], notForTypes?: string[]) => {
-    if (notForTypes?.includes(businessType)) return false;
-    if (!businessTypes && !modules) return true;
-    if (businessTypes?.includes(businessType)) return true;
-    return !!modules?.some((m) => (enabledModules as string[]).includes(m));
-  };
+  // Whether this kind of business uses an entry (its main till and the modules it switched on): see lib/menuRules.ts.
+  const usedByBusiness = (to: string) => menuVisible(to, { posMode: businessType, enabledModules, role: userRole });
 
   const userPlan = user?.planName ?? 'STARTER';
   const subStatus = subscription?.subscriptionStatus;
@@ -531,12 +522,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const canSeePlan = (to: string) => hasFeature(userPlan, to.replace(/^\//, ''), subStatus, subTier);
 
   const visibleGroups = NAV_GROUPS
-    .filter((g) => canSee(g.roles) && canSeeBusinessType(g.businessTypes))
+    .filter((g) => canSee(g.roles))
     .map((g) => ({
       ...g,
       items: g.items.filter(
         (item) =>
-          canSee(item.roles) && canSeeBusinessType(item.businessTypes, item.modules, item.notForTypes) && canSeePlan(item.to) &&
+          canSee(item.roles) && usedByBusiness(item.to) && canSeePlan(item.to) &&
           // A business that prints its kitchen tickets has no kitchen display to open (Settings > General > Kitchen).
           !(item.to === '/kds' && businessSettings?.kitchenMode === 'PRINT_ONLY'),
       ),

@@ -536,7 +536,7 @@ export function canTransitionKot(from: KotStatus, to: KotStatus): boolean {
 // capability on for a business whatever its posMode, instead of forcing the
 // owner to pick one vertical.
 
-export const OPTIONAL_MODULES = ['RESTAURANT', 'HOTEL'] as const;
+export const OPTIONAL_MODULES = ['RESTAURANT', 'HOTEL', 'DELIVERY', 'FIELD_SALES', 'QUOTES'] as const;
 export type OptionalModule = (typeof OPTIONAL_MODULES)[number];
 
 export const OPTIONAL_MODULE_LABELS: Record<OptionalModule, { label: string; description: string }> = {
@@ -548,6 +548,18 @@ export const OPTIONAL_MODULE_LABELS: Record<OptionalModule, { label: string; des
     label: 'Hotel & rooms',
     description: 'Rooms, bookings, guest folios and housekeeping, alongside your main till.',
   },
+  DELIVERY: {
+    label: 'Delivery & online orders',
+    description: 'Delivery orders, orders placed on your online store, and delivery dispatch.',
+  },
+  FIELD_SALES: {
+    label: 'Field sales',
+    description: 'Sales agents who take orders away from the shop, their routes and the field orders board.',
+  },
+  QUOTES: {
+    label: 'Quotes (proforma invoices)',
+    description: 'Price quotes and proforma invoices you send a customer before they buy.',
+  },
 };
 
 /** posModes whose main till already is the restaurant. */
@@ -556,10 +568,26 @@ export const RESTAURANT_POS_MODES: readonly string[] = ['HOSPITALITY', 'FAST_FOO
 /** posModes whose main till already includes the hotel. */
 export const HOTEL_POS_MODES: readonly string[] = ['HOSPITALITY'];
 
+/**
+ * Which main tills already include each module, so it needs no switch of its own. Everything else can be switched on in
+ * Settings, and a module also switches itself on the first time the business actually uses it (see the API's
+ * enableBusinessModule), so a feature that is hidden by default can never leave an order or a quote unseen.
+ *
+ * Delivery and quotes are for businesses that sell goods to people elsewhere or on account (a shop, a supermarket, a
+ * takeaway); a table-service restaurant or hotel, a salon, a clinic, a fuel station or a cybercafe do not need them by
+ * default. Field sales (agents on the road) is for distribution and wholesale: shops and supermarkets.
+ */
+export const MODULE_POS_MODES: Record<OptionalModule, readonly string[]> = {
+  RESTAURANT: RESTAURANT_POS_MODES,
+  HOTEL: HOTEL_POS_MODES,
+  DELIVERY: ['FAST_FOOD', 'RETAIL', 'SUPERMARKET'],
+  FIELD_SALES: ['RETAIL', 'SUPERMARKET'],
+  QUOTES: ['RETAIL', 'SUPERMARKET'],
+};
+
 /** True when the main till already provides the module, so it needs no switch of its own. */
 export function moduleIncludedByMode(module: OptionalModule, posMode?: string | null): boolean {
-  const mode = (posMode ?? '').toUpperCase();
-  return module === 'RESTAURANT' ? RESTAURANT_POS_MODES.includes(mode) : HOTEL_POS_MODES.includes(mode);
+  return MODULE_POS_MODES[module].includes((posMode ?? '').toUpperCase());
 }
 
 /** Parse the stored JSON list, ignoring anything that is not a known module. */

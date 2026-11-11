@@ -23,6 +23,14 @@ function setup() {
       update: jest.fn().mockImplementation(async ({ data }: any) => ({ id: 'a1', ...data })),
       delete: jest.fn().mockResolvedValue({}),
     },
+    // Salon additions: the services of a visit, who can be booked, and the staff themselves.
+    appointmentService: { findMany: jest.fn().mockResolvedValue([]), createMany: jest.fn().mockResolvedValue({ count: 0 }), deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    serviceStaff: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]), upsert: jest.fn().mockResolvedValue({}) },
+    user: {
+      findFirst: jest.fn().mockImplementation(async ({ where }: any) => ({ id: where.id, name: `Staff ${where.id}` })),
+      findMany: jest.fn().mockImplementation(async ({ where }: any) => (where?.id?.in ?? []).map((id: string) => ({ id, name: `Staff ${id}`, role: 'CASHIER' }))),
+    },
+    business: { findUnique: jest.fn().mockResolvedValue({ negativePolicyDefault: 'ALLOW' }) },
     $executeRaw: jest.fn().mockResolvedValue(1),
     $transaction: jest.fn(),
   };

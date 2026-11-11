@@ -213,6 +213,7 @@ export default function POSPage() {
     taxType?: 'VAT' | 'TOT' | 'NONE';
     totRate?: number;
     name?: string;
+    posMode?: string;
     enableCashDrawer?: boolean;
     enableBarcodeScanner?: boolean;
     enablePoleDisplay?: boolean;
@@ -228,6 +229,7 @@ export default function POSPage() {
       taxType: d.taxType ?? 'VAT',
       totRate: typeof d.totRate === 'number' ? d.totRate : 3,
       name: d.name,
+      posMode: d.posMode,
       enableCashDrawer: d.enableCashDrawer ?? false,
       enableBarcodeScanner: d.enableBarcodeScanner ?? true,
       enablePoleDisplay: d.enablePoleDisplay ?? false,
@@ -239,6 +241,17 @@ export default function POSPage() {
   const enableCashDrawer = businessSettings?.enableCashDrawer ?? false;
   const enableBarcodeScanner = businessSettings?.enableBarcodeScanner ?? true;
   const enablePoleDisplay = businessSettings?.enablePoleDisplay ?? false;
+
+  // A salon rings services up at this till too: the person who did the work is chosen here, so commission goes to them.
+  const [servedById, setServedById] = useState('');
+  const isSalon = businessSettings?.posMode === 'SALON';
+  const { data: stylistList } = useQuery<{ stylists: Array<{ userId: string; name: string; active: boolean }> }>({
+    queryKey: ['salon-staff'],
+    queryFn: () => api.get('/appointments/staff'),
+    enabled: !!businessId && isSalon,
+    staleTime: 60_000,
+  });
+  const servedByOptions = (stylistList?.stylists ?? []).filter((s) => s.active).map((s) => ({ id: s.userId, name: s.name }));
 
   // ─── Clock In/Out ─────────────────────────────────────────────────────────
 
@@ -480,7 +493,7 @@ export default function POSPage() {
         type: isCredit ? 'CREDIT' : 'NORMAL',
         priceLevel,
         customerId: customerId ?? undefined,
-        items: cart.map((i) => ({ itemId: i.id, quantity: i.quantity })),
+        items: cart.map((i) => ({ itemId: i.id, quantity: i.quantity, ...(servedById && i.itemType === 'SERVICE' && { staffId: servedById }) })),
         payments,
         serviceChargeCents,
         ...(tipCents > 0 && { tipCents }),
@@ -950,6 +963,7 @@ export default function POSPage() {
 
       {/* Right: Cart */}
       <CartPanel
+        servedBy={isSalon ? { options: servedByOptions, value: servedById, onChange: setServedById } : undefined}
         cart={cart}
         priceLevel={priceLevel}
         showCartMobile={showCartMobile}

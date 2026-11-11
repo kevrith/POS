@@ -27,6 +27,8 @@ interface FEFOAlert {
 }
 
 interface Props {
+  /** Salon / spa: who performed the services in this sale, so commission goes to them and not to the cashier. */
+  servedBy?: { options: Array<{ id: string; name: string }>; value: string; onChange: (id: string) => void };
   cart: CartItem[];
   priceLevel: PriceLevel;
   showCartMobile: boolean;
@@ -65,6 +67,7 @@ interface Props {
 }
 
 export default function CartPanel({
+  servedBy,
   cart, priceLevel, showCartMobile, setShowCartMobile,
   heldSalesCount, onHold, onShowHeld, onClear,
   onRemoveItem, onUpdateQuantity, onUpdateDiscount, onOpenPriceOverride,
@@ -146,6 +149,17 @@ export default function CartPanel({
           </button>
         </div>
       </div>
+
+      {servedBy && servedBy.options.length > 0 && (
+        <div className="mx-3 mt-2 flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/60 px-3 py-2">
+          <label htmlFor="served-by" className="text-xs font-medium text-slate-300 whitespace-nowrap">Served by</label>
+          <select id="served-by" value={servedBy.value} onChange={(e) => servedBy.onChange(e.target.value)}
+            className="min-w-0 flex-1 rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-white">
+            <option value="">No one in particular</option>
+            {servedBy.options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+          </select>
+        </div>
+      )}
 
       {/* FEFO suggestion banner */}
       {fefoAlerts.length > 0 && (

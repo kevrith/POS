@@ -240,3 +240,32 @@ export function buildUnmatchedClaimReceiptLines(paidCents: number): JournalLine[
     { accountCode: '4450', accountName: 'Insurance Claim Receipts', debitCents: 0, creditCents: paidCents },
   ];
 }
+
+/**
+ * A tip taken with a payment: the money arrives in whatever it was paid by, and is owed to the staff, not earned by the
+ * business. Kept apart from the sale, so the tax invoice sent to KRA is exactly what was supplied.
+ */
+export function buildTipJournalLines(method: string, amountCents: number): JournalLine[] {
+  if (!(amountCents > 0)) return [];
+  const acct = tenderAccount(method);
+  return [
+    { accountCode: acct.code, accountName: acct.name, debitCents: amountCents, creditCents: 0 },
+    { accountCode: '2200', accountName: 'Tips Payable', debitCents: 0, creditCents: amountCents },
+  ];
+}
+
+export async function postTipJournal(
+  ledger: Pick<LedgerService, 'autoPost'>,
+  input: { businessId: string; storeId?: string; description: string; reference: string; method: string; amountCents: number; sourceType?: string },
+): Promise<void> {
+  const lines = buildTipJournalLines(input.method, input.amountCents);
+  if (lines.length === 0) return;
+  await ledger.autoPost({
+    businessId: input.businessId,
+    storeId: input.storeId,
+    description: input.description,
+    reference: input.reference,
+    sourceType: input.sourceType ?? 'TIP',
+    lines,
+  });
+}

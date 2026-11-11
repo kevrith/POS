@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { enableBusinessModule } from '../common/business-modules';
 import { DeliveryService } from '../delivery/delivery.service';
 import { newDeliveryOrderNumber } from '../delivery/order-number';
 
@@ -317,6 +318,7 @@ export class DeliveryRoutesService {
         )?.id;
       if (!storeId) continue;
 
+      void enableBusinessModule(this.prisma, fo.businessId, 'DELIVERY');
       await this.prisma.deliveryOrder.create({
         data: {
           // Derived from the field order's number before, which is sequential and

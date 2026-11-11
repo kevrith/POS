@@ -55,6 +55,12 @@ For appointments, the booking form picks the service from the catalogue and (on 
 adds more; **Complete** opens a payment window (price, deposit applied, amount received, optional company KRA PIN) and ends in the
 fiscal receipt; **Cancel** and **No-Show** with a deposit held ask how to pay it back, or a manager can keep it.
 
+The salon screens live in `components/salon/` (`BookingModal` multi-service booking with client history, `CompleteModal` bill with
+products, a stylist per line and a tip, `DayBoard` per-stylist columns, `TeamModal` stylists and working hours, `ClientPanel`
+notes and history). Pure rules are in `lib/salon.ts` (visit length, slots) and `lib/nairobiDay.ts` (Nairobi day helpers), both
+unit-tested. The till shows **Served by** on SERVICE lines for a SALON business and sends `staffId` on those lines; the stylist
+list is the `['salon-staff']` query.
+
 For a cyber cafe, ending a session shows the buyer KRA PIN field, a customer picker when it is paid on credit (credit is only for a
 registered customer), and then the fiscal receipt (number, KRA status, Print) instead of the plain one.
 
@@ -121,6 +127,7 @@ Tests: `npm test` (vitest) covers the print preference, routing and failure repo
 | `socket.ts` | Live updates (KDS, pole display, driver location). The server only joins a socket to the business in its token |
 | `useKdsRealtime.ts` | Keeps a kitchen screen live: refreshes on ticket events, chimes for a new ticket, warns loudly when a sent line is voided |
 | `components/OrderVoidDialog.tsx` | One dialog for voiding part or all of a line, or a whole table order: quantity, reason, manager PIN when the kitchen already has it. `VoidLogModal.tsx` is the manager's review |
+| `menuRules.ts` | Which menu entries a business sees, by main till (posMode) and the optional modules it switched on. One table for the desktop sidebar and the phone menu (`menuVisible`); an entry with no rule is for every business. Roles and plan limits stay in the menus |
 | `useRestaurantAccess.ts` | Whether tables and the kitchen display are on: a restaurant till, or any till with the Restaurant module enabled |
 | `db.ts`, `syncEngine.ts` | Dexie/IndexedDB offline store + replay |
 | `whatsapp.ts` | WhatsApp receipt handoff |

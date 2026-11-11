@@ -69,7 +69,8 @@ export function normalizeServerUrl(input: string): string {
   let v = input.trim();
   if (!v) return '';
   if (!/^https?:\/\//i.test(v)) v = `http://${v}`;
-  v = v.replace(/\/+$/, '');
+  // The app adds /api/v1 itself. An address pasted from the API docs ("https://host/api/v1") would double it and every call would 404.
+  v = v.replace(/\/+$/, '').replace(/\/api(\/v1)?$/i, '').replace(/\/+$/, '');
   const m = /^(https?:\/\/)([^/:]+)(:\d+)?(\/.*)?$/i.exec(v);
   if (m && !m[3] && m[1].toLowerCase() === 'http://') v = `${m[1]}${m[2]}:${API_PORT}${m[4] ?? ''}`;
   return v;
@@ -205,5 +206,40 @@ export function describeConnection(cfg: SetupSummary | null | undefined): { wher
       return { where: 'KASTRA Cloud (needs the internet)', business };
     default:
       return null;
+  }
+}
+
+/**
+ * What a "Test connection" press found out.
+ *  - ok: it is a KASTRA server and this app is allowed to talk to it
+ *  - blocked: the machine answers but refuses this app (the server's allowed-origins setting): signing in would fail
+ *  - wrong: something answers at that address but it is not a KASTRA server (a wrong address or path)
+ *  - unreachable: nothing answered (wrong address, no internet, or a cloud server that is still waking up)
+ */
+export type ServerCheck = 'ok' | 'blocked' | 'wrong' | 'unreachable';
+
+/**
+ * Test a server the way the app will really use it: with the same kind of request staff sign-in makes from the app's own
+ * screens. The old test only opened a network connection to the host, so it said "connected" to a server that then refused
+ * every sign-in. When the real request fails but the connection opens, the server is up and turning this app away.
+ *
+ * A cloud server that has been idle can take close to a minute to wake, hence the long wait.
+ */
+export async function checkServer(
+  url: string,
+  deps: { fetchFn: typeof fetch; canConnect: (url: string) => Promise<boolean>; timeoutMs?: number },
+): Promise<ServerCheck> {
+  const target = `${url.replace(/\/+$/, '')}/api/v1/health`;
+  try {
+    const res = await deps.fetchFn(target, { signal: AbortSignal.timeout(deps.timeoutMs ?? 60_000) });
+    // 502/503/504: a host in front of a server that is not up yet (a cloud server waking). Not "wrong", just not ready.
+    if ([502, 503, 504].includes(res.status)) return 'unreachable';
+    if (!res.ok) return 'wrong';
+    const body = (await res.json().catch(() => null)) as { status?: string } | null;
+    return body?.status === 'ok' ? 'ok' : 'wrong';
+  } catch {
+    // No answer the app could read. If the host still accepts a connection, the browser refused it: that is the allowed-origins rule.
+    const up = await deps.canConnect(url).catch(() => false);
+    return up ? 'blocked' : 'unreachable';
   }
 }

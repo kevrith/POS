@@ -77,10 +77,38 @@ interface AppUpdateState {
   dismissed: boolean;
   check: (manual?: boolean) => Promise<void>;
   install: () => Promise<void>;
+  /**
+   * Pick up an install that is already running. The download belongs to the desktop program, not to this page, so a
+   * refresh (or a new window) leaves it going while the page forgets it: this asks the program and follows it again.
+   */
+  resume: () => Promise<void>;
   dismiss: () => void;
 }
 
 let polling = false;
+
+/** What the desktop program answers when an install is already running (see app_update_install). */
+const ALREADY_RUNNING = /already being installed/i;
+
+/** Follow a running install until it fails or the program restarts for the update. */
+function followInstall(): void {
+  if (polling) return;
+  polling = true;
+  const tick = async () => {
+    try {
+      const p = await call<UpdateProgress>('app_update_status');
+      useAppUpdate.setState({ progress: p });
+      if (p.stage === 'error' || p.stage === 'idle') {
+        polling = false;
+        return;
+      }
+    } catch {
+      // The program is restarting for the update: keep waiting, there is nothing to show but the last stage.
+    }
+    setTimeout(tick, 700);
+  };
+  void tick();
+}
 
 export const useAppUpdate = create<AppUpdateState>((set, get) => ({
   found: null,
@@ -109,26 +137,29 @@ export const useAppUpdate = create<AppUpdateState>((set, get) => ({
     try {
       await call<void>('app_update_install');
     } catch (e) {
+      // Already running (the page was refreshed mid-download): that is not a failure, join it.
+      if (ALREADY_RUNNING.test(asMessage(e))) {
+        followInstall();
+        return;
+      }
       set({ progress: { ...IDLE, stage: 'error', error: asMessage(e) } });
       return;
     }
-    if (polling) return;
-    polling = true;
     // The desktop program does the work in the background; follow it until it fails. On success it ends this program.
-    const tick = async () => {
-      try {
-        const p = await call<UpdateProgress>('app_update_status');
+    followInstall();
+  },
+
+  resume: async () => {
+    if (!inDesktopApp() || isInstalling(get().progress)) return;
+    try {
+      const p = await call<UpdateProgress>('app_update_status');
+      if (isInstalling(p)) {
         set({ progress: p });
-        if (p.stage === 'error' || p.stage === 'idle') {
-          polling = false;
-          return;
-        }
-      } catch {
-        // The program is restarting for the update: keep waiting, there is nothing to show but the last stage.
+        followInstall();
       }
-      setTimeout(tick, 700);
-    };
-    void tick();
+    } catch {
+      // No answer from the desktop program: nothing to resume.
+    }
   },
 
   dismiss: () => set({ dismissed: true }),
@@ -140,6 +171,8 @@ const EVERY_MS = 6 * 60 * 60 * 1000;
 /** Start the background checks (once per mounting of the banner). A no-op outside the desktop app. */
 export function startUpdateChecks(): () => void {
   if (!inDesktopApp()) return () => undefined;
+  // First of all: is an install already running from before this page loaded?
+  void useAppUpdate.getState().resume();
   const first = setTimeout(() => void useAppUpdate.getState().check(), FIRST_CHECK_MS);
   const every = setInterval(() => void useAppUpdate.getState().check(), EVERY_MS);
   return () => {

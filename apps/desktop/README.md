@@ -68,7 +68,7 @@ Installed apps update themselves, with the owner's go-ahead. Parts:
 
 | Part | Where | What it does |
 |---|---|---|
-| `app_update.rs` | `src-tauri/src` | `app_update_check` asks the manifest whether a newer version exists; `app_update_install` downloads it, **stops the offline server cleanly (with a backup)**, runs the installer and restarts; `app_update_status` is polled for progress. If the installer cannot run, the server is started again |
+| `app_update.rs` | `src-tauri/src` | `app_update_check` asks the manifest whether a newer version exists; `app_update_install` downloads it, **stops the offline server cleanly (with a backup)**, runs the installer and restarts; `app_update_status` is polled for progress. If the installer cannot run, the server is started again. The download belongs to this program, not to the page: after a refresh the page asks `app_update_status` on start (`resume` in `lib/appUpdate.ts`) and follows a running install again, and pressing Install while one runs joins it instead of failing |
 | Banner and card | `apps/web`: `UpdateBanner.tsx` (top of every screen), `AppUpdateCard.tsx` (Settings, General), state in `lib/appUpdate.ts` | A check 20 s after start and every 6 h. The banner says "KASTRA 1.2.0 is ready"; the **owner or a manager** presses *Install and restart* (a cashier is told to ask). Quiet when offline |
 | The signed manifest | `tauri.conf.json` `plugins.updater` | The app only accepts an installer signed with KASTRA's update key: the **public** key is in `tauri.conf.json`, the private key is the GitHub secret `TAURI_SIGNING_PRIVATE_KEY` |
 | Manifest address | `https://github.com/kevrith/POS/releases/download/desktop-updates/latest.json` | One fixed address. The release workflow copies each release's `latest.json` there (a pre-release called `desktop-updates`, so it never becomes the repository's "latest release") |
@@ -138,7 +138,12 @@ either. To make the repository private, move `latest.json` and these files to pu
 
 The wizard asks two questions: where does your data live, and what does THIS computer do?
 
-- **CLOUD** — the app is a till for KASTRA Cloud (`get_cloud_url`); needs internet to sign in and sell.
+- **CLOUD** — the app is a till for KASTRA Cloud (`get_cloud_url`); needs internet to sign in and sell. The cloud API must
+  allow the desktop app's own web address in its CORS list (`http://tauri.localhost` on Windows, `tauri://localhost` on macOS and
+  Linux; `DESKTOP_APP_ORIGINS` in `apps/api/src/common/app-urls.ts`), or every sign-in from the app fails in the browser layer
+  even though the server is up. The setup screen's **Test connection** (`checkServer` in `lib/desktopSetup.ts`) therefore makes the
+  same kind of request sign-in makes, and says "refusing this app" when the host answers a plain connection but not that request;
+  the old test only opened a network connection, so it reported "connected" to a server that then refused every sign-in.
 - **SERVER_POS** — data on this computer, which is also the till (a small shop's one PC). Works fully offline. Other
   computers may not connect unless the owner ticks "Let other computers on this network connect".
 - **SERVER** — data on this computer, which only serves the tills (a supermarket's back-room PC). It shows the server

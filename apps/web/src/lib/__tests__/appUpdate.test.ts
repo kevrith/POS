@@ -130,10 +130,48 @@ describe('the update store, against a stand-in desktop app', () => {
     expect(calls).not.toContain('app_update_status');
   });
 
+  it('picks a running download back up after the page is refreshed', async () => {
+    // The page just loaded: its own copy says idle, but the desktop program is half way through the download.
+    handlers.app_update_status = () => ({ stage: 'downloading', downloaded: 60, total: 100 });
+    expect(useAppUpdate.getState().progress.stage).toBe('idle');
+    await useAppUpdate.getState().resume();
+    expect(useAppUpdate.getState().progress).toMatchObject({ stage: 'downloading', downloaded: 60 });
+
+    // ...and keeps following it to the end.
+    handlers.app_update_status = () => ({ stage: 'installing', downloaded: 100, total: 100 });
+    await vi.advanceTimersByTimeAsync(700);
+    expect(useAppUpdate.getState().progress.stage).toBe('installing');
+
+    // Let it finish, so its polling stops and cannot leak into the next test.
+    handlers.app_update_status = () => ({ stage: 'idle', downloaded: 0 });
+    await vi.advanceTimersByTimeAsync(700);
+  });
+
+  it('does not invent progress when nothing is running', async () => {
+    handlers.app_update_status = () => ({ stage: 'idle', downloaded: 0 });
+    await useAppUpdate.getState().resume();
+    expect(useAppUpdate.getState().progress.stage).toBe('idle');
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(calls.filter((c) => c === 'app_update_status').length).toBe(1); // no polling started
+  });
+
+  it('joins an install that is already running instead of reporting it as an error', async () => {
+    // The owner refreshed mid-download, then pressed Install again.
+    handlers.app_update_install = () => {
+      throw 'An update is already being installed.';
+    };
+    handlers.app_update_status = () => ({ stage: 'downloading', downloaded: 80, total: 100 });
+    await useAppUpdate.getState().install();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(useAppUpdate.getState().progress).toMatchObject({ stage: 'downloading', downloaded: 80 });
+    expect(useAppUpdate.getState().progress.stage).not.toBe('error');
+  });
+
   it('does nothing outside the desktop app', async () => {
     vi.stubGlobal('window', {}); // a plain browser: no desktop bridge
     await useAppUpdate.getState().check(true);
     await useAppUpdate.getState().install();
+    await useAppUpdate.getState().resume();
     expect(calls).toEqual([]);
     expect(useAppUpdate.getState().progress.stage).toBe('idle');
   });

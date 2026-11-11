@@ -41,8 +41,9 @@ build alive.
   against the unparsed body.
 - Helmet security headers. CSP and COEP are off (Swagger UI), COOP is off (the
   Google OAuth popup polls `window.closed` on the opener).
-- CORS allows `FRONTEND_URL`, `ADMIN_URL`, anything in `EXTRA_ORIGINS`, any
-  `*.vercel.app` preview, and origin-less requests (mobile apps, curl, health checks).
+- CORS allows `FRONTEND_URL`, `ADMIN_URL`, anything in `EXTRA_ORIGINS`, the installed desktop app's own addresses
+  (`http://tauri.localhost`, `https://tauri.localhost`, `tauri://localhost`: without them a desktop set to use the cloud cannot sign in),
+  any `*.vercel.app` preview, and origin-less requests (mobile apps, curl, health checks). The rule is `isOriginAllowed` in `common/app-urls.ts`.
 - Fingerprint / Face ID is WebAuthn (`auth/webauthn.*`). The RP ID and expected origin are derived
   from the request's `Origin` (or `Referer`) header by `webauthn-origin.ts`, checked against
   `FRONTEND_URL` / `ADMIN_URL` / `EXTRA_ORIGINS`; `WEBAUTHN_RP_ID` optionally widens it to a parent

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildSetupPayload, defaultLanEnabled, describeConnection, googleSignInAvailable, validateOwnerAccount, flowFor, isLocalTopology, keepsOwnData, localServerUrl, normalizeServerUrl,
+  buildSetupPayload, defaultLanEnabled, describeConnection, googleSignInAvailable, validateOwnerAccount, flowFor, isLocalTopology, keepsOwnData, localServerUrl, normalizeServerUrl, checkServer,
   stepAfter, stepBefore, topologyName, type SetupDraft,
 } from '../desktopSetup';
 import { formatBytes, timeAgo } from '../desktopServer';
@@ -162,5 +162,43 @@ describe('what this computer is connected to', () => {
     expect(describeConnection({ mode: 'SERVER' })?.where).toMatch(/shop server/);
     expect(describeConnection({ mode: 'CLIENT', server_url: 'http://192.168.1.20:3010' })?.where).toContain('192.168.1.20:3010');
     expect(describeConnection({ mode: 'CLOUD' })?.where).toMatch(/Cloud/);
+  });
+});
+
+describe('server address typed or pasted', () => {
+  it('drops an /api or /api/v1 tail, because the app adds it itself', () => {
+    expect(normalizeServerUrl('https://pos-bhe5.onrender.com/api/v1')).toBe('https://pos-bhe5.onrender.com');
+    expect(normalizeServerUrl('https://pos-bhe5.onrender.com/api/')).toBe('https://pos-bhe5.onrender.com');
+    expect(normalizeServerUrl('192.168.1.20:3010/api/v1/')).toBe('http://192.168.1.20:3010');
+  });
+});
+
+describe('checkServer (the Test connection button)', () => {
+  const reply = (status: number, body?: unknown) => async () => new Response(body === undefined ? null : JSON.stringify(body), { status });
+  const refuse = async () => { throw new TypeError('Failed to fetch'); };
+  const up = async () => true;
+  const down = async () => false;
+
+  it('asks the real health address, with the same kind of request staff sign-in makes', async () => {
+    const seen: string[] = [];
+    const fetchFn = (async (u: string) => { seen.push(u); return new Response('{"status":"ok"}', { status: 200 }); }) as unknown as typeof fetch;
+    expect(await checkServer('https://pos-bhe5.onrender.com/', { fetchFn, canConnect: down })).toBe('ok');
+    expect(seen).toEqual(['https://pos-bhe5.onrender.com/api/v1/health']);
+  });
+
+  it('says blocked when the host accepts a connection but the app cannot read the answer (the server refuses this app)', async () => {
+    expect(await checkServer('https://x', { fetchFn: refuse as unknown as typeof fetch, canConnect: up })).toBe('blocked');
+  });
+
+  it('says unreachable when nothing answers at all', async () => {
+    expect(await checkServer('https://x', { fetchFn: refuse as unknown as typeof fetch, canConnect: down })).toBe('unreachable');
+    expect(await checkServer('https://x', { fetchFn: refuse as unknown as typeof fetch, canConnect: async () => { throw new Error('boom'); } })).toBe('unreachable');
+  });
+
+  it('says wrong for something that answers but is not a KASTRA server, and unreachable for a server still waking', async () => {
+    expect(await checkServer('https://x', { fetchFn: reply(404) as unknown as typeof fetch, canConnect: up })).toBe('wrong');
+    expect(await checkServer('https://x', { fetchFn: reply(200, { hello: 'world' }) as unknown as typeof fetch, canConnect: up })).toBe('wrong');
+    expect(await checkServer('https://x', { fetchFn: reply(200) as unknown as typeof fetch, canConnect: up })).toBe('wrong');
+    expect(await checkServer('https://x', { fetchFn: reply(503) as unknown as typeof fetch, canConnect: up })).toBe('unreachable');
   });
 });

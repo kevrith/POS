@@ -46,3 +46,26 @@ export function configuredOrigins(env: NodeJS.ProcessEnv = process.env): string[
   const origins = [web ? strip(web) : production ? '' : DEV_FRONTEND_URL, admin ? strip(admin) : production ? '' : DEV_ADMIN_URL];
   return origins.filter(Boolean);
 }
+
+/**
+ * Where the installed desktop app's screens come from: `http://tauri.localhost` on Windows, `tauri://localhost` on macOS
+ * and Linux. A desktop app set to use the cloud calls this API from that address, so without it every sign-in fails with a
+ * browser CORS error even though the server is up. Only the program's own embedded web view can be at these addresses, and
+ * the app signs in with a bearer token, not a cookie, so allowing them gives a web page on the internet no access.
+ */
+export const DESKTOP_APP_ORIGINS = ['http://tauri.localhost', 'https://tauri.localhost', 'tauri://localhost'] as const;
+
+/**
+ * Whether a browser at `origin` may call the API. No origin (mobile apps, curl, health checks) is allowed, as are the
+ * configured web/admin addresses, the desktop app, and any *.vercel.app preview.
+ */
+export function isOriginAllowed(origin: string | undefined, allowed: readonly string[]): boolean {
+  if (!origin) return true;
+  if (allowed.includes(origin)) return true;
+  if ((DESKTOP_APP_ORIGINS as readonly string[]).includes(origin)) return true;
+  try {
+    return new URL(origin).hostname.endsWith('.vercel.app');
+  } catch {
+    return false;
+  }
+}

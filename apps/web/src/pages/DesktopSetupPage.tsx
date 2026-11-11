@@ -27,7 +27,7 @@ import {
   ArrowRight, Shield, Tablet, ChefHat, BarChart3, User, HardDrive, Cloud, FolderOpen, Eye, EyeOff,
 } from 'lucide-react';
 import {
-  buildSetupPayload, validateOwnerAccount, localServerUrl, defaultLanEnabled, flowFor, isLocalTopology, normalizeServerUrl, STEP_LABEL, stepAfter, stepBefore,
+  buildSetupPayload, validateOwnerAccount, localServerUrl, defaultLanEnabled, flowFor, isLocalTopology, normalizeServerUrl, checkServer, STEP_LABEL, stepAfter, stepBefore,
   topologyName, type DeviceRole, type Place, type StepId, type Topology,
 } from '../lib/desktopSetup';
 import { serverDefaults, serverStart, serverStatus, validateFolders, type FolderCheck } from '../lib/desktopServer';
@@ -283,7 +283,7 @@ export default function DesktopSetupPage() {
   const [deviceRole,    setDeviceRole]    = useState<DeviceRole>('FULL_POS');
   const [machineId,     setMachineId]     = useState('');
   const [serverUrl,     setServerUrl]     = useState('http://192.168.1.');
-  const [connectStatus, setConnectStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
+  const [connectStatus, setConnectStatus] = useState<'idle' | 'testing' | 'ok' | 'fail' | 'blocked' | 'wrong'>('idle');
   const [scanning,      setScanning]      = useState(false);
   const [discovered,    setDiscovered]    = useState<DiscoveredServer[]>([]);
   const [cloudUrl,      setCloudUrl]      = useState('https://pos-bhe5.onrender.com');
@@ -382,12 +382,12 @@ export default function DesktopSetupPage() {
 
   async function testConnection() {
     setConnectStatus('testing');
-    try {
-      const ok = await invoke<boolean>('test_server_connection', { serverUrl: normalizeServerUrl(serverUrl) });
-      setConnectStatus(ok ? 'ok' : 'fail');
-    } catch {
-      setConnectStatus('fail');
-    }
+    const url = normalizeServerUrl(serverUrl);
+    const result = await checkServer(url, {
+      fetchFn: (input, init) => fetch(input, init),
+      canConnect: (u) => invoke<boolean>('test_server_connection', { serverUrl: u }),
+    });
+    setConnectStatus(result === 'ok' ? 'ok' : result === 'blocked' ? 'blocked' : result === 'wrong' ? 'wrong' : 'fail');
   }
 
   async function scanForServers() {
@@ -1040,9 +1040,27 @@ export default function DesktopSetupPage() {
                 </div>
               )}
               {connectStatus === 'fail' && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  Cannot reach server. Check the IP and ensure the server is running.
+                <div role="alert" className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <span>
+                    Cannot reach the server. Check the address and this computer's internet. A cloud server that has been idle can take
+                    up to a minute to wake: wait a moment and test again.
+                  </span>
+                </div>
+              )}
+              {connectStatus === 'blocked' && (
+                <div role="alert" className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <span>
+                    The server is online, but it is refusing this app, so staff could not sign in. The server needs to allow the desktop
+                    app (its allowed-origins setting). Ask your KASTRA administrator to update the server.
+                  </span>
+                </div>
+              )}
+              {connectStatus === 'wrong' && (
+                <div role="alert" className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <span>That address answered, but it is not a KASTRA server. Check the address for typing mistakes.</span>
                 </div>
               )}
 

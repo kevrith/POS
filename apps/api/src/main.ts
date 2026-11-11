@@ -6,7 +6,7 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import helmet from 'helmet';
-import { configuredOrigins } from './common/app-urls';
+import { configuredOrigins, isOriginAllowed } from './common/app-urls';
 
 // Initialize Sentry before anything else so all errors are captured
 if (process.env.SENTRY_DSN) {
@@ -75,14 +75,8 @@ async function bootstrap() {
     logger.log(`CORS allowed origins: ${allowedOrigins.join(', ')}`);
     app.enableCors({
       origin: (origin, callback) => {
-        // Allow requests with no origin (mobile apps, curl, Render health checks)
-        if (!origin) return callback(null, true);
-        if (allowedOrigins.includes(origin)) return callback(null, true);
-        // Allow any *.vercel.app preview deployment
-        if (origin.endsWith('.vercel.app')) return callback(null, true);
-        // Deny silently — using callback(new Error(...)) can interfere with
-        // Express error handling before CORS headers are written to the response.
-        callback(null, false);
+        // Deny silently: callback(new Error(...)) can interfere with Express error handling before CORS headers are written.
+        callback(null, isOriginAllowed(origin, allowedOrigins));
       },
       credentials: true,
     });

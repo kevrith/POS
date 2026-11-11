@@ -136,7 +136,8 @@ Tests: `npm test` (vitest) covers the print preference, routing and failure repo
 | `socket.ts` | Live updates (KDS, pole display, driver location). The server only joins a socket to the business in its token |
 | `useKdsRealtime.ts` | Keeps a kitchen screen live: refreshes on ticket events, chimes for a new ticket, warns loudly when a sent line is voided |
 | `components/OrderVoidDialog.tsx` | One dialog for voiding part or all of a line, or a whole table order: quantity, reason, manager PIN when the kitchen already has it. `VoidLogModal.tsx` is the manager's review |
-| `menuRules.ts` | Which menu entries a business sees, by main till (posMode) and the optional modules it switched on. One table for the desktop sidebar and the phone menu (`menuVisible`); an entry with no rule is for every business. Roles and plan limits stay in the menus |
+| `mainTill.ts` | The name and icon of the first Sales entry per main till (Supermarket POS, Fuel Forecourt, Salon POS...), and the addresses that count as the till |
+| `menuRules.ts` | Which menu entries a business sees, by main till (posMode) and the optional modules it switched on. One table for the desktop sidebar and the phone menu (`menuVisible`); an entry with no rule is for every business. Roles and plan limits stay in the menus. Goods-trading tools (Bundles, RFQ, Forecasting) are the TRADE_TOOLS module, off for salon / fuel / cybercafe; stock, finance and people pages are never hidden by mode |
 | `useRestaurantAccess.ts` | Whether tables and the kitchen display are on: a restaurant till, or any till with the Restaurant module enabled |
 | `db.ts`, `syncEngine.ts` | Dexie/IndexedDB offline store + replay |
 | `whatsapp.ts` | WhatsApp receipt handoff |

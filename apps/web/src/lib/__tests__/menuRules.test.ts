@@ -11,7 +11,7 @@ const DELIVERY = ['/delivery', '/online-orders', '/delivery-management'];
 
 describe('what each kind of business sees by default', () => {
   it('a salon does not see field sales, delivery, quotes or shop-only tools (the report)', () => {
-    for (const path of [...FIELD_SALES, ...DELIVERY, '/proforma', '/layaway', '/serial', '/kds', '/hospitality', '/hotel', '/fuel-pump', '/cybercafe', '/prescriptions']) {
+    for (const path of [...FIELD_SALES, ...DELIVERY, '/proforma', '/layaway', '/serial', '/kds', '/hospitality', '/hotel', '/prescriptions']) {
       expect(has('SALON', path), `${path} for SALON`).toBe(false);
     }
     expect(has('SALON', '/appointments')).toBe(true);
@@ -43,8 +43,6 @@ describe('what each kind of business sees by default', () => {
     expect(has('CLINIC', '/prescriptions')).toBe(true);
     expect(has('CLINIC', '/pharmacy')).toBe(true);
     expect(has('CLINIC', '/appointments')).toBe(true);
-    expect(has('FUEL_PUMP', '/fuel-pump')).toBe(true);
-    expect(has('CYBERCAFE', '/cybercafe')).toBe(true);
     expect(has('RETAIL', '/serial')).toBe(true);
     expect(has('BAR_TAB', '/kds')).toBe(true);
   });
@@ -52,6 +50,29 @@ describe('what each kind of business sees by default', () => {
   it('entries with no rule are for everyone', () => {
     for (const mode of MODES) expect(has(mode, '/inventory')).toBe(true);
   });
+});
+
+describe('goods-trading tools and the core pages', () => {
+  const TOOLS = ['/bundle', '/rfq', '/forecasting'];
+
+  it('fuel, salon and cybercafe do not see kits, tenders or demand forecasts by default', () => {
+    for (const mode of ['SALON', 'CYBERCAFE', 'FUEL_PUMP']) for (const path of TOOLS) expect(has(mode, path), `${path} for ${mode}`).toBe(false);
+  });
+
+  it('shops, supermarkets, restaurants, bars and clinics keep them', () => {
+    for (const mode of ['RETAIL', 'SUPERMARKET', 'HOSPITALITY', 'FAST_FOOD', 'BAR_TAB', 'CLINIC']) for (const path of TOOLS) expect(has(mode, path), `${path} for ${mode}`).toBe(true);
+  });
+
+  it('a salon, cybercafe or fuel station can switch them on in Settings', () => {
+    for (const mode of ['SALON', 'CYBERCAFE', 'FUEL_PUMP']) for (const path of TOOLS) expect(has(mode, path, ['TRADE_TOOLS']), `${path} for ${mode}`).toBe(true);
+  });
+
+  it('every business keeps stock, suppliers, finance and people pages (no rule = never hidden by the till)', () => {
+    const core = ['/inventory', '/suppliers', '/transfers', '/stocktake', '/damaged-goods', '/cash-drawer', '/expenses', '/cheques', '/ledger', '/reconciliation', '/reports', '/sales-list', '/customers', '/hr', '/payroll', '/promotions'];
+    for (const mode of MODES) for (const path of core) expect(has(mode, path), `${path} for ${mode}`).toBe(true);
+  });
+
+  it('salons still sell gift cards', () => expect(has('SALON', '/gift-cards')).toBe(true));
 });
 
 describe('switching a feature on', () => {
@@ -83,7 +104,7 @@ describe('switching a feature on', () => {
 
 describe('the whole table', () => {
   it('has no entry that can never be seen: each is visible for some business, with the right modules on', () => {
-    const everything = ['RESTAURANT', 'HOTEL', 'DELIVERY', 'FIELD_SALES', 'QUOTES'];
+    const everything = ['RESTAURANT', 'HOTEL', 'DELIVERY', 'FIELD_SALES', 'QUOTES', 'TRADE_TOOLS'];
     for (const path of Object.keys(MENU_RULES)) {
       expect(MODES.some((m) => has(m, path, everything)), `${path} is visible for no business at all`).toBe(true);
     }

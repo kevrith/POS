@@ -4,8 +4,7 @@ import { menuVisible } from '../menuRules';
 const has = (mode: string, path: string, role?: string) => menuVisible(path, { posMode: mode, enabledModules: [], role });
 
 describe('what a fuel station sees', () => {
-  it('has its forecourt and a till for the shop, lubricants and LPG', () => {
-    expect(has('FUEL_PUMP', '/fuel-pump')).toBe(true);
+  it('has a till for the shop, lubricants and LPG (the forecourt is its main till, see mainTill.test)', () => {
     expect(has('FUEL_PUMP', '/shop-till')).toBe(true);
   });
 

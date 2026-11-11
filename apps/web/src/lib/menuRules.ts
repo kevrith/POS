@@ -51,15 +51,16 @@ export const MENU_RULES: Record<string, MenuRule> = {
   '/prescriptions': { businessTypes: ['CLINIC'] },
   '/pharmacy': { businessTypes: ['CLINIC'] },
   '/appointments': { businessTypes: ['CLINIC', 'SALON'] },
-  '/fuel-pump': { businessTypes: ['FUEL_PUMP'] },
   // A fuel station's /pos is the forecourt; its shop, lubricants and LPG are sold on the standard till here
   '/shop-till': { businessTypes: ['FUEL_PUMP'] },
-  // Tools a fuel station has no use for (kits of goods, tenders to suppliers for a shop range, demand forecasts, gift cards)
-  '/bundle': { notForTypes: ['FUEL_PUMP'] },
-  '/rfq': { notForTypes: ['FUEL_PUMP'] },
-  '/forecasting': { notForTypes: ['FUEL_PUMP'] },
+  // Goods-trading tools (kits of goods, tenders to suppliers, demand forecasts): the TRADE_TOOLS module, on for businesses that
+  // buy and resell stock and switchable in Settings for the rest. Stock, suppliers, stocktake, damaged goods and ALL of Finance /
+  // People stay visible to every business (a salon still holds retail stock, pays suppliers and runs payroll), so nothing a
+  // business needs is ever hidden by its till. Gift cards: not for fuel (salons sell them).
+  '/bundle': { feature: 'TRADE_TOOLS' },
+  '/rfq': { feature: 'TRADE_TOOLS' },
+  '/forecasting': { feature: 'TRADE_TOOLS' },
   '/gift-cards': { notForTypes: ['FUEL_PUMP'] },
-  '/cybercafe': { businessTypes: ['CYBERCAFE'] },
 };
 
 export interface MenuContext {

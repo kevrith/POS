@@ -5,13 +5,14 @@ import {
   DollarSign, CreditCard, Monitor, Layers, Pill, CalendarClock,
   Hash, ChefHat, Box, ArrowRightLeft, Wallet, UserCheck, Tag, Gift,
   TrendingUp, Landmark, GitBranch, LayoutDashboard, LogOut, Bell,
-  Home, MoreHorizontal, ClipboardList, MapPin, Fuel, BedDouble,
+  Home, MoreHorizontal, ClipboardList, MapPin, BedDouble,
   Radio, CheckCircle2, Trash2, Send, FileText, Shield, Wand2, ShoppingBag, Clock,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/auth';
 import { useThemeStore } from '../stores/theme';
 import { hasFeature } from '../lib/featureGates';
 import { menuVisible } from '../lib/menuRules';
+import { mainTillFor, isMainTillPath } from '../lib/mainTill';
 import { prefetchRoute } from '../lib/routeLoaders';
 
 /* ── Bottom tab bar items (always visible) ────────────────────────────────── */
@@ -62,8 +63,6 @@ const MENU_GROUPS: NavGroup[] = [
       { to: '/waitlist',            icon: Clock,         label: 'Waitlist',         roles: ['OWNER','MANAGER','WAITER'] },
       { to: '/hotel',               icon: BedDouble,     label: 'Hotel' },
       { to: '/channel-manager',     icon: Radio,         label: 'Channel Manager' },
-      { to: '/fuel-pump',           icon: Fuel,          label: 'Fuel Pumps',       roles: ['OWNER','MANAGER','CASHIER'] },
-      { to: '/cybercafe',           icon: Monitor,       label: 'Cybercafe',        roles: ['OWNER','MANAGER','CASHIER'] },
     ],
   },
   {
@@ -157,7 +156,9 @@ export default function MobileNav({ isOpen, onOpen, onClose, businessType = 'RET
   }, [isOpen]);
 
   const isActive = (to: string) =>
-    to === '/' ? location.pathname === '/' : location.pathname === to || location.pathname.startsWith(to + '/');
+    to === '/' ? location.pathname === '/'
+      : to === '/pos' ? isMainTillPath(location.pathname)
+      : location.pathname === to || location.pathname.startsWith(to + '/');
 
   const canSee = (roles?: string[]) => !roles || roles.includes(userRole);
   const usedByBusiness = (to: string) => menuVisible(to, { posMode: businessType, enabledModules, role: userRole });
@@ -167,7 +168,10 @@ export default function MobileNav({ isOpen, onOpen, onClose, businessType = 'RET
     .filter((g) => canSee(g.roles))
     .map((g) => ({
       ...g,
-      items: g.items.filter((i) => canSee(i.roles) && usedByBusiness(i.to) && canSeePlan(i.to)),
+      items: g.items
+        .filter((i) => canSee(i.roles) && usedByBusiness(i.to) && canSeePlan(i.to))
+        // The main till is named for what it opens in this kind of business (lib/mainTill.ts).
+        .map((i) => (i.to === '/pos' ? { ...i, label: mainTillFor(businessType).label, icon: mainTillFor(businessType).icon } : i)),
     }))
     .filter((g) => g.items.length > 0);
 
@@ -293,7 +297,9 @@ export default function MobileNav({ isOpen, onOpen, onClose, businessType = 'RET
       {/* ── Bottom tab bar ────────────────────────────────────────────────── */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 dark:bg-[#0d1117]/95 backdrop-blur-md border-t border-gray-200/80 dark:border-white/[0.06]" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <div className="flex items-stretch h-[57px]">
-          {BOTTOM_TABS.map((tab) => {
+          {BOTTOM_TABS.map((baseTab) => {
+            const till = mainTillFor(businessType);
+            const tab = baseTab.to === '/pos' ? { ...baseTab, label: till.shortLabel, icon: till.icon } : baseTab;
             const active = isActive(tab.to);
             return (
               <Link

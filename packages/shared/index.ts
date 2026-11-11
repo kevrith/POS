@@ -536,7 +536,7 @@ export function canTransitionKot(from: KotStatus, to: KotStatus): boolean {
 // capability on for a business whatever its posMode, instead of forcing the
 // owner to pick one vertical.
 
-export const OPTIONAL_MODULES = ['RESTAURANT', 'HOTEL', 'DELIVERY', 'FIELD_SALES', 'QUOTES'] as const;
+export const OPTIONAL_MODULES = ['RESTAURANT', 'HOTEL', 'DELIVERY', 'FIELD_SALES', 'QUOTES', 'TRADE_TOOLS'] as const;
 export type OptionalModule = (typeof OPTIONAL_MODULES)[number];
 
 export const OPTIONAL_MODULE_LABELS: Record<OptionalModule, { label: string; description: string }> = {
@@ -559,6 +559,10 @@ export const OPTIONAL_MODULE_LABELS: Record<OptionalModule, { label: string; des
   QUOTES: {
     label: 'Quotes (proforma invoices)',
     description: 'Price quotes and proforma invoices you send a customer before they buy.',
+  },
+  TRADE_TOOLS: {
+    label: 'Goods trading tools',
+    description: 'Bundles and kits, supplier tenders (RFQ) and demand forecasting, for businesses that buy and resell stock.',
   },
 };
 
@@ -583,6 +587,9 @@ export const MODULE_POS_MODES: Record<OptionalModule, readonly string[]> = {
   DELIVERY: ['FAST_FOOD', 'RETAIL', 'SUPERMARKET'],
   FIELD_SALES: ['RETAIL', 'SUPERMARKET'],
   QUOTES: ['RETAIL', 'SUPERMARKET'],
+  // Kits, supplier tenders and demand forecasts are for businesses that buy and resell stock. A salon, a cybercafe and a fuel
+  // station sell mostly services or a single product line, so they switch these on only if they need them.
+  TRADE_TOOLS: ['RETAIL', 'SUPERMARKET', 'HOSPITALITY', 'FAST_FOOD', 'BAR_TAB', 'CLINIC'],
 };
 
 /** True when the main till already provides the module, so it needs no switch of its own. */

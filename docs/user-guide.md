@@ -443,14 +443,21 @@ the restaurant.
 **What the menu shows for your kind of business.** The menu only lists what your kind of business uses, so a salon is
 not offered Field Orders or Delivery Routes and a table-service restaurant is not offered Delivery. Three more
 features can be switched on the same way (Settings, *Also run*): **Delivery & online orders** (Delivery, Online Orders,
-Delivery Dispatch), **Field sales** (Agent Dashboard, Field Orders, Delivery Routes) and **Quotes (proforma invoices)**.
-They are on by default for the main tills that use them:
+Delivery Dispatch), **Field sales** (Agent Dashboard, Field Orders, Delivery Routes), **Quotes (proforma invoices)** and
+**Goods trading tools** (Bundles / Kits, RFQ, AI Forecasting). They are on by default for the main tills that use them:
 
-| Main till | Delivery & online orders | Field sales | Quotes |
-|---|---|---|---|
-| Retail, Supermarket | on | on | on |
-| Fast Food | on | off | off |
-| Hospitality, Bar, Salon, Clinic, Fuel, Cybercafe | off | off | off |
+| Main till | Delivery & online orders | Field sales | Quotes | Goods trading tools |
+|---|---|---|---|---|
+| Retail, Supermarket | on | on | on | on |
+| Fast Food | on | off | off | on |
+| Hospitality, Bar, Clinic | off | off | off | on |
+| Salon, Fuel, Cybercafe | off | off | off | off |
+
+Stock, suppliers, stocktake, finance, staff and payroll are never hidden, whatever your main till.
+
+**The till entry is named for your business.** The first entry under Sales opens your main till, and it is labelled
+for it: *Supermarket POS*, *Restaurant POS*, *Counter POS*, *Bar POS*, *Fuel Forecourt*, *Cybercafe POS*, *Clinic POS* or
+*Salon POS* (*Point of Sale* for a shop). A fuel station and a cybercafe no longer list their till twice.
 
 A feature that is off **turns itself on the first time you really use it**: an online order placed on your store, a
 delivery you create, a field order or route, or a proforma you write. Its menu entry then appears, so an order or a quote

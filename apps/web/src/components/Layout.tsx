@@ -28,6 +28,7 @@ import { useLicense } from '../lib/license';
 import MobileNav from './MobileNav';
 import { hasFeature } from '../lib/featureGates';
 import { menuVisible } from '../lib/menuRules';
+import { mainTillFor, isMainTillPath } from '../lib/mainTill';
 import { parseEnabledModules } from '@pos/shared';
 
 interface NavItem {
@@ -62,7 +63,7 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
   {
     label: 'Sales',
     items: [
-      // /pos is the universal entry-point; POSRouterPage redirects to the right UI per posMode
+      // /pos is the universal entry-point; POSRouterPage shows the right UI per posMode, and its label/icon follow (lib/mainTill.ts)
       { to: '/pos', icon: ShoppingCart, label: 'Point of Sale', roles: ['OWNER', 'MANAGER', 'CASHIER', 'WAITER'] },
       { to: '/shop-till', icon: ShoppingCart, label: 'Shop & Lubricants', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
       { to: '/kds', icon: Monitor, label: 'Kitchen Display', roles: ['OWNER', 'MANAGER', 'WAITER', 'KITCHEN'] },
@@ -88,8 +89,7 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
       { to: '/waitlist', icon: Clock, label: 'Waitlist', roles: ['OWNER', 'MANAGER', 'WAITER'] },
       { to: '/hotel', icon: BedDouble, label: 'Hotel Integration', roles: ['OWNER', 'MANAGER'] },
       { to: '/channel-manager', icon: Radio, label: 'Channel Manager', roles: ['OWNER', 'MANAGER'] },
-      { to: '/fuel-pump', icon: Fuel, label: 'Fuel Pumps', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
-      { to: '/cybercafe', icon: Monitor, label: 'Cybercafe', roles: ['OWNER', 'MANAGER', 'CASHIER'] },
+      // The fuel forecourt and the cybercafe board are the main till of those businesses (lib/mainTill.ts): no second entry.
     ],
   },
   {
@@ -487,7 +487,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const userRole = user?.role ?? '';
 
   const isActive = (path: string) =>
-    path === '/pos' ? location.pathname === path : location.pathname.startsWith(path);
+    path === '/pos' ? isMainTillPath(location.pathname) : location.pathname.startsWith(path);
 
   const toggleGroup = (label: string) =>
     setCollapsedGroups((prev) => {
@@ -501,9 +501,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const currentPageInfo = (() => {
     const allItems = NAV_GROUPS.flatMap((g) => g.items);
     const match = allItems.find((item) => isActive(item.to));
+    if (match?.to === '/pos') { const till = mainTillFor(businessType); return { label: till.label, Icon: till.icon }; }
     if (match) return { label: match.label, Icon: match.icon };
     // Screens that are not in the menu still say what they are, instead of falling back to "Dashboard".
-    if (location.pathname.startsWith('/supermart')) return { label: 'Supermarket POS', Icon: ShoppingCart };
     if (location.pathname === '/notifications') return { label: 'Notifications', Icon: Bell };
     if (location.pathname.startsWith('/settings'))   return { label: 'Settings',      Icon: Settings };
     if (location.pathname.startsWith('/setup'))      return { label: 'Setup Wizard',  Icon: Wand2 };
@@ -526,12 +526,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     .filter((g) => canSee(g.roles))
     .map((g) => ({
       ...g,
-      items: g.items.filter(
-        (item) =>
-          canSee(item.roles) && usedByBusiness(item.to) && canSeePlan(item.to) &&
-          // A business that prints its kitchen tickets has no kitchen display to open (Settings > General > Kitchen).
-          !(item.to === '/kds' && businessSettings?.kitchenMode === 'PRINT_ONLY'),
-      ),
+      items: g.items
+        .filter(
+          (item) =>
+            canSee(item.roles) && usedByBusiness(item.to) && canSeePlan(item.to) &&
+            // A business that prints its kitchen tickets has no kitchen display to open (Settings > General > Kitchen).
+            !(item.to === '/kds' && businessSettings?.kitchenMode === 'PRINT_ONLY'),
+        )
+        // The main till is named for what it opens in this kind of business (lib/mainTill.ts).
+        .map((item) => (item.to === '/pos' ? { ...item, label: mainTillFor(businessType).label, icon: mainTillFor(businessType).icon } : item)),
     }))
     .filter((g) => g.items.length > 0);
 

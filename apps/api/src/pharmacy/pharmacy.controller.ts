@@ -41,8 +41,8 @@ export class PharmacyController {
   }
 
   @Patch('providers/:id')
-  updateProvider(@Param('id') id: string, @Body() dto: any) {
-    return this.svc.updateProvider(id, dto);
+  updateProvider(@Param('id') id: string, @Body() dto: any, @Req() req: Request & { user: AuthUser }) {
+    return this.svc.updateProvider(id, req.user.businessId, dto ?? {});
   }
 
   // Claims

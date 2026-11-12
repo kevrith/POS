@@ -99,3 +99,141 @@ describe('visits', () => {
     for (const role of ['WAITER', 'KITCHEN', 'DRIVER', 'SALES_AGENT', 'ACCOUNTANT']) expect(can(role, 'GET', '/visits')).toBe(false);
   });
 });
+
+describe('insurance cover and claims', () => {
+  it('whoever registers or bills the patient can check cover', () => {
+    for (const role of ['CASHIER', 'PHARMACIST', 'MANAGER', 'OWNER']) {
+      expect(can(role, 'POST', '/cover/checks')).toBe(true);
+      expect(can(role, 'GET', '/cover/checks')).toBe(true);
+    }
+    for (const role of ['WAITER', 'KITCHEN', 'DRIVER', 'ACCOUNTANT']) expect(can(role, 'POST', '/cover/checks')).toBe(false);
+  });
+
+  it('the claims board is for management and the accountant only', () => {
+    for (const role of ['OWNER', 'MANAGER', 'ACCOUNTANT']) {
+      expect(can(role, 'GET', '/cover/claims')).toBe(true);
+      expect(can(role, 'GET', '/cover/claims/aging')).toBe(true);
+      expect(can(role, 'GET', '/cover/claims/c-1')).toBe(true);
+    }
+    for (const role of ['CASHIER', 'PHARMACIST', 'DOCTOR']) expect(can(role, 'GET', '/cover/claims')).toBe(false);
+  });
+});
+
+describe('lab', () => {
+  it('a doctor or manager orders; a lab technician cannot', () => {
+    for (const role of ['DOCTOR', 'MANAGER', 'OWNER']) expect(can(role, 'POST', '/lab/orders')).toBe(true);
+    for (const role of ['LAB_TECH', 'CASHIER', 'PHARMACIST', 'WAITER']) expect(can(role, 'POST', '/lab/orders')).toBe(false);
+  });
+
+  it('anyone clinical collects the specimen, including the lab technician', () => {
+    for (const role of ['LAB_TECH', 'CASHIER', 'PHARMACIST', 'DOCTOR', 'MANAGER']) expect(can(role, 'POST', '/lab/orders/o-1/collect')).toBe(true);
+    for (const role of ['WAITER', 'KITCHEN', 'ACCOUNTANT']) expect(can(role, 'POST', '/lab/orders/o-1/collect')).toBe(false);
+  });
+
+  it('only the lab technician and management enter results; a doctor, cashier or pharmacist cannot', () => {
+    for (const role of ['LAB_TECH', 'MANAGER', 'OWNER']) expect(can(role, 'PATCH', '/lab/orders/o-1/items/i-1/results')).toBe(true);
+    for (const role of ['DOCTOR', 'CASHIER', 'PHARMACIST']) expect(can(role, 'PATCH', '/lab/orders/o-1/items/i-1/results')).toBe(false);
+  });
+
+  it('a doctor can release a result; sending one back for correction and the catalogue are management\'s', () => {
+    expect(can('DOCTOR', 'POST', '/lab/orders/o-1/items/i-1/verify')).toBe(true);
+    expect(can('LAB_TECH', 'POST', '/lab/orders/o-1/items/i-1/verify')).toBe(true);
+    expect(can('CASHIER', 'POST', '/lab/orders/o-1/items/i-1/verify')).toBe(false);
+    for (const role of ['DOCTOR', 'LAB_TECH', 'CASHIER']) {
+      expect(can(role, 'POST', '/lab/orders/o-1/items/i-1/reopen')).toBe(false);
+      expect(can(role, 'POST', '/lab/tests')).toBe(false);
+      expect(can(role, 'PATCH', '/lab/tests/t-1')).toBe(false);
+      expect(can(role, 'POST', '/lab/tests/starter')).toBe(false);
+    }
+    expect(can('MANAGER', 'POST', '/lab/orders/o-1/items/i-1/reopen')).toBe(true);
+    expect(can('MANAGER', 'POST', '/lab/tests')).toBe(true);
+  });
+
+  it('a lab technician sees the lab and nothing else', () => {
+    expect(can('LAB_TECH', 'GET', '/lab/board')).toBe(true);
+    for (const path of ['/patients', '/visits', '/sales', '/items', '/prescriptions', '/reports/summary', '/hr/employees', '/cover/claims']) expect(can('LAB_TECH', 'GET', path)).toBe(false);
+  });
+
+  it('the front line may read the lab; floor staff may not', () => {
+    for (const role of ['CASHIER', 'PHARMACIST', 'DOCTOR', 'LAB_TECH']) expect(can(role, 'GET', '/lab/board')).toBe(true);
+    for (const role of ['WAITER', 'KITCHEN', 'DRIVER', 'ACCOUNTANT']) expect(can(role, 'GET', '/lab/board')).toBe(false);
+  });
+});
+
+describe('nurse', () => {
+  it('registers and queues patients, takes vitals, takes specimens and reads the record', () => {
+    expect(can('NURSE', 'GET', '/patients')).toBe(true);
+    expect(can('NURSE', 'POST', '/patients')).toBe(true);
+    expect(can('NURSE', 'PATCH', '/patients/p-1')).toBe(true);
+    expect(can('NURSE', 'GET', '/visits')).toBe(true);
+    expect(can('NURSE', 'POST', '/visits')).toBe(true);
+    expect(can('NURSE', 'PATCH', '/visits/v-1/vitals')).toBe(true);
+    expect(can('NURSE', 'GET', '/prescriptions')).toBe(true);
+    expect(can('NURSE', 'GET', '/lab/board')).toBe(true);
+    expect(can('NURSE', 'POST', '/lab/orders/o-1/collect')).toBe(true);
+  });
+
+  it('does not consult, prescribe, bill, cancel, order tests or enter results', () => {
+    for (const action of ['start', 'finish', 'reopen', 'complete', 'cancel', 'charges']) expect(can('NURSE', 'POST', `/visits/v-1/${action}`)).toBe(false);
+    expect(can('NURSE', 'PATCH', '/visits/v-1/consultation')).toBe(false);
+    expect(can('NURSE', 'POST', '/prescriptions')).toBe(false);
+    expect(can('NURSE', 'PATCH', '/prescriptions/rx-1/dispense')).toBe(false);
+    expect(can('NURSE', 'POST', '/lab/orders')).toBe(false);
+    expect(can('NURSE', 'PATCH', '/lab/orders/o-1/items/i-1/results')).toBe(false);
+    expect(can('NURSE', 'POST', '/lab/orders/o-1/items/i-1/verify')).toBe(false);
+    expect(can('NURSE', 'POST', '/cover/checks')).toBe(false);
+  });
+
+  it('sees nothing outside the clinic: no till, money, reports, staff or claims', () => {
+    for (const path of ['/sales', '/items', '/reports/summary', '/hr/employees', '/cover/claims', '/pharmacy/drugs', '/clinic/reports/summary']) expect(can('NURSE', 'GET', path)).toBe(false);
+    expect(can('NURSE', 'POST', '/sales/checkout')).toBe(false);
+  });
+
+  it('is an assignable role that a manager can create', () => {
+    expect(ASSIGNABLE_ROLES).toContain('NURSE');
+    expect(() => assertCanManageUser('MANAGER', undefined, 'NURSE')).not.toThrow();
+  });
+});
+
+describe('clinic reports', () => {
+  it('are for management only', () => {
+    for (const role of ['OWNER', 'MANAGER']) expect(can(role, 'GET', '/clinic/reports/summary')).toBe(true);
+    for (const role of ['DOCTOR', 'CASHIER', 'PHARMACIST', 'LAB_TECH', 'ACCOUNTANT', 'WAITER']) expect(can(role, 'GET', '/clinic/reports/summary')).toBe(false);
+  });
+});
+
+describe('compliance exports', () => {
+  it('are for management and the pharmacist', () => {
+    for (const role of ['OWNER', 'MANAGER', 'PHARMACIST']) {
+      expect(can(role, 'GET', '/compliance/controlled-register')).toBe(true);
+      expect(can(role, 'GET', '/compliance/patients/p-1/export')).toBe(true);
+    }
+    for (const role of ['CASHIER', 'DOCTOR', 'NURSE', 'LAB_TECH', 'ACCOUNTANT', 'WAITER']) {
+      expect(can(role, 'GET', '/compliance/controlled-register')).toBe(false);
+      expect(can(role, 'GET', '/compliance/patients/p-1/export')).toBe(false);
+    }
+  });
+});
+
+describe('checking an appointment in as a visit', () => {
+  it('is the front desk\'s, not the nurse\'s or a lab technician\'s', () => {
+    for (const role of ['CASHIER', 'PHARMACIST', 'MANAGER', 'OWNER']) expect(can(role, 'POST', '/visits/from-appointment/ap-1')).toBe(true);
+    for (const role of ['NURSE', 'LAB_TECH', 'WAITER', 'ACCOUNTANT']) expect(can(role, 'POST', '/visits/from-appointment/ap-1')).toBe(false);
+  });
+});
+
+describe('resubmitting a claim', () => {
+  it('is for management and the accountant, like the claims', () => {
+    for (const role of ['OWNER', 'MANAGER', 'ACCOUNTANT']) expect(can(role, 'POST', '/cover/claims/c-1/resubmit')).toBe(true);
+    for (const role of ['CASHIER', 'PHARMACIST', 'DOCTOR', 'NURSE']) expect(can(role, 'POST', '/cover/claims/c-1/resubmit')).toBe(false);
+  });
+  it('and the follow-up reminders are the front desk\'s', () => {
+    for (const role of ['CASHIER', 'PHARMACIST', 'MANAGER']) expect(can(role, 'POST', '/visits/v-1/follow-up/remind')).toBe(true);
+    for (const role of ['NURSE', 'LAB_TECH', 'WAITER']) expect(can(role, 'POST', '/visits/v-1/follow-up/remind')).toBe(false);
+    expect(can('NURSE', 'GET', '/visits/follow-ups')).toBe(true);
+  });
+  it('a clinician acknowledges a critical result; a technician does not', () => {
+    for (const role of ['DOCTOR', 'MANAGER']) expect(can(role, 'POST', '/lab/orders/o-1/items/i-1/acknowledge')).toBe(true);
+    for (const role of ['LAB_TECH', 'CASHIER', 'NURSE']) expect(can(role, 'POST', '/lab/orders/o-1/items/i-1/acknowledge')).toBe(false);
+  });
+});

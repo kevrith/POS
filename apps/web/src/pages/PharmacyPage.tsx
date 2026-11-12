@@ -2,12 +2,11 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
-import { useDialog } from '../components/Dialog';
 import {
   Pill, AlertTriangle, Shield, FileText, Plus, Trash2,
   RefreshCw, TrendingUp, BookOpen, Pencil, Check, X, Tag,
 } from 'lucide-react';
-import { formatKES } from '@pos/shared';
+import { Link } from 'react-router-dom';
 import { printBarcodeLabel } from '../lib/printer';
 import { printHtml } from '../lib/printHtml';
 import DispenseModal from '../components/DispenseModal';
@@ -21,21 +20,12 @@ const SEV_COLOR: Record<string, string> = {
   CONTRAINDICATED: 'bg-red-200 text-red-900 font-bold',
 };
 
-const CLAIM_COLOR: Record<string, string> = {
-  SUBMITTED: 'bg-blue-100 text-blue-700',
-  APPROVED: 'bg-green-100 text-green-700',
-  PAID: 'bg-emerald-100 text-emerald-700',
-  REJECTED: 'bg-red-100 text-red-700',
-  VOIDED: 'bg-gray-100 text-gray-500',
-};
-
 const EMPTY_DRUG = { genericName: '', brandName: '', strength: '', dosageForm: 'TABLET', category: 'OTHER', scheduleClass: 'OTC', defaultInstructions: '', maxDailyDose: '', unit: 'mg', contraindicationsText: '' };
 
 export default function PharmacyPage() {
   const user = useAuthStore((s) => s.user);
   const businessId = user?.businessId ?? '';
   const qc = useQueryClient();
-  const { prompt } = useDialog();
   const [tab, setTab] = useState<Tab>('drugs');
 
   // ── Drug Catalogue ──
@@ -127,32 +117,15 @@ export default function PharmacyPage() {
     queryFn: () => api.get<any[]>(`/pharmacy/providers?businessId=${businessId}`),
     enabled: tab === 'providers' || tab === 'claims',
   });
-  const [provForm, setProvForm] = useState({ name: '', code: '', contactPhone: '', contactEmail: '' });
+  const [provForm, setProvForm] = useState({ name: '', code: '', contactPhone: '', contactEmail: '', kind: 'PRIVATE', requiresEligibility: true });
   const createProv = useMutation({
     mutationFn: (d: any) => api.post('/pharmacy/providers', { ...d, businessId }),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['pharmacy-providers'] }); setProvForm({ name: '', code: '', contactPhone: '', contactEmail: '' }); },
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['pharmacy-providers'] }); setProvForm({ name: '', code: '', contactPhone: '', contactEmail: '', kind: 'PRIVATE', requiresEligibility: true }); },
   });
   const toggleProv = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
       api.patch(`/pharmacy/providers/${id}`, { isActive }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['pharmacy-providers'] }),
-  });
-
-  // ── Insurance Claims ──
-  const [claimStatus, setClaimStatus] = useState('');
-  const { data: claims = [] } = useQuery({
-    queryKey: ['pharmacy-claims', businessId, claimStatus],
-    queryFn: () => api.get<any[]>(`/pharmacy/claims?businessId=${businessId}${claimStatus ? `&status=${claimStatus}` : ''}`),
-    enabled: tab === 'claims',
-  });
-  const { data: claimStats } = useQuery({
-    queryKey: ['pharmacy-claim-stats', businessId],
-    queryFn: () => api.get<any>(`/pharmacy/claims/stats?businessId=${businessId}`),
-    enabled: tab === 'claims',
-  });
-  const updateClaim = useMutation({
-    mutationFn: ({ id, ...data }: any) => api.patch(`/pharmacy/claims/${id}`, data),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['pharmacy-claims'] }); void qc.invalidateQueries({ queryKey: ['pharmacy-claim-stats'] }); },
   });
 
   const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
@@ -579,13 +552,36 @@ export default function PharmacyPage() {
               <input className="border rounded px-3 py-1.5 text-sm" placeholder="Contact phone" value={provForm.contactPhone} onChange={(e) => setProvForm({ ...provForm, contactPhone: e.target.value })} />
               <input className="border rounded px-3 py-1.5 text-sm" placeholder="Contact email" value={provForm.contactEmail} onChange={(e) => setProvForm({ ...provForm, contactEmail: e.target.value })} />
             </div>
-            <button
-              onClick={() => createProv.mutate(provForm)}
-              disabled={!provForm.name || !provForm.code || createProv.isPending}
-              className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-medium disabled:opacity-50"
-            >
-              <Plus className="w-4 h-4 inline mr-1" />Add Provider
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <select className="border rounded px-3 py-1.5 text-sm" value={provForm.kind} onChange={(e) => setProvForm({ ...provForm, kind: e.target.value })} aria-label="Type of insurer">
+                <option value="PRIVATE">Private insurer</option>
+                <option value="SHA">SHA (Social Health Authority)</option>
+                <option value="CORPORATE">Corporate scheme</option>
+                <option value="OTHER">Other</option>
+              </select>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={provForm.requiresEligibility} onChange={(e) => setProvForm({ ...provForm, requiresEligibility: e.target.checked })} />
+                Confirm cover before billing this insurer
+              </label>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => createProv.mutate(provForm)}
+                disabled={!provForm.name || !provForm.code || createProv.isPending}
+                className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-medium disabled:opacity-50"
+              >
+                <Plus className="w-4 h-4 inline mr-1" />Add Provider
+              </button>
+              {!providers.some((p: any) => p.kind === 'SHA') && (
+                <button
+                  onClick={() => createProv.mutate({ name: 'Social Health Authority', code: 'SHA', contactPhone: '', contactEmail: '', kind: 'SHA', requiresEligibility: true })}
+                  disabled={createProv.isPending}
+                  className="border border-blue-600 text-blue-700 px-4 py-1.5 rounded text-sm font-medium disabled:opacity-50"
+                >
+                  Add Social Health Authority (SHA)
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -594,7 +590,7 @@ export default function PharmacyPage() {
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="font-semibold">{p.name}</p>
-                    <p className="text-xs text-gray-500 font-mono">{p.code}</p>
+                    <p className="text-xs text-gray-500 font-mono">{p.code}{p.kind && p.kind !== 'PRIVATE' ? ` · ${p.kind}` : ''}</p>
                     {p.contactPhone && <p className="text-sm text-gray-600 mt-1">{p.contactPhone}</p>}
                     {p.contactEmail && <p className="text-sm text-gray-500">{p.contactEmail}</p>}
                   </div>
@@ -612,98 +608,11 @@ export default function PharmacyPage() {
         </div>
       )}
 
-      {/* ── Insurance Claims ── */}
+      {/* ── Insurance Claims: moved to its own page ── */}
       {tab === 'claims' && (
-        <div className="space-y-4">
-          {claimStats && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {[
-                { label: 'Submitted', data: claimStats.submitted, color: 'blue', amt: claimStats.submitted._sum?.billedCents },
-                { label: 'Approved', data: claimStats.approved, color: 'green', amt: claimStats.approved._sum?.approvedCents },
-                { label: 'Paid', data: claimStats.paid, color: 'emerald', amt: claimStats.paid._sum?.paidCents },
-                { label: 'Rejected', data: claimStats.rejected, color: 'red', amt: claimStats.rejected._sum?.billedCents },
-              ].map(({ label, data, amt }) => (
-                <div key={label} className="bg-white border rounded-lg p-4">
-                  <p className="text-sm text-gray-500">{label}</p>
-                  <p className="text-2xl font-bold">{data._count}</p>
-                  <p className="text-sm text-gray-600">{formatKES(amt ?? 0)}</p>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="flex gap-2 items-center">
-            <select className="border rounded px-3 py-1.5 text-sm" value={claimStatus} onChange={(e) => setClaimStatus(e.target.value)} aria-label="Filter by statuses">
-              <option value="">All Statuses</option>
-              {['SUBMITTED', 'APPROVED', 'PAID', 'REJECTED'].map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-
-          <div className="bg-white border rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-600">
-                <tr>
-                  <th className="text-left px-4 py-2">Claim #</th>
-                  <th className="text-left px-4 py-2">Provider</th>
-                  <th className="text-left px-4 py-2">Patient ID</th>
-                  <th className="text-left px-4 py-2">Billed</th>
-                  <th className="text-left px-4 py-2">Approved</th>
-                  <th className="text-left px-4 py-2">Paid</th>
-                  <th className="text-left px-4 py-2">Status</th>
-                  <th className="px-4 py-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {claims.map((claim: any) => (
-                  <tr key={claim.id} className="border-t hover:bg-gray-50">
-                    <td className="px-4 py-2 font-mono text-xs">{claim.claimNumber ?? '—'}</td>
-                    <td className="px-4 py-2">{claim.provider?.name}</td>
-                    <td className="px-4 py-2 text-gray-600">{claim.patientInsuranceId ?? '—'}</td>
-                    <td className="px-4 py-2">{formatKES(claim.billedCents)}</td>
-                    <td className="px-4 py-2">{claim.approvedCents ? formatKES(claim.approvedCents) : '—'}</td>
-                    <td className="px-4 py-2">{claim.paidCents ? formatKES(claim.paidCents) : '—'}</td>
-                    <td className="px-4 py-2">
-                      <span className={`px-2 py-0.5 rounded-full text-xs ${CLAIM_COLOR[claim.status] ?? ''}`}>{claim.status}</span>
-                    </td>
-                    <td className="px-4 py-2">
-                      <div className="flex gap-1">
-                        {claim.status === 'SUBMITTED' && (
-                          <button
-                            onClick={() => updateClaim.mutate({ id: claim.id, status: 'APPROVED', approvedCents: claim.billedCents })}
-                            className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs"
-                          >
-                            Approve
-                          </button>
-                        )}
-                        {claim.status === 'APPROVED' && (
-                          <button
-                            onClick={() => updateClaim.mutate({ id: claim.id, status: 'PAID', paidCents: claim.approvedCents, paidAt: new Date() })}
-                            className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs"
-                          >
-                            Mark Paid
-                          </button>
-                        )}
-                        {(claim.status === 'SUBMITTED' || claim.status === 'APPROVED') && (
-                          <button
-                            onClick={async () => {
-                              const reason = await prompt({ title: 'Reject Claim', message: 'Provide a reason for rejection.', placeholder: 'Enter reason...', confirmLabel: 'Reject' });
-                              if (reason) updateClaim.mutate({ id: claim.id, status: 'REJECTED', rejectionReason: reason });
-                            }}
-                            className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs"
-                          >
-                            Reject
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {claims.length === 0 && (
-                  <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No claims found</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+        <div className="rounded-lg border bg-white p-6 text-sm">
+          <p className="mb-3 text-gray-700">Claims now have their own page, with what each insurer owes, how long it has been owed, and what is holding each claim back.</p>
+          <Link to="/claims" className="inline-flex rounded bg-blue-600 px-4 py-1.5 font-medium text-white">Open Insurance Claims</Link>
         </div>
       )}
 

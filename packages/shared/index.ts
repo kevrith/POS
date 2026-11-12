@@ -50,6 +50,7 @@ export enum InventoryMovementType {
   BATCH_RECEIPT = 'BATCH_RECEIPT',
   EXPIRY_WRITE_OFF = 'EXPIRY_WRITE_OFF',
   GRN_RECEIPT = 'GRN_RECEIPT',
+  SUPPLIER_RETURN = 'SUPPLIER_RETURN',
   TRANSFER = 'TRANSFER',
 }
 
@@ -113,6 +114,10 @@ export enum UserRole {
   PHARMACIST = 'PHARMACIST',
   /** Writes prescriptions and reads patient records; does not dispense or sell. */
   DOCTOR = 'DOCTOR',
+  /** Runs the lab: collects specimens, enters and releases results; sees nothing else. */
+  LAB_TECH = 'LAB_TECH',
+  /** Registers and triages patients and takes lab specimens; does not consult, prescribe, dispense or take money. */
+  NURSE = 'NURSE',
   WAITER = 'WAITER',
   KITCHEN = 'KITCHEN',
   /** Delivery driver — signs in on the Kastra Driver app with email + password. */
@@ -204,6 +209,12 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   [UserRole.DOCTOR]: [
     'patients.*', 'prescriptions.create', 'prescriptions.read',
     'pharmacy.read', 'appointments.read',
+  ],
+  [UserRole.LAB_TECH]: [
+    'lab.*',
+  ],
+  [UserRole.NURSE]: [
+    'patients.read', 'patients.create', 'patients.update', 'visits.queue', 'visits.triage', 'lab.collect', 'prescriptions.read',
   ],
   [UserRole.WAITER]: [
     'hospitality.orders.*',

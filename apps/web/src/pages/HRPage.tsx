@@ -100,6 +100,8 @@ const ROLE_COLORS: Record<string, string> = {
   CASHIER: 'bg-emerald-100 text-emerald-700',
   PHARMACIST: 'bg-cyan-100 text-cyan-700',
   DOCTOR: 'bg-rose-100 text-rose-700',
+  NURSE: 'bg-sky-100 text-sky-700',
+  LAB_TECH: 'bg-fuchsia-100 text-fuchsia-700',
   WAITER: 'bg-amber-100 text-amber-700',
   KITCHEN: 'bg-orange-100 text-orange-700',
   ACCOUNTANT: 'bg-indigo-100 text-indigo-700',
@@ -568,8 +570,12 @@ function EditEmployeePanel({ employee, businessId, onClose, onSuccess }: {
                   <option value="CASHIER">Cashier — POS access</option>
                 <option value="PHARMACIST">Pharmacist — dispensing + POS</option>
                 <option value="DOCTOR">Doctor — prescriptions + patient records</option>
+                <option value="NURSE">Nurse — triage, patients, specimens</option>
+                <option value="LAB_TECH">Lab technician — lab only</option>
                   <option value="PHARMACIST">Pharmacist — dispensing + POS</option>
                   <option value="DOCTOR">Doctor — prescriptions + patient records</option>
+                  <option value="NURSE">Nurse — triage, patients, specimens</option>
+                  <option value="LAB_TECH">Lab technician — lab only</option>
                   <option value="WAITER">Waiter — Hospitality + POS</option>
                   <option value="KITCHEN">Kitchen Staff — KDS only</option>
                   <option value="MANAGER">Manager — Full access (no billing)</option>

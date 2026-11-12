@@ -31,6 +31,12 @@ export class BatchController {
     return this.batchService.create(businessId, body as Parameters<BatchService['create']>[1]);
   }
 
+  @Get('expiry-summary')
+  @RequirePermission('inventory.read')
+  async expirySummary(@Param('businessId') businessId: string) {
+    return this.batchService.getExpirySummary(businessId);
+  }
+
   @Get('expiring')
   @RequirePermission('inventory.read')
   async getExpiring(@Param('businessId') businessId: string, @Query('days') days?: string) {
@@ -64,9 +70,10 @@ export class BatchController {
   @Patch(':id/write-off')
   @RequirePermission('inventory.create')
   async writeOffBatch(
+    @Param('businessId') businessId: string,
     @Param('id') id: string,
     @Body('authorizedBy') authorizedBy: string,
   ) {
-    return this.batchExpiryCronService.writeOffSingleBatch(id, authorizedBy ?? 'MANAGER');
+    return this.batchExpiryCronService.writeOffSingleBatch(id, authorizedBy ?? 'MANAGER', businessId);
   }
 }

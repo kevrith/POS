@@ -51,6 +51,10 @@ export const MENU_RULES: Record<string, MenuRule> = {
   '/prescriptions': { businessTypes: ['CLINIC'] },
   '/patients': { businessTypes: ['CLINIC'] },
   '/visits': { businessTypes: ['CLINIC'] },
+  '/claims': { businessTypes: ['CLINIC'] },
+  '/lab': { businessTypes: ['CLINIC'] },
+  '/clinic-reports': { businessTypes: ['CLINIC'] },
+  '/compliance': { businessTypes: ['CLINIC'] },
   '/pharmacy': { businessTypes: ['CLINIC'] },
   '/appointments': { businessTypes: ['CLINIC', 'SALON'] },
   // A fuel station's /pos is the forecourt; its shop, lubricants and LPG are sold on the standard till here

@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { optionalText, text } from '../common/validate';
+import { cleanIcd11 } from '../cover/cover';
 
 /**
  * Common outpatient diagnoses with their ICD-10 codes, so a doctor picks rather than types, and a report can count by code.
@@ -84,7 +85,8 @@ export function searchDiagnoses(q: string, limit = 15): Array<{ code: string; la
   }).slice(0, limit).map((d) => ({ ...d }));
 }
 
-export interface Diagnosis { code?: string; label: string }
+/** `code` is the ICD-10 code; `icd11` is the ICD-11 code that SHA claims ask for. Both are optional. */
+export interface Diagnosis { code?: string; icd11?: string; label: string }
 
 /** The diagnoses a doctor sent, cleaned: a label each, an optional code, no duplicates, no more than ten. */
 export function cleanDiagnoses(value: unknown): Diagnosis[] {
@@ -100,7 +102,8 @@ export function cleanDiagnoses(value: unknown): Diagnosis[] {
     const key = (code ?? label).toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ ...(code ? { code } : {}), label });
+    const icd11 = cleanIcd11(d?.icd11);
+    out.push({ ...(code ? { code } : {}), ...(icd11 ? { icd11 } : {}), label });
   }
   return out;
 }

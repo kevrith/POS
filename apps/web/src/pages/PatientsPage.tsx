@@ -1,3 +1,4 @@
+import { PatientCover } from '../components/clinical/CoverCheck';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -146,11 +147,12 @@ export default function PatientsPage() {
                   ['Pregnancy', [detail.pregnant && 'Pregnant', detail.breastfeeding && 'Breastfeeding'].filter(Boolean).join(', ') || null],
                   ['Conditions', detail.conditions.join(', ') || null],
                   ['Next of kin', [detail.nextOfKinName, detail.nextOfKinPhone].filter(Boolean).join(' · ') || null],
-                  ['Insurance member', detail.insuranceMemberNumber],
                 ].filter(([, v]) => v).map(([k, v]) => (
                   <div key={k as string}><dt className="text-xs text-gray-500">{k}</dt><dd className="text-gray-900 dark:text-white">{v}</dd></div>
                 ))}
               </dl>
+              <PatientCover patientId={detail.id} providerId={detail.insuranceProviderId} memberNumber={detail.insuranceMemberNumber} />
+
               {detail.notes && <p className="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:bg-gray-700/40 dark:text-gray-200">{detail.notes}</p>}
 
               {manager && unlinked.length > 0 && (

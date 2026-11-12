@@ -2,6 +2,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { v4 as uuidv4 } from 'uuid';
+import { expirySummary } from './expiry-summary';
 
 interface CreateBatchDto {
   itemId: string;
@@ -51,9 +52,18 @@ export class BatchService {
         item: { businessId },
         ...(status ? { status } : {}),
       },
-      include: { item: { select: { name: true, weightUnit: true } } },
+      include: { item: { select: { name: true, weightUnit: true, costPriceCents: true } } },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  /** What is on the shelf out of date or about to be, by how soon, with what it cost. */
+  async getExpirySummary(businessId: string) {
+    const lots = await this.prisma.batch.findMany({
+      where: { item: { businessId }, status: { in: ['ACTIVE', 'RECALLED'] }, quantityRemaining: { gt: 0 } },
+      select: { quantityRemaining: true, expiryDate: true, status: true, item: { select: { costPriceCents: true } } },
+    });
+    return expirySummary(lots.map((l) => ({ quantityRemaining: l.quantityRemaining, expiryDate: l.expiryDate, status: l.status, unitCostCents: l.item.costPriceCents ?? 0 })));
   }
 
   async getExpiringBatches(businessId: string, daysThreshold: number) {

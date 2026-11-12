@@ -5,7 +5,7 @@ import {
   DollarSign, CreditCard, Monitor, Layers, Pill, CalendarClock,
   Hash, ChefHat, Box, ArrowRightLeft, Wallet, UserCheck, Tag, Gift,
   TrendingUp, Landmark, GitBranch, LayoutDashboard, LogOut, Bell,
-  Home, MoreHorizontal, ClipboardList, MapPin, BedDouble,
+  Home, MoreHorizontal, ClipboardList, MapPin, BedDouble, ShieldCheck, FlaskConical,
   Radio, CheckCircle2, Trash2, Send, FileText, Shield, Wand2, ShoppingBag, Clock,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/auth';
@@ -47,8 +47,12 @@ const MENU_GROUPS: NavGroup[] = [
       { to: '/hospitality',   icon: ClipboardList,  label: 'Restaurant Tables', roles: ['OWNER','MANAGER','WAITER','CASHIER','PHARMACIST'] },
       { to: '/layaway',       icon: Layers,         label: 'Layaway',         roles: ['OWNER','MANAGER','CASHIER','PHARMACIST'] },
       { to: '/proforma',      icon: CreditCard,     label: 'Proformas',       roles: ['OWNER','MANAGER','CASHIER','PHARMACIST'] },
-      { to: '/visits',        icon: ClipboardList,  label: 'Visits',          roles: ['OWNER','MANAGER','CASHIER','PHARMACIST','DOCTOR'] },
-      { to: '/patients',      icon: Users,          label: 'Patients',        roles: ['OWNER','MANAGER','CASHIER','PHARMACIST','DOCTOR'] },
+      { to: '/visits',        icon: ClipboardList,  label: 'Visits',          roles: ['OWNER','MANAGER','CASHIER','PHARMACIST','DOCTOR','NURSE'] },
+      { to: '/lab',           icon: FlaskConical,   label: 'Laboratory',      roles: ['OWNER','MANAGER','CASHIER','PHARMACIST','DOCTOR','NURSE','LAB_TECH'] },
+      { to: '/compliance',     icon: FileText,       label: 'Compliance Records', roles: ['OWNER','MANAGER','PHARMACIST'] },
+      { to: '/clinic-reports', icon: BarChart3,      label: 'Clinic Reports',  roles: ['OWNER','MANAGER'] },
+      { to: '/claims',        icon: ShieldCheck,    label: 'Insurance Claims', roles: ['OWNER','MANAGER','ACCOUNTANT'] },
+      { to: '/patients',      icon: Users,          label: 'Patients',        roles: ['OWNER','MANAGER','CASHIER','PHARMACIST','DOCTOR','NURSE'] },
       { to: '/prescriptions', icon: Pill,           label: 'Prescriptions',   roles: ['OWNER','MANAGER','CASHIER','PHARMACIST','DOCTOR'] },
       { to: '/appointments',  icon: CalendarClock,  label: 'Appointments',    roles: ['OWNER','MANAGER','CASHIER','PHARMACIST','DOCTOR'] },
     ],

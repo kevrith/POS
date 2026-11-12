@@ -9,7 +9,7 @@ import {
   Fuel, Lock, BedDouble, CheckCircle2, Trash2, Radio, BookOpen,
   Link2, FileText, Clock, Send, Shield, Tablet, Fingerprint,
   ClipboardList, MapPin, Store, Zap, Building2, PanelLeftClose, PanelLeftOpen,
-  ShoppingBag, HardDrive, KeyRound,
+  ShoppingBag, HardDrive, KeyRound, ShieldCheck, FlaskConical,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { readLastKnown, writeLastKnown } from '../lib/lastKnown';
@@ -72,8 +72,12 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
       // Kiosk mode is launched from within the POS page (not a permanent nav item)
       { to: '/layaway', icon: Layers, label: 'Layaway', roles: ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST'] },
       { to: '/proforma', icon: CreditCard, label: 'Proformas', roles: ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST'] },
-      { to: '/visits', icon: ClipboardList, label: 'Visits', roles: ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST', 'DOCTOR'] },
-      { to: '/patients', icon: Users, label: 'Patients', roles: ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST', 'DOCTOR'] },
+      { to: '/visits', icon: ClipboardList, label: 'Visits', roles: ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST', 'DOCTOR', 'NURSE'] },
+      { to: '/lab', icon: FlaskConical, label: 'Laboratory', roles: ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST', 'DOCTOR', 'NURSE', 'LAB_TECH'] },
+      { to: '/compliance', icon: FileText, label: 'Compliance Records', roles: ['OWNER', 'MANAGER', 'PHARMACIST'] },
+      { to: '/clinic-reports', icon: TrendingUp, label: 'Clinic Reports', roles: ['OWNER', 'MANAGER'] },
+      { to: '/claims', icon: ShieldCheck, label: 'Insurance Claims', roles: ['OWNER', 'MANAGER', 'ACCOUNTANT'] },
+      { to: '/patients', icon: Users, label: 'Patients', roles: ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST', 'DOCTOR', 'NURSE'] },
       { to: '/prescriptions', icon: Pill, label: 'Prescriptions', roles: ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST', 'DOCTOR'] },
       { to: '/pharmacy', icon: Pill, label: 'Pharmacy Mgmt', roles: ['OWNER', 'MANAGER', 'PHARMACIST'] },
       { to: '/appointments', icon: CalendarClock, label: 'Appointments', roles: ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST', 'DOCTOR'] },

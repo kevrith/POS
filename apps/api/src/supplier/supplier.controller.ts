@@ -1,6 +1,8 @@
 import { Feature } from '@pos/shared';
 import { RequiresFeature } from '../auth/subscription.guard';
-import { Controller, Post, Get, Patch, Delete, Body, Param, Query, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Body, Param, Query, BadRequestException, Req } from '@nestjs/common';
+import type { Request } from 'express';
+import type { AuthUser } from '../auth/auth.service';
 import { SupplierService } from './supplier.service';
 
 
@@ -77,6 +79,7 @@ export class SupplierController {
   @Post('purchase-orders/:id/grn')
   async createGRN(
     @Param('id') id: string,
+    @Req() req: Request & { user: AuthUser },
     @Body() body: {
       storeId: string;
       items: Array<{
@@ -87,7 +90,7 @@ export class SupplierController {
       }>;
     },
   ) {
-    return this.supplierService.createGRN(id, body.storeId, body.items);
+    return this.supplierService.createGRN(req.user.businessId, id, body.storeId, body.items);
   }
 
   @Patch('purchase-orders/:id/invoice')
@@ -151,8 +154,8 @@ export class SupplierController {
   }
 
   @Patch('returns/:id/status')
-  async updateReturnStatus(@Param('id') id: string, @Body() body: { status: string }) {
-    return this.supplierService.updateReturnStatus(id, body.status);
+  async updateReturnStatus(@Param('id') id: string, @Body() body: { status: string; creditNoteNumber?: string; amountCents?: number }, @Req() req: Request & { user: AuthUser }) {
+    return this.supplierService.updateReturnStatus(req.user.businessId, id, body.status, { creditNoteNumber: body.creditNoteNumber, amountCents: body.amountCents });
   }
 
   // ── Supplier Invoices ──────────────────────────────────────────────────────────

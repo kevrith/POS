@@ -1199,6 +1199,205 @@ bill: they are paid for when the pharmacy dispenses them. A visit can be
 completed, and sent <strong>back to the doctor</strong> before it is
 billed. Each patient’s page lists their earlier visits.</li>
 </ol></li>
+<li><strong>Follow-ups</strong> — when a doctor sets a follow-up date,
+the patient appears on the <strong>Follow-ups</strong> tab of
+<strong>Visits</strong> (overdue, due today, coming up in the next 14
+days) until they have been reached or have already come back for another
+visit. <strong>Send SMS</strong> texts a short reminder that names the
+clinic and the date and nothing about the illness (it needs SMS set up
+for the business); <strong>Mark reached</strong> is for a phone call. A
+patient with no phone number cannot be texted. A nurse sees the list but
+the front desk and managers do the reaching.</li>
+<li><strong>Critical lab results</strong> — a critical value tells the
+clinicians at once (a notification) and shows a red warning on the
+visit’s <strong>Lab</strong> tab until a doctor presses
+<strong>Critical: I have seen this</strong>; who and when are kept. A
+corrected value must be acknowledged again. Reference ranges can have a
+separate range for <strong>children under 12</strong> (the common tests
+carry one for haemoglobin), and the range used is printed with each
+result. <strong>Imaging</strong> (chest X-ray and ultrasound are in the
+common tests) takes no specimen: press <em>Patient attended</em>, then
+type the <strong>Findings</strong> and <strong>Impression</strong>. The
+images themselves are not stored in KASTRA. <strong>Print label</strong>
+on a collected order prints a small specimen label.</li>
+<li><strong>Sending a rejected claim again</strong> — in
+<strong>Insurance Claims</strong>, open a rejected claim and press
+<strong>Correct and send again</strong>: fix the member number,
+pre-authorisation number or the ICD-11 codes. A new claim is made, the
+old one stays as the record and points to it, and each rejected claim
+can be sent again once. The rejection already wrote the amount off the
+books, so if the insurer pays the new claim it is booked as recovered
+income, not a second receivable.</li>
+<li><strong>Credit notes from supplier returns</strong> — marking a
+return <strong>Credited</strong> asks for the supplier’s credit note
+number (blank is numbered for you) and the amount actually credited, and
+records a credit note against the supplier, linked to the return. A
+number already on record is refused and the return stays open.</li>
+<li><strong>Resubmitting a rejected claim</strong> — open the rejected
+claim under <strong>Insurance Claims</strong> and press <strong>Correct
+and send again</strong>. Fix the member number, add a pre-authorisation
+number or the ICD-11 codes the insurer asked for, and a new claim is
+raised as <em>billed</em>; the old one stays as the record and points to
+it. Because the rejection already wrote the amount off the books, a
+payment on the new claim is recovered income, not a second receivable.
+Each rejected claim can be sent again once; if the new one is rejected
+too, correct and send that one.</li>
+<li><strong>Supplier credit</strong> — when you mark a supplier return
+<strong>Credited</strong>, KASTRA asks for the supplier’s credit note
+number (blank means it numbers one for you) and the amount actually
+credited, and records a credit note against the supplier that can be set
+against a later order.</li>
+<li><strong>Laboratory extras</strong> — <strong>Children</strong> under
+12 can have their own normal range on a test (set it in the test list;
+the starter haemoglobin has one) and are judged against it. A
+<strong>critical result</strong> is announced to the clinicians in their
+notifications the moment it is entered, and the doctor presses
+<strong>Critical: I have seen this</strong>: who and when are kept, and
+a corrected value must be acknowledged again. <strong>Print
+label</strong> makes a small specimen label. <strong>Imaging</strong>
+(X-ray and ultrasound are in the starter list) works like any test with
+a typed <em>Findings</em> and <em>Impression</em>, no specimen is taken
+(the button says <em>Patient attended</em>), and a second person still
+releases it. The images themselves are not stored in KASTRA.</li>
+<li><strong>Compliance records</strong> — <strong>Compliance
+Records</strong> in the menu (owner, manager and pharmacist), for an
+inspection or a patient’s request. Choose a period (today, 7 days, 30
+days, this month, or dates) and each register can be <strong>downloaded
+as CSV</strong> or <strong>printed</strong> with a line for the
+pharmacist in charge to sign. They are exports of the records KASTRA
+holds, laid out for filing: they are not the official forms, so check
+what your regulator asks for.
+<ul>
+<li><strong>Controlled drugs</strong>: every entry (medicine, schedule,
+quantity, patient and ID, prescriber and licence, prescription number,
+who dispensed it) with, for each controlled medicine, what was dispensed
+in the period next to the stock held now. Medicines are matched by
+name.</li>
+<li><strong>Dispensing</strong>: every prescription whose latest fill
+fell in the period, with its medicines and who dispensed it.</li>
+<li><strong>Disposals</strong>: expired, damaged and recalled stock
+written off in Batch &amp; Expiry, with the lot, cost and who authorised
+it.</li>
+<li><strong>Patient data request</strong>: when a patient asks what is
+held about them, choose the patient and <strong>download all
+data</strong> (a file with the record, visits and notes, prescriptions,
+lab results, cover checks and claims) or <strong>print a readable
+copy</strong>. Check who is asking first: this is health information.
+Each export is recorded on the audit log with your name and the time.
+KASTRA does not delete or anonymise patient records: how long health
+records must be kept and when they may be erased is for you to settle
+with your adviser, so ask us before relying on any deletion.</li>
+</ul></li>
+<li><strong>Appointments to visits</strong> — in a clinic,
+<strong>Appointments</strong> has a <strong>Check in as visit</strong>
+button on booked and confirmed appointments. It finds the patient
+(starting from the phone and name on the booking, or registers them),
+puts them in the <strong>Visits</strong> queue with the booked services
+already on the bill, and moves the appointment to <em>In progress</em>.
+Finishing the visit completes the appointment (it is not invoiced a
+second time); cancelling the visit cancels it, so it does not keep
+holding the slot. An appointment that holds a deposit cannot be checked
+in this way: complete it from Appointments so the deposit is applied. A
+nurse cannot check patients in from appointments.</li>
+<li><strong>Clinic reports</strong> — <strong>Clinic Reports</strong> in
+the menu (owner and manager) shows, for today, 7 days, 30 days, this
+month or dates you choose: visits per day, how long patients waited to
+be triaged and to see the doctor, how long consultations took, the
+<strong>diagnoses</strong> seen most often (split into children under 5
+and everyone else, with a <strong>Download CSV</strong>), what each
+<strong>doctor</strong> did, who came (women and men, by age band), what
+the clinic charged for services on completed visits, and the lab’s
+ordered, released, critical and average time for each test. Figures
+count a diagnosis once per visit and only for visits whose consultation
+was finished. Days are Nairobi days.</li>
+<li><strong>Nurse accounts</strong> — add them under Settings (Staff)
+with the role <strong>Nurse</strong>. A nurse registers patients, queues
+them, takes <strong>vitals</strong> and takes lab specimens, and can
+read the record and prescriptions. A nurse cannot take a patient in to
+the doctor, write a prescription, add charges, bill, cancel a visit,
+order tests or enter results, and sees no till, money or reports.</li>
+<li><strong>The laboratory</strong> — <strong>Laboratory</strong> in the
+menu. A manager opens <strong>Test list</strong> and presses
+<strong>Load common tests</strong> (about 20: malaria, full blood count,
+blood sugar, HIV, urinalysis, kidney and liver tests and more), then
+reviews the normal ranges: they are general adult ranges, so your lab
+lead should check them against your own methods. Each test says what it
+measures and its normal range (with a separate range for women where
+that applies, and <em>critical</em> limits), and can be <strong>charged
+as</strong> a service from Items &amp; Stock so it lands on the visit’s
+bill.
+<ol type="1">
+<li><strong>Order.</strong> The doctor (or a manager) opens the visit’s
+<strong>Lab</strong> tab and presses <strong>Order tests</strong>, picks
+the tests, adds a note for the lab and marks them
+<strong>Urgent</strong> if needed. Tests are always ordered inside an
+open visit, so they are billed with it (for a walk-in who only needs a
+test, open a visit for them first). The same test is not ordered twice
+while the first is unfinished.</li>
+<li><strong>Collect.</strong> Whoever takes the specimen opens the order
+on the <strong>Laboratory</strong> worklist and presses <strong>Specimen
+collected</strong>. Until then nothing can be entered. An order can be
+cancelled (with a reason, and its charge comes off the visit) only
+before the specimen is taken.</li>
+<li><strong>Results.</strong> The lab technician (or a manager) types
+each value. KASTRA judges it against the patient’s own range, so the
+same haemoglobin can be normal for a man and low for a woman, and marks
+it <em>low</em>, <em>high</em>, <em>abnormal</em> or <em>critical</em>.
+A critical value shows a red warning to the lab and to the doctor.</li>
+<li><strong>Release.</strong> A <strong>second person</strong> checks
+and releases the result (a manager can release their own, for a
+one-person lab). The doctor sees results as <em>waiting to be
+checked</em> until then and cannot rely on them. A released result
+cannot be edited: only a manager can <strong>send it back for
+correction</strong>, with a reason that is kept. Released results can be
+<strong>printed</strong> as a lab report, and the patient’s earlier
+results stay on record. Create the lab technician under
+<strong>Settings, Staff</strong> with the role <strong>Lab
+technician</strong>: they sign in to the lab and see nothing else.</li>
+</ol></li>
+<li><strong>Insurance cover and claims</strong> — set up each insurer
+once under <strong>Pharmacy Mgmt, Insurance Providers</strong> (there is
+a one-press button for <strong>Social Health Authority (SHA)</strong>).
+<em>Confirm cover before billing this insurer</em> is on by default, and
+SHA needs it.
+<ol type="1">
+<li><strong>Check cover.</strong> Look the member up with the insurer
+(their portal, the card, a phone call), then press <strong>Check
+cover</strong> on the patient’s page, or <strong>Record cover
+check</strong> when billing. Choose <em>Eligible</em>, <em>Not
+eligible</em> or <em>Could not check</em> (their system was down), and
+add the insurer’s reference if they gave one. The result is kept with
+your name and the time. A patient with no insurer on file gets the one
+that was found eligible, so the next visit starts filled in. KASTRA does
+not yet ask the insurer’s system for you: you type what they told
+you.</li>
+<li><strong>Bill the insurer.</strong> When completing a visit, tick
+<em>An insurer pays part of this bill</em>, choose the insurer, enter
+the member number and the percentage the <strong>patient</strong> pays
+(0 when the insurer pays everything). For an insurer that needs a check,
+the button stays off until cover has been confirmed <em>for this
+visit</em>; a member found <em>Not eligible</em> cannot be billed to the
+insurer (bill the patient, or correct the member number and check
+again). The patient pays their share, the insurer’s share becomes a
+<strong>claim</strong>, and on real sales the invoice shows it as owed
+by the insurer.</li>
+<li><strong>ICD-11 for SHA.</strong> SHA’s published guidance asks for
+ICD-11 diagnosis codes. Beside each diagnosis the doctor can enter its
+<strong>ICD-11 code</strong> (for example 1F40). The claim is flagged
+until every diagnosis has one.</li>
+<li><strong>Follow the claims.</strong> <strong>Insurance
+Claims</strong> in the menu (owner, manager and accountant) shows what
+each insurer owes by age (0-30, 31-60, 61-90, over 90 days) and, for
+every claim, what is still holding it back: no member number, cover not
+confirmed, no diagnosis, no ICD-11 code. Open a claim to see the
+patient, diagnoses and services, <strong>print</strong> it for the
+insurer’s portal or form, set the insurer’s <strong>claim
+number</strong> and any <strong>pre-authorisation</strong> number, then
+mark <strong>Insurer approved</strong>, <strong>Payment
+received</strong> (enter what actually arrived) or <strong>Insurer
+rejected</strong> with the reason. A shortfall or a rejection is written
+off in the books.</li>
+</ol></li>
 <li><strong>Patients</strong> — every person you treat has one record
 (<strong>Patients</strong> in the menu): name, phone, ID number, date of
 birth, weight, <strong>allergies</strong>, conditions, whether pregnant
@@ -1447,6 +1646,21 @@ moved or discounted</li>
 them</strong> and names the batch</li>
 <li>A <strong>recall</strong> can pull a whole batch, and tell you which
 customers bought from it</li>
+<li><strong>Receiving creates the batch.</strong> When a delivery is
+recorded as goods received, each batch-tracked item needs its
+<strong>lot number</strong> from the pack, and medicines also need the
+<strong>expiry date</strong>. A lot that has already expired is refused
+(send it back instead); a second delivery of the same lot tops it up;
+the same lot with a different expiry date is refused so a typing slip
+does not hide a short-dated pack.</li>
+<li><strong>The expiry dashboard</strong> at the top of <strong>Batch
+&amp; Expiry</strong> shows what is on the shelf already expired,
+expiring within 30, 31 to 60 and 61 to 90 days, and recalled lots to
+send back, each with the units and what they cost. Press a figure to see
+those lots. On each lot you can <strong>return it to the
+supplier</strong> (the units leave that lot and your stock, and a return
+note is made), <strong>write it off</strong> (recorded as a loss at
+cost), or recall it.</li>
 </ul>
 <p><strong>Serial numbers</strong> are the same idea for
 individually-tracked goods — electronics, appliances — where you need to
@@ -1458,7 +1672,18 @@ orders</h2>
 them</li>
 <li><strong>Purchase orders</strong> — raise, send, and track them</li>
 <li><strong>Goods received (GRN)</strong> — record what actually
-arrived</li>
+arrived, against an approved order. You cannot receive a line that is
+not on the order or more than is still outstanding (change the order
+first if the supplier sent extra); the form starts with what is still to
+come. The order is marked partly or fully received for you.</li>
+<li><strong>Returns to a supplier</strong> — stock leaves the moment the
+return is made, from the lot you choose (an expired or recalled lot is
+exactly what is sent back) or oldest-first when you do not choose.
+KASTRA checks there is that much on hand and in the lot. Mark it
+<strong>Credited</strong> when the supplier credits you;
+<strong>Cancel</strong> a return that does not go ahead and the units go
+back into the lot and the store they left. Older returns made before
+this was recorded cannot be cancelled this way.</li>
 <li><strong>RFQ</strong> — ask several suppliers to quote, compare, and
 pick. Suppliers respond through a link you send them; they do not need a
 login</li>

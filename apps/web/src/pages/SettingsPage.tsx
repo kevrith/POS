@@ -107,6 +107,8 @@ const ROLE_LABELS: Record<string, string> = {
   CASHIER: 'Cashier',
   PHARMACIST: 'Pharmacist',
   DOCTOR: 'Doctor',
+  NURSE: 'Nurse',
+  LAB_TECH: 'Lab Technician',
   WAITER: 'Waiter',
   KITCHEN: 'Kitchen Staff',
   DRIVER: 'Driver',
@@ -120,6 +122,8 @@ const ROLE_COLORS: Record<string, string> = {
   CASHIER: 'bg-yellow-100 text-yellow-700',
   PHARMACIST: 'bg-cyan-100 text-cyan-700',
   DOCTOR: 'bg-rose-100 text-rose-700',
+  NURSE: 'bg-sky-100 text-sky-700',
+  LAB_TECH: 'bg-fuchsia-100 text-fuchsia-700',
   WAITER: 'bg-orange-100 text-orange-700',
   KITCHEN: 'bg-gray-100 text-gray-700',
   DRIVER: 'bg-teal-100 text-teal-700',
@@ -169,7 +173,7 @@ function AddUserModal({
   const needsPassword = ['OWNER', 'MANAGER', 'ACCOUNTANT', 'DRIVER', 'SALES_AGENT'].includes(form.role);
   // Drivers and agents sign in to their phones by PIN — a PIN login lasts 12 hours
   // against 15 minutes for email, which is what keeps them signed in out in the field.
-  const needsPin = ['CASHIER', 'PHARMACIST', 'DOCTOR', 'WAITER', 'KITCHEN', 'DRIVER', 'SALES_AGENT'].includes(form.role);
+  const needsPin = ['CASHIER', 'PHARMACIST', 'DOCTOR', 'NURSE', 'LAB_TECH', 'WAITER', 'KITCHEN', 'DRIVER', 'SALES_AGENT'].includes(form.role);
   const pinIsField = ['DRIVER', 'SALES_AGENT'].includes(form.role);
   const isDriver = form.role === 'DRIVER';
 
@@ -205,6 +209,8 @@ function AddUserModal({
               <option value="CASHIER">Cashier — POS + PIN login</option>
               <option value="PHARMACIST">Pharmacist — dispenses, sells, approves safety overrides + PIN</option>
               <option value="DOCTOR">Doctor — writes prescriptions, reads patient records + PIN</option>
+              <option value="NURSE">Nurse — registers and triages patients, takes specimens + PIN</option>
+              <option value="LAB_TECH">Lab technician — the lab only + PIN</option>
               <option value="WAITER">Waiter — Hospitality + PIN login</option>
               <option value="KITCHEN">Kitchen Staff — KDS only + PIN</option>
               <option value="DRIVER">Driver — Kastra Driver app (email + password)</option>

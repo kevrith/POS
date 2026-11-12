@@ -78,6 +78,7 @@ interface SupplierReturnItem {
   unitCostCents: number;
   totalCents: number;
   reason?: string;
+  lotNumber?: string | null;
   item?: { name: string; sku?: string };
 }
 
@@ -358,14 +359,12 @@ interface GRNModalProps {
 
 function GRNModal({ po, storeId, onClose, onSuccess }: GRNModalProps) {
   const [receiving, setReceiving] = useState(
-    po.items.map((item) => ({
-      poItemId: item.id,
-      name: item.item?.name ?? item.itemId,
-      ordered: item.quantityOrdered,
-      received: item.quantityOrdered,
-      batchLot: '',
-      expiry: '',
-    })),
+    po.items.map((item) => {
+      // What is still to come: the order less what earlier receipts brought in.
+      const earlier = (po.grns ?? []).flatMap((g) => g.items).filter((g) => g.poItemId === item.id).reduce((sum, g) => sum + g.quantityReceived, 0);
+      const outstanding = Math.max(0, Math.round((item.quantityOrdered - earlier) * 1000) / 1000);
+      return { poItemId: item.id, name: item.item?.name ?? item.itemId, ordered: outstanding, earlier, received: outstanding, batchLot: '', expiry: '' };
+    }),
   );
   const [error, setError] = useState('');
 
@@ -406,7 +405,7 @@ function GRNModal({ po, storeId, onClose, onSuccess }: GRNModalProps) {
           )}
 
           <p className="text-sm text-gray-600 bg-blue-50 border border-blue-200 rounded-lg p-3">
-            Enter quantities received. Stock levels will be updated automatically upon confirmation.
+            Enter quantities received. Stock levels will be updated automatically upon confirmation. For stock tracked by lot (medicines and other batch items) the lot number is needed, and medicines also need the expiry date from the pack: the lot is recorded with the stock.
           </p>
 
           {receiving.map((r, idx) => (
@@ -414,7 +413,7 @@ function GRNModal({ po, storeId, onClose, onSuccess }: GRNModalProps) {
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-gray-800">{r.name}</span>
                 <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
-                  Ordered: {r.ordered}
+                  Still to come: {r.ordered}{r.earlier > 0 ? ` (${r.earlier} already received)` : ''}
                 </span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -423,9 +422,10 @@ function GRNModal({ po, storeId, onClose, onSuccess }: GRNModalProps) {
                   <input
                     type="number"
                     min={0}
+                    step="any"
                     value={r.received}
                     onChange={(e) => setReceiving(receiving.map((x, i) =>
-                      i === idx ? { ...x, received: Math.max(0, parseInt(e.target.value) || 0) } : x,
+                      i === idx ? { ...x, received: Math.max(0, parseFloat(e.target.value) || 0) } : x,
                     ))}
                     className="w-full border rounded-lg px-3 py-2 text-sm font-bold"
                   />
@@ -456,7 +456,7 @@ function GRNModal({ po, storeId, onClose, onSuccess }: GRNModalProps) {
               {r.received < r.ordered && (
                 <p className="text-xs text-amber-600 flex items-center gap-1">
                   <AlertCircle className="w-3 h-3" />
-                  Receiving {r.ordered - r.received} fewer than ordered — PO will be marked Partially Received
+                  Receiving {Math.round((r.ordered - r.received) * 1000) / 1000} fewer than still expected — PO will be marked Partially Received
                 </p>
               )}
             </div>
@@ -1294,6 +1294,14 @@ export default function SuppliersPage() {
       setShowNewReturn(false);
       setReturnForm({ supplierId: '', reason: '', notes: '', itemName: '', itemId: '', qty: '1', unitCostKES: '0', itemReason: '' });
     },
+  });
+
+  const [crediting, setCrediting] = useState<SupplierReturn | null>(null);
+  const [creditForm, setCreditForm] = useState({ number: '', amount: '' });
+  const returnStatus = useMutation({
+    mutationFn: ({ id, status, creditNoteNumber, amountCents }: { id: string; status: 'CREDITED' | 'CANCELLED'; creditNoteNumber?: string; amountCents?: number }) => api.patch(`/suppliers/returns/${id}/status`, { status, creditNoteNumber, amountCents }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['supplier-returns'] }); void qc.invalidateQueries({ queryKey: ['batches'] }); void qc.invalidateQueries({ queryKey: ['supplier-credit-notes'] }); setCrediting(null); },
+    onError: (e: Error) => window.alert(e.message),
   });
 
   // ── Price Agreements state ──
@@ -2143,6 +2151,31 @@ export default function SuppliersPage() {
               </div>
             )}
 
+            {crediting && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) setCrediting(null); }}>
+                <form role="dialog" aria-modal="true" aria-label="Supplier credited this return" className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6 space-y-4"
+                  onSubmit={(e) => { e.preventDefault(); returnStatus.mutate({ id: crediting.id, status: 'CREDITED', creditNoteNumber: creditForm.number.trim() || undefined, amountCents: Math.round((parseFloat(creditForm.amount) || 0) * 100) }); }}>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-800">{crediting.returnNumber} credited</h3>
+                    <p className="text-sm text-gray-500">A credit note is recorded against {crediting.supplier?.name ?? 'the supplier'} so it can be set against a later order.</p>
+                  </div>
+                  <div>
+                    <label htmlFor="cn-number" className="block text-sm font-medium text-gray-700 mb-1">Supplier's credit note number (optional)</label>
+                    <input id="cn-number" value={creditForm.number} onChange={(e) => setCreditForm((f) => ({ ...f, number: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Leave blank to number it for you" />
+                  </div>
+                  <div>
+                    <label htmlFor="cn-amount" className="block text-sm font-medium text-gray-700 mb-1">Amount credited (KES)</label>
+                    <input id="cn-amount" inputMode="decimal" value={creditForm.amount} onChange={(e) => setCreditForm((f) => ({ ...f, amount: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm" />
+                    <p className="text-xs text-gray-500 mt-1">The return was worth {fmt(crediting.totalCents)}. Enter what the supplier actually credited; 0 records no credit note.</p>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button type="button" onClick={() => setCrediting(null)} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50">Cancel</button>
+                    <button type="submit" disabled={returnStatus.isPending} className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">{returnStatus.isPending ? 'Saving…' : 'Mark credited'}</button>
+                  </div>
+                </form>
+              </div>
+            )}
+
             {supplierReturns.length === 0 ? (
               <div className="text-center py-16 bg-white rounded-xl border">
                 <Truck className="w-12 h-12 mx-auto mb-3 text-gray-300" />
@@ -2156,6 +2189,7 @@ export default function SuppliersPage() {
                       <th className="px-4 py-3 text-left">Return #</th>
                       <th className="px-4 py-3 text-left">Supplier</th>
                       <th className="px-4 py-3 text-left">Reason</th>
+                      <th className="px-4 py-3 text-left">Lot</th>
                       <th className="px-4 py-3 text-right">Total</th>
                       <th className="px-4 py-3 text-center">Status</th>
                       <th className="px-4 py-3 text-left">Date</th>
@@ -2168,18 +2202,27 @@ export default function SuppliersPage() {
                         <td className="px-4 py-3 font-mono font-semibold text-blue-600">{r.returnNumber}</td>
                         <td className="px-4 py-3 font-medium">{r.supplier?.name ?? '—'}</td>
                         <td className="px-4 py-3 text-gray-600 max-w-xs truncate">{r.reason}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-gray-600">{[...new Set(r.items.map((i) => i.lotNumber).filter(Boolean))].join(', ') || '—'}</td>
                         <td className="px-4 py-3 text-right font-semibold text-red-600">{fmt(r.totalCents)}</td>
                         <td className="px-4 py-3 text-center">
                           <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                            r.status === 'APPROVED' ? 'bg-green-100 text-green-700'
-                            : r.status === 'DRAFT' ? 'bg-gray-100 text-gray-600'
+                            r.status === 'CREDITED' || r.status === 'APPROVED' ? 'bg-green-100 text-green-700'
+                            : r.status === 'CANCELLED' ? 'bg-gray-100 text-gray-500'
                             : 'bg-blue-100 text-blue-700'
                           }`}>
                             {r.status}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-gray-500">{new Date(r.createdAt).toLocaleDateString('en-KE')}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 space-x-2 whitespace-nowrap">
+                          {['DRAFT', 'SENT', 'APPROVED'].includes(r.status) && (
+                            <>
+                              <button onClick={() => { setCrediting(r); setCreditForm({ number: '', amount: (r.totalCents / 100).toFixed(2) }); }} disabled={returnStatus.isPending}
+                                className="text-xs font-medium text-green-700 border border-green-200 rounded px-2 py-1 hover:bg-green-50 disabled:opacity-50">Credited</button>
+                              <button onClick={() => { if (window.confirm(`Cancel ${r.returnNumber}? The stock goes back where it came from.`)) returnStatus.mutate({ id: r.id, status: 'CANCELLED' }); }} disabled={returnStatus.isPending}
+                                className="text-xs font-medium text-red-700 border border-red-200 rounded px-2 py-1 hover:bg-red-50 disabled:opacity-50">Cancel</button>
+                            </>
+                          )}
                           <a
                             href={`/api/v1/reports/pdf/debit-note/${r.id}`}
                             target="_blank"

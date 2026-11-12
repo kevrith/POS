@@ -2,18 +2,21 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { formatKES } from '@pos/shared';
-import { AlertTriangle, FileText, Pill, Printer, Stethoscope, Trash2, X } from 'lucide-react';
+import { AlertTriangle, FileText, Pill, Printer, ShieldCheck, Stethoscope, Trash2, X } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth';
 import { allergyLine, bmi, vitalFlags, VISIT_STATUS_LABEL, type Diagnosis, type VisitDetail } from '../../lib/clinical';
 import { isValidKraPin } from '../../lib/kraPin';
+import type { CoverStanding } from '../../lib/cover';
+import { CoverBadge, CoverCheckModal, useInsurers } from './CoverCheck';
+import { LabTab } from './LabResults';
 import { printHtml } from '../../lib/printHtml';
 import { referralLetterHtml, sickNoteHtml } from '../../lib/visitPrint';
 import { Badge, Button, Input, Select, Tabs, Textarea, type TabItem } from '../ui';
 import { Modal } from '../../pages/fuel/Modal';
 import { useDialog } from '../Dialog';
 
-type Tab = 'triage' | 'consultation' | 'prescriptions' | 'billing';
+type Tab = 'triage' | 'consultation' | 'lab' | 'prescriptions' | 'billing';
 
 const canConsult = (role?: string) => ['OWNER', 'ADMIN', 'MANAGER', 'DOCTOR'].includes(String(role));
 const canBill = (role?: string) => ['OWNER', 'ADMIN', 'MANAGER', 'CASHIER', 'PHARMACIST'].includes(String(role));
@@ -52,6 +55,7 @@ export default function VisitWorkspace({ visitId, onClose }: { visitId: string; 
   const tabs = useMemo<Array<TabItem<Tab>>>(() => [
     { id: 'triage', label: 'Triage' },
     { id: 'consultation', label: 'Consultation' },
+    { id: 'lab', label: 'Lab' },
     { id: 'prescriptions', label: 'Prescriptions', count: visit?.prescriptions.length },
     { id: 'billing', label: 'Billing', count: visit?.charges.length },
   ], [visit?.prescriptions.length, visit?.charges.length]);
@@ -81,8 +85,9 @@ export default function VisitWorkspace({ visitId, onClose }: { visitId: string; 
         {current === 'triage' && <TriageTab visit={visit} closed={closed} onSave={(body) => act.mutate({ path: 'vitals', method: 'patch', body })} busy={act.isPending} />}
         {current === 'consultation' && <ConsultationTab visit={visit} editable={visit.status === 'IN_CONSULTATION' && canConsult(user?.role) && mine} onSave={(body) => act.mutate({ path: 'consultation', method: 'patch', body })} busy={act.isPending}
           business={business} />}
+        {current === 'lab' && <LabTab visitId={visit.id} closed={closed} canOrder={canConsult(user?.role)} business={business} onChanged={() => refresh()} />}
         {current === 'prescriptions' && <PrescriptionsTab visit={visit} closed={closed} />}
-        {current === 'billing' && <BillingTab visit={visit} closed={closed} canTakeMoney={canBill(user?.role)} onChanged={refresh} />}
+        {current === 'billing' && <BillingTab visit={visit} closed={closed || user?.role === 'NURSE'} canTakeMoney={canBill(user?.role)} onChanged={refresh} />}
 
         {!closed && (
           <div className="flex flex-wrap items-center justify-end gap-2 border-t pt-3 dark:border-gray-700">
@@ -95,10 +100,10 @@ export default function VisitWorkspace({ visitId, onClose }: { visitId: string; 
             {visit.status === 'READY_TO_BILL' && canConsult(user?.role) && (
               <Button variant="secondary" loading={act.isPending} onClick={() => { act.mutate({ path: 'reopen' }); setTab('consultation'); }}>Back to the doctor</Button>
             )}
-            <Button variant="secondary" icon={<X className="w-4 h-4" />} onClick={async () => {
+            {user?.role !== 'NURSE' && <Button variant="secondary" icon={<X className="w-4 h-4" />} onClick={async () => {
               const reason = await prompt({ title: 'Cancel this visit', message: 'Nothing is billed. Say why (for example: the patient left).', placeholder: 'Reason', confirmLabel: 'Cancel visit' });
               if (reason && reason.trim()) act.mutate({ path: 'cancel', body: { reason: reason.trim() } });
-            }}>Cancel visit</Button>
+            }}>Cancel visit</Button>}
           </div>
         )}
         {visit.status === 'CANCELLED' && <p className="text-sm text-gray-600">Cancelled: {visit.cancelReason}</p>}
@@ -178,15 +183,20 @@ function ConsultationTab({ visit, editable, onSave, busy, business }: { visit: V
 
       <div>
         <p className="mb-1 text-[13px] font-semibold text-gray-700 dark:text-gray-200">Diagnoses</p>
-        <div className="mb-2 flex flex-wrap gap-2">
-          {diagnoses.length === 0 && <span className="text-xs text-gray-500">None yet. At least one is needed to finish the consultation.</span>}
+        {diagnoses.length === 0 && <p className="mb-2 text-xs text-gray-500">None yet. At least one is needed to finish the consultation.</p>}
+        <ul className="mb-2 space-y-1.5">
           {diagnoses.map((d) => (
-            <span key={d.code ?? d.label} className="inline-flex items-center gap-1 rounded-full bg-teal-100 px-2.5 py-1 text-xs font-medium text-teal-800 dark:bg-teal-500/20 dark:text-teal-200">
-              {d.code ? `${d.code} ` : ''}{d.label}
-              {editable && <button type="button" aria-label={`Remove ${d.label}`} onClick={() => setDiagnoses((l) => l.filter((x) => x !== d))}><X className="h-3 w-3" /></button>}
-            </span>
+            <li key={d.code ?? d.label} className="flex flex-wrap items-center gap-2 rounded-lg bg-teal-50 px-3 py-1.5 text-sm text-teal-900 dark:bg-teal-500/10 dark:text-teal-100">
+              <span className="min-w-0 flex-1">{d.code ? <span className="mr-1 font-mono text-xs">{d.code}</span> : null}{d.label}</span>
+              {editable ? (
+                <input aria-label={`ICD-11 code for ${d.label}`} placeholder="ICD-11 (SHA)" value={d.icd11 ?? ''} maxLength={10}
+                  onChange={(e) => setDiagnoses((l) => l.map((x) => (x === d ? { ...x, icd11: e.target.value.toUpperCase() || undefined } : x)))}
+                  className="h-8 w-28 rounded-md border bg-white px-2 font-mono text-xs dark:border-gray-600 dark:bg-gray-800" />
+              ) : d.icd11 ? <span className="font-mono text-xs">{d.icd11}</span> : null}
+              {editable && <button type="button" aria-label={`Remove ${d.label}`} onClick={() => setDiagnoses((l) => l.filter((x) => x !== d))}><X className="h-3.5 w-3.5" /></button>}
+            </li>
           ))}
-        </div>
+        </ul>
         {editable && (
           <div className="relative">
             <Input label="Add a diagnosis" hideLabel placeholder="Search by name or ICD-10 code, or type your own and press Enter" value={q} onChange={(e) => setQ(e.target.value)}
@@ -312,18 +322,73 @@ function PayModal({ visit, onClose, onDone }: { visit: VisitDetail; onClose: () 
   const [tendered, setTendered] = useState('');
   const [ref, setRef] = useState('');
   const [pin, setPin] = useState('');
-  const takes = visit.invoicing && visit.totalCents > 0;
-  const paying = Math.round((parseFloat(tendered) || 0) * 100) || visit.totalCents;
+  const { data: insurers = [] } = useInsurers();
+  const [insured, setInsured] = useState(false);
+  const [providerId, setProviderId] = useState(visit.patient?.insuranceProviderId ?? '');
+  const [member, setMember] = useState(visit.patient?.insuranceMemberNumber ?? '');
+  const [sharePct, setSharePct] = useState('0');
+  const [checking, setChecking] = useState(false);
+  const insurer = insurers.find((i) => i.id === providerId);
+  const invoicing = visit.invoicing && visit.totalCents > 0;
+  const pct = Math.min(99, Math.max(0, Math.floor(Number(sharePct) || 0)));
+  const patientShare = insured ? Math.round((visit.totalCents * pct) / 100) : visit.totalCents;
+  const insurerShare = visit.totalCents - patientShare;
+  const collects = invoicing && patientShare > 0;
+  const paying = Math.round((parseFloat(tendered) || 0) * 100) || patientShare;
   const pinBad = pin.trim() !== '' && !isValidKraPin(pin);
+  const memberReady = member.trim().length > 0;
+  const { data: found, refetch } = useQuery<{ standing: CoverStanding }>({
+    queryKey: ['cover', 'standing', visit.id, providerId, member.trim()],
+    queryFn: () => api.get(`/cover/standing?visitId=${visit.id}&providerId=${providerId}&memberNumber=${encodeURIComponent(member.trim())}`),
+    enabled: insured && !!providerId && memberReady,
+  });
+  const standing: CoverStanding = found?.standing ?? 'NOT_CHECKED';
+  const blocked = insured && (!providerId || !memberReady || (!!insurer?.requiresEligibility && standing !== 'ELIGIBLE'));
   const done = useMutation({
-    mutationFn: () => api.post<{ visit: VisitDetail; receiptNumber?: string }>(`/visits/${visit.id}/complete`, takes ? { payments: [{ method, amountCents: paying, ...(ref.trim() ? { reference: ref.trim() } : {}) }], buyerKraPin: pin.trim() || undefined } : {}),
-    onSuccess: (r) => { toast.success(r.receiptNumber ? `Visit completed. Receipt ${r.receiptNumber}` : 'Visit completed'); onDone(r.visit); },
+    mutationFn: () => api.post<{ visit: VisitDetail; receiptNumber?: string; claimId?: string | null }>(`/visits/${visit.id}/complete`, {
+      ...(collects ? { payments: [{ method, amountCents: paying, ...(ref.trim() ? { reference: ref.trim() } : {}) }] } : {}),
+      ...(invoicing ? { buyerKraPin: pin.trim() || undefined } : {}),
+      ...(insured ? { insurance: { providerId, memberNumber: member.trim(), patientPct: pct } } : {}),
+    }),
+    onSuccess: (r) => {
+      toast.success(`${r.receiptNumber ? `Visit completed. Receipt ${r.receiptNumber}` : 'Visit completed'}${r.claimId ? '. Claim raised' : ''}`);
+      onDone(r.visit);
+    },
     onError: (e: Error) => toast.error(e.message),
   });
   return (
-    <Modal title="Complete the visit" subtitle={takes ? `Total ${formatKES(visit.totalCents)}` : visit.totalCents > 0 ? 'Real sales are off, so no payment is taken here' : 'Nothing was charged'} onClose={onClose}>
+    <Modal title="Complete the visit" subtitle={invoicing ? `Total ${formatKES(visit.totalCents)}` : visit.totalCents > 0 ? 'Real sales are off, so no payment is taken here' : 'Nothing was charged'} onClose={onClose}>
       <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); done.mutate(); }}>
-        {takes && (
+        {visit.totalCents > 0 && (
+          <div className="space-y-3 rounded-lg border px-3 py-3">
+            <label className="flex items-center gap-2 text-sm font-semibold">
+              <input type="checkbox" checked={insured} onChange={(e) => setInsured(e.target.checked)} />
+              <ShieldCheck className="h-4 w-4 text-blue-600" aria-hidden /> An insurer pays part of this bill
+            </label>
+            {insured && (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Select label="Insurer" value={providerId} onChange={(e) => setProviderId(e.target.value)}>
+                    <option value="">Choose an insurer…</option>
+                    {insurers.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+                  </Select>
+                  <Input label="Member number" value={member} onChange={(e) => setMember(e.target.value)} />
+                  <Input label="Patient pays (%)" inputMode="numeric" value={sharePct} onChange={(e) => setSharePct(e.target.value)} hint="0 when the insurer pays everything" />
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <span className="flex items-center gap-2"><CoverBadge standing={standing} />
+                    {insurer && !insurer.requiresEligibility && <span className="text-xs text-gray-500">This insurer does not need a check</span>}
+                  </span>
+                  <Button variant="secondary" size="sm" disabled={!providerId || !memberReady} onClick={() => setChecking(true)}>Record cover check</Button>
+                </div>
+                {blocked && providerId && memberReady && <p className="text-xs text-amber-700">Cover has to be confirmed before the insurer can be billed. Look the member up with the insurer, then record the result.</p>}
+                <div className="flex justify-between text-sm"><span>Patient pays</span><span className="font-semibold tabular-nums">{formatKES(patientShare)}</span></div>
+                <div className="flex justify-between text-sm text-blue-700"><span>Billed to the insurer</span><span className="font-semibold tabular-nums">{formatKES(insurerShare)}</span></div>
+              </>
+            )}
+          </div>
+        )}
+        {collects && (
           <>
             <div className="flex flex-wrap gap-2">
               {METHODS.map(([m, label]) => (
@@ -331,16 +396,17 @@ function PayModal({ visit, onClose, onDone }: { visit: VisitDetail; onClose: () 
                   className={`h-10 rounded-lg border px-4 text-sm font-semibold ${method === m ? 'border-brand-600 bg-brand-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>{label}</button>
               ))}
             </div>
-            <Input label="Amount received" inputMode="decimal" value={tendered} onChange={(e) => setTendered(e.target.value)} placeholder={(visit.totalCents / 100).toFixed(2)} />
+            <Input label="Amount received" inputMode="decimal" value={tendered} onChange={(e) => setTendered(e.target.value)} placeholder={(patientShare / 100).toFixed(2)} />
             {(method === 'MPESA' || method === 'CARD') && <Input label={method === 'MPESA' ? 'M-Pesa code' : 'Card slip number'} value={ref} onChange={(e) => setRef(e.target.value)} />}
-            <Input label="Buyer's KRA PIN (optional)" value={pin} onChange={(e) => setPin(e.target.value.toUpperCase())} placeholder="A012345678Z" error={pinBad ? 'A KRA PIN looks like A012345678Z or P051234567Z' : undefined} />
           </>
         )}
+        {invoicing && <Input label="Buyer's KRA PIN (optional)" value={pin} onChange={(e) => setPin(e.target.value.toUpperCase())} placeholder="A012345678Z" error={pinBad ? 'A KRA PIN looks like A012345678Z or P051234567Z' : undefined} />}
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={done.isPending} disabled={pinBad || (takes && paying < visit.totalCents)}>{takes ? 'Take payment' : 'Complete'}</Button>
+          <Button type="submit" loading={done.isPending} disabled={pinBad || blocked || (collects && paying < patientShare)}>{collects ? 'Take payment' : insured ? 'Bill the insurer and complete' : 'Complete'}</Button>
         </div>
       </form>
+      {checking && <CoverCheckModal patientId={visit.patientId} visitId={visit.id} providerId={providerId} memberNumber={member} onClose={() => setChecking(false)} onDone={() => { setChecking(false); void refetch(); }} />}
     </Modal>
   );
 }

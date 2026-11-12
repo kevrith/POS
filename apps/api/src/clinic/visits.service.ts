@@ -6,6 +6,10 @@ import { hasTooManyDecimals } from '../common/quantity';
 import { DirectSaleService, type DirectSaleInput, type EtimsOutcome } from '../sales/direct-sale.service';
 import { presentPatient } from '../patients/patient-data';
 import { cleanDiagnoses, parseDiagnoses } from './diagnosis-codes';
+import { CoverService } from '../cover/cover.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { daysOverdue, followUpBucket, reminderMessage } from './follow-ups';
+import { splitBill } from '../cover/cover';
 import { assertCan, OPEN_STATUSES, PRIORITIES, queueOrder } from './visit-flow';
 import { hasAnyVital, vitalsData, type VitalsInput } from './vitals';
 
@@ -56,7 +60,7 @@ export function consultationData(input: ConsultationInput, now = new Date()): Re
 
 @Injectable()
 export class VisitsService {
-  constructor(private prisma: PrismaService, private directSales: DirectSaleService) {}
+  constructor(private prisma: PrismaService, private directSales: DirectSaleService, private cover: CoverService, private notifications: NotificationsService) {}
 
   /** V-<YYYYMMDD>-<nnn>: per business, per Nairobi day, continuing from the highest issued so a deletion never reuses a number. */
   private async nextNumber(businessId: string): Promise<string> {
@@ -108,6 +112,113 @@ export class VisitsService {
         await new Promise((r) => setTimeout(r, Math.floor(Math.random() * 25 * attempt)));
       }
     }
+  }
+
+  /**
+   * A booked patient arrives: queue them as a visit tied to the appointment, bring the appointment's services onto the bill, and
+   * move the appointment to IN_PROGRESS, all together. An appointment holding a deposit is not taken this way: the deposit is
+   * applied when the appointment itself is completed, and a visit would bypass that. Finishing or cancelling the visit
+   * closes the appointment (see `complete` and `cancel`).
+   */
+  async createFromAppointment(businessId: string, appointmentId: string, dto: { patientId?: string; complaint?: string }, actor: Actor) {
+    const appt = await this.prisma.appointment.findFirst({ where: { id: appointmentId, businessId } });
+    if (!appt) throw new NotFoundException('Appointment not found');
+    if (!['BOOKED', 'CONFIRMED'].includes(appt.status)) throw new BadRequestException(`A ${appt.status.toLowerCase().replace(/_/g, ' ')} appointment cannot be checked in`);
+    if (appt.depositCents > 0) throw new BadRequestException('This appointment holds a deposit. Complete it from Appointments so the deposit is applied, or refund the deposit first.');
+    const patient = await this.prisma.patient.findFirst({ where: { id: text(dto.patientId, 'Patient', 64), businessId, isActive: true } });
+    if (!patient) throw new BadRequestException('Patient not found');
+    const already = await this.prisma.visit.findFirst({ where: { businessId, appointmentId, status: { not: 'CANCELLED' } }, select: { visitNumber: true } });
+    if (already) throw new ConflictException(`This appointment is already checked in (${already.visitNumber})`);
+    const open = await this.prisma.visit.findFirst({ where: { businessId, patientId: patient.id, status: { in: [...OPEN_STATUSES] } }, select: { visitNumber: true } });
+    if (open) throw new ConflictException(`${patient.name} already has an open visit (${open.visitNumber})`);
+
+    // The services booked, priced as they were booked; an older booking with only a service on the appointment itself counts as one.
+    const booked = await this.prisma.appointmentService.findMany({ where: { appointmentId }, orderBy: { position: 'asc' } });
+    const wanted = booked.length > 0 ? booked.filter((b) => b.itemId).map((b) => ({ itemId: b.itemId as string, name: b.name, unitPriceCents: b.unitPriceCents }))
+      : appt.serviceItemId ? [{ itemId: appt.serviceItemId, name: '', unitPriceCents: 0 }] : [];
+    const itemRows = wanted.length ? await this.prisma.item.findMany({ where: { businessId, id: { in: wanted.map((w) => w.itemId) } }, select: { id: true, name: true, type: true, retailPriceCents: true } }) : [];
+    const byId = new Map(itemRows.map((i) => [i.id, i]));
+    const charges = wanted.flatMap((w) => {
+      const item = byId.get(w.itemId);
+      if (!item || item.type !== 'SERVICE') return [];
+      const price = w.unitPriceCents > 0 ? w.unitPriceCents : item.retailPriceCents;
+      return price > 0 ? [{ businessId, itemId: item.id, name: w.name || item.name, quantity: 1, unitPriceCents: price, addedBy: actor.name }] : [];
+    });
+    const data = {
+      businessId, storeId: appt.storeId, patientId: patient.id, appointmentId,
+      complaint: optionalText(dto.complaint, 'Complaint', 500) ?? optionalText(appt.notes, 'Complaint', 500),
+      priority: 'NORMAL', createdBy: actor.name,
+    };
+    for (let attempt = 1; ; attempt++) {
+      const visitNumber = await this.nextNumber(businessId);
+      try {
+        const visitId = await this.prisma.$transaction(async (tx) => {
+          const moved = await tx.appointment.updateMany({ where: { id: appointmentId, businessId, status: { in: ['BOOKED', 'CONFIRMED'] } }, data: { status: 'IN_PROGRESS' } });
+          if (moved.count !== 1) throw new BadRequestException('This appointment was just changed by someone else. Reload it.');
+          const visit = await tx.visit.create({ data: { ...data, visitNumber } });
+          for (const c of charges) await tx.visitCharge.create({ data: { ...c, visitId: visit.id } });
+          return visit.id;
+        });
+        return this.get(visitId, businessId);
+      } catch (err) {
+        if ((err as { code?: string })?.code !== 'P2002' || attempt >= MAX_ATTEMPTS) throw err;
+        await new Promise((r) => setTimeout(r, Math.floor(Math.random() * 25 * attempt)));
+      }
+    }
+  }
+
+  /**
+   * Patients whose follow-up is due: overdue by up to 60 days, today, or in the next 14 days, whom nobody has reached yet and who
+   * have not already come back (a later visit means the follow-up happened).
+   */
+  async followUps(businessId: string, storeId?: string) {
+    const now = new Date();
+    const from = new Date(now.getTime() - 60 * 86_400_000);
+    const to = new Date(now.getTime() + 14 * 86_400_000);
+    const rows = await this.prisma.visit.findMany({
+      where: { businessId, ...(storeId ? { storeId } : {}), followUpDate: { gte: from, lte: to }, followUpContactedAt: null, status: { in: ['READY_TO_BILL', 'COMPLETED'] } },
+      orderBy: { followUpDate: 'asc' },
+      take: 500,
+    });
+    if (rows.length === 0) return { overdue: [], today: [], soon: [] };
+    const later = await this.prisma.visit.findMany({ where: { businessId, patientId: { in: [...new Set(rows.map((r) => r.patientId))] }, status: { not: 'CANCELLED' }, createdAt: { gt: rows.reduce((m, r) => (r.createdAt < m ? r.createdAt : m), rows[0].createdAt) } }, select: { patientId: true, createdAt: true } });
+    const lastVisit = new Map<string, number>();
+    for (const l of later) lastVisit.set(l.patientId, Math.max(lastVisit.get(l.patientId) ?? 0, l.createdAt.getTime()));
+    const due = rows.filter((r) => (lastVisit.get(r.patientId) ?? 0) <= r.createdAt.getTime());
+    const people = await this.patientCards(businessId, due.map((r) => r.patientId));
+    const out: Record<'overdue' | 'today' | 'soon', unknown[]> = { overdue: [], today: [], soon: [] };
+    for (const r of due) {
+      out[followUpBucket(r.followUpDate as Date, now)].push({
+        id: r.id, visitNumber: r.visitNumber, followUpDate: r.followUpDate, daysOverdue: daysOverdue(r.followUpDate as Date, now), complaint: r.complaint, diagnoses: parseDiagnoses(r.diagnoses),
+        doctorName: r.doctorName, patient: people.get(r.patientId) ?? null,
+      });
+    }
+    return out;
+  }
+
+  /** Someone reached the patient some other way (a call). The follow-up leaves the list. */
+  async markFollowUpContacted(id: string, businessId: string, actor: Actor) {
+    const v = await this.owned(id, businessId);
+    if (!v.followUpDate) throw new BadRequestException('This visit has no follow-up date');
+    const done = await this.prisma.visit.updateMany({ where: { id, businessId, followUpContactedAt: null }, data: { followUpContactedAt: new Date(), followUpContactedBy: actor.name } });
+    if (done.count !== 1) throw new BadRequestException('Someone already reached this patient');
+    return { ok: true };
+  }
+
+  /** SMS the patient a plain reminder. It is marked contacted only when the message actually went. */
+  async remindFollowUp(id: string, businessId: string, actor: Actor) {
+    const v = await this.owned(id, businessId);
+    if (!v.followUpDate) throw new BadRequestException('This visit has no follow-up date');
+    if (v.followUpContactedAt) throw new BadRequestException('Someone already reached this patient');
+    const [patient, business] = await Promise.all([
+      this.prisma.patient.findFirst({ where: { id: v.patientId, businessId }, select: { name: true, phone: true } }),
+      this.prisma.business.findFirst({ where: { id: businessId }, select: { name: true } }),
+    ]);
+    if (!patient?.phone) throw new BadRequestException('This patient has no phone number on record');
+    const sent = await this.notifications.sendSMS(businessId, patient.phone, reminderMessage(patient.name, business?.name ?? 'the clinic', v.followUpDate));
+    if (!sent.success) throw new BadRequestException(sent.error === 'Messaging not configured' ? 'SMS is not set up for this business. Call the patient and mark them as reached instead.' : `The message was not sent: ${sent.error ?? 'unknown error'}`);
+    await this.prisma.visit.updateMany({ where: { id, businessId, followUpContactedAt: null }, data: { followUpContactedAt: new Date(), followUpContactedBy: `${actor.name} (SMS)` } });
+    return { ok: true };
   }
 
   /** The queue board: open visits (urgent first, longest wait next) and today's finished ones, each with who the patient is. */
@@ -241,11 +352,12 @@ export class VisitsService {
    * Take the money and close the visit. For a business on the sales pipeline the charges become one invoice (with a KRA
    * receipt) in the same transaction as closing the visit; otherwise, or when there is nothing to charge, the visit just closes.
    */
-  async complete(id: string, businessId: string, actor: Actor, dto: { payments?: Array<{ method: string; amountCents: number; reference?: string }>; buyerKraPin?: string } = {}) {
+  async complete(id: string, businessId: string, actor: Actor, dto: { payments?: Array<{ method: string; amountCents: number; reference?: string }>; buyerKraPin?: string; insurance?: { providerId?: string; memberNumber?: string; patientPct?: number } } = {}) {
     const v = await this.owned(id, businessId);
     assertCan('complete', v.status);
     const charges = await this.prisma.visitCharge.findMany({ where: { visitId: id, businessId }, orderBy: { createdAt: 'asc' } });
     const invoice = (await this.directSales.isEnabled(businessId)) && charges.length > 0;
+    const insured = await this.insuredShare(v, businessId, charges, dto.insurance);
 
     let input: DirectSaleInput | null = null;
     if (invoice) {
@@ -264,7 +376,8 @@ export class VisitsService {
           if (!item) throw new BadRequestException(`${c.name} is no longer in the catalogue`);
           return { itemId: item.id, name: c.name, quantity: c.quantity, unitPriceCents: c.unitPriceCents, totalCents: Math.round(c.unitPriceCents * c.quantity), taxClass: taxClassOf(item) };
         }),
-        payments,
+        // The insurer's share is owed to the clinic by the insurer until the claim is paid.
+        payments: [...payments, ...(insured && insured.insurerCents > 0 ? [{ method: 'INSURANCE', amountCents: insured.insurerCents }] : [])],
         customerName: patient?.name,
         customerPhone: patient?.phone ?? undefined,
         buyerKraPin: optionalKraPin(dto.buyerKraPin, 'Buyer KRA PIN'),
@@ -275,18 +388,60 @@ export class VisitsService {
     const outcome = await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.visit.updateMany({ where: { id, businessId, status: 'READY_TO_BILL' }, data: { status: 'COMPLETED', completedAt: new Date() } });
       if (claimed.count !== 1) throw new BadRequestException('This visit was just completed by someone else. Reload it.');
-      if (!input) return null;
-      const result = await this.directSales.createInTx(tx, input);
-      await tx.visit.updateMany({ where: { id, businessId }, data: { saleId: result.sale.id } });
-      return result;
+      const result = input ? await this.directSales.createInTx(tx, input) : null;
+      if (result) await tx.visit.updateMany({ where: { id, businessId }, data: { saleId: result.sale.id } });
+      // The appointment this visit came from is done. Closed directly, not through the appointment's own completion, which would invoice it a second time.
+      if (v.appointmentId) await tx.appointment.updateMany({ where: { id: v.appointmentId, businessId, status: 'IN_PROGRESS' }, data: { status: 'COMPLETED' } });
+      // The insurer's share becomes a claim, with the diagnoses it was raised for. Without real sales there is no sale behind it.
+      const claim = insured && insured.insurerCents > 0
+        ? await tx.insuranceClaim.create({
+            data: {
+              businessId, visitId: id, patientId: v.patientId, providerId: insured.providerId, patientInsuranceId: insured.memberNumber,
+              billedCents: insured.insurerCents, copayPct: insured.patientPct, status: 'SUBMITTED', saleId: result?.sale.id ?? null,
+              diagnoses: JSON.stringify(parseDiagnoses(v.diagnoses)), coverCheckId: insured.checkId,
+            },
+          })
+        : null;
+      return { result, claim };
     });
 
-    if (!outcome || !input) return { visit: await this.get(id, businessId), invoice: null, etims: null };
-    const after = this.directSales.afterCommit(outcome, input);
+    if (!outcome.result || !input) return { visit: await this.get(id, businessId), invoice: null, etims: null, claimId: outcome.claim?.id ?? null };
+    const after = this.directSales.afterCommit(outcome.result, input);
     let timer: ReturnType<typeof setTimeout> | undefined;
     const etims: EtimsOutcome | null = await Promise.race([after.etims, new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), ETIMS_WAIT_MS); })]);
     clearTimeout(timer);
-    return { visit: await this.get(id, businessId), invoice: outcome.sale, etims, receiptNumber: outcome.sale.receiptNumber };
+    return { visit: await this.get(id, businessId), invoice: outcome.result.sale, etims, receiptNumber: outcome.result.sale.receiptNumber, claimId: outcome.claim?.id ?? null };
+  }
+
+  /**
+   * Work out who pays what when an insurer covers part of the bill. SHA and other insurers that ask for it must have had their
+   * cover confirmed for this visit first: an unconfirmed (or refused) member would otherwise leave the clinic with an unpayable claim.
+   */
+  private async insuredShare(
+    v: { id: string; patientId: string; createdAt: Date },
+    businessId: string,
+    charges: Array<{ unitPriceCents: number; quantity: number }>,
+    ins: { providerId?: string; memberNumber?: string; patientPct?: number } | undefined,
+  ) {
+    if (!ins || !ins.providerId) return null;
+    if (charges.length === 0) throw new BadRequestException('There is nothing on the bill to claim');
+    const provider = await this.prisma.insuranceProvider.findFirst({ where: { id: text(ins.providerId, 'Insurer', 64), businessId, isActive: true } });
+    if (!provider) throw new BadRequestException('That insurer is not set up here');
+    const patient = await this.prisma.patient.findFirst({ where: { id: v.patientId, businessId }, select: { insuranceMemberNumber: true } });
+    const memberNumber = optionalText(ins.memberNumber, 'Member number', 60) ?? patient?.insuranceMemberNumber?.trim();
+    if (!memberNumber) throw new BadRequestException('Enter the patient\'s member number for the insurer');
+    // 100 would mean the insurer pays nothing, so there is no claim to make: take payment as a normal sale.
+    const patientPct = intInRange(ins.patientPct ?? 0, 'Patient share (%)', 0, 99);
+    const { standing, checkId } = await this.cover.standingFor(businessId, v, provider.id, memberNumber);
+    if (provider.requiresEligibility && standing !== 'ELIGIBLE') {
+      throw new BadRequestException(
+        standing === 'NOT_ELIGIBLE'
+          ? `${provider.name} reported this member as not eligible. Bill the patient directly, or correct the member number and check again.`
+          : `Cover with ${provider.name} has not been confirmed for this visit. Record a cover check first.`,
+      );
+    }
+    const total = charges.reduce((sum, c) => sum + Math.round(c.unitPriceCents * c.quantity), 0);
+    return { providerId: provider.id, memberNumber, patientPct, checkId, ...splitBill(total, patientPct) };
   }
 
   /** The patient left, or the visit was opened by mistake. Nothing is billed. */
@@ -295,6 +450,8 @@ export class VisitsService {
     assertCan('cancel', v.status);
     const why = text(reason, 'Reason', 200);
     await this.move(id, businessId, ['WAITING', 'TRIAGED', 'IN_CONSULTATION', 'READY_TO_BILL'], { status: 'CANCELLED', cancelReason: why }, 'This visit has moved on. Reload it.');
+    // The patient left before being seen through: the appointment does not stay open holding the slot.
+    if (v.appointmentId) await this.prisma.appointment.updateMany({ where: { id: v.appointmentId, businessId, status: 'IN_PROGRESS' }, data: { status: 'CANCELLED' } });
     return this.get(id, businessId);
   }
 }

@@ -350,6 +350,7 @@ export class PrescriptionsService {
             data: {
               businessId,
               prescriptionId: rx.id,
+              patientId: rx.patientId,
               providerId: terms.insurance.providerId,
               patientInsuranceId: terms.insurance.memberNumber,
               billedCents: insurerCents,

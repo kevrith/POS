@@ -6,7 +6,7 @@ import { clearLastKnown } from '../lib/lastKnown';
 
 const API_V1 = getApiUrl();
 
-export type UserRole = 'OWNER' | 'MANAGER' | 'ACCOUNTANT' | 'CASHIER' | 'PHARMACIST' | 'DOCTOR' | 'WAITER' | 'KITCHEN';
+export type UserRole = 'OWNER' | 'MANAGER' | 'ACCOUNTANT' | 'CASHIER' | 'PHARMACIST' | 'DOCTOR' | 'NURSE' | 'LAB_TECH' | 'WAITER' | 'KITCHEN';
 
 export interface AuthUser {
   id: string;

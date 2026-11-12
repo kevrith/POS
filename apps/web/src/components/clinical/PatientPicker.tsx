@@ -6,9 +6,9 @@ import { allergyLine, type Patient } from '../../lib/clinical';
 import PatientFormModal from './PatientFormModal';
 
 /** Pick the patient a prescription is for (or register them), and see their allergies right away. */
-export default function PatientPicker({ value, onChange }: { value: Patient | null; onChange: (p: Patient | null) => void }) {
-  const [q, setQ] = useState('');
-  const [open, setOpen] = useState(false);
+export default function PatientPicker({ value, onChange, initialQuery }: { value: Patient | null; onChange: (p: Patient | null) => void; initialQuery?: string }) {
+  const [q, setQ] = useState(initialQuery ?? '');
+  const [open, setOpen] = useState(!!initialQuery);
   const [registering, setRegistering] = useState(false);
   const { data: results = [] } = useQuery<Patient[]>({
     queryKey: ['patients', 'pick', q],

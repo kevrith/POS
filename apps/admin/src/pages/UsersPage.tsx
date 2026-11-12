@@ -26,8 +26,8 @@ const Icons = {
   building: 'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
 };
 
-const ROLES = ['ALL', 'OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST', 'DOCTOR', 'ACCOUNTANT', 'WAITER', 'KITCHEN'];
-const EDITABLE_ROLES = ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST', 'DOCTOR', 'ACCOUNTANT', 'WAITER', 'KITCHEN'];
+const ROLES = ['ALL', 'OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST', 'DOCTOR', 'NURSE', 'LAB_TECH', 'ACCOUNTANT', 'WAITER', 'KITCHEN'];
+const EDITABLE_ROLES = ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST', 'DOCTOR', 'NURSE', 'LAB_TECH', 'ACCOUNTANT', 'WAITER', 'KITCHEN'];
 
 function RoleBadge({ role }: { role: string }) {
   const m: Record<string, { bg: string; color: string }> = {

@@ -1,11 +1,14 @@
-import { requireArray } from '../common/validate';
+import { intInRange, oneOf, optionalText, requireArray, text } from '../common/validate';
+import { InventoryMovementType } from '@pos/shared';
+import { drawStock } from '../batch/batch-allocation';
+import { planReceipt, type ItemFacts } from './receiving';
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { v4 as uuidv4 } from 'uuid';
 import * as net from 'node:net';
 
-import { roundQty } from '../common/quantity';
+import { QTY_EPSILON, hasTooManyDecimals, roundQty } from '../common/quantity';
 /** Minimal SMTP client using node:net (no external packages). Supports AUTH LOGIN. */
 async function sendSmtpEmail(opts: {
   host: string; port: number; user: string; pass: string;
@@ -234,80 +237,68 @@ export class SupplierService {
 
   // ── Goods Received Notes ─────────────────────────────────────────────────────
 
+  /**
+   * Record what actually arrived against an approved purchase order. In one transaction, with the order locked so two
+   * receipts cannot both take the last of it: the lines are checked (on the order, not more than is outstanding, a lot and an
+   * expiry for stock tracked by lot), each line becomes stock, and stock tracked by lot gets (or tops up) its lot so
+   * the expiry and the first-expiry-first-out selling and returns that depend on it are right from the day it arrives.
+   */
   async createGRN(
+    businessId: string,
     poId: string,
     storeId: string,
-    items: Array<{
-      poItemId: string;
-      quantityReceived: number;
-      batchLotNumber?: string;
-      expiryDate?: string;
-    }>,
+    lines: Array<{ poItemId: string; quantityReceived: number; batchLotNumber?: string; expiryDate?: string }>,
   ) {
-    const po = await this.prisma.purchaseOrder.findUnique({
-      where: { id: poId },
-      include: { items: true },
-    });
-    if (!po) throw new NotFoundException('Purchase order not found');
-    if (!['APPROVED', 'PARTIALLY_RECEIVED'].includes(po.status)) {
-      throw new BadRequestException('PO must be Approved before recording receipt');
-    }
+    const store = await this.prisma.store.findFirst({ where: { id: text(storeId, 'Store', 64), businessId }, select: { id: true } });
+    if (!store) throw new BadRequestException('Store not found');
+    const exists = await this.prisma.purchaseOrder.findFirst({ where: { id: poId, businessId }, select: { id: true } });
+    if (!exists) throw new NotFoundException('Purchase order not found');
 
-    const grn = await this.prisma.$transaction(async (tx) => {
-      // Create the GRN record
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "PurchaseOrder" WHERE id = ${poId} FOR UPDATE`;
+      const po = await tx.purchaseOrder.findFirst({ where: { id: poId, businessId }, include: { items: true } });
+      if (!po) throw new NotFoundException('Purchase order not found');
+      if (!['APPROVED', 'PARTIALLY_RECEIVED'].includes(po.status)) throw new BadRequestException('PO must be Approved before recording receipt');
+
+      const earlier = await tx.gRN.findMany({ where: { poId }, include: { items: { select: { poItemId: true, quantityReceived: true } } } });
+      const itemRows = await tx.item.findMany({ where: { businessId, id: { in: po.items.map((i) => i.itemId) } }, select: { id: true, name: true, trackBatches: true, genericName: true, scheduleClass: true, requiresPrescription: true } });
+      const facts = new Map<string, ItemFacts>(itemRows.map((i) => [i.id, { id: i.id, name: i.name, trackBatches: i.trackBatches, isMedicine: !!(i.genericName || i.scheduleClass || i.requiresPrescription) }]));
+      const planned = planReceipt(po.items, earlier.flatMap((g) => g.items), lines ?? [], facts);
+
       const newGrn = await tx.gRN.create({
-        data: {
-          poId,
-          items: {
-            create: items.map((item) => ({
-              poItemId: item.poItemId,
-              quantityReceived: item.quantityReceived,
-              batchLotNumber: item.batchLotNumber,
-              expiryDate: item.expiryDate ? new Date(item.expiryDate) : undefined,
-            })),
-          },
-        },
+        data: { poId, items: { create: planned.map((l) => ({ poItemId: l.poItemId, quantityReceived: l.quantity, batchLotNumber: l.lot ?? undefined, expiryDate: l.expiry ?? undefined })) } },
         include: { items: true },
       });
 
-      // Create inventory movements for each received item
-      for (const grnItem of items) {
-        if (grnItem.quantityReceived <= 0) continue;
-        const poItem = po.items.find((p) => p.id === grnItem.poItemId);
-        if (!poItem) continue;
-
+      for (const l of planned) {
+        let batchId: string | undefined;
+        if (l.trackBatches && l.lot) {
+          const lot = await tx.batch.findFirst({ where: { itemId: l.itemId, storeId, lotNumber: l.lot, item: { businessId } } });
+          if (!lot) {
+            const made = await tx.batch.create({
+              data: { offlineId: uuidv4(), itemId: l.itemId, storeId, lotNumber: l.lot, expiryDate: l.expiry ?? undefined, supplierId: po.supplierId, quantityReceived: l.quantity, quantityRemaining: l.quantity, status: 'ACTIVE' },
+            });
+            batchId = made.id;
+          } else {
+            if (lot.status !== 'ACTIVE') throw new BadRequestException(`${l.itemName}: lot ${l.lot} was ${lot.status === 'RECALLED' ? 'recalled' : 'written off'} and cannot be received again`);
+            if (l.expiry && lot.expiryDate && lot.expiryDate.toISOString().slice(0, 10) !== l.expiry.toISOString().slice(0, 10)) {
+              throw new BadRequestException(`${l.itemName}: lot ${l.lot} is already on record with a different expiry date (${lot.expiryDate.toISOString().slice(0, 10)}). Check the pack.`);
+            }
+            await tx.batch.update({ where: { id: lot.id }, data: { quantityReceived: { increment: l.quantity }, quantityRemaining: { increment: l.quantity } } });
+            batchId = lot.id;
+          }
+        }
         await tx.inventoryMovement.create({
-          data: {
-            offlineId: uuidv4(),
-            itemId: poItem.itemId,
-            storeId,
-            businessId: po.businessId,
-            type: 'GRN_RECEIPT',
-            quantity: grnItem.quantityReceived,
-            grnId: newGrn.id,
-            source: 'GRN',
-          },
+          data: { offlineId: uuidv4(), itemId: l.itemId, storeId, businessId, type: InventoryMovementType.GRN_RECEIPT, quantity: l.quantity, grnId: newGrn.id, batchId, source: 'GRN' },
         });
       }
 
-      // Determine new PO status based on all GRNs
-      const allGrns = await tx.gRN.findMany({
-        where: { poId },
-        include: { items: true },
-      });
-      const totalOrdered = po.items.reduce((s, i) => s + i.quantityOrdered, 0);
-      const totalReceived = allGrns.flatMap((g) => g.items).reduce((s, i) => s + i.quantityReceived, 0);
-      const newStatus = totalReceived >= totalOrdered ? 'RECEIVED' : 'PARTIALLY_RECEIVED';
-
-      await tx.purchaseOrder.update({
-        where: { id: poId },
-        data: { status: newStatus },
-      });
-
+      const all = await tx.gRN.findMany({ where: { poId }, include: { items: true } });
+      const totalOrdered = po.items.reduce((sum, i) => sum + i.quantityOrdered, 0);
+      const totalReceived = all.flatMap((g) => g.items).reduce((sum, i) => sum + i.quantityReceived, 0);
+      await tx.purchaseOrder.update({ where: { id: poId }, data: { status: totalReceived >= totalOrdered - QTY_EPSILON ? 'RECEIVED' : 'PARTIALLY_RECEIVED' } });
       return newGrn;
     });
-
-    return grn;
   }
 
   // ── Purchase Order Email ──────────────────────────────────────────────────────
@@ -387,11 +378,17 @@ export class SupplierService {
     const count = await this.prisma.supplierCreditNote.count({
       where: { businessId: data.businessId },
     });
-    const creditNumber = `CN-${String(count + 1).padStart(4, '0')}`;
-    return this.prisma.supplierCreditNote.create({
-      data: { ...data, creditNumber },
-      include: { supplier: true },
-    });
+    // Credit note numbers are unique across all businesses, so the plain next number can already be taken by another one.
+    // Then it carries the business's own prefix.
+    const own = data.businessId.replace(/[^A-Za-z0-9]/g, '').slice(0, 8).toUpperCase();
+    for (let attempt = 0; ; attempt++) {
+      const creditNumber = attempt === 0 ? `CN-${String(count + 1).padStart(4, '0')}` : `CN-${own}-${String(count + attempt).padStart(4, '0')}`;
+      try {
+        return await this.prisma.supplierCreditNote.create({ data: { ...data, creditNumber }, include: { supplier: true } });
+      } catch (err) {
+        if ((err as { code?: string })?.code !== 'P2002' || attempt >= 5) throw err;
+      }
+    }
   }
 
   async getCreditNotes(businessId: string, supplierId?: string) {
@@ -496,56 +493,88 @@ export class SupplierService {
 
   // ── Supplier Returns ──────────────────────────────────────────────────────────
 
+  /**
+   * Send stock back to a supplier. The stock leaves in the same transaction that records the return: from the lot named on
+   * the line (an expired or recalled lot is exactly what is sent back), or first-expiry-first-out for stock tracked by lot,
+   * or plainly for stock that is not. What is on hand must cover it, the lot must hold that many, and a lot that was written
+   * off cannot be returned.
+   */
   async createSupplierReturn(businessId: string, data: {
     supplierId: string;
     purchaseOrderId?: string;
     reason: string;
     notes?: string;
     storeId: string;
-    items: Array<{ itemId: string; quantity: number; unitCostCents: number; reason?: string }>;
+    items: Array<{ itemId: string; quantity: number; unitCostCents?: number; reason?: string; batchId?: string }>;
   }) {
-    requireArray(data?.items, 'items');
-    const count = await this.prisma.supplierReturn.count({ where: { businessId } });
-    const returnNumber = `RTS-${String(count + 1).padStart(4, '0')}`;
-    const totalCents = data.items.reduce((s, i) => s + i.quantity * i.unitCostCents, 0);
+    const lines = requireArray<{ itemId: string; quantity: number; unitCostCents?: number; reason?: string; batchId?: string }>(data?.items, 'items');
+    if (lines.length === 0) throw new BadRequestException('Choose at least one item to return');
+    if (lines.length > 50) throw new BadRequestException('At most 50 lines on one return');
+    const reason = text(data.reason, 'Reason', 200);
+    const notes = optionalText(data.notes, 'Notes', 500);
+    const [supplier, store] = await Promise.all([
+      this.prisma.supplier.findFirst({ where: { id: text(data.supplierId, 'Supplier', 64), businessId }, select: { id: true } }),
+      this.prisma.store.findFirst({ where: { id: text(data.storeId, 'Store', 64), businessId }, select: { id: true } }),
+    ]);
+    if (!supplier) throw new BadRequestException('Supplier not found');
+    if (!store) throw new BadRequestException('Store not found');
 
-    const supplierReturn = await this.prisma.supplierReturn.create({
-      data: {
-        businessId,
-        supplierId: data.supplierId,
-        purchaseOrderId: data.purchaseOrderId,
-        returnNumber,
-        reason: data.reason,
-        notes: data.notes,
-        totalCents,
-        items: {
-          create: data.items.map(i => ({
-            itemId: i.itemId,
-            quantity: i.quantity,
-            unitCostCents: i.unitCostCents,
-            totalCents: i.quantity * i.unitCostCents,
-            reason: i.reason,
-          })),
-        },
-      },
-      include: { items: true },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      // One return number at a time per business, so two clerks do not both take RTS-0007.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${businessId + ":RTS"}))`;
+      const last = await tx.supplierReturn.findMany({ where: { businessId, returnNumber: { startsWith: 'RTS-' } }, select: { returnNumber: true } });
+      const lastSeq = last.reduce((m, r) => Math.max(m, parseInt(r.returnNumber.slice(4), 10) || 0), 0);
+      const returnNumber = `RTS-${String(lastSeq + 1).padStart(4, '0')}`;
 
-    // Reverse inventory
-    for (const item of data.items) {
-      await this.prisma.inventoryMovement.create({
-        data: {
-          businessId,
-          storeId: data.storeId,
-          itemId: item.itemId,
-          type: 'ADJUSTMENT',
-          quantity: -item.quantity,
-          source: `Supplier Return ${returnNumber}: ${data.reason}`,
-          offlineId: `rts-${supplierReturn.id}-${item.itemId}`,
-        },
+      const items = await tx.item.findMany({ where: { businessId, id: { in: [...new Set(lines.map((l) => String(l.itemId)))] } }, select: { id: true, name: true, trackBatches: true, costPriceCents: true } });
+      const byId = new Map(items.map((i) => [i.id, i]));
+      const wanted = new Map<string, number>();
+      const prepared = lines.map((l) => {
+        const item = byId.get(String(l.itemId));
+        if (!item) throw new BadRequestException('One of the items is not in the catalogue');
+        const quantity = Number(l.quantity);
+        if (!Number.isFinite(quantity) || quantity <= 0 || quantity > 1_000_000_000) throw new BadRequestException(`${item.name}: the quantity must be more than zero`);
+        if (hasTooManyDecimals(quantity)) throw new BadRequestException(`${item.name}: quantities can have at most 3 decimal places`);
+        const unitCostCents = l.unitCostCents === undefined || l.unitCostCents === null ? (item.costPriceCents ?? 0) : intInRange(l.unitCostCents, `${item.name}: unit cost`, 0, 1_000_000_000);
+        wanted.set(item.id, roundQty((wanted.get(item.id) ?? 0) + quantity));
+        return { item, quantity: roundQty(quantity), unitCostCents, reason: optionalText(l.reason, 'Line reason', 200), batchId: l.batchId ? text(l.batchId, 'Lot', 64) : undefined };
       });
-    }
-    return supplierReturn;
+      for (const [itemId, qty] of wanted) {
+        const agg = await tx.inventoryMovement.aggregate({ where: { businessId, storeId: store.id, itemId }, _sum: { quantity: true } });
+        const onHand = roundQty(agg._sum.quantity ?? 0);
+        if (qty > onHand + QTY_EPSILON) throw new BadRequestException(`${byId.get(itemId)?.name}: only ${onHand} on hand here, so ${qty} cannot be returned`);
+      }
+
+      const source = `Supplier return ${returnNumber}: ${reason}`;
+      const out: Array<{ itemId: string; quantity: number; unitCostCents: number; totalCents: number; reason?: string; batchId?: string; lotNumber?: string }> = [];
+      for (const l of prepared) {
+        if (l.batchId) {
+          const lot = await tx.batch.findFirst({ where: { id: l.batchId, itemId: l.item.id, storeId: store.id, item: { businessId } } });
+          if (!lot) throw new BadRequestException(`${l.item.name}: that lot is not in this store`);
+          if (lot.status === 'WRITTEN_OFF') throw new BadRequestException(`${l.item.name}: lot ${lot.lotNumber} was written off and cannot be returned`);
+          const took = await tx.batch.updateMany({ where: { id: lot.id, status: { in: ['ACTIVE', 'RECALLED'] }, quantityRemaining: { gte: l.quantity } }, data: { quantityRemaining: { decrement: l.quantity } } });
+          if (took.count !== 1) throw new BadRequestException(`${l.item.name}: lot ${lot.lotNumber} has only ${roundQty(lot.quantityRemaining)} left`);
+          await tx.inventoryMovement.create({ data: { offlineId: uuidv4(), businessId, storeId: store.id, itemId: l.item.id, type: InventoryMovementType.SUPPLIER_RETURN, quantity: -l.quantity, batchId: lot.id, source } });
+          out.push({ itemId: l.item.id, quantity: l.quantity, unitCostCents: l.unitCostCents, totalCents: Math.round(l.quantity * l.unitCostCents), reason: l.reason, batchId: lot.id, lotNumber: lot.lotNumber });
+        } else {
+          const drawn = await drawStock(tx, { businessId, storeId: store.id, itemId: l.item.id, itemName: l.item.name, quantity: l.quantity, trackBatches: l.item.trackBatches, type: InventoryMovementType.SUPPLIER_RETURN, source });
+          const lots = drawn.slices.length > 0 ? await tx.batch.findMany({ where: { id: { in: drawn.slices.map((s) => s.batchId) } }, select: { id: true, lotNumber: true } }) : [];
+          const lotName = new Map(lots.map((x) => [x.id, x.lotNumber]));
+          if (drawn.slices.length === 0) out.push({ itemId: l.item.id, quantity: l.quantity, unitCostCents: l.unitCostCents, totalCents: Math.round(l.quantity * l.unitCostCents), reason: l.reason });
+          for (const slice of drawn.slices) out.push({ itemId: l.item.id, quantity: slice.quantity, unitCostCents: l.unitCostCents, totalCents: Math.round(slice.quantity * l.unitCostCents), reason: l.reason, batchId: slice.batchId, lotNumber: lotName.get(slice.batchId) });
+          if (drawn.unbatched > 0 && drawn.slices.length > 0) out.push({ itemId: l.item.id, quantity: drawn.unbatched, unitCostCents: l.unitCostCents, totalCents: Math.round(drawn.unbatched * l.unitCostCents), reason: l.reason });
+        }
+      }
+
+      return tx.supplierReturn.create({
+        data: {
+          businessId, supplierId: supplier.id, purchaseOrderId: optionalText(data.purchaseOrderId, 'Order', 64), returnNumber, status: 'SENT', storeId: store.id, reason, notes,
+          totalCents: out.reduce((sum, i) => sum + i.totalCents, 0),
+          items: { create: out },
+        },
+        include: { items: true },
+      });
+    });
   }
 
   async getSupplierReturns(businessId: string, supplierId?: string) {
@@ -559,8 +588,44 @@ export class SupplierService {
     });
   }
 
-  async updateReturnStatus(returnId: string, status: string) {
-    return this.prisma.supplierReturn.update({ where: { id: returnId }, data: { status } });
+  /**
+   * The supplier credited the return (CREDITED), or it did not go ahead (CANCELLED: the units come back into the lot and the
+   * store they left). Either way a return that is already credited or cancelled does not move again.
+   */
+  async updateReturnStatus(businessId: string, returnId: string, status: string, opts: { creditNoteNumber?: string; amountCents?: number } = {}) {
+    const target = oneOf(String(status ?? '').toUpperCase(), 'Status', ['CREDITED', 'CANCELLED'] as const);
+    const ret = await this.prisma.supplierReturn.findFirst({ where: { id: returnId, businessId }, include: { items: true } });
+    if (!ret) throw new NotFoundException('Return not found');
+    if (target === 'CANCELLED' && !ret.storeId) throw new BadRequestException('This return was made before the store was recorded. Put the stock back with a stock adjustment, then mark it credited or leave it.');
+    const open = ['DRAFT', 'SENT', 'APPROVED'];
+    if (!open.includes(ret.status)) throw new BadRequestException(`A ${ret.status.toLowerCase()} return cannot be changed`);
+
+    const amountCents = target === 'CREDITED' ? (opts.amountCents === undefined || opts.amountCents === null ? ret.totalCents : intInRange(opts.amountCents, 'Credit amount', 0, 1_000_000_000)) : 0;
+    const given = optionalText(opts.creditNoteNumber, 'Credit note number', 40);
+    return this.prisma.$transaction(async (tx) => {
+      const moved = await tx.supplierReturn.updateMany({ where: { id: returnId, businessId, status: { in: open } }, data: { status: target } });
+      if (moved.count !== 1) throw new BadRequestException('This return was just changed by someone else. Reload it.');
+      if (target === 'CREDITED' && amountCents > 0) {
+        // The supplier's credit is recorded as a credit note against them, so it can be set against a later order.
+        // Numbers are unique across all businesses, so a generated one carries the business's own prefix.
+        const creditNumber = given ?? `CN-${businessId.replace(/[^A-Za-z0-9]/g, '').slice(0, 8).toUpperCase()}-${ret.returnNumber}`;
+        const exists = await tx.supplierCreditNote.findFirst({ where: { creditNumber }, select: { id: true } });
+        if (exists) throw new BadRequestException(`Credit note ${creditNumber} is already on record`);
+        const note = await tx.supplierCreditNote.create({ data: { businessId, supplierId: ret.supplierId, creditNumber, amountCents, reason: `Return ${ret.returnNumber}` } });
+        await tx.supplierReturn.updateMany({ where: { id: returnId, businessId }, data: { creditNoteId: note.id } });
+      }
+      if (target === 'CANCELLED') {
+        for (const line of ret.items) {
+          let batchId: string | undefined;
+          if (line.batchId) {
+            const back = await tx.batch.updateMany({ where: { id: line.batchId, status: { notIn: ['WRITTEN_OFF'] } }, data: { quantityRemaining: { increment: line.quantity } } });
+            if (back.count === 1) batchId = line.batchId;
+          }
+          await tx.inventoryMovement.create({ data: { offlineId: uuidv4(), businessId, storeId: ret.storeId as string, itemId: line.itemId, type: InventoryMovementType.SUPPLIER_RETURN, quantity: line.quantity, batchId, source: `Supplier return ${ret.returnNumber} cancelled` } });
+        }
+      }
+      return tx.supplierReturn.findFirst({ where: { id: returnId, businessId }, include: { items: true, supplier: { select: { name: true } } } });
+    });
   }
 
   // ── Supplier Invoices ──────────────────────────────────────────────────────────

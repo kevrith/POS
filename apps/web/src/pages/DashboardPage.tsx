@@ -119,10 +119,12 @@ const METHOD_COLORS: Record<string, string> = {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-/** A doctor has no sales dashboard: their home is the patient list. Everyone else gets the dashboard. */
+/** A doctor has no sales dashboard (their home is the patient list) and neither does a lab technician (the lab). Everyone else gets the dashboard. */
 export default function DashboardPage() {
   const role = useAuthStore((s) => s.user?.role);
-  return role === 'DOCTOR' ? <Navigate to="/patients" replace /> : <SalesDashboard />;
+  if (role === 'DOCTOR') return <Navigate to="/patients" replace />;
+  if (role === 'NURSE') return <Navigate to="/visits" replace />;
+  return role === 'LAB_TECH' ? <Navigate to="/lab" replace /> : <SalesDashboard />;
 }
 
 function SalesDashboard() {

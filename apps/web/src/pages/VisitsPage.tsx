@@ -4,7 +4,8 @@ import { AlertTriangle, ClipboardList, Plus } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { VISIT_STATUS_LABEL, waitLabel, type Patient, type VisitRow, type VisitStatus } from '../lib/clinical';
-import { Badge, Button, Card, EmptyState, ErrorState, Input, Select } from '../components/ui';
+import { Badge, Button, Card, EmptyState, ErrorState, Input, Segmented, Select } from '../components/ui';
+import FollowUpsPanel, { useFollowUpCount } from '../components/clinical/FollowUps';
 import { Modal } from './fuel/Modal';
 import PatientPicker from '../components/clinical/PatientPicker';
 import VisitWorkspace from '../components/clinical/VisitWorkspace';
@@ -19,6 +20,8 @@ export default function VisitsPage() {
   const storeId = user?.storeId ?? '';
   const [openId, setOpenId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [view, setView] = useState<'queue' | 'follow-ups'>('queue');
+  const followCount = useFollowUpCount();
 
   const { data, isLoading, error, refetch } = useQuery<{ open: VisitRow[]; closed: VisitRow[] }>({
     queryKey: ['visits', storeId],
@@ -40,6 +43,9 @@ export default function VisitsPage() {
         <Button icon={<Plus className="w-4 h-4" />} onClick={() => setAdding(true)}>New visit</Button>
       </div>
 
+      <Segmented items={[{ id: 'queue', label: 'Queue' }, { id: 'follow-ups', label: 'Follow-ups', count: followCount || undefined }]} value={view} onChange={setView} />
+
+      {view === 'follow-ups' ? <FollowUpsPanel /> : (<>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {COLUMNS.map((status) => {
           const rows = open.filter((v) => v.status === status);
@@ -72,6 +78,7 @@ export default function VisitsPage() {
           </Card>
         )}
       </section>
+      </>)}
 
       {adding && <NewVisitModal storeId={storeId} onClose={() => setAdding(false)} onCreated={(id) => { setAdding(false); setOpenId(id); }} />}
       {openId && <VisitWorkspace visitId={openId} onClose={() => setOpenId(null)} />}

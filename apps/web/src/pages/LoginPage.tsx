@@ -37,6 +37,8 @@ const ROLE_COLORS: Record<string, string> = {
   CASHIER:  'bg-emerald-600',
   PHARMACIST: 'bg-cyan-600',
   DOCTOR:   'bg-rose-600',
+  NURSE:    'bg-sky-600',
+  LAB_TECH: 'bg-fuchsia-600',
   WAITER:   'bg-amber-500',
   KITCHEN:  'bg-orange-500',
   ACCOUNTANT: 'bg-indigo-600',

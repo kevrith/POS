@@ -94,9 +94,10 @@ export class BatchExpiryCronService {
     return { writtenOff: count };
   }
 
-  async writeOffSingleBatch(batchId: string, authorizedBy: string) {
+  async writeOffSingleBatch(batchId: string, authorizedBy: string, businessId: string) {
+    // Scoped to the caller's business: a lot id from another business is simply not found.
     const batch = await this.prisma.batch.findFirst({
-      where: { id: batchId },
+      where: { id: batchId, item: { businessId } },
       include: {
         item: { select: { name: true, businessId: true, costPriceCents: true } },
       },

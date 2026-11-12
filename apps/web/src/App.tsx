@@ -39,6 +39,10 @@ const PoleDisplayPage = lazy(() => import('./pages/PoleDisplayPage'));
 const PrescriptionsPage = lazy(() => import('./pages/PrescriptionsPage'));
 const PatientsPage = lazy(() => import('./pages/PatientsPage'));
 const VisitsPage = lazy(() => import('./pages/VisitsPage'));
+const ClaimsPage = lazy(() => import('./pages/ClaimsPage'));
+const LabPage = lazy(() => import('./pages/LabPage'));
+const ClinicReportsPage = lazy(() => import('./pages/ClinicReportsPage'));
+const CompliancePage = lazy(() => import('./pages/CompliancePage'));
 const PharmacyPage = lazy(() => import('./pages/PharmacyPage'));
 const AppointmentsPage = lazy(() => import('./pages/AppointmentsPage'));
 const DeliveryPage = lazy(() => import('./pages/DeliveryPage'));
@@ -173,10 +177,10 @@ async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Prom
   return null;
 }
 
-/** Where staff land: the till, except a doctor, whose home is the patient list. */
+/** Where staff land: the till, except a doctor (the patient list), a nurse (the queue) and a lab technician (the lab). */
 function HomeRedirect() {
   const role = useAuthStore((st) => st.user?.role);
-  return <Navigate to={role === 'DOCTOR' ? '/patients' : '/pos'} replace />;
+  return <Navigate to={role === 'DOCTOR' ? '/patients' : role === 'LAB_TECH' ? '/lab' : role === 'NURSE' ? '/visits' : '/pos'} replace />;
 }
 
 export default function App() {
@@ -371,6 +375,10 @@ export default function App() {
               <Route path="/prescriptions" element={<PrescriptionsPage />} />
               <Route path="/patients" element={<PatientsPage />} />
               <Route path="/visits" element={<VisitsPage />} />
+              <Route path="/claims" element={<ClaimsPage />} />
+              <Route path="/lab" element={<LabPage />} />
+              <Route path="/clinic-reports" element={<ClinicReportsPage />} />
+              <Route path="/compliance" element={<CompliancePage />} />
               <Route path="/pharmacy" element={<PharmacyPage />} />
               <Route path="/appointments" element={<AppointmentsPage />} />
               <Route path="/delivery" element={<DeliveryPage />} />

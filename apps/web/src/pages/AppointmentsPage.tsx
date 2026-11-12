@@ -16,6 +16,7 @@ import CompleteModal, { type CompletePayload } from '../components/salon/Complet
 import ClientPanel from '../components/salon/ClientPanel';
 import DayBoard from '../components/salon/DayBoard';
 import TeamModal from '../components/salon/TeamModal';
+import CheckInModal from '../components/clinical/CheckInModal';
 
 const STATUS_COLORS: Record<string, string> = {
   BOOKED: 'bg-blue-100 text-blue-700',
@@ -55,13 +56,16 @@ export default function AppointmentsPage() {
   const [clientOf, setClientOf] = useState<Appointment | null>(null);
 
   // What the owner has chosen to do with this business's takings, and the services that can be booked.
-  const { data: bizSettings } = useQuery<{ name?: string; verticalSalesEnabled?: boolean; receiptHeader?: string; receiptFooter?: string }>({
+  const { data: bizSettings } = useQuery<{ name?: string; posMode?: string; verticalSalesEnabled?: boolean; receiptHeader?: string; receiptFooter?: string }>({
     queryKey: ['biz-settings', businessId],
     queryFn: () => api.get(`/business/${businessId}/settings`),
     enabled: !!businessId,
     staleTime: 5 * 60_000,
   });
   const onPipeline = !!bizSettings?.verticalSalesEnabled;
+  // A clinic checks a booked patient in as a visit, so they join the queue with their booked services on the bill.
+  const clinic = String(bizSettings?.posMode ?? '').toUpperCase() === 'CLINIC';
+  const [checkingIn, setCheckingIn] = useState<Appointment | null>(null);
   const { data: catalogue = [] } = useQuery<CatalogueItem[]>({
     queryKey: ['items-for-appointments', businessId, storeId],
     queryFn: () => api.get(`/items?businessId=${businessId}&storeId=${storeId}&activeOnly=true`),
@@ -192,6 +196,10 @@ export default function AppointmentsPage() {
           </div>
           {transitions.length > 0 && canManage && (
             <div className="flex flex-shrink-0 flex-wrap justify-end gap-1.5">
+              {clinic && ['BOOKED', 'CONFIRMED'].includes(appt.status) && appt.depositCents === 0 && (
+                <button onClick={() => setCheckingIn(appt)}
+                  className="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-medium text-white hover:opacity-90">Check in as visit</button>
+              )}
               {['BOOKED', 'CONFIRMED', 'IN_PROGRESS'].includes(appt.status) && (
                 <button onClick={() => { setPay({ method: 'CASH', tendered: '', refundMethod: 'CASH', keep: false }); setAction({ kind: 'deposit', appt }); }}
                   className="rounded-lg border border-blue-300 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50">Deposit</button>
@@ -393,6 +401,7 @@ export default function AppointmentsPage() {
       })()}
 
       {receipt && <DirectSaleReceiptModal receipt={receipt} title="Appointment completed" onClose={() => setReceipt(null)} />}
+      {checkingIn && <CheckInModal appointment={checkingIn} onClose={() => setCheckingIn(null)} onDone={() => setCheckingIn(null)} />}
     </div>
   );
 }

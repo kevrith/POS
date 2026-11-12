@@ -100,7 +100,8 @@ export const VISIT_STATUS_LABEL: Record<VisitStatus, string> = {
 };
 export const OPEN_VISIT_STATUSES: VisitStatus[] = ['WAITING', 'TRIAGED', 'IN_CONSULTATION', 'READY_TO_BILL'];
 
-export interface Diagnosis { code?: string; label: string }
+/** `code` is ICD-10; `icd11` is the ICD-11 code that SHA claims ask for. */
+export interface Diagnosis { code?: string; icd11?: string; label: string }
 
 export interface PatientCard {
   id: string; name: string; patientNumber: string; phone: string | null; sex: string | null; ageYears: number | null;

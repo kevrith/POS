@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, NotFoundExc
 import { cleanDiagnoses, parseDiagnoses, searchDiagnoses } from './diagnosis-codes';
 import { assertCan, queueOrder } from './visit-flow';
 import { hasAnyVital, vitalsData } from './vitals';
+import { CoverService } from '../cover/cover.service';
 import { consultationData, VisitsService } from './visits.service';
 
 describe('vitals', () => {
@@ -100,7 +101,7 @@ const MANAGER = { id: 'u-mgr', name: 'Grace', role: 'MANAGER' };
 const NURSE = { id: 'u-cash', name: 'Peter', role: 'CASHIER' };
 
 function makeVisit(o: Record<string, any> = {}) {
-  return { id: 'v-1', businessId: 'biz-1', storeId: 'store-1', patientId: 'pt-1', visitNumber: 'V-20261112-001', status: 'WAITING', priority: 'NORMAL', doctorId: null, doctorName: null, diagnoses: '[]', ...o };
+  return { id: 'v-1', businessId: 'biz-1', storeId: 'store-1', patientId: 'pt-1', visitNumber: 'V-20261112-001', status: 'WAITING', priority: 'NORMAL', doctorId: null, doctorName: null, diagnoses: '[]', createdAt: new Date('2026-11-12T09:00:00Z'), ...o };
 }
 
 function setup(opts: { invoice?: boolean } = {}) {
@@ -110,16 +111,23 @@ function setup(opts: { invoice?: boolean } = {}) {
     visit: { findFirst: jest.fn().mockResolvedValue(makeVisit()), findMany: jest.fn().mockResolvedValue([]), create: jest.fn().mockImplementation(async ({ data }: any) => ({ id: 'v-new', ...data })), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     visitCharge: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn().mockResolvedValue({}), deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
     prescription: { findMany: jest.fn().mockResolvedValue([]) },
+    appointment: { findFirst: jest.fn().mockResolvedValue(null), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    appointmentService: { findMany: jest.fn().mockResolvedValue([]) },
+    business: { findFirst: jest.fn().mockResolvedValue({ name: 'Afya Clinic' }) },
+    insuranceProvider: { findFirst: jest.fn().mockResolvedValue(null) },
+    insuranceClaim: { create: jest.fn().mockImplementation(async ({ data }: any) => ({ id: 'claim-1', ...data })) },
+    coverCheck: { findMany: jest.fn().mockResolvedValue([]) },
     item: { findFirst: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
     $transaction: jest.fn(),
   };
   p.$transaction.mockImplementation(async (arg: any) => (typeof arg === 'function' ? arg(p) : Promise.all(arg)));
+  const notifications: any = { sendSMS: jest.fn().mockResolvedValue({ success: true }) };
   const directSales: any = {
     isEnabled: jest.fn().mockResolvedValue(!!opts.invoice),
     createInTx: jest.fn().mockImplementation(async (_tx: any, input: any) => ({ sale: { id: 'sale-1', receiptNumber: 'NRB-0001', totalCents: input.lines.reduce((s: number, l: any) => s + l.totalCents, 0), status: 'PAID' }, isCredit: false, payments: input.payments })),
     afterCommit: jest.fn().mockReturnValue({ etims: Promise.resolve({ success: true, controlNumber: 'CN-1' }) }),
   };
-  return { prisma: p, directSales, svc: new VisitsService(p, directSales) };
+  return { prisma: p, directSales, notifications, svc: new VisitsService(p, directSales, new CoverService(p), notifications) };
 }
 const statusOf = (v: any, status: string) => v.visit.findFirst.mockResolvedValue(makeVisit({ status, doctorId: 'u-doc', doctorName: 'Dr Doe', diagnoses: '[{"label":"Malaria"}]' }));
 
@@ -258,6 +266,75 @@ describe('VisitsService charges and billing', () => {
     expect(prisma.visit.updateMany).toHaveBeenCalledWith({ where: { id: 'v-1', businessId: 'biz-1' }, data: { saleId: 'sale-1' } });
   });
 
+  describe('with an insurer covering part of the bill', () => {
+    const sha = { id: 'sha', name: 'SHA', kind: 'SHA', requiresEligibility: true, isActive: true };
+    const bill = (prisma: any) => {
+      statusOf(prisma, 'READY_TO_BILL');
+      prisma.visit.findFirst.mockResolvedValue(makeVisit({ status: 'READY_TO_BILL', doctorId: 'u-doc', doctorName: 'Dr Doe', diagnoses: '[{"label":"Malaria","code":"B54","icd11":"1F40"}]' }));
+      prisma.visitCharge.findMany.mockResolvedValue([{ id: 'c1', itemId: 'item-c', name: 'Consultation', quantity: 1, unitPriceCents: 50000 }, { id: 'c2', itemId: 'item-l', name: 'Malaria test', quantity: 1, unitPriceCents: 30000 }]);
+      prisma.item.findMany.mockResolvedValue([{ id: 'item-c', taxClass: 'A' }, { id: 'item-l', taxClass: 'A' }]);
+      prisma.insuranceProvider.findFirst.mockResolvedValue(sha);
+    };
+    const check = (o: Record<string, unknown> = {}) => ({ id: 'chk-1', providerId: 'sha', memberNumber: 'SHA-123', status: 'ELIGIBLE', visitId: 'v-1', checkedAt: new Date('2026-11-12T09:10:00Z'), ...o });
+
+    it('refuses until the cover has been checked for this visit', async () => {
+      const { svc, prisma, directSales } = setup({ invoice: true });
+      bill(prisma);
+      await expect(svc.complete('v-1', 'biz-1', NURSE, { insurance: { providerId: 'sha', memberNumber: 'SHA-123', patientPct: 0 } })).rejects.toThrow(/has not been confirmed/);
+      expect(directSales.createInTx).not.toHaveBeenCalled();
+      expect(prisma.visit.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('refuses a member the insurer found not eligible, even if an older check said yes', async () => {
+      const { svc, prisma } = setup({ invoice: true });
+      bill(prisma);
+      prisma.coverCheck.findMany.mockResolvedValue([check({ status: 'NOT_ELIGIBLE', checkedAt: new Date('2026-11-12T09:30:00Z') }), check()]);
+      await expect(svc.complete('v-1', 'biz-1', NURSE, { insurance: { providerId: 'sha', memberNumber: 'SHA-123' } })).rejects.toThrow(/not eligible/);
+    });
+
+    it('splits the bill, owes the insurer its share on the invoice and raises the claim with the diagnoses', async () => {
+      const { svc, prisma, directSales } = setup({ invoice: true });
+      bill(prisma);
+      prisma.coverCheck.findMany.mockResolvedValue([check()]);
+      const r: any = await svc.complete('v-1', 'biz-1', NURSE, { payments: [{ method: 'CASH', amountCents: 16000 }], insurance: { providerId: 'sha', memberNumber: 'SHA-123', patientPct: 20 } });
+      const [, input] = directSales.createInTx.mock.calls[0];
+      expect(input.payments).toEqual([{ method: 'CASH', amountCents: 16000 }, { method: 'INSURANCE', amountCents: 64000 }]);
+      expect(prisma.insuranceClaim.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ businessId: 'biz-1', visitId: 'v-1', patientId: 'pt-1', providerId: 'sha', patientInsuranceId: 'SHA-123', billedCents: 64000, copayPct: 20, status: 'SUBMITTED', saleId: 'sale-1', coverCheckId: 'chk-1', diagnoses: JSON.stringify([{ label: 'Malaria', code: 'B54', icd11: '1F40' }]) }),
+      });
+      expect(r.claimId).toBe('claim-1');
+    });
+
+    it('with no real sales the claim is still raised, with no sale behind it', async () => {
+      const { svc, prisma, directSales } = setup({ invoice: false });
+      bill(prisma);
+      prisma.coverCheck.findMany.mockResolvedValue([check()]);
+      const r: any = await svc.complete('v-1', 'biz-1', NURSE, { insurance: { providerId: 'sha', memberNumber: 'SHA-123', patientPct: 0 } });
+      expect(directSales.createInTx).not.toHaveBeenCalled();
+      expect(prisma.insuranceClaim.create).toHaveBeenCalledWith({ data: expect.objectContaining({ billedCents: 80000, saleId: null }) });
+      expect(r.claimId).toBe('claim-1');
+    });
+
+    it('an insurer that does not require a check can be billed without one', async () => {
+      const { svc, prisma } = setup({ invoice: false });
+      bill(prisma);
+      prisma.insuranceProvider.findFirst.mockResolvedValue({ ...sha, kind: 'PRIVATE', requiresEligibility: false });
+      await svc.complete('v-1', 'biz-1', NURSE, { insurance: { providerId: 'sha', memberNumber: 'X1' } });
+      expect(prisma.insuranceClaim.create).toHaveBeenCalled();
+    });
+
+    it('needs a member number, a real insurer and something to claim', async () => {
+      const { svc, prisma } = setup({ invoice: false });
+      bill(prisma);
+      prisma.patient.findFirst.mockResolvedValue({ id: 'pt-1', name: 'Jane', insuranceMemberNumber: null });
+      await expect(svc.complete('v-1', 'biz-1', NURSE, { insurance: { providerId: 'sha' } })).rejects.toThrow(/member number/);
+      prisma.insuranceProvider.findFirst.mockResolvedValue(null);
+      await expect(svc.complete('v-1', 'biz-1', NURSE, { insurance: { providerId: 'nope', memberNumber: '1' } })).rejects.toThrow(/not set up/);
+      prisma.visitCharge.findMany.mockResolvedValue([]);
+      await expect(svc.complete('v-1', 'biz-1', NURSE, { insurance: { providerId: 'sha', memberNumber: '1' } })).rejects.toThrow(/nothing on the bill/);
+    });
+  });
+
   it('refuses a bad payment or PIN before closing anything', async () => {
     const { svc, prisma } = setup({ invoice: true });
     statusOf(prisma, 'READY_TO_BILL');
@@ -308,5 +385,138 @@ describe('VisitsService.board', () => {
     expect(board.open.map((v: any) => v.id)).toEqual(['b', 'a']);
     expect(board.closed.map((v: any) => v.id)).toEqual(['c']);
     expect(board.open[0].patient.allergies).toEqual([{ substance: 'Penicillin' }]);
+  });
+});
+
+describe('VisitsService.createFromAppointment', () => {
+  const appt = (o: Record<string, unknown> = {}) => ({ id: 'ap-1', businessId: 'biz-1', storeId: 'store-1', status: 'CONFIRMED', depositCents: 0, notes: 'Review of blood pressure', serviceItemId: null, ...o });
+  const prep = (o: Record<string, unknown> = {}) => {
+    const h = setup();
+    h.prisma.appointment.findFirst.mockResolvedValue(appt(o));
+    h.prisma.visit.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValue(makeVisit());
+    return h;
+  };
+
+  it('queues the patient from the appointment, brings its services onto the bill and starts the appointment', async () => {
+    const { svc, prisma } = prep();
+    prisma.appointmentService.findMany.mockResolvedValue([{ itemId: 'item-c', name: 'Consultation', unitPriceCents: 45000 }, { itemId: 'item-p', name: 'Product', unitPriceCents: 100 }, { itemId: null, name: 'Free text', unitPriceCents: 500 }]);
+    prisma.item.findMany.mockResolvedValue([{ id: 'item-c', name: 'Consultation', type: 'SERVICE', retailPriceCents: 50000 }, { id: 'item-p', name: 'Product', type: 'PRODUCT', retailPriceCents: 100 }]);
+    prisma.visit.create.mockImplementation(async ({ data }: any) => ({ id: 'v-new', ...data }));
+    await svc.createFromAppointment('biz-1', 'ap-1', { patientId: 'pt-1' }, NURSE);
+    expect(prisma.appointment.updateMany).toHaveBeenCalledWith({ where: { id: 'ap-1', businessId: 'biz-1', status: { in: ['BOOKED', 'CONFIRMED'] } }, data: { status: 'IN_PROGRESS' } });
+    expect(prisma.visit.create).toHaveBeenCalledWith({ data: expect.objectContaining({ businessId: 'biz-1', storeId: 'store-1', patientId: 'pt-1', appointmentId: 'ap-1', complaint: 'Review of blood pressure', visitNumber: expect.stringMatching(/^V-\d{8}-001$/) }) });
+    expect(prisma.visitCharge.create).toHaveBeenCalledTimes(1);
+    expect(prisma.visitCharge.create).toHaveBeenCalledWith({ data: expect.objectContaining({ visitId: 'v-new', itemId: 'item-c', name: 'Consultation', unitPriceCents: 45000, addedBy: 'Peter' }) });
+  });
+
+  it('refuses an appointment that is not waiting, one holding a deposit, an unknown one and an unknown patient', async () => {
+    for (const [o, re] of [[{ status: 'COMPLETED' }, /cannot be checked in/], [{ status: 'IN_PROGRESS' }, /cannot be checked in/], [{ depositCents: 5000 }, /holds a deposit/]] as const) {
+      const { svc, prisma } = prep(o);
+      await expect(svc.createFromAppointment('biz-1', 'ap-1', { patientId: 'pt-1' }, NURSE)).rejects.toThrow(re);
+      expect(prisma.visit.create).not.toHaveBeenCalled();
+    }
+    const a = setup();
+    await expect(a.svc.createFromAppointment('biz-1', 'nope', { patientId: 'pt-1' }, NURSE)).rejects.toThrow(NotFoundException);
+    const b = prep();
+    b.prisma.patient.findFirst.mockResolvedValue(null);
+    await expect(b.svc.createFromAppointment('biz-1', 'ap-1', { patientId: 'pt-1' }, NURSE)).rejects.toThrow(/Patient not found/);
+  });
+
+  it('is not checked in twice, and not for a patient who already has an open visit', async () => {
+    const a = setup();
+    a.prisma.appointment.findFirst.mockResolvedValue(appt());
+    a.prisma.visit.findFirst.mockResolvedValueOnce({ visitNumber: 'V-1' });
+    await expect(a.svc.createFromAppointment('biz-1', 'ap-1', { patientId: 'pt-1' }, NURSE)).rejects.toThrow(ConflictException);
+    const b = setup();
+    b.prisma.appointment.findFirst.mockResolvedValue(appt());
+    b.prisma.visit.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ visitNumber: 'V-2' });
+    await expect(b.svc.createFromAppointment('biz-1', 'ap-1', { patientId: 'pt-1' }, NURSE)).rejects.toThrow(/already has an open visit/);
+  });
+
+  it('loses cleanly if the appointment changed at the same moment, and makes no visit', async () => {
+    const { svc, prisma } = prep();
+    prisma.appointment.updateMany.mockResolvedValue({ count: 0 });
+    await expect(svc.createFromAppointment('biz-1', 'ap-1', { patientId: 'pt-1' }, NURSE)).rejects.toThrow(/just changed/);
+    expect(prisma.visit.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('a visit that came from an appointment', () => {
+  it('completing it closes the appointment directly, so it is not invoiced a second time', async () => {
+    const { svc, prisma, directSales } = setup({ invoice: false });
+    prisma.visit.findFirst.mockResolvedValue(makeVisit({ status: 'READY_TO_BILL', appointmentId: 'ap-1', diagnoses: '[{"label":"X"}]' }));
+    prisma.visitCharge.findMany.mockResolvedValue([{ id: 'c1', itemId: 'item-c', name: 'Consultation', quantity: 1, unitPriceCents: 50000 }]);
+    await svc.complete('v-1', 'biz-1', NURSE);
+    expect(prisma.appointment.updateMany).toHaveBeenCalledWith({ where: { id: 'ap-1', businessId: 'biz-1', status: 'IN_PROGRESS' }, data: { status: 'COMPLETED' } });
+    expect(directSales.createInTx).not.toHaveBeenCalled();
+  });
+
+  it('cancelling it cancels the appointment so it does not keep holding the slot', async () => {
+    const { svc, prisma } = setup();
+    prisma.visit.findFirst.mockResolvedValue(makeVisit({ status: 'WAITING', appointmentId: 'ap-1' }));
+    await svc.cancel('v-1', 'biz-1', 'Patient left');
+    expect(prisma.appointment.updateMany).toHaveBeenCalledWith({ where: { id: 'ap-1', businessId: 'biz-1', status: 'IN_PROGRESS' }, data: { status: 'CANCELLED' } });
+  });
+
+  it('a visit with no appointment touches none', async () => {
+    const { svc, prisma } = setup();
+    await svc.cancel('v-1', 'biz-1', 'left');
+    expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('follow-ups', () => {
+  const dueVisit = (o: Record<string, unknown> = {}) => makeVisit({ id: 'fv-1', status: 'COMPLETED', followUpDate: new Date(Date.now() - 2 * 86_400_000), followUpContactedAt: null, diagnoses: '[{"label":"Malaria"}]', ...o });
+
+  it('lists who is due, in buckets, and leaves out a patient who has already come back', async () => {
+    const { svc, prisma } = setup();
+    prisma.visit.findMany
+      .mockResolvedValueOnce([dueVisit(), dueVisit({ id: 'fv-2', patientId: 'pt-2', followUpDate: new Date(Date.now() + 3 * 86_400_000) }), dueVisit({ id: 'fv-3', patientId: 'pt-3' })])
+      .mockResolvedValueOnce([{ patientId: 'pt-3', createdAt: new Date() }]);
+    prisma.patient.findMany.mockResolvedValue([{ id: 'pt-1', name: 'Jane', phone: '0711', patientNumber: 'PT-1', sex: 'F', allergies: '[]', conditions: '[]', dateOfBirth: null }, { id: 'pt-2', name: 'Sam', phone: null, patientNumber: 'PT-2', sex: 'M', allergies: '[]', conditions: '[]', dateOfBirth: null }]);
+    const r: any = await svc.followUps('biz-1');
+    expect(r.overdue.map((x: any) => x.id)).toEqual(['fv-1']);
+    expect(r.overdue[0].daysOverdue).toBe(2);
+    expect(r.soon.map((x: any) => x.id)).toEqual(['fv-2']);
+    expect(JSON.stringify(r)).not.toContain('fv-3');
+    expect(prisma.visit.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ businessId: 'biz-1', followUpContactedAt: null, status: { in: ['READY_TO_BILL', 'COMPLETED'] } }) }));
+  });
+
+  it('marks a patient reached once, and only for a visit with a follow-up', async () => {
+    const { svc, prisma } = setup();
+    prisma.visit.findFirst.mockResolvedValue(dueVisit());
+    await svc.markFollowUpContacted('fv-1', 'biz-1', NURSE);
+    expect(prisma.visit.updateMany).toHaveBeenCalledWith({ where: { id: 'fv-1', businessId: 'biz-1', followUpContactedAt: null }, data: { followUpContactedAt: expect.any(Date), followUpContactedBy: 'Peter' } });
+    prisma.visit.updateMany.mockResolvedValue({ count: 0 });
+    await expect(svc.markFollowUpContacted('fv-1', 'biz-1', NURSE)).rejects.toThrow(/already reached/);
+    prisma.visit.findFirst.mockResolvedValue(dueVisit({ followUpDate: null }));
+    await expect(svc.markFollowUpContacted('fv-1', 'biz-1', NURSE)).rejects.toThrow(/no follow-up date/);
+  });
+
+  it('texts the patient and marks them reached only if the message went', async () => {
+    const { svc, prisma, notifications } = setup();
+    prisma.visit.findFirst.mockResolvedValue(dueVisit());
+    prisma.patient.findFirst.mockResolvedValue({ name: 'Jane Doe', phone: '0711000111' });
+    await svc.remindFollowUp('fv-1', 'biz-1', NURSE);
+    expect(notifications.sendSMS).toHaveBeenCalledWith('biz-1', '0711000111', expect.stringContaining('Hello Jane, a reminder from Afya Clinic'));
+    expect(prisma.visit.updateMany).toHaveBeenCalledWith({ where: { id: 'fv-1', businessId: 'biz-1', followUpContactedAt: null }, data: { followUpContactedAt: expect.any(Date), followUpContactedBy: 'Peter (SMS)' } });
+
+    const b = setup();
+    b.prisma.visit.findFirst.mockResolvedValue(dueVisit());
+    b.prisma.patient.findFirst.mockResolvedValue({ name: 'Jane', phone: '0711' });
+    b.notifications.sendSMS.mockResolvedValue({ success: false, error: 'Messaging not configured' });
+    await expect(b.svc.remindFollowUp('fv-1', 'biz-1', NURSE)).rejects.toThrow(/SMS is not set up/);
+    expect(b.prisma.visit.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('will not text a patient with no phone, or one already reached', async () => {
+    const a = setup();
+    a.prisma.visit.findFirst.mockResolvedValue(dueVisit());
+    a.prisma.patient.findFirst.mockResolvedValue({ name: 'Jane', phone: null });
+    await expect(a.svc.remindFollowUp('fv-1', 'biz-1', NURSE)).rejects.toThrow(/no phone number/);
+    expect(a.notifications.sendSMS).not.toHaveBeenCalled();
+    const b = setup();
+    b.prisma.visit.findFirst.mockResolvedValue(dueVisit({ followUpContactedAt: new Date() }));
+    await expect(b.svc.remindFollowUp('fv-1', 'biz-1', NURSE)).rejects.toThrow(/already reached/);
   });
 });

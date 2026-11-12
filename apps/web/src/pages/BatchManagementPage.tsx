@@ -2,8 +2,11 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Package, AlertTriangle, Clock, RotateCcw, History, X,
-  RefreshCw, CheckCircle, XCircle, Loader2, Plus,
+  RefreshCw, CheckCircle, XCircle, Loader2, Plus, Undo2, Trash2,
 } from 'lucide-react';
+import { toast } from 'sonner';
+import { formatKES } from '@pos/shared';
+import { useDialog } from '../components/Dialog';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 
@@ -21,8 +24,12 @@ interface Batch {
   quantityRemaining: number;
   status: string;
   createdAt: string;
-  item: { name: string; unit?: string };
+  item: { name: string; unit?: string; costPriceCents?: number | null };
 }
+
+interface Bucket { lots: number; units: number; costCents: number }
+type BucketName = 'expired' | 'within30' | 'within60' | 'within90' | 'later' | 'noExpiry' | 'recalled' | 'total';
+type ExpirySummary = Record<BucketName, Bucket>;
 
 interface BatchMovement {
   id: string;
@@ -434,6 +441,74 @@ function AddBatchModal({ businessId, storeId, onClose, onSuccess }: AddBatchModa
   );
 }
 
+// ─── Return to supplier ────────────────────────────────────────────────────
+
+const RETURN_REASONS = ['Expired', 'Near expiry, supplier takes it back', 'Damaged', 'Recalled by the manufacturer', 'Wrong item delivered'];
+
+/** Send what is left of a lot back to its supplier: the units leave this lot and the store, and a return note is made. */
+function ReturnModal({ batch, businessId, onClose, onDone }: { batch: Batch; businessId: string; onClose: () => void; onDone: () => void }) {
+  const { data: suppliers = [] } = useQuery<Array<{ id: string; name: string }>>({
+    queryKey: ['suppliers', businessId],
+    queryFn: () => api.get(`/suppliers?businessId=${businessId}`),
+  });
+  const [supplierId, setSupplierId] = useState(batch.supplierId ?? '');
+  const [qty, setQty] = useState(String(batch.quantityRemaining));
+  const [reason, setReason] = useState(batch.status === 'RECALLED' ? RETURN_REASONS[3] : batch.expiryDate && new Date(batch.expiryDate) <= new Date() ? RETURN_REASONS[0] : RETURN_REASONS[1]);
+  const [note, setNote] = useState('');
+  const quantity = Number(qty);
+  const bad = !(quantity > 0) || quantity > batch.quantityRemaining;
+  const save = useMutation({
+    mutationFn: () => api.post<{ returnNumber: string }>('/suppliers/returns', {
+      businessId, supplierId, storeId: batch.storeId, reason, notes: note.trim() || undefined,
+      items: [{ itemId: batch.itemId, quantity, batchId: batch.id, unitCostCents: batch.item.costPriceCents ?? 0, reason: `Lot ${batch.lotNumber}` }],
+    }),
+    onSuccess: (r) => { toast.success(`Return ${r.returnNumber} made. ${quantity} left the stock.`); onDone(); onClose(); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div role="dialog" aria-modal="true" aria-label="Return to supplier" className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md shadow-2xl">
+        <div className="flex items-start justify-between px-6 py-4 border-b dark:border-gray-700">
+          <div>
+            <h2 className="text-lg font-bold text-gray-800 dark:text-white">Return to supplier</h2>
+            <p className="text-sm text-gray-500">{batch.item.name} · lot {batch.lotNumber} · {batch.quantityRemaining} left</p>
+          </div>
+          <button onClick={onClose} aria-label="Close" className="p-1.5 rounded-lg hover:bg-gray-100"><X className="w-5 h-5 text-gray-500" /></button>
+        </div>
+        <form className="p-6 space-y-4" onSubmit={(e) => { e.preventDefault(); save.mutate(); }}>
+          <div>
+            <label htmlFor="ret-supplier" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Supplier</label>
+            <select id="ret-supplier" value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600">
+              <option value="">Choose a supplier…</option>
+              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="ret-qty" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Quantity</label>
+            <input id="ret-qty" inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600" />
+            {quantity > batch.quantityRemaining && <p className="text-xs text-red-600 mt-1">This lot has only {batch.quantityRemaining} left.</p>}
+          </div>
+          <div>
+            <label htmlFor="ret-reason" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reason</label>
+            <select id="ret-reason" value={reason} onChange={(e) => setReason(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600">
+              {RETURN_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="ret-note" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Note (optional)</label>
+            <input id="ret-note" value={note} onChange={(e) => setNote(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600" />
+          </div>
+          <p className="text-xs text-gray-500">Worth {formatKES(Math.round((Number.isFinite(quantity) ? quantity : 0) * (batch.item.costPriceCents ?? 0)))} at cost. The units leave your stock now; cancel the return under Suppliers if it does not go ahead.</p>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50">Cancel</button>
+            <button type="submit" disabled={!supplierId || bad || save.isPending} className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">{save.isPending ? 'Returning…' : 'Return stock'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ─────────────────────────────────────────────────────────────
 
 type Filter = 'all' | 'expiring' | 'expired' | 'recalled';
@@ -449,6 +524,20 @@ export default function BatchManagementPage() {
   const [historyBatchId, setHistoryBatchId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [expiryDays, setExpiryDays] = useState(30);
+  const [returning, setReturning] = useState<Batch | null>(null);
+  const { confirm } = useDialog();
+
+  const { data: summary } = useQuery<ExpirySummary>({
+    queryKey: ['batches-summary', businessId],
+    queryFn: () => api.get<ExpirySummary>(`/businesses/${businessId}/batch/expiry-summary`),
+    enabled: !!businessId,
+  });
+  const writeOff = useMutation({
+    mutationFn: (b: Batch) => api.patch(`/businesses/${businessId}/batch/${b.id}/write-off`, { authorizedBy: user?.name ?? 'Manager' }),
+    onSuccess: () => { toast.success('Written off'); void qc.invalidateQueries({ queryKey: ['batches'] }); void qc.invalidateQueries({ queryKey: ['batches-expiring'] }); void qc.invalidateQueries({ queryKey: ['batches-summary'] }); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const refreshAll = () => { void qc.invalidateQueries({ queryKey: ['batches'] }); void qc.invalidateQueries({ queryKey: ['batches-expiring'] }); void qc.invalidateQueries({ queryKey: ['batches-summary'] }); };
 
   const { data: batches = [], isLoading, refetch } = useQuery<Batch[]>({
     queryKey: ['batches', businessId],
@@ -462,22 +551,18 @@ export default function BatchManagementPage() {
       api.get<Batch[]>(`/businesses/${businessId}/batch/expiring?days=${expiryDays}`),
     enabled: !!businessId && filter === 'expiring',
   });
+  const hasStock = (b: Batch) => b.quantityRemaining > 0;
 
   const nowTs = now.getTime();
   const filtered = (() => {
     if (filter === 'expiring') return expiringBatches;
     if (filter === 'expired')
-      return batches.filter((b) => b.expiryDate && new Date(b.expiryDate).getTime() <= nowTs);
+      return batches.filter((b) => hasStock(b) && b.status !== 'WRITTEN_OFF' && b.expiryDate && new Date(b.expiryDate).getTime() <= nowTs);
     if (filter === 'recalled') return batches.filter((b) => b.status === 'RECALLED');
     return batches;
   })();
 
   const activeBatches = batches.filter((b) => b.status === 'ACTIVE');
-  const expiredCount = batches.filter((b) => b.expiryDate && new Date(b.expiryDate).getTime() <= nowTs).length;
-  const expiringCount = batches.filter((b) => {
-    const days = daysUntilExpiry(b.expiryDate);
-    return days !== null && days > 0 && days <= 30;
-  }).length;
   const recalledCount = batches.filter((b) => b.status === 'RECALLED').length;
 
   return (
@@ -488,7 +573,7 @@ export default function BatchManagementPage() {
           <div>
             <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Batch Management</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-              {batches.length} total batches · {activeBatches.length} active
+              {summary ? `${summary.total.lots} ${summary.total.lots === 1 ? 'lot' : 'lots'} with stock, worth ${formatKES(summary.total.costCents)} at cost` : `${batches.length} total batches · ${activeBatches.length} active`}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -508,18 +593,20 @@ export default function BatchManagementPage() {
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-6 pb-0">
-        {[
-          { label: 'Total Batches', value: batches.length, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20' },
-          { label: 'Active', value: activeBatches.length, color: 'text-green-600', bg: 'bg-green-50 dark:bg-green-900/20' },
-          { label: 'Expiring ≤30d', value: expiringCount, color: 'text-yellow-600', bg: 'bg-yellow-50 dark:bg-yellow-900/20' },
-          { label: 'Expired', value: expiredCount, color: 'text-red-600', bg: 'bg-red-50 dark:bg-red-900/20' },
-        ].map((s) => (
-          <div key={s.label} className={`${s.bg} rounded-xl p-4`}>
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">{s.label}</p>
-            <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-          </div>
+      {/* What is on the shelf out of date or about to be, and what it cost */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-6 pb-0">
+        {([
+          { id: 'expired', label: 'Expired', tone: 'text-red-700', bg: 'bg-red-50 dark:bg-red-900/20', show: () => { setFilter('expired'); } },
+          { id: 'within30', label: 'Within 30 days', tone: 'text-amber-700', bg: 'bg-amber-50 dark:bg-amber-900/20', show: () => { setFilter('expiring'); setExpiryDays(30); } },
+          { id: 'within60', label: '31 to 60 days', tone: 'text-yellow-700', bg: 'bg-yellow-50 dark:bg-yellow-900/20', show: () => { setFilter('expiring'); setExpiryDays(60); } },
+          { id: 'within90', label: '61 to 90 days', tone: 'text-blue-700', bg: 'bg-blue-50 dark:bg-blue-900/20', show: () => { setFilter('expiring'); setExpiryDays(90); } },
+          { id: 'recalled', label: 'Recalled, to send back', tone: 'text-red-700', bg: 'bg-red-50 dark:bg-red-900/20', show: () => { setFilter('recalled'); } },
+        ] as const).map((t) => (
+          <button key={t.id} type="button" onClick={t.show} className={`${t.bg} rounded-xl p-4 text-left hover:ring-2 hover:ring-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500`}>
+            <span className="block text-xs font-medium text-gray-600 dark:text-gray-300 uppercase mb-1">{t.label}</span>
+            <span className={`block text-xl font-bold tabular-nums ${t.tone}`}>{formatKES(summary?.[t.id].costCents ?? 0)}</span>
+            <span className="block text-xs text-gray-500">{summary?.[t.id].lots ?? 0} {(summary?.[t.id].lots ?? 0) === 1 ? 'lot' : 'lots'} · {summary?.[t.id].units ?? 0} units at cost</span>
+          </button>
         ))}
       </div>
 
@@ -648,6 +735,29 @@ export default function BatchManagementPage() {
                           >
                             <History className="w-4 h-4" />
                           </button>
+                          {hasStock(batch) && (batch.status === 'ACTIVE' || batch.status === 'RECALLED') && (
+                            <button
+                              onClick={() => setReturning(batch)}
+                              title="Return to supplier"
+                              aria-label={`Return lot ${batch.lotNumber} to supplier`}
+                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            >
+                              <Undo2 className="w-4 h-4" />
+                            </button>
+                          )}
+                          {hasStock(batch) && batch.status === 'ACTIVE' && (
+                            <button
+                              onClick={async () => {
+                                const ok = await confirm({ title: 'Write off this lot', message: `Write off the ${batch.quantityRemaining} left of ${batch.item.name}, lot ${batch.lotNumber}? It is recorded as a loss at cost and cannot be undone.`, confirmLabel: 'Write off', variant: 'danger' });
+                                if (ok) writeOff.mutate(batch);
+                              }}
+                              title="Write off"
+                              aria-label={`Write off lot ${batch.lotNumber}`}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                           {batch.status === 'ACTIVE' && (
                             <button
                               onClick={() => setRecallBatch(batch)}
@@ -674,10 +784,12 @@ export default function BatchManagementPage() {
           batch={recallBatch}
           businessId={businessId}
           onClose={() => setRecallBatch(null)}
-          onSuccess={() => {
-            void qc.invalidateQueries({ queryKey: ['batches'] });
-          }}
+          onSuccess={refreshAll}
         />
+      )}
+
+      {returning && (
+        <ReturnModal batch={returning} businessId={businessId} onClose={() => setReturning(null)} onDone={refreshAll} />
       )}
 
       {historyBatchId && (
@@ -693,7 +805,7 @@ export default function BatchManagementPage() {
           businessId={businessId}
           storeId={storeId}
           onClose={() => setShowAddModal(false)}
-          onSuccess={() => void qc.invalidateQueries({ queryKey: ['batches'] })}
+          onSuccess={refreshAll}
         />
       )}
     </div>

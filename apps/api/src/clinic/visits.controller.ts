@@ -29,9 +29,31 @@ export class VisitsController {
     return searchDiagnoses(q ?? '');
   }
 
+  /** Patients whose follow-up is due, to be reached. */
+  @Get('follow-ups')
+  followUps(@Query('storeId') storeId: string | undefined, @Req() req: Authed) {
+    return this.svc.followUps(req.user.businessId, storeId);
+  }
+
+  @Post(':id/follow-up/contacted')
+  followUpContacted(@Param('id') id: string, @Req() req: Authed) {
+    return this.svc.markFollowUpContacted(id, req.user.businessId, actorOf(req));
+  }
+
+  @Post(':id/follow-up/remind')
+  followUpRemind(@Param('id') id: string, @Req() req: Authed) {
+    return this.svc.remindFollowUp(id, req.user.businessId, actorOf(req));
+  }
+
   @Get('patient/:patientId')
   history(@Param('patientId') patientId: string, @Req() req: Authed) {
     return this.svc.history(patientId, req.user.businessId);
+  }
+
+  /** A booked patient has arrived: queue them from their appointment. */
+  @Post('from-appointment/:appointmentId')
+  fromAppointment(@Param('appointmentId') appointmentId: string, @Body() dto: { patientId?: string; complaint?: string }, @Req() req: Authed) {
+    return this.svc.createFromAppointment(req.user.businessId, appointmentId, dto ?? {}, actorOf(req));
   }
 
   @Post()

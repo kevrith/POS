@@ -2,7 +2,8 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { PrismaService } from '../prisma/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { buildClaimJournalLines, buildUnmatchedClaimReceiptLines } from '../sales/sale-ledger';
-import { intInRange, oneOf, optionalText } from '../common/validate';
+import { intInRange, oneOf, optionalText, text } from '../common/validate';
+import { PROVIDER_KINDS } from '../cover/cover';
 import { drugData, type DrugInput } from './drug-data';
 import { STARTER_DRUGS, STARTER_INTERACTIONS } from './starter-data';
 import { normalizeDrugName } from '../prescriptions/clinical-safety';
@@ -47,18 +48,29 @@ export class PharmacyService {
     });
   }
 
-  async createProvider(dto: {
-    businessId: string;
-    name: string;
-    code: string;
-    contactPhone?: string;
-    contactEmail?: string;
-  }) {
-    return this.prisma.insuranceProvider.create({ data: dto });
+  /** The fields of an insurer a user may set, checked. Only what was sent is touched when updating. */
+  private providerData(dto: Record<string, unknown>, creating: boolean) {
+    const out: Record<string, unknown> = {};
+    if (creating || dto.name !== undefined) out.name = text(dto.name, 'Insurer name', 120);
+    if (creating || dto.code !== undefined) out.code = text(dto.code, 'Insurer code', 30).toUpperCase();
+    if (dto.contactPhone !== undefined) out.contactPhone = optionalText(dto.contactPhone, 'Phone', 40) ?? null;
+    if (dto.contactEmail !== undefined) out.contactEmail = optionalText(dto.contactEmail, 'Email', 120) ?? null;
+    if (dto.kind !== undefined) out.kind = oneOf(String(dto.kind).toUpperCase(), 'Insurer type', PROVIDER_KINDS);
+    if (dto.requiresEligibility !== undefined) out.requiresEligibility = dto.requiresEligibility === true;
+    if (dto.isActive !== undefined) out.isActive = dto.isActive === true;
+    return out;
   }
 
-  async updateProvider(id: string, dto: { name?: string; code?: string; contactPhone?: string; contactEmail?: string; isActive?: boolean }) {
-    return this.prisma.insuranceProvider.update({ where: { id }, data: dto });
+  async createProvider(dto: Record<string, unknown> & { businessId: string }) {
+    const data = this.providerData(dto, true);
+    return this.prisma.insuranceProvider.create({ data: { ...(data as { name: string; code: string }), businessId: dto.businessId } });
+  }
+
+  async updateProvider(id: string, businessId: string, dto: Record<string, unknown>) {
+    const data = this.providerData(dto, false);
+    const done = await this.prisma.insuranceProvider.updateMany({ where: { id, businessId }, data });
+    if (done.count !== 1) throw new NotFoundException('Insurer not found');
+    return this.prisma.insuranceProvider.findFirst({ where: { id, businessId } });
   }
 
   // ---------- Insurance Claims ----------
@@ -96,6 +108,7 @@ export class PharmacyService {
     dto: {
       status?: string;
       claimNumber?: string;
+      preauthNumber?: string;
       approvedCents?: number;
       paidCents?: number;
       rejectionReason?: string;
@@ -110,6 +123,7 @@ export class PharmacyService {
     const data: Record<string, unknown> = {};
     if (dto.status !== undefined) data.status = oneOf(String(dto.status), 'Claim status', CLAIM_STATUSES);
     if (dto.claimNumber !== undefined) data.claimNumber = optionalText(dto.claimNumber, 'Claim number', 60) ?? null;
+    if (dto.preauthNumber !== undefined) data.preauthNumber = optionalText(dto.preauthNumber, 'Pre-authorisation number', 60) ?? null;
     if (dto.approvedCents !== undefined) data.approvedCents = intInRange(dto.approvedCents, 'Amount approved', 0, 1_000_000_000);
     if (dto.rejectionReason !== undefined) data.rejectionReason = optionalText(dto.rejectionReason, 'Rejection reason', 300) ?? null;
     let paidCents = 0;

@@ -13,7 +13,7 @@
  *     call the route. Routes no rule matches stay open to every authenticated
  *     role, so adding this guard cannot break an endpoint nobody classified yet.
  *     New management-only endpoints must be added here.
- *  2. NARROW_ROLE_ALLOWLIST: DRIVER, SALES_AGENT, KITCHEN and DOCTOR sign in to a single
+ *  2. NARROW_ROLE_ALLOWLIST: DRIVER, SALES_AGENT, KITCHEN, DOCTOR, NURSE and LAB_TECH sign in to a single
  *     purpose-built screen, so for them the default flips to deny: they reach
  *     only the prefixes their app uses.
  *
@@ -27,7 +27,7 @@ import { BadRequestException, ForbiddenException } from '@nestjs/common';
 export type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export const ALL_ROLES = [
-  'OWNER', 'ADMIN', 'MANAGER', 'ACCOUNTANT', 'CASHIER', 'PHARMACIST', 'DOCTOR', 'WAITER', 'KITCHEN', 'DRIVER', 'SALES_AGENT',
+  'OWNER', 'ADMIN', 'MANAGER', 'ACCOUNTANT', 'CASHIER', 'PHARMACIST', 'DOCTOR', 'NURSE', 'LAB_TECH', 'WAITER', 'KITCHEN', 'DRIVER', 'SALES_AGENT',
 ] as const;
 
 /** ADMIN is a legacy owner-level role string still present in older data. */
@@ -39,12 +39,15 @@ const FLOOR = [...MGMT, 'CASHIER', 'PHARMACIST', 'WAITER'] as const;
 const FLOOR_ACC = [...FLOOR, 'ACCOUNTANT'] as const;
 const DISPATCH = [...MGMT, 'CASHIER', 'PHARMACIST'] as const;
 /** Who may see patient records and write prescriptions: the front line, pharmacists and doctors. Never the floor staff. */
-const CLINICAL = [...DISPATCH, 'DOCTOR'] as const;
+const CLINICAL = [...DISPATCH, 'DOCTOR', 'NURSE'] as const;
 /** Who may keep the drug list and interaction table: management and the pharmacist. */
 const PHARMACY_ADMIN = [...MGMT, 'PHARMACIST'] as const;
 const ALL: readonly string[] = ALL_ROLES;
 
-export const NARROW_ROLES = ['DRIVER', 'SALES_AGENT', 'KITCHEN', 'DOCTOR'] as const;
+/** Who may collect specimens and read the lab: the clinical staff and the lab technician. */
+const LAB = [...CLINICAL, 'LAB_TECH'] as const;
+
+export const NARROW_ROLES = ['DRIVER', 'SALES_AGENT', 'KITCHEN', 'DOCTOR', 'NURSE', 'LAB_TECH'] as const;
 
 export interface AccessRule {
   /** Omitted = every method. */
@@ -254,16 +257,43 @@ export const ACCESS_RULES: readonly AccessRule[] = [
   r('*', '/prescriptions/**', DISPATCH),
   // A visit: the front line queues patients and takes the bill, a nurse or doctor takes vitals, and only a doctor (or a manager)
   // takes a patient in, writes the consultation and sends them to billing.
+  r('POST', '/visits/from-appointment/:id', DISPATCH),
+  r('POST', '/visits/:id/follow-up/**', DISPATCH),
   r('POST', '/visits/:id/start', [...MGMT, 'DOCTOR']),
   r('PATCH', '/visits/:id/consultation', [...MGMT, 'DOCTOR']),
   r('POST', '/visits/:id/finish', [...MGMT, 'DOCTOR']),
   r('POST', '/visits/:id/reopen', [...MGMT, 'DOCTOR']),
   r('POST', '/visits/:id/complete', DISPATCH),
   r('*', '/visits/**', CLINICAL),
+  // The clinic's figures (patients, diagnoses, doctors' workload, takings from services) are management's.
+  r('*', '/clinic/reports/**', MGMT),
+  // The lab: a doctor (or manager) orders, anyone clinical collects the specimen, only the lab technician (or a manager) enters
+  // results, and a second person releases them. The catalogue and its normal ranges are management's.
+  // The registers an inspector asks for, and a patient's whole record for a data access request: the pharmacy's keepers only.
+  r('*', '/compliance/**', PHARMACY_ADMIN),
+  r('POST', '/lab/tests/starter', MGMT),
+  r('POST', '/lab/tests', MGMT),
+  r('PATCH', '/lab/tests/:id', MGMT),
+  r('POST', '/lab/orders', [...MGMT, 'DOCTOR']),
+  r('POST', '/lab/orders/:id/cancel', [...MGMT, 'DOCTOR']),
+  r('POST', '/lab/orders/:id/collect', LAB),
+  r('PATCH', '/lab/orders/:id/items/:itemId/results', [...MGMT, 'LAB_TECH']),
+  r('POST', '/lab/orders/:id/items/:itemId/verify', [...MGMT, 'LAB_TECH', 'DOCTOR']),
+  r('POST', '/lab/orders/:id/items/:itemId/acknowledge', [...MGMT, 'DOCTOR']),
+  r('POST', '/lab/orders/:id/items/:itemId/reopen', MGMT),
+  r('GET', '/lab/**', LAB),
+  r('*', '/lab/**', MGMT),
   // Patient records hold allergies, conditions, ID numbers and contacts.
   r('PATCH', '/patients/:id/active', PHARMACY_ADMIN),
   r('POST', '/patients/:id/adopt-prescriptions', PHARMACY_ADMIN),
   r('*', '/patients/**', CLINICAL),
+  // Cover checks are made by whoever registers or bills the patient; the claims board is money, so it is for management and the
+  // accountant, like the claims themselves.
+  r('*', '/cover/checks', CLINICAL),
+  r('GET', '/cover/standing', CLINICAL),
+  r('POST', '/cover/claims/**', FIN),
+  r('GET', '/cover/claims/**', FIN),
+  r('GET', '/cover/claims', FIN),
   r('GET', '/pharmacy/claims', FIN),
   r('GET', '/pharmacy/claims/stats', FIN),
   r(['POST', 'PATCH'], '/pharmacy/claims/**', FIN),
@@ -309,11 +339,40 @@ export const NARROW_ROLE_ALLOWLIST: Readonly<Record<string, readonly AccessRule[
     ...SELF_SERVICE,
     r('*', '/patients/**', ALL),
     r('*', '/visits/**', ALL),
+    r('*', '/lab/**', ALL),
     r('*', '/prescriptions/**', ALL),
     r('GET', '/pharmacy/**', ALL),
     r('GET', '/appointments/**', ALL),
     r('GET', '/items', ALL),
     r('GET', '/items/:id', ALL),
+    r('GET', '/business/:id/settings', ALL),
+    r('GET', '/business/:id/stores', ALL),
+    r('GET', '/subscription/**', ALL),
+    r('GET', '/notifications/**', ALL),
+  ],
+  // A nurse registers and queues patients, takes vitals, takes lab specimens and reads the record. No consulting, prescribing,
+  // charges, billing, cancelling a visit or cover checks: those are the doctor's and the front desk's.
+  NURSE: [
+    ...SELF_SERVICE,
+    r('GET', '/patients/**', ALL),
+    r('POST', '/patients', ALL),
+    r('PATCH', '/patients/:id', ALL),
+    r('GET', '/visits/**', ALL),
+    r('POST', '/visits', ALL),
+    r('PATCH', '/visits/:id/vitals', ALL),
+    r('GET', '/prescriptions/**', ALL),
+    r('GET', '/lab/**', ALL),
+    r('POST', '/lab/orders/:id/collect', ALL),
+    r('GET', '/appointments/**', ALL),
+    r('GET', '/business/:id/settings', ALL),
+    r('GET', '/business/:id/stores', ALL),
+    r('GET', '/subscription/**', ALL),
+    r('GET', '/notifications/**', ALL),
+  ],
+  // A lab technician sees the lab and nothing else.
+  LAB_TECH: [
+    ...SELF_SERVICE,
+    r('*', '/lab/**', ALL),
     r('GET', '/business/:id/settings', ALL),
     r('GET', '/business/:id/stores', ALL),
     r('GET', '/subscription/**', ALL),

@@ -1523,7 +1523,13 @@ model SupplierReturn {
   supplierId      String
   purchaseOrderId String?
   returnNumber    String
-  status          String               @default("DRAFT")
+  /// Stock leaves when the return is made, so it starts SENT. Then CREDITED when the supplier credits it, or CANCELLED
+  /// (stock comes back). DRAFT and APPROVED are older rows and count as still open.
+  status          String               @default("SENT")
+  /// The store the stock left, so cancelling puts it back there (null on returns made before this was kept).
+  storeId         String?
+  /// The supplier's credit note recorded when the return was marked credited.
+  creditNoteId    String?
   reason          String
   totalCents      Int                  @default(0)
   notes           String?
@@ -1544,6 +1550,9 @@ model SupplierReturnItem {
   unitCostCents Int
   totalCents    Int
   reason        String?
+  /// The lot the units came out of (and its number as it was then), for stock tracked by lot.
+  batchId       String?
+  lotNumber     String?
   item          Item           @relation(fields: [itemId], references: [id])
   return        SupplierReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
 }
@@ -1682,6 +1691,9 @@ model Visit {
   referralTo       String?
   referralNote     String?
   followUpDate     DateTime?
+  /// When someone reached the patient about the follow-up (a call or an SMS), and who.
+  followUpContactedAt DateTime?
+  followUpContactedBy String?
   consultStartedAt DateTime?
   consultEndedAt   DateTime?
   /// The invoice the visit's charges became, when the business is on real sales.
@@ -1710,6 +1722,90 @@ model VisitCharge {
   createdAt      DateTime @default(now())
 
   @@index([visitId])
+}
+
+/// A test the lab can run. `parameters` is a JSON list of what is measured (a single result for a malaria test, many for a full blood
+/// count): name, kind (NUMERIC, CHOICE, TEXT), unit, reference range (with a female override), critical limits, choices.
+model LabTest {
+  id              String   @id @default(uuid())
+  businessId      String
+  name            String
+  code            String?
+  /// HAEMATOLOGY, CHEMISTRY, MICROBIOLOGY, PARASITOLOGY, SEROLOGY, URINALYSIS, IMAGING or OTHER.
+  category        String   @default("OTHER")
+  /// BLOOD, URINE, STOOL, SWAB, SPUTUM, OTHER or NONE.
+  specimen        String   @default("BLOOD")
+  parameters      String   @default("[]")
+  /// The SERVICE item on the price list that is charged on the visit when this test is ordered (null: not charged).
+  itemId          String?
+  turnaroundHours Int?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([businessId, name])
+  @@index([businessId, isActive])
+}
+
+/// A request for tests on one patient, always inside an open visit so the work is billed with the visit.
+/// ORDERED -> COLLECTED -> RESULTED -> VERIFIED, or CANCELLED before the specimen is taken.
+model LabOrder {
+  id              String    @id @default(uuid())
+  businessId      String
+  storeId         String
+  /// L-YYYYMMDD-001, counted per business per Nairobi day.
+  orderNumber     String
+  patientId       String
+  visitId         String
+  status          String    @default("ORDERED")
+  priority        String    @default("NORMAL")
+  clinicalNotes   String?
+  orderedBy       String
+  orderedByName   String
+  collectedAt     DateTime?
+  collectedByName String?
+  cancelReason    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([businessId, orderNumber])
+  @@index([businessId, status])
+  @@index([visitId])
+  @@index([patientId])
+}
+
+/// One test on an order. `parameters` is a copy of the test's parameters when it was ordered, so changing the catalogue later
+/// never changes how an old result was judged. `results` is a JSON list of { name, value, unit, low, high, flag }.
+model LabOrderItem {
+  id           String    @id @default(uuid())
+  businessId   String
+  orderId      String
+  testId       String
+  testName     String
+  specimen     String    @default("BLOOD")
+  parameters   String    @default("[]")
+  /// PENDING, RESULTED (entered, waiting for a second person) or VERIFIED (released).
+  status       String    @default("PENDING")
+  results      String    @default("[]")
+  comment      String?
+  hasCritical  Boolean   @default(false)
+  resultedAt   DateTime?
+  resultedById String?
+  resultedBy   String?
+  verifiedAt   DateTime?
+  verifiedById String?
+  verifiedBy   String?
+  /// Why a released result was sent back for correction, and by whom.
+  amendedNote  String?
+  /// When a clinician acknowledged a critical result, and who.
+  criticalAckAt DateTime?
+  criticalAckBy String?
+  /// The charge this test added to the visit, so cancelling the order takes it off again.
+  chargeId     String?
+  createdAt    DateTime  @default(now())
+
+  @@index([orderId])
+  @@index([businessId, status])
 }
 
 /// A safety rule that was set aside on purpose: who, why, and what it was. Written when a dispense goes ahead over a
@@ -2648,6 +2744,10 @@ model InsuranceProvider {
   contactEmail String?
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
+  /// SHA (Social Health Authority), PRIVATE, CORPORATE or OTHER. SHA claims carry stricter checks.
+  kind         String   @default("PRIVATE")
+  /// When true, a claim to this insurer needs an "eligible" cover check made for the visit.
+  requiresEligibility Boolean @default(true)
 
   claims InsuranceClaim[]
 
@@ -2657,7 +2757,16 @@ model InsuranceProvider {
 model InsuranceClaim {
   id                 String            @id @default(uuid())
   businessId         String
-  prescriptionId     String
+  prescriptionId     String?
+  /// The clinic visit the claim was raised in (null for a pharmacy fill).
+  visitId            String?
+  patientId          String?
+  /// JSON list of { code?, icd11?, label } copied from the visit when the claim was raised.
+  diagnoses          String            @default("[]")
+  /// Pre-authorisation number from the insurer, when one was needed.
+  preauthNumber      String?
+  /// The cover check that was relied on when the claim was raised.
+  coverCheckId       String?
   providerId         String
   patientInsuranceId String?
   claimNumber        String?
@@ -2673,12 +2782,41 @@ model InsuranceClaim {
   saleId             String?
   /// A hand-raised claim whose amount was brought into Accounts Receivable by an opening balance, so paying it clears that.
   receivableBooked   Boolean           @default(false)
+  /// A rejected claim sent again after correction: the new claim names the old one, and the old one names the new.
+  resubmittedFromId  String?
+  resubmittedToId    String?
   createdAt          DateTime          @default(now())
 
   provider InsuranceProvider @relation(fields: [providerId], references: [id])
 
   @@index([businessId])
   @@index([prescriptionId])
+  @@index([visitId])
+  @@index([businessId, status, submittedAt])
+}
+
+/// One check of whether a patient's insurance covers them: made by hand from the insurer's portal or card today, and by the
+/// insurer's own service later. "Not checked" is the absence of a row, never a guess.
+model CoverCheck {
+  id            String   @id @default(uuid())
+  businessId    String
+  patientId     String
+  providerId    String
+  visitId       String?
+  memberNumber  String
+  /// ELIGIBLE, NOT_ELIGIBLE or UNAVAILABLE (the insurer's system could not be reached, so cover is unknown).
+  status        String
+  /// MANUAL (someone looked it up and typed the answer) or an integration name such as SHA_API.
+  method        String   @default("MANUAL")
+  /// The insurer's own reference for the answer, when it gave one.
+  reference     String?
+  notes         String?
+  checkedBy     String
+  checkedByName String
+  checkedAt     DateTime @default(now())
+
+  @@index([businessId, patientId, checkedAt])
+  @@index([visitId])
 }
 
 model ControlledSubstanceLog {

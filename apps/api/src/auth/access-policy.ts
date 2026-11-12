@@ -252,6 +252,14 @@ export const ACCESS_RULES: readonly AccessRule[] = [
   r('POST', '/prescriptions/check-interactions', CLINICAL),
   r('GET', '/prescriptions/**', CLINICAL),
   r('*', '/prescriptions/**', DISPATCH),
+  // A visit: the front line queues patients and takes the bill, a nurse or doctor takes vitals, and only a doctor (or a manager)
+  // takes a patient in, writes the consultation and sends them to billing.
+  r('POST', '/visits/:id/start', [...MGMT, 'DOCTOR']),
+  r('PATCH', '/visits/:id/consultation', [...MGMT, 'DOCTOR']),
+  r('POST', '/visits/:id/finish', [...MGMT, 'DOCTOR']),
+  r('POST', '/visits/:id/reopen', [...MGMT, 'DOCTOR']),
+  r('POST', '/visits/:id/complete', DISPATCH),
+  r('*', '/visits/**', CLINICAL),
   // Patient records hold allergies, conditions, ID numbers and contacts.
   r('PATCH', '/patients/:id/active', PHARMACY_ADMIN),
   r('POST', '/patients/:id/adopt-prescriptions', PHARMACY_ADMIN),
@@ -300,6 +308,7 @@ export const NARROW_ROLE_ALLOWLIST: Readonly<Record<string, readonly AccessRule[
   DOCTOR: [
     ...SELF_SERVICE,
     r('*', '/patients/**', ALL),
+    r('*', '/visits/**', ALL),
     r('*', '/prescriptions/**', ALL),
     r('GET', '/pharmacy/**', ALL),
     r('GET', '/appointments/**', ALL),

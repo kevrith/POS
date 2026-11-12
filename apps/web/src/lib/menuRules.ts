@@ -50,6 +50,7 @@ export const MENU_RULES: Record<string, MenuRule> = {
   // Other kinds of business
   '/prescriptions': { businessTypes: ['CLINIC'] },
   '/patients': { businessTypes: ['CLINIC'] },
+  '/visits': { businessTypes: ['CLINIC'] },
   '/pharmacy': { businessTypes: ['CLINIC'] },
   '/appointments': { businessTypes: ['CLINIC', 'SALON'] },
   // A fuel station's /pos is the forecourt; its shop, lubricants and LPG are sold on the standard till here

@@ -55,6 +55,7 @@ import { AffiliateModule } from './affiliate/affiliate.module';
 import { KdpaModule } from './kdpa/kdpa.module';
 import { PrescriptionsModule } from './prescriptions/prescriptions.module';
 import { PatientsModule } from './patients/patients.module';
+import { ClinicModule } from './clinic/clinic.module';
 import { PharmacyModule } from './pharmacy/pharmacy.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { DeliveryModule } from './delivery/delivery.module';
@@ -140,6 +141,7 @@ import { DbBackupModule } from './backup/db-backup.module';
     KdpaModule,
     PrescriptionsModule,
     PatientsModule,
+    ClinicModule,
     PharmacyModule,
     AppointmentsModule,
     DeliveryModule,

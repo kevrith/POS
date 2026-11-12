@@ -73,6 +73,11 @@ list is the `['salon-staff']` query.
 For a cyber cafe, ending a session shows the buyer KRA PIN field, a customer picker when it is paid on credit (credit is only for a
 registered customer), and then the fiscal receipt (number, KRA status, Print) instead of the plain one.
 
+Clinic visits: `VisitsPage` (`/visits`) is the queue board (open visits by status, urgent first, polled every 20 s) and `components/clinical/VisitWorkspace.tsx`
+is one visit in four tabs (Triage, Consultation, Prescriptions, Billing). Triage flags are `vitalFlags` in `lib/clinical.ts` (adult ranges only, none under 12); the sick note and
+referral letter are `lib/visitPrint.ts` (everything escaped, printed with `printHtml`). Writing a prescription goes through `/prescriptions?visit=...&patient=...`, which opens
+the form for that patient and ties the prescription to the visit. `DOCTOR` lands on `/patients` and `/visits` is in every clinical menu.
+
 Roles: `PHARMACIST` is a cashier in every menu plus Pharmacy Mgmt, and counts as an approver in `lib/clinical.ts` (`MANAGER_ROLES`, `canApproveAlone`);
 `DOCTOR` sees only Patients, Prescriptions and Appointments, lands on `/patients` (`HomeRedirect` in `App.tsx`, and `DashboardPage` redirects them),
 and `PrescriptionsPage` shows the dispense buttons to `canManage` roles only. The pharmacy drug list is one table (`FormularyEntry`): the Drug List tab

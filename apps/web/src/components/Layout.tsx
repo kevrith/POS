@@ -72,6 +72,7 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
       // Kiosk mode is launched from within the POS page (not a permanent nav item)
       { to: '/layaway', icon: Layers, label: 'Layaway', roles: ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST'] },
       { to: '/proforma', icon: CreditCard, label: 'Proformas', roles: ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST'] },
+      { to: '/visits', icon: ClipboardList, label: 'Visits', roles: ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST', 'DOCTOR'] },
       { to: '/patients', icon: Users, label: 'Patients', roles: ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST', 'DOCTOR'] },
       { to: '/prescriptions', icon: Pill, label: 'Prescriptions', roles: ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST', 'DOCTOR'] },
       { to: '/pharmacy', icon: Pill, label: 'Pharmacy Mgmt', roles: ['OWNER', 'MANAGER', 'PHARMACIST'] },

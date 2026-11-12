@@ -47,6 +47,7 @@ const MENU_GROUPS: NavGroup[] = [
       { to: '/hospitality',   icon: ClipboardList,  label: 'Restaurant Tables', roles: ['OWNER','MANAGER','WAITER','CASHIER','PHARMACIST'] },
       { to: '/layaway',       icon: Layers,         label: 'Layaway',         roles: ['OWNER','MANAGER','CASHIER','PHARMACIST'] },
       { to: '/proforma',      icon: CreditCard,     label: 'Proformas',       roles: ['OWNER','MANAGER','CASHIER','PHARMACIST'] },
+      { to: '/visits',        icon: ClipboardList,  label: 'Visits',          roles: ['OWNER','MANAGER','CASHIER','PHARMACIST','DOCTOR'] },
       { to: '/patients',      icon: Users,          label: 'Patients',        roles: ['OWNER','MANAGER','CASHIER','PHARMACIST','DOCTOR'] },
       { to: '/prescriptions', icon: Pill,           label: 'Prescriptions',   roles: ['OWNER','MANAGER','CASHIER','PHARMACIST','DOCTOR'] },
       { to: '/appointments',  icon: CalendarClock,  label: 'Appointments',    roles: ['OWNER','MANAGER','CASHIER','PHARMACIST','DOCTOR'] },

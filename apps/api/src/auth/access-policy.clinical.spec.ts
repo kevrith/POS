@@ -74,3 +74,28 @@ describe('assigning the roles', () => {
     expect(() => assertCanManageUser('PHARMACIST', undefined, 'DOCTOR')).toThrow();
   });
 });
+
+describe('visits', () => {
+  it('the front line queues and bills; a doctor consults but never takes the money', () => {
+    for (const role of ['CASHIER', 'PHARMACIST', 'DOCTOR', 'MANAGER', 'OWNER']) {
+      expect(can(role, 'GET', '/visits')).toBe(true);
+      expect(can(role, 'POST', '/visits')).toBe(true);
+      expect(can(role, 'PATCH', '/visits/v-1/vitals')).toBe(true);
+      expect(can(role, 'POST', '/visits/v-1/charges')).toBe(true);
+    }
+    for (const action of ['start', 'finish', 'reopen']) {
+      expect(can('DOCTOR', 'POST', `/visits/v-1/${action}`)).toBe(true);
+      expect(can('MANAGER', 'POST', `/visits/v-1/${action}`)).toBe(true);
+      expect(can('CASHIER', 'POST', `/visits/v-1/${action}`)).toBe(false);
+      expect(can('PHARMACIST', 'POST', `/visits/v-1/${action}`)).toBe(false);
+    }
+    expect(can('DOCTOR', 'PATCH', '/visits/v-1/consultation')).toBe(true);
+    expect(can('CASHIER', 'PATCH', '/visits/v-1/consultation')).toBe(false);
+    expect(can('CASHIER', 'POST', '/visits/v-1/complete')).toBe(true);
+    expect(can('DOCTOR', 'POST', '/visits/v-1/complete')).toBe(false);
+  });
+
+  it('floor staff and the rest never see visits', () => {
+    for (const role of ['WAITER', 'KITCHEN', 'DRIVER', 'SALES_AGENT', 'ACCOUNTANT']) expect(can(role, 'GET', '/visits')).toBe(false);
+  });
+});

@@ -123,6 +123,8 @@ export class PrescriptionsService {
     refillsAllowed?: number;
     /** A patient record. When given, the patient details on the prescription are copied from it. */
     patientId?: string;
+    /** The clinic visit it is written in. It must be this business's visit for the same patient. */
+    visitId?: string;
   }) {
     if (typeof dto.storeId !== 'string' || !dto.storeId) throw new BadRequestException('storeId is required');
     const store = await this.prisma.store.findFirst({ where: { id: dto.storeId, businessId: dto.businessId }, select: { id: true } });
@@ -161,10 +163,20 @@ export class PrescriptionsService {
       if (!patient) throw new BadRequestException('Patient not found');
     }
 
+    let visitId: string | undefined;
+    if (dto.visitId) {
+      const visit = await this.prisma.visit.findFirst({ where: { id: text(dto.visitId, 'Visit', 64), businessId: dto.businessId }, select: { id: true, patientId: true, status: true } });
+      if (!visit) throw new BadRequestException('Visit not found');
+      if (['COMPLETED', 'CANCELLED'].includes(visit.status)) throw new BadRequestException('That visit is already closed');
+      if (!patient || visit.patientId !== patient.id) throw new BadRequestException('That visit belongs to a different patient');
+      visitId = visit.id;
+    }
+
     const data = {
       businessId: dto.businessId,
       storeId: dto.storeId,
       patientId: patient?.id,
+      visitId,
       patientName: patient ? patient.name : text(dto.patientName, 'Patient name', 120),
       patientPhone: patient ? patient.phone ?? undefined : optionalText(dto.patientPhone, 'Patient phone', 30),
       patientDOB: patient ? patient.dateOfBirth?.toISOString().slice(0, 10) : optionalText(dto.patientDOB, 'Patient date of birth', 30),

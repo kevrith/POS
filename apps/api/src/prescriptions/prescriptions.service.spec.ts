@@ -29,6 +29,7 @@ function setup() {
     drugInteraction: { findMany: jest.fn().mockResolvedValue([]) },
     formularyEntry: { findMany: jest.fn().mockResolvedValue([]) },
     patient: { findFirst: jest.fn().mockResolvedValue(null) },
+    visit: { findFirst: jest.fn().mockResolvedValue(null) },
     rxSafetyOverride: { create: jest.fn().mockResolvedValue({}) },
     insuranceProvider: { findFirst: jest.fn().mockResolvedValue({ id: 'ins-1' }) },
     prescriptionFill: { create: jest.fn().mockResolvedValue({}) },
@@ -600,5 +601,29 @@ describe('safety at dispensing', () => {
     prisma.patient.findFirst.mockResolvedValue(allergic);
     const res = await svc.previewSafety('biz-1', { patientId: 'pt-1', items: [{ name: 'Amoxicillin 500mg', qty: 21 }, { name: '  ' }] });
     expect(res.blocked).toBe(true);
+  });
+});
+
+describe('a prescription written in a visit', () => {
+  const PATIENT = { id: 'pt-1', name: 'Wanjiru Kamau', phone: null, dateOfBirth: null, idNumber: null, isActive: true };
+  const ready = (visit: Record<string, unknown> | null) => {
+    const s = setup();
+    s.prisma.patient.findFirst.mockResolvedValue(PATIENT);
+    s.prisma.visit.findFirst.mockResolvedValue(visit);
+    return s;
+  };
+
+  it('is linked to the visit', async () => {
+    const { svc, prisma } = ready({ id: 'v-1', patientId: 'pt-1', status: 'IN_CONSULTATION' });
+    await svc.create({ ...NEW_RX, patientId: 'pt-1', visitId: 'v-1' });
+    expect(prisma.prescription.create.mock.calls[0][0].data.visitId).toBe('v-1');
+    expect(prisma.visit.findFirst).toHaveBeenCalledWith({ where: { id: 'v-1', businessId: 'biz-1' }, select: { id: true, patientId: true, status: true } });
+  });
+
+  it('refuses a visit that is not this business\'s, is closed, or is another patient\'s', async () => {
+    await expect(ready(null).svc.create({ ...NEW_RX, patientId: 'pt-1', visitId: 'v-x' })).rejects.toThrow(/Visit not found/);
+    await expect(ready({ id: 'v-1', patientId: 'pt-1', status: 'COMPLETED' }).svc.create({ ...NEW_RX, patientId: 'pt-1', visitId: 'v-1' })).rejects.toThrow(/already closed/);
+    await expect(ready({ id: 'v-1', patientId: 'pt-other', status: 'WAITING' }).svc.create({ ...NEW_RX, patientId: 'pt-1', visitId: 'v-1' })).rejects.toThrow(/different patient/);
+    await expect(ready({ id: 'v-1', patientId: 'pt-1', status: 'WAITING' }).svc.create({ ...NEW_RX, visitId: 'v-1' })).rejects.toThrow(/different patient/);
   });
 });

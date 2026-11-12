@@ -34,6 +34,7 @@ export const routeLoaders: Record<string, () => Promise<unknown>> = {
   '/owner-dashboard': () => import('../pages/OwnerDashboardPage'),
   '/prescriptions': () => import('../pages/PrescriptionsPage'),
   '/patients': () => import('../pages/PatientsPage'),
+  '/visits': () => import('../pages/VisitsPage'),
   '/pharmacy': () => import('../pages/PharmacyPage'),
   '/appointments': () => import('../pages/AppointmentsPage'),
   '/delivery': () => import('../pages/DeliveryPage'),

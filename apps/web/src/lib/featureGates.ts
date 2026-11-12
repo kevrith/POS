@@ -70,6 +70,7 @@ export const FEATURE_PLANS: Record<string, Plan> = {
   'proforma':             'GROWTH',
   'prescriptions':        'GROWTH',
   'patients':             'GROWTH',
+  'visits':               'GROWTH',
   'pharmacy':             'GROWTH',
   'appointments':         'GROWTH',
   'delivery':             'GROWTH',

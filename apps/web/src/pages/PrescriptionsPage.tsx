@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
@@ -81,6 +82,18 @@ export default function PrescriptionsPage() {
   const [referNotes, setReferNotes] = useState('');
 
   const [patient, setPatient] = useState<Patient | null>(null);
+  // Arriving from a visit ("Write a prescription for this visit"): the patient is chosen and the prescription is tied to the visit.
+  const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
+  const visitId = params.get('visit');
+  const visitPatientId = params.get('patient');
+  useEffect(() => {
+    if (!visitId || !visitPatientId) return;
+    let cancelled = false;
+    void api.get<Patient>(`/patients/${visitPatientId}`).then((p) => { if (!cancelled) { setPatient(p); setShowCreate(true); } }).catch(() => { if (!cancelled) setParams({}, { replace: true }); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visitId, visitPatientId]);
   const [typedPatient, setTypedPatient] = useState(false);
   // A doctor signed in is the prescriber (the server takes the name from the login too).
   const ownDoctorName = user?.role === 'DOCTOR' ? user.name ?? '' : '';
@@ -124,8 +137,11 @@ export default function PrescriptionsPage() {
     mutationFn: (data: any) => api.post('/prescriptions', data),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['prescriptions'] });
+      void qc.invalidateQueries({ queryKey: ['visit'] });
       setShowCreate(false);
       resetForm();
+      // Written in a visit: back to that visit, where the prescription now shows.
+      if (visitId) { setParams({}, { replace: true }); navigate('/visits'); }
     },
   });
 
@@ -751,6 +767,7 @@ export default function PrescriptionsPage() {
               <button onClick={() => createMutation.mutate({
                   businessId, storeId, ...form,
                   ...(patient ? { patientId: patient.id } : {}),
+                  ...(visitId ? { visitId } : {}),
                   items: form.items.map(({ duration, ...line }) => ({ ...line, ...(duration ? { durationDays: duration } : {}) })),
                 })}
                 disabled={(!patient && !form.patientName) || !form.doctorName || form.items.some((i) => !i.name) || createMutation.isPending}

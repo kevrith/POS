@@ -40,6 +40,11 @@ export default function PatientsPage() {
     queryFn: () => api.get(`/patients/${selectedId}`),
     enabled: !!selectedId,
   });
+  const { data: visits = [] } = useQuery<Array<{ id: string; visitNumber: string; createdAt: string; status: string; complaint: string | null; doctorName: string | null; diagnoses: Array<{ code?: string; label: string }> }>>({
+    queryKey: ['patient-visits', selectedId],
+    queryFn: () => api.get(`/visits/patient/${selectedId}`),
+    enabled: !!selectedId,
+  });
   const { data: unlinked = [] } = useQuery<RxRow[]>({
     queryKey: ['patient-unlinked', selectedId],
     queryFn: () => api.get(`/patients/${selectedId}/unlinked-history`),
@@ -152,6 +157,20 @@ export default function PatientsPage() {
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
                   <span>{unlinked.length} earlier prescription{unlinked.length === 1 ? '' : 's'} with this name look like theirs.</span>
                   <button onClick={() => adopt.mutate()} disabled={adopt.isPending} className="rounded-md border border-amber-400 px-2.5 py-1 text-xs font-medium hover:bg-amber-100 disabled:opacity-50 dark:hover:bg-amber-500/20">Add them to this record</button>
+                </div>
+              )}
+
+              {visits.length > 0 && (
+                <div>
+                  <h3 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">Visits</h3>
+                  <ul className="divide-y rounded-lg border dark:divide-gray-700 dark:border-gray-700">
+                    {visits.slice(0, 8).map((v) => (
+                      <li key={v.id} className="px-3 py-2 text-sm">
+                        <p className="font-mono text-xs text-teal-600">{v.visitNumber} · {new Date(v.createdAt).toLocaleDateString('en-KE')}{v.doctorName ? ` · ${v.doctorName}` : ''}</p>
+                        <p className="text-gray-800 dark:text-gray-100">{v.diagnoses.length ? v.diagnoses.map((d) => d.label).join('; ') : v.complaint ?? 'No notes'}</p>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
 

@@ -355,6 +355,14 @@ Rules these modules enforce on the server (the web and mobile screens are not tr
   before, nothing could set them, so the register and these checks never had anything to run on. `AllExceptionsFilter` passes a
   `code` and `details` through when an exception carries them. Not covered yet: proforma conversion, orders and the vertical takings
   do not apply the restricted-sale rule.
+- **Clinic visits (`clinic/`).** `Visit` (V-YYYYMMDD-nnn per business per Nairobi day) moves WAITING, TRIAGED, IN_CONSULTATION, READY_TO_BILL, COMPLETED or CANCELLED; the rules
+  are in `visit-flow.ts` (`assertCan`), and every move is a conditional `updateMany` on the status so two people cannot both win. A patient has one open visit at a time. Vitals are validated in
+  `vitals.ts` (ranges wide enough for any patient, tight enough to catch a slipped decimal; a blood pressure is two numbers). `diagnosis-codes.ts` holds about 70 common ICD-10 diagnoses
+  (`GET /visits/diagnoses?q=`), a diagnosis outside it is kept as typed. Only a doctor or manager starts, writes notes, finishes or reopens, and only the doctor who holds the visit (or a manager)
+  writes its notes; finishing needs a diagnosis. `VisitCharge` lines are catalogue SERVICE items at their price (medicines are billed at dispensing). `POST /visits/:id/complete` closes the visit and,
+  for a business on real sales with charges, writes one invoice (`DirectSaleService.createInTx`, source `CLINIC`) in the same transaction and returns the KRA answer like a fuel or pharmacy sale;
+  otherwise it only closes. `Prescription.visitId` ties a prescription to an open visit of the same patient. Access (`access-policy.ts`): front line and doctors queue and take vitals, only doctors and
+  managers consult, only the front line takes the money.
 - **One drug list, starter data and clinical roles.** The drug catalogue and the formulary are one table, `FormularyEntry` (migration
   `20261113100000_one_drug_list` copies `DrugCatalogue` across; that table is left in place and unused). `/pharmacy/drugs` is its API
   (`pharmacy/drug-data.ts` validates, the same generic name, brand and strength is listed once, ids are checked against the caller's business), and

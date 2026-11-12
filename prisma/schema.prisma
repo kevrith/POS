@@ -1589,6 +1589,8 @@ model Prescription {
   referralNotes      String?
   /// The patient record this was written for. The name, phone and DOB above stay as a snapshot of what was on the paper.
   patientId          String?
+  /// The clinic visit it was written in, when it was.
+  visitId            String?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   business           Business  @relation(fields: [businessId], references: [id])
@@ -1596,6 +1598,7 @@ model Prescription {
 
   @@index([businessId, storeId, status])
   @@index([businessId, patientId])
+  @@index([visitId])
 }
 
 /// A person the clinic or pharmacy treats. One record per person: prescriptions, history and the safety checks
@@ -1635,6 +1638,78 @@ model Patient {
   @@index([businessId, name])
   @@index([businessId, phone])
   @@index([businessId, idNumber])
+}
+
+/// One attendance at the clinic, from the front desk to the bill: queue, vitals, consultation, charges.
+model Visit {
+  id               String    @id @default(uuid())
+  businessId       String
+  storeId          String
+  patientId        String
+  /// V-YYYYMMDD-001, counted per business per Nairobi day.
+  visitNumber      String
+  /// WAITING, TRIAGED, IN_CONSULTATION, READY_TO_BILL, COMPLETED or CANCELLED.
+  status           String    @default("WAITING")
+  /// NORMAL or URGENT (urgent is seen first).
+  priority         String    @default("NORMAL")
+  complaint        String?
+  appointmentId    String?
+  doctorId         String?
+  doctorName       String?
+  // Triage
+  temperatureC     Float?
+  pulse            Int?
+  respiratoryRate  Int?
+  systolic         Int?
+  diastolic        Int?
+  spo2             Int?
+  weightKg         Float?
+  heightCm         Float?
+  bloodSugarMmol   Float?
+  painScore        Int?
+  triageNotes      String?
+  triagedAt        DateTime?
+  triagedBy        String?
+  // Consultation (SOAP)
+  subjective       String?
+  objective        String?
+  assessment       String?
+  plan             String?
+  /// JSON list of { code?, label }.
+  diagnoses        String    @default("[]")
+  sickLeaveDays    Int?
+  sickLeaveNote    String?
+  referralTo       String?
+  referralNote     String?
+  followUpDate     DateTime?
+  consultStartedAt DateTime?
+  consultEndedAt   DateTime?
+  /// The invoice the visit's charges became, when the business is on real sales.
+  saleId           String?
+  cancelReason     String?
+  completedAt      DateTime?
+  createdBy        String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([businessId, visitNumber])
+  @@index([businessId, storeId, status])
+  @@index([businessId, patientId])
+}
+
+/// A fee on a visit (consultation, a lab test, a procedure): a catalogue item at its price, billed when the visit is completed.
+model VisitCharge {
+  id             String   @id @default(uuid())
+  businessId     String
+  visitId        String
+  itemId         String
+  name           String
+  quantity       Float    @default(1)
+  unitPriceCents Int
+  addedBy        String?
+  createdAt      DateTime @default(now())
+
+  @@index([visitId])
 }
 
 /// A safety rule that was set aside on purpose: who, why, and what it was. Written when a dispense goes ahead over a

@@ -495,6 +495,7 @@ interface PODetailProps {
 
 function PODetail({ po, storeId, onBack, onRefresh }: PODetailProps) {
   const qc = useQueryClient();
+  const pharmacist = useAuthStore((s) => s.user?.role) === 'PHARMACIST';
   const { confirm } = useDialog();
   const [showGRN, setShowGRN] = useState(false);
   const [showEmailPO, setShowEmailPO] = useState(false);
@@ -677,7 +678,7 @@ function PODetail({ po, storeId, onBack, onRefresh }: PODetailProps) {
 
       {/* Actions */}
       <div className="border-t px-6 py-4 flex gap-3">
-        {po.status === 'DRAFT' && (
+        {!pharmacist && po.status === 'DRAFT' && (
           <button
             onClick={() => updateStatus.mutate('SUBMITTED')}
             disabled={updateStatus.isPending}
@@ -687,7 +688,7 @@ function PODetail({ po, storeId, onBack, onRefresh }: PODetailProps) {
             Submit PO
           </button>
         )}
-        {po.status === 'SUBMITTED' && (
+        {!pharmacist && po.status === 'SUBMITTED' && (
           <>
             <button
               onClick={() => updateStatus.mutate('APPROVED')}
@@ -718,7 +719,7 @@ function PODetail({ po, storeId, onBack, onRefresh }: PODetailProps) {
       </div>
 
       {/* Invoice generation — for received POs */}
-      {(po.status === 'RECEIVED' || po.status === 'PARTIALLY_RECEIVED') && !po.invoiceNumber && (
+      {!pharmacist && (po.status === 'RECEIVED' || po.status === 'PARTIALLY_RECEIVED') && !po.invoiceNumber && (
         <div className="px-6 pb-2">
           <button
             onClick={() => setShowInvoiceModal(true)}
@@ -743,7 +744,7 @@ function PODetail({ po, storeId, onBack, onRefresh }: PODetailProps) {
 
       {/* Print PO + Force Close — always visible */}
       <div className="px-6 pb-4 flex gap-2">
-        {po.status === 'PARTIALLY_RECEIVED' && (
+        {!pharmacist && po.status === 'PARTIALLY_RECEIVED' && (
           <button
             onClick={async () => { const ok = await confirm({ title: 'Close Purchase Order', message: 'Mark this PO as fully received? This cannot be undone.', variant: 'warning', confirmLabel: 'Close PO' }); if (ok) closePOMutation.mutate(); }}
             disabled={closePOMutation.isPending}
@@ -1196,6 +1197,7 @@ type Tab = 'suppliers' | 'purchase-orders' | 'credit-notes' | 'returns' | 'invoi
 export default function SuppliersPage() {
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const pharmacist = user?.role === 'PHARMACIST';
   const { confirm } = useDialog();
   const [tab, setTab] = useState<Tab>('suppliers');
   const [showAddSupplier, setShowAddSupplier] = useState(false);
@@ -1301,7 +1303,7 @@ export default function SuppliersPage() {
   const returnStatus = useMutation({
     mutationFn: ({ id, status, creditNoteNumber, amountCents }: { id: string; status: 'CREDITED' | 'CANCELLED'; creditNoteNumber?: string; amountCents?: number }) => api.patch(`/suppliers/returns/${id}/status`, { status, creditNoteNumber, amountCents }),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['supplier-returns'] }); void qc.invalidateQueries({ queryKey: ['batches'] }); void qc.invalidateQueries({ queryKey: ['supplier-credit-notes'] }); setCrediting(null); },
-    onError: (e: Error) => window.alert(e.message),
+    onError: (e: Error) => toast.error(e.message),
   });
 
   // ── Price Agreements state ──
@@ -1483,7 +1485,7 @@ export default function SuppliersPage() {
               className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg" aria-label="Refresh">
               <RefreshCw className="w-5 h-5" />
             </button>
-            {tab === 'suppliers' ? (
+            {pharmacist && (tab === 'suppliers' || tab === 'purchase-orders') ? null : tab === 'suppliers' ? (
               <button
                 onClick={() => setShowAddSupplier(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
@@ -1531,7 +1533,7 @@ export default function SuppliersPage() {
             { id: 'landed-cost' as const, label: 'Landed Cost', Icon: Package },
             { id: 'catalogue' as const, label: 'Vendor Catalogue', Icon: Package },
             { id: 'auto-reorder' as const, label: 'Auto-Reorder', Icon: RefreshCw },
-          ]).map(({ id, label, Icon }) => (
+          ]).filter(({ id }) => !pharmacist || ['suppliers', 'purchase-orders', 'returns'].includes(id)).map(({ id, label, Icon }) => (
             <button
               key={id}
               onClick={() => setTab(id)}
@@ -2219,7 +2221,7 @@ export default function SuppliersPage() {
                             <>
                               <button onClick={() => { setCrediting(r); setCreditForm({ number: '', amount: (r.totalCents / 100).toFixed(2) }); }} disabled={returnStatus.isPending}
                                 className="text-xs font-medium text-green-700 border border-green-200 rounded px-2 py-1 hover:bg-green-50 disabled:opacity-50">Credited</button>
-                              <button onClick={() => { if (window.confirm(`Cancel ${r.returnNumber}? The stock goes back where it came from.`)) returnStatus.mutate({ id: r.id, status: 'CANCELLED' }); }} disabled={returnStatus.isPending}
+                              <button onClick={async () => { const ok = await confirm({ title: `Cancel ${r.returnNumber}`, message: 'The stock goes back into the lot and the store it came from.', variant: 'danger', confirmLabel: 'Cancel return' }); if (ok) returnStatus.mutate({ id: r.id, status: 'CANCELLED' }); }} disabled={returnStatus.isPending}
                                 className="text-xs font-medium text-red-700 border border-red-200 rounded px-2 py-1 hover:bg-red-50 disabled:opacity-50">Cancel</button>
                             </>
                           )}

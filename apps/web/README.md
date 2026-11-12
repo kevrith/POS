@@ -391,3 +391,5 @@ Tests: `src/styles/__tests__/tokens.test.ts` (contrast of every text pairing, ge
 - **`RouteErrorBoundary`** turns a page that fails to load into a message with a Reload button (and reloads once automatically for a stale
   or missing page file), instead of a blank screen.
 - Dev server: run a second API on another port and point Vite at it with `VITE_API_PROXY=http://localhost:3110 npx vite --port 3006`.
+
+Known-gap pass: `ProformaPage.tsx` converts a quotation through the shared `RestrictedSaleModal` flow (an `approval` ref is sent as `restrictedOverride`; POS quotations now carry each line's `itemId`). `components/clinical/Tariff.tsx` is the insurer price editor opened by **Prices** on `PharmacyPage` (`/cover/tariffs`); `VisitWorkspace` PayModal and `DispenseModal` ask `/cover/quote` and `/prescriptions/:id/quote?providerId=` so the insured total shown matches what is invoiced. `Layout`/`MobileNav` give `PHARMACIST` an Inventory group; `SuppliersPage` and `BatchManagementPage` hide manager-only actions from them. The lab worklist shows an overdue badge from `dueAt`/`overdue`.

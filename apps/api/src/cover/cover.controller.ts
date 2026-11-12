@@ -1,5 +1,5 @@
 import { Feature } from '@pos/shared';
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import type { AuthUser } from '../auth/auth.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -13,6 +13,27 @@ type Authed = Request & { user: AuthUser };
 @Controller('cover')
 export class CoverController {
   constructor(private svc: CoverService) {}
+
+  @Get('tariffs')
+  tariffs(@Query('providerId') providerId: string, @Req() req: Authed) {
+    return this.svc.tariffs(req.user.businessId, providerId);
+  }
+
+  @Put('tariffs')
+  setTariff(@Body() dto: { providerId?: string; itemId?: string; priceCents?: number }, @Req() req: Authed) {
+    return this.svc.setTariff(req.user.businessId, dto ?? {});
+  }
+
+  @Delete('tariffs/:id')
+  removeTariff(@Param('id') id: string, @Req() req: Authed) {
+    return this.svc.removeTariff(req.user.businessId, id);
+  }
+
+  /** What a visit's bill is at an insurer's prices. */
+  @Get('quote')
+  quote(@Query('visitId') visitId: string, @Query('providerId') providerId: string, @Req() req: Authed) {
+    return this.svc.quote(req.user.businessId, visitId, providerId);
+  }
 
   @Post('checks')
   record(@Body() dto: { patientId?: string; providerId?: string; memberNumber?: string; status?: string; reference?: string; notes?: string; visitId?: string }, @Req() req: Authed) {

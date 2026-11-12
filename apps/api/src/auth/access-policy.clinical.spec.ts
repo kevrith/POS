@@ -261,3 +261,29 @@ describe('SHA connection', () => {
     for (const role of ['WAITER', 'KITCHEN', 'NURSE', 'LAB_TECH', 'ACCOUNTANT']) expect(can(role, 'POST', '/cover/sha/eligibility')).toBe(false);
   });
 });
+
+describe('a pharmacist and the supplier side', () => {
+  it('receives deliveries and sends stock back, and can read suppliers and orders', () => {
+    for (const [m, p] of [['GET', '/suppliers'], ['GET', '/suppliers/purchase-orders'], ['GET', '/suppliers/purchase-orders/po-1'], ['POST', '/suppliers/purchase-orders/po-1/grn'], ['GET', '/suppliers/returns'], ['POST', '/suppliers/returns'], ['PATCH', '/suppliers/returns/r-1/status']] as const) {
+      expect(can('PHARMACIST', m, p)).toBe(true);
+    }
+  });
+  it('does not order, approve, invoice or handle credit', () => {
+    for (const [m, p] of [['POST', '/suppliers/purchase-orders'], ['PATCH', '/suppliers/purchase-orders/po-1/status'], ['PATCH', '/suppliers/purchase-orders/po-1/invoice'], ['GET', '/suppliers/invoices'], ['GET', '/suppliers/credit-notes'], ['POST', '/suppliers/credit-notes'], ['POST', '/suppliers']] as const) {
+      expect(can('PHARMACIST', m, p)).toBe(false);
+    }
+  });
+  it('a cashier gets none of it', () => {
+    expect(can('CASHIER', 'GET', '/suppliers')).toBe(false);
+    expect(can('CASHIER', 'POST', '/suppliers/purchase-orders/po-1/grn')).toBe(false);
+    expect(can('CASHIER', 'POST', '/suppliers/returns')).toBe(false);
+  });
+});
+
+describe('insurer tariffs', () => {
+  it('are set by the owner or a manager; the front line only sees a visit\'s quote', () => {
+    for (const role of ['OWNER', 'MANAGER']) { expect(can(role, 'GET', '/cover/tariffs')).toBe(true); expect(can(role, 'PUT', '/cover/tariffs')).toBe(true); expect(can(role, 'DELETE', '/cover/tariffs/t-1')).toBe(true); }
+    for (const role of ['CASHIER', 'PHARMACIST', 'ACCOUNTANT', 'DOCTOR']) { expect(can(role, 'PUT', '/cover/tariffs')).toBe(false); expect(can(role, 'GET', '/cover/tariffs')).toBe(false); }
+    for (const role of ['CASHIER', 'PHARMACIST', 'MANAGER']) expect(can(role, 'GET', '/cover/quote')).toBe(true);
+  });
+});

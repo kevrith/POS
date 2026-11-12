@@ -74,6 +74,11 @@ see the money without adjusting stock or editing staff, which is the same line t
 web app draws. Cashiers and waiters see only **their own** sales; browsing the whole
 store's takings is OWNER/MANAGER/ACCOUNTANT only.
 
+`NOT_ON_MOBILE` (DOCTOR, NURSE, LAB_TECH) and `mobileSignInBlock(role)`: the phone till refuses to sign these roles in, because their work
+lives on the web app. `lib/restricted.ts` + `components/RestrictedSaleModal.tsx`: when checkout answers `RESTRICTED_SALE` (an item needing
+a prescription or a controlled drug), the till asks a manager for a reason (and the buyer's name for a controlled drug) and retries the same
+payload with `restrictedOverride`. An offline-queued sale cannot carry that approval, so the server refuses it at sync.
+
 The module is pure (no imports), so it unit-tests in plain Node.
 
 ---

@@ -9,6 +9,8 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect, useRef } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { mobileApi, formatKES } from '../lib/api';
+import RestrictedSaleModal from '../components/RestrictedSaleModal';
+import { restrictedFrom, type RestrictedApprovalInput, type RestrictedFound } from '../lib/restricted';
 import { useAuthStore } from '../stores/auth';
 import { useActiveStore } from '../lib/useActiveStore';
 import { useCartStore } from '../stores/cart';
@@ -38,6 +40,8 @@ interface SalePayload {
   discountCents?: number; serviceChargeCents?: number; promotionId?: string;
   /** Set when paying a table: the server bills the order itself and closes it. */
   orderId?: string; expectedTotalCents?: number;
+  /** A manager's approval to sell a prescription-only or controlled medicine without a prescription. */
+  restrictedOverride?: RestrictedApprovalInput;
 }
 
 interface GiftCard { code: string; balanceCents: number; status: string; }
@@ -578,6 +582,7 @@ export default function PaymentScreen() {
   // ── completeSale mutation ───────────────────────────────────────────────────
   const { mutate: completeSale, isPending } = useMutation({
     mutationFn: async (payload: SalePayload) => {
+      lastPayload.current = payload;
       try {
         return await mobileApi.post<SaleResult>('/sales/checkout', payload);
       } catch (err) {
@@ -594,6 +599,7 @@ export default function PaymentScreen() {
     },
     onSuccess: (result: SaleResult) => {
       attemptRef.current = null;
+      setRestrictedAsk(null);
       qc.invalidateQueries({ queryKey: ['sales'] });
       if (orderMode) {
         qc.invalidateQueries({ queryKey: ['tables'] });
@@ -640,11 +646,17 @@ export default function PaymentScreen() {
         Alert.alert('Saved Offline', 'Sale saved to offline queue and will sync when back online.', [
           { text: 'OK', onPress: () => { clearCart(); router.replace('/(tabs)/pos' as any); } },
         ]);
+      } else if (restrictedFrom(err)) {
+        // The server refused a prescription-only or controlled medicine: ask for a manager's approval and send the same sale again.
+        setRestrictedAsk(restrictedFrom(err));
       } else {
+        // An approval that was refused (a wrong PIN) is said while the window is still open.
         Alert.alert('Sale Failed', err?.message ?? 'Could not complete the sale. Please try again.');
       }
     },
   });
+  const [restrictedAsk, setRestrictedAsk] = useState<RestrictedFound[] | null>(null);
+  const lastPayload = useRef<SalePayload | null>(null);
 
   /**
    * One idempotency key per checkout ATTEMPT, reused while the cashier retries the same sale (the response may
@@ -1008,6 +1020,16 @@ export default function PaymentScreen() {
       </KeyboardAvoidingView>
 
       {/* ── Success Modal ── */}
+      {restrictedAsk && (
+        <RestrictedSaleModal
+          found={restrictedAsk}
+          role={user?.role}
+          busy={isPending}
+          onCancel={() => setRestrictedAsk(null)}
+          onApprove={(approval) => { if (lastPayload.current) completeSale({ ...lastPayload.current, restrictedOverride: approval }); }}
+        />
+      )}
+
       <Modal visible={showSuccess} animationType="fade" transparent>
         <View style={styles.successOverlay}>
           <View style={styles.successCard}>

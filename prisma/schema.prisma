@@ -2795,6 +2795,21 @@ model InsuranceClaim {
   @@index([businessId, status, submittedAt])
 }
 
+/// What an insurer pays for one catalogue item (a service or a medicine) when it differs from the list price. A visit or a
+/// dispense paid in part by that insurer is invoiced at these prices; an item with no row here is invoiced at its list price.
+model InsurerTariff {
+  id         String   @id @default(uuid())
+  businessId String
+  providerId String
+  itemId     String
+  priceCents Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([providerId, itemId])
+  @@index([businessId, providerId])
+}
+
 /// A business's own connection to the Social Health Authority's eligibility service. The facility keeps its own credentials
 /// (client id and secret from SHA, and its Facility Registry code); the secret is stored encrypted and never sent back out.
 model ShaConnection {

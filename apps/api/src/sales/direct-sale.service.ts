@@ -1,3 +1,4 @@
+import { loadRestricted, refuseRestricted } from './restricted-sale';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { SaleStatus, SaleType, calculateTOT, computeTaxes, type TaxClass } from '@pos/shared';
@@ -136,6 +137,8 @@ export class DirectSaleService {
 
   async createInTx(tx: Tx, input: DirectSaleInput): Promise<DirectSaleResult> {
     if (!Array.isArray(input.lines) || input.lines.length === 0) throw new BadRequestException('A sale needs at least one line');
+    // A prescription-only or controlled medicine is dispensed from a prescription, which is the PHARMACY source; no other invoice may carry one.
+    if (input.source !== 'PHARMACY') refuseRestricted(await loadRestricted(tx, input.businessId, input.lines.map((l) => l.itemId)), 'on this invoice');
     for (const l of input.lines) {
       if (!Number.isFinite(l.quantity) || l.quantity <= 0) throw new BadRequestException(`Quantity of ${l.name} must be greater than zero`);
       if (!Number.isInteger(l.totalCents) || !Number.isInteger(l.unitPriceCents)) throw new BadRequestException(`Amounts for ${l.name} must be whole cents`);

@@ -161,6 +161,12 @@ export function orderStatusFrom(current: string, itemStatuses: string[]): OrderS
   return 'COLLECTED';
 }
 
+/** When an order falls due: its creation plus the longest turnaround among its tests. Null when no test says how long it takes. */
+export function overdueAt(createdAt: Date, hours: Array<number | null>): Date | null {
+  const longest = Math.max(0, ...hours.filter((h): h is number => typeof h === 'number' && h > 0));
+  return longest > 0 ? new Date(createdAt.getTime() + longest * 3_600_000) : null;
+}
+
 /** Who may release a result: someone other than the person who entered it, except a manager or owner (a small lab, one person). */
 export function canVerify(resultedById: string | null, actor: { id: string; role: string }): boolean {
   if (['OWNER', 'ADMIN', 'MANAGER'].includes(actor.role)) return true;

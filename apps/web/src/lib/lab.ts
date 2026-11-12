@@ -31,6 +31,8 @@ export interface LabOrder {
   orderedByName: string; collectedByName: string | null; collectedAt: string | null; cancelReason: string | null; createdAt: string;
   patient: { id: string; name: string; patientNumber: string; sex: string | null; ageYears: number | null } | null;
   items: LabItem[];
+  /** On the worklist only: when it should be done, and whether that time has passed. */
+  dueAt?: string | null; overdue?: boolean;
 }
 
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = { ORDERED: 'To collect', COLLECTED: 'In the lab', RESULTED: 'To release', VERIFIED: 'Released', CANCELLED: 'Cancelled' };

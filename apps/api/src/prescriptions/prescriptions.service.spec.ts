@@ -34,6 +34,7 @@ function setup() {
     insuranceProvider: { findFirst: jest.fn().mockResolvedValue({ id: 'ins-1' }) },
     prescriptionFill: { create: jest.fn().mockResolvedValue({}) },
     insuranceClaim: { create: jest.fn().mockImplementation(async ({ data }: any) => ({ id: 'claim-1', ...data })) },
+    insurerTariff: { findMany: jest.fn().mockResolvedValue([]) },
     $transaction: jest.fn(),
   };
   p.$transaction.mockImplementation(async (arg: any) => (typeof arg === 'function' ? arg(p) : Promise.all(arg)));
@@ -400,10 +401,18 @@ describe('dispensing on the sales pipeline', () => {
   it('quotes the fill from catalogue prices, and says nothing to collect off the pipeline', async () => {
     const on = ready();
     expect(await on.svc.quote('rx-1', 'biz-1')).toEqual({
-      invoice: true, totalCents: 42000, unpriced: [],
+      invoice: true, totalCents: 42000, listTotalCents: 42000, unpriced: [],
       lines: [expect.objectContaining({ itemId: 'item-1', quantity: 21, unitPriceCents: 2000, totalCents: 42000, taxClass: 'A' })],
     });
-    expect(await setup().svc.quote('rx-1', 'biz-1')).toEqual({ invoice: false, lines: [], totalCents: 0, unpriced: [] });
+    expect(await setup().svc.quote('rx-1', 'biz-1')).toEqual({ invoice: false, lines: [], totalCents: 0, listTotalCents: 0, unpriced: [] });
+  });
+
+  it('quotes and dispenses at the insurer\'s price when an insurer is chosen, and claims on that price', async () => {
+    const on = ready();
+    on.prisma.insurerTariff.findMany.mockResolvedValue([{ itemId: 'item-1', priceCents: 1500 }]);
+    expect(await on.svc.quote('rx-1', 'biz-1', 'ins-1')).toMatchObject({ totalCents: 31500, listTotalCents: 42000, lines: [expect.objectContaining({ unitPriceCents: 1500, totalCents: 31500 })] });
+    expect(await on.svc.quote('rx-1', 'biz-1')).toMatchObject({ totalCents: 42000 });
+    expect(on.prisma.insurerTariff.findMany).toHaveBeenCalledTimes(1);
   });
 
   it('makes one sale for the fill, tied to the stock leaving, and returns the receipt', async () => {

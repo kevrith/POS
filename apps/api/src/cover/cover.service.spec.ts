@@ -12,6 +12,8 @@ function setup() {
     insuranceClaim: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn() },
     prescription: { findMany: jest.fn().mockResolvedValue([]) },
     visitCharge: { findMany: jest.fn().mockResolvedValue([]), groupBy: jest.fn().mockResolvedValue([]) },
+    insurerTariff: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}), updateMany: jest.fn().mockResolvedValue({ count: 1 }), deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    item: { findFirst: jest.fn().mockResolvedValue({ id: 'item-c' }), findMany: jest.fn().mockResolvedValue([]) },
     saleItem: { findMany: jest.fn().mockResolvedValue([]) },
   };
   return { prisma: p, svc: new CoverService(p) };
@@ -153,5 +155,52 @@ describe('CoverService.resubmit', () => {
     const { svc, prisma } = prep();
     await expect(svc.resubmit('biz-1', 'cl-1', { diagnoses: [{ label: 'x', icd11: 'not a code!' }] })).rejects.toThrow(/ICD-11/);
     expect(prisma.insuranceClaim.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('insurer tariffs', () => {
+  it('sets a price for one item, and changes it rather than adding a second line', async () => {
+    const a = setup();
+    await a.svc.setTariff('biz-1', { providerId: 'sha', itemId: 'item-c', priceCents: 40000 });
+    expect(a.prisma.insurerTariff.create).toHaveBeenCalledWith({ data: { businessId: 'biz-1', providerId: 'sha', itemId: 'item-c', priceCents: 40000 } });
+    const b = setup();
+    b.prisma.insurerTariff.findFirst.mockResolvedValue({ id: 't-1' });
+    await b.svc.setTariff('biz-1', { providerId: 'sha', itemId: 'item-c', priceCents: 42000 });
+    expect(b.prisma.insurerTariff.updateMany).toHaveBeenCalledWith({ where: { id: 't-1', businessId: 'biz-1' }, data: { priceCents: 42000 } });
+    expect(b.prisma.insurerTariff.create).not.toHaveBeenCalled();
+  });
+
+  it('needs a real insurer and item of this business, and a positive whole price', async () => {
+    const a = setup();
+    a.prisma.insuranceProvider.findFirst.mockResolvedValue(null);
+    await expect(a.svc.setTariff('biz-1', { providerId: 'x', itemId: 'item-c', priceCents: 100 })).rejects.toThrow(/insurer is not set up/);
+    const b = setup();
+    b.prisma.item.findFirst.mockResolvedValue(null);
+    await expect(b.svc.setTariff('biz-1', { providerId: 'sha', itemId: 'x', priceCents: 100 })).rejects.toThrow(/not in the catalogue/);
+    const c = setup();
+    for (const bad of [0, -5, 1.5, 'free']) await expect(c.svc.setTariff('biz-1', { providerId: 'sha', itemId: 'item-c', priceCents: bad as never })).rejects.toThrow(/Price/);
+    expect(c.prisma.insurerTariff.create).not.toHaveBeenCalled();
+  });
+
+  it('lists the insurer\'s prices next to the list prices, and removes one line, scoped to the business', async () => {
+    const { svc, prisma } = setup();
+    prisma.insurerTariff.findMany.mockResolvedValue([{ id: 't-1', itemId: 'item-c', priceCents: 40000 }]);
+    prisma.item.findMany.mockResolvedValue([{ id: 'item-c', name: 'Consultation', retailPriceCents: 50000, type: 'SERVICE' }]);
+    expect(await svc.tariffs('biz-1', 'sha')).toEqual([{ id: 't-1', itemId: 'item-c', itemName: 'Consultation', itemType: 'SERVICE', listPriceCents: 50000, priceCents: 40000 }]);
+    await svc.removeTariff('biz-1', 't-1');
+    expect(prisma.insurerTariff.deleteMany).toHaveBeenCalledWith({ where: { id: 't-1', businessId: 'biz-1' } });
+    prisma.insurerTariff.deleteMany.mockResolvedValue({ count: 0 });
+    await expect(svc.removeTariff('biz-1', 'x')).rejects.toThrow(NotFoundException);
+  });
+
+  it('quotes a visit\'s bill at the insurer\'s prices', async () => {
+    const { svc, prisma } = setup();
+    prisma.visit.findFirst.mockResolvedValue({ id: 'v-1' });
+    prisma.insuranceProvider.findFirst.mockResolvedValue({ id: 'sha', name: 'SHA' });
+    prisma.visitCharge.findMany.mockResolvedValue([{ itemId: 'item-c', name: 'Consultation', quantity: 1, unitPriceCents: 50000 }, { itemId: 'item-l', name: 'Test', quantity: 1, unitPriceCents: 30000 }]);
+    prisma.insurerTariff.findMany.mockResolvedValue([{ itemId: 'item-c', priceCents: 40000 }]);
+    const q: any = await svc.quote('biz-1', 'v-1', 'sha');
+    expect(q).toMatchObject({ providerName: 'SHA', listTotalCents: 80000, billTotalCents: 70000, adjusted: true });
+    expect(q.lines.map((l: any) => [l.name, l.unitPriceCents, l.onTariff])).toEqual([['Consultation', 40000, true], ['Test', 30000, false]]);
   });
 });

@@ -330,9 +330,16 @@ function PayModal({ visit, onClose, onDone }: { visit: VisitDetail; onClose: () 
   const [checking, setChecking] = useState(false);
   const insurer = insurers.find((i) => i.id === providerId);
   const invoicing = visit.invoicing && visit.totalCents > 0;
+  // With an insurer paying part, the bill is at that insurer's prices where it has them.
+  const { data: quote } = useQuery<{ listTotalCents: number; billTotalCents: number; adjusted: boolean; providerName: string }>({
+    queryKey: ['cover', 'quote', visit.id, providerId],
+    queryFn: () => api.get(`/cover/quote?visitId=${visit.id}&providerId=${providerId}`),
+    enabled: insured && !!providerId,
+  });
+  const billTotal = insured && quote ? quote.billTotalCents : visit.totalCents;
   const pct = Math.min(99, Math.max(0, Math.floor(Number(sharePct) || 0)));
-  const patientShare = insured ? Math.round((visit.totalCents * pct) / 100) : visit.totalCents;
-  const insurerShare = visit.totalCents - patientShare;
+  const patientShare = insured ? Math.round((billTotal * pct) / 100) : visit.totalCents;
+  const insurerShare = billTotal - patientShare;
   const collects = invoicing && patientShare > 0;
   const paying = Math.round((parseFloat(tendered) || 0) * 100) || patientShare;
   const pinBad = pin.trim() !== '' && !isValidKraPin(pin);
@@ -382,6 +389,7 @@ function PayModal({ visit, onClose, onDone }: { visit: VisitDetail; onClose: () 
                   <Button variant="secondary" size="sm" disabled={!providerId || !memberReady} onClick={() => setChecking(true)}>Record cover check</Button>
                 </div>
                 {blocked && providerId && memberReady && <p className="text-xs text-amber-700">Cover has to be confirmed before the insurer can be billed. Look the member up with the insurer, then record the result.</p>}
+                {quote?.adjusted && <p className="text-xs text-blue-800">At {quote.providerName}'s prices the bill is {formatKES(quote.billTotalCents)} (list price {formatKES(quote.listTotalCents)}).</p>}
                 <div className="flex justify-between text-sm"><span>Patient pays</span><span className="font-semibold tabular-nums">{formatKES(patientShare)}</span></div>
                 <div className="flex justify-between text-sm text-blue-700"><span>Billed to the insurer</span><span className="font-semibold tabular-nums">{formatKES(insurerShare)}</span></div>
               </>

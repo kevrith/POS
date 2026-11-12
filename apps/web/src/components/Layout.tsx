@@ -100,18 +100,19 @@ const NAV_GROUPS: NavGroupWithBusinessTypes[] = [
   },
   {
     label: 'Inventory',
-    roles: ['OWNER', 'MANAGER'],
+    // A pharmacist sees the stock, the lots and their expiry, and the supplier side (receiving and returns); the rest is management's.
+    roles: ['OWNER', 'MANAGER', 'PHARMACIST'],
     items: [
       { to: '/inventory', icon: Package, label: 'Items & Stock' },
       { to: '/batch', icon: Layers, label: 'Batch & Expiry' },
-      { to: '/serial', icon: Hash, label: 'Serial Tracking' },
-      { to: '/recipe', icon: ChefHat, label: 'Recipes / BOM' },
-      { to: '/bundle', icon: Box, label: 'Bundles / Kits' },
+      { to: '/serial', icon: Hash, label: 'Serial Tracking', roles: ['OWNER', 'MANAGER'] },
+      { to: '/recipe', icon: ChefHat, label: 'Recipes / BOM', roles: ['OWNER', 'MANAGER'] },
+      { to: '/bundle', icon: Box, label: 'Bundles / Kits', roles: ['OWNER', 'MANAGER'] },
       { to: '/suppliers', icon: Truck, label: 'Suppliers & POs' },
       { to: '/rfq', icon: Send, label: 'RFQ', roles: ['OWNER', 'MANAGER'] },
-      { to: '/transfers', icon: ArrowRightLeft, label: 'Stock Transfers' },
-      { to: '/stocktake', icon: CheckCircle2, label: 'Stocktake' },
-      { to: '/damaged-goods', icon: Trash2, label: 'Damaged Goods' },
+      { to: '/transfers', icon: ArrowRightLeft, label: 'Stock Transfers', roles: ['OWNER', 'MANAGER'] },
+      { to: '/stocktake', icon: CheckCircle2, label: 'Stocktake', roles: ['OWNER', 'MANAGER'] },
+      { to: '/damaged-goods', icon: Trash2, label: 'Damaged Goods', roles: ['OWNER', 'MANAGER'] },
     ],
   },
   {

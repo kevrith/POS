@@ -7,6 +7,7 @@ import {
   RefreshCw, TrendingUp, BookOpen, Pencil, Check, X, Tag,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import TariffModal from '../components/clinical/Tariff';
 import { printBarcodeLabel } from '../lib/printer';
 import { printHtml } from '../lib/printHtml';
 import DispenseModal from '../components/DispenseModal';
@@ -27,6 +28,7 @@ export default function PharmacyPage() {
   const businessId = user?.businessId ?? '';
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>('drugs');
+  const [tariffOf, setTariffOf] = useState<{ id: string; name: string } | null>(null);
 
   // ── Drug Catalogue ──
   const [drugSearch, setDrugSearch] = useState('');
@@ -594,6 +596,7 @@ export default function PharmacyPage() {
                     {p.contactPhone && <p className="text-sm text-gray-600 mt-1">{p.contactPhone}</p>}
                     {p.contactEmail && <p className="text-sm text-gray-500">{p.contactEmail}</p>}
                   </div>
+                  {['OWNER', 'ADMIN', 'MANAGER'].includes(String(user?.role)) && <button onClick={() => setTariffOf({ id: p.id, name: p.name })} className="mr-2 text-xs px-2 py-1 rounded-full font-medium border border-blue-200 text-blue-700 hover:bg-blue-50">Prices</button>}
                   <button
                     onClick={() => toggleProv.mutate({ id: p.id, isActive: !p.isActive })}
                     className={`text-xs px-2 py-1 rounded-full font-medium ${p.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}
@@ -621,6 +624,7 @@ export default function PharmacyPage() {
         <DrugLabelsTab drugs={drugs} businessName={user?.businessId ?? 'Pharmacy'} />
       )}
 
+      {tariffOf && <TariffModal provider={tariffOf} onClose={() => setTariffOf(null)} />}
       {refilling && <DispenseModal rx={refilling} mode="refill" onClose={() => setRefilling(null)} />}
     </div>
   );

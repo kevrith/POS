@@ -10,6 +10,7 @@ import { CoverService } from '../cover/cover.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { daysOverdue, followUpBucket, reminderMessage } from './follow-ups';
 import { splitBill } from '../cover/cover';
+import { applyTariff, loadTariff } from '../cover/tariff';
 import { assertCan, OPEN_STATUSES, PRIORITIES, queueOrder } from './visit-flow';
 import { hasAnyVital, vitalsData, type VitalsInput } from './vitals';
 
@@ -374,7 +375,9 @@ export class VisitsService {
         lines: charges.map((c) => {
           const item = byId.get(c.itemId);
           if (!item) throw new BadRequestException(`${c.name} is no longer in the catalogue`);
-          return { itemId: item.id, name: c.name, quantity: c.quantity, unitPriceCents: c.unitPriceCents, totalCents: Math.round(c.unitPriceCents * c.quantity), taxClass: taxClassOf(item) };
+          // An insured visit is invoiced at the insurer's price where it has one (see insuredShare).
+          const unit = insured?.pricedLines.find((p) => p.itemId === c.itemId && p.name === c.name)?.unitPriceCents ?? c.unitPriceCents;
+          return { itemId: item.id, name: c.name, quantity: c.quantity, unitPriceCents: unit, totalCents: Math.round(unit * c.quantity), taxClass: taxClassOf(item) };
         }),
         // The insurer's share is owed to the clinic by the insurer until the claim is paid.
         payments: [...payments, ...(insured && insured.insurerCents > 0 ? [{ method: 'INSURANCE', amountCents: insured.insurerCents }] : [])],
@@ -420,7 +423,7 @@ export class VisitsService {
   private async insuredShare(
     v: { id: string; patientId: string; createdAt: Date },
     businessId: string,
-    charges: Array<{ unitPriceCents: number; quantity: number }>,
+    charges: Array<{ itemId: string; name: string; unitPriceCents: number; quantity: number }>,
     ins: { providerId?: string; memberNumber?: string; patientPct?: number } | undefined,
   ) {
     if (!ins || !ins.providerId) return null;
@@ -440,8 +443,10 @@ export class VisitsService {
           : `Cover with ${provider.name} has not been confirmed for this visit. Record a cover check first.`,
       );
     }
-    const total = charges.reduce((sum, c) => sum + Math.round(c.unitPriceCents * c.quantity), 0);
-    return { providerId: provider.id, memberNumber, patientPct, checkId, ...splitBill(total, patientPct) };
+    // The invoice is at the insurer's own prices for every service it has a price for, and at the list price for the rest.
+    const tariff = await loadTariff(this.prisma, businessId, provider.id);
+    const priced = applyTariff(charges.map((c) => ({ itemId: c.itemId, name: c.name, quantity: c.quantity, unitPriceCents: c.unitPriceCents })), tariff);
+    return { providerId: provider.id, memberNumber, patientPct, checkId, pricedLines: priced.lines, ...splitBill(priced.billTotalCents, patientPct) };
   }
 
   /** The patient left, or the visit was opened by mistake. Nothing is billed. */

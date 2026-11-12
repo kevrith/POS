@@ -1,3 +1,4 @@
+import { refuseRestricted, restrictedItems } from '../sales/restricted-sale';
 import { Injectable, BadRequestException, ConflictException, ForbiddenException, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -964,9 +965,11 @@ export class HospitalityService {
     // VAT per line from each item's class, and none at all for a business that is not VAT-registered. It used to
     // be 16/116 of the whole tab for every business.
     const [tabItems, business] = await Promise.all([
-      this.prisma.item.findMany({ where: { id: { in: order.items.map((i) => i.itemId).filter(Boolean) as string[] }, businessId }, select: { id: true, taxClass: true, vatApplicable: true } }),
+      this.prisma.item.findMany({ where: { id: { in: order.items.map((i) => i.itemId).filter(Boolean) as string[] }, businessId }, select: { id: true, name: true, taxClass: true, vatApplicable: true, requiresPrescription: true, scheduleClass: true } }),
       this.prisma.business.findUnique({ where: { id: businessId }, select: { taxType: true } }),
     ]);
+    // A restaurant tab is not a pharmacy counter: a prescription-only or controlled item cannot be settled here.
+    refuseRestricted(restrictedItems(tabItems), 'on a tab');
     const classOf = new Map(tabItems.map((i) => [i.id, taxClassOf(i)]));
     const taxes = computeTaxes(
       order.items.map((i) => ({ totalCents: i.totalCents, taxClass: classOf.get(i.itemId as string) ?? 'B' })),

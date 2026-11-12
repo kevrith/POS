@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { api, openPdfReport } from '../lib/api';
+import { api, ApiError, openPdfReport } from '../lib/api';
+import RestrictedSaleModal, { type RestrictedApprovalInput } from '../components/clinical/RestrictedSaleModal';
 import { useAuthStore } from '../stores/auth';
 import { useDialog } from '../components/Dialog';
 import { X, Printer, FileText } from 'lucide-react';
@@ -36,6 +37,9 @@ export default function ProformaPage() {
   const [selectedProforma, setSelectedProforma] = useState<Proforma | null>(null);
   const [payMethod, setPayMethod] = useState('CASH');
   const [payRef, setPayRef] = useState('');
+  // A quotation holding prescription-only or controlled medicines needs a manager's approval to become a sale, as at the till.
+  const approval = useRef<RestrictedApprovalInput | undefined>(undefined);
+  const [restrictedAsk, setRestrictedAsk] = useState<{ medicines: string[]; controlled: boolean; vars: { id: string; method: string; reference?: string } } | null>(null);
   const queryClient = useQueryClient();
   const { confirm } = useDialog();
   const user = useAuthStore((s) => s.user);
@@ -53,6 +57,7 @@ export default function ProformaPage() {
       return api.post<{ id: string; receiptNumber: string }>(`/sales/proforma/${vars.id}/convert`, {
         cashierId: user?.id,
         storeId: user?.storeId,
+        ...(approval.current && { restrictedOverride: approval.current }),
         payments: [
           {
             method: vars.method,
@@ -63,6 +68,8 @@ export default function ProformaPage() {
       });
     },
     onSuccess: (data) => {
+      approval.current = undefined;
+      setRestrictedAsk(null);
       queryClient.invalidateQueries({ queryKey: ['proformas', businessId] });
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       setSelectedProforma(null);
@@ -74,7 +81,15 @@ export default function ProformaPage() {
         },
       });
     },
-    onError: (err: Error) => toast.error(err.message || 'Conversion failed'),
+    onError: (err: Error, vars) => {
+      if (err instanceof ApiError && err.code === 'RESTRICTED_SALE') {
+        const found = (Array.isArray(err.details) ? err.details : []) as Array<{ name: string; controlled: boolean }>;
+        setRestrictedAsk({ medicines: found.map((d) => d.name), controlled: found.some((d) => d.controlled), vars });
+      } else {
+        // An approval that was refused (a wrong PIN, a missing reason) is said while the window is still open.
+        toast.error(err.message || 'Conversion failed');
+      }
+    },
   });
 
   const cancelMutation = useMutation({
@@ -315,6 +330,16 @@ export default function ProformaPage() {
             </div>
           </div>
         </div>
+      )}
+      {restrictedAsk && (
+        <RestrictedSaleModal
+          medicines={restrictedAsk.medicines}
+          controlled={restrictedAsk.controlled}
+          role={user?.role}
+          busy={convertMutation.isPending}
+          onCancel={() => { approval.current = undefined; setRestrictedAsk(null); }}
+          onApprove={(a) => { approval.current = a; convertMutation.mutate(restrictedAsk.vars); }}
+        />
       )}
     </div>
   );

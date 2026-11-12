@@ -526,6 +526,8 @@ export default function BatchManagementPage() {
   const [expiryDays, setExpiryDays] = useState(30);
   const [returning, setReturning] = useState<Batch | null>(null);
   const { confirm } = useDialog();
+  // Recalling, writing off and adding lots are management's; a pharmacist reads the lots and returns stock to the supplier.
+  const manager = ['OWNER', 'ADMIN', 'MANAGER'].includes(String(user?.role));
 
   const { data: summary } = useQuery<ExpirySummary>({
     queryKey: ['batches-summary', businessId],
@@ -582,6 +584,7 @@ export default function BatchManagementPage() {
               className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg" aria-label="Refresh">
               <RefreshCw className="w-5 h-5" />
             </button>
+            {manager && (
             <button
               onClick={() => setShowAddModal(true)}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm"
@@ -589,6 +592,7 @@ export default function BatchManagementPage() {
               <Plus className="w-4 h-4" />
               Add Batch
             </button>
+            )}
           </div>
         </div>
       </div>
@@ -745,7 +749,7 @@ export default function BatchManagementPage() {
                               <Undo2 className="w-4 h-4" />
                             </button>
                           )}
-                          {hasStock(batch) && batch.status === 'ACTIVE' && (
+                          {manager && hasStock(batch) && batch.status === 'ACTIVE' && (
                             <button
                               onClick={async () => {
                                 const ok = await confirm({ title: 'Write off this lot', message: `Write off the ${batch.quantityRemaining} left of ${batch.item.name}, lot ${batch.lotNumber}? It is recorded as a loss at cost and cannot be undone.`, confirmLabel: 'Write off', variant: 'danger' });
@@ -758,7 +762,7 @@ export default function BatchManagementPage() {
                               <Trash2 className="w-4 h-4" />
                             </button>
                           )}
-                          {batch.status === 'ACTIVE' && (
+                          {manager && batch.status === 'ACTIVE' && (
                             <button
                               onClick={() => setRecallBatch(batch)}
                               title="Recall Batch"

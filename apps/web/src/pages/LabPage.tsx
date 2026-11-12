@@ -37,9 +37,11 @@ function Worklist() {
   const { data, isLoading } = useQuery<{ open: LabOrder[]; done: LabOrder[] }>({ queryKey: ['lab', 'board'], queryFn: () => api.get(`/lab/board${user?.storeId ? `?storeId=${user.storeId}` : ''}`), refetchInterval: 20_000 });
   const columns: Array<{ status: LabOrder['status']; orders: LabOrder[] }> = (['ORDERED', 'COLLECTED', 'RESULTED'] as const).map((status) => ({ status, orders: (data?.open ?? []).filter((o) => o.status === status) }));
   if (isLoading) return <p className="text-sm text-gray-500">Loading…</p>;
+  const overdue = data?.open.filter((o) => o.overdue).length ?? 0;
   if (!data || (data.open.length === 0 && data.done.length === 0)) return <EmptyState icon={<FlaskConical className="h-8 w-8" />} title="Nothing in the lab" description="Tests ordered by a doctor appear here." />;
   return (
     <div className="space-y-5">
+      {overdue > 0 && <p role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">{overdue} {overdue === 1 ? 'order is' : 'orders are'} taking longer than the time set for the test. They are at the top of their columns.</p>}
       <div className="grid gap-4 lg:grid-cols-3">
         {columns.map((c) => (
           <section key={c.status} aria-label={ORDER_STATUS_LABEL[c.status]} className="rounded-xl border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/30">
@@ -69,6 +71,7 @@ function OrderCard({ order, onOpen }: { order: LabOrder; onOpen: () => void }) {
         <span className="font-semibold">{order.patient?.name ?? 'Patient'}</span>
         <span className="flex gap-1">
           {order.priority === 'URGENT' && <Badge tone="danger">Urgent</Badge>}
+          {order.overdue && <Badge tone="warning">Overdue</Badge>}
           {orderHasCritical(order) && <Badge tone="danger">{order.items.some(needsAck) ? 'Critical, not seen' : 'Critical'}</Badge>}
         </span>
       </span>

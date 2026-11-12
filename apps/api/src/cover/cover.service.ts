@@ -1,7 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { oneOf, optionalText, text } from '../common/validate';
+import { intInRange, oneOf, optionalText, text } from '../common/validate';
 import { cleanDiagnoses, parseDiagnoses } from '../clinic/diagnosis-codes';
+import { applyTariff, loadTariff } from './tariff';
 import { ageDays, agingByProvider, claimReadiness, COVER_STATUSES, coverStanding, type CoverStanding } from './cover';
 
 interface Actor { id: string; name: string }
@@ -135,6 +136,53 @@ export class CoverService {
       await tx.insuranceClaim.updateMany({ where: { id: claimId, businessId }, data: { resubmittedToId: fresh.id } });
       return fresh;
     });
+  }
+
+  // ── what each insurer pays per item ─────────────────────────────────────────────────────────────────────────────
+
+  /** The insurer's prices, with each item's list price beside it. */
+  async tariffs(businessId: string, providerId: string) {
+    const rows = await this.prisma.insurerTariff.findMany({ where: { businessId, providerId }, orderBy: { createdAt: 'asc' } });
+    const items = await this.prisma.item.findMany({ where: { businessId, id: { in: rows.map((r) => r.itemId) } }, select: { id: true, name: true, retailPriceCents: true, type: true } });
+    const byId = new Map(items.map((i) => [i.id, i]));
+    return rows.map((r) => ({ id: r.id, itemId: r.itemId, itemName: byId.get(r.itemId)?.name ?? 'Item', itemType: byId.get(r.itemId)?.type ?? null, listPriceCents: byId.get(r.itemId)?.retailPriceCents ?? null, priceCents: r.priceCents }));
+  }
+
+  /** Set (or change) what this insurer pays for one item. */
+  async setTariff(businessId: string, dto: { providerId?: string; itemId?: string; priceCents?: number }) {
+    const providerId = text(dto.providerId, 'Insurer', 64);
+    const itemId = text(dto.itemId, 'Item', 64);
+    const priceCents = intInRange(dto.priceCents, 'Price', 1, 1_000_000_000);
+    const [provider, item] = await Promise.all([
+      this.prisma.insuranceProvider.findFirst({ where: { id: providerId, businessId }, select: { id: true } }),
+      this.prisma.item.findFirst({ where: { id: itemId, businessId }, select: { id: true } }),
+    ]);
+    if (!provider) throw new BadRequestException('That insurer is not set up here');
+    if (!item) throw new BadRequestException('That item is not in the catalogue');
+    const existing = await this.prisma.insurerTariff.findFirst({ where: { businessId, providerId, itemId }, select: { id: true } });
+    if (existing) await this.prisma.insurerTariff.updateMany({ where: { id: existing.id, businessId }, data: { priceCents } });
+    else await this.prisma.insurerTariff.create({ data: { businessId, providerId, itemId, priceCents } });
+    return this.tariffs(businessId, providerId);
+  }
+
+  async removeTariff(businessId: string, id: string) {
+    const done = await this.prisma.insurerTariff.deleteMany({ where: { id, businessId } });
+    if (done.count !== 1) throw new NotFoundException('Tariff line not found');
+    return { ok: true };
+  }
+
+  /** What a visit's bill comes to when this insurer pays part of it: each service at the insurer's price where it has one. */
+  async quote(businessId: string, visitId: string, providerId: string) {
+    const [visit, provider] = await Promise.all([
+      this.prisma.visit.findFirst({ where: { id: visitId, businessId }, select: { id: true } }),
+      this.prisma.insuranceProvider.findFirst({ where: { id: providerId, businessId }, select: { id: true, name: true } }),
+    ]);
+    if (!visit) throw new NotFoundException('Visit not found');
+    if (!provider) throw new BadRequestException('That insurer is not set up here');
+    const charges = await this.prisma.visitCharge.findMany({ where: { visitId, businessId }, orderBy: { createdAt: 'asc' } });
+    const tariff = await loadTariff(this.prisma, businessId, provider.id);
+    const priced = applyTariff(charges.map((c) => ({ itemId: c.itemId, name: c.name, quantity: c.quantity, unitPriceCents: c.unitPriceCents })), tariff);
+    return { providerName: provider.name, listTotalCents: priced.listTotalCents, billTotalCents: priced.billTotalCents, adjusted: priced.lines.some((l) => l.onTariff), lines: priced.lines };
   }
 
   /** What each insurer still owes, by how long ago the claim was raised. */

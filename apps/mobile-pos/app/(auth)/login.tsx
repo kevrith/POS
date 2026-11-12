@@ -11,6 +11,7 @@
  * Email login replaces steps 3-5 with a single email+password form.
  */
 
+import { mobileSignInBlock } from '../../lib/roles';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView,
   KeyboardAvoidingView, Platform, FlatList, Linking,
@@ -99,6 +100,9 @@ export default function LoginScreen() {
 
   /** Shared tail of every sign-in: remember the session, then open the app. */
   function finishLogin(data: LoginResponse) {
+    // A doctor, nurse or lab technician works on the web or desktop app: say so instead of opening an empty till.
+    const blocked = mobileSignInBlock(data.user.role);
+    if (blocked) { Alert.alert('Use the web or desktop app', blocked); return Promise.resolve(); }
     const token = data.accessToken ?? data.access_token ?? '';
     return SecureStore.setItemAsync('pos_token', token).then(() => {
       setAuth(data.user, token);

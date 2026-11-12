@@ -15,7 +15,7 @@ function setup() {
     patient: { findFirst: jest.fn().mockResolvedValue({ name: 'Jane Doe', sex: 'F', dateOfBirth: null }), findMany: jest.fn().mockResolvedValue([{ id: 'pt-1', name: 'Jane Doe', patientNumber: 'PT-0001', sex: 'F', dateOfBirth: null, allergies: '[]', conditions: '[]' }]) },
     item: { findFirst: jest.fn().mockResolvedValue({ id: 'item-1', type: 'SERVICE', name: 'Lab fee' }), findMany: jest.fn().mockResolvedValue([{ id: 'item-1', retailPriceCents: 30000 }]) },
     labTest: {
-      findMany: jest.fn().mockResolvedValue([{ id: 't-1', name: 'Haemoglobin', specimen: 'BLOOD', parameters: HB, itemId: 'item-1' }]),
+      findMany: jest.fn().mockResolvedValue([{ id: 't-1', name: 'Haemoglobin', specimen: 'BLOOD', parameters: HB, itemId: 'item-1', turnaroundHours: null }]),
       create: jest.fn().mockImplementation(async ({ data }: any) => ({ id: 't-new', ...data })),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }), findFirst: jest.fn().mockResolvedValue({ id: 't-1', itemId: null, parameters: HB }), createMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
@@ -290,5 +290,30 @@ describe('critical results', () => {
     prisma.labOrderItem.findFirst.mockResolvedValue(pendingItem({ parameters: JSON.stringify([{ name: 'Haemoglobin', kind: 'NUMERIC', unit: 'g/dL', low: 13, high: 17, lowC: 11.5, highC: 15.5 }]) }));
     await svc.saveResults('biz-1', 'o-1', 'i-1', { values: { Haemoglobin: 12 } }, TECH);
     expect(JSON.parse(prisma.labOrderItem.updateMany.mock.calls[0][0].data.results)[0]).toMatchObject({ flag: 'NORMAL', low: 11.5, high: 15.5 });
+  });
+});
+
+describe('LabService.board overdue', () => {
+  it('flags an unfinished order past its tests\' turnaround, puts it first, and never flags a released one', async () => {
+    const { svc, prisma } = setup();
+    const old = new Date(Date.now() - 6 * 3_600_000);
+    prisma.labOrder.findMany.mockResolvedValue([
+      { id: 'a', patientId: 'pt-1', visitId: 'v-1', status: 'COLLECTED', priority: 'NORMAL', createdAt: new Date() },
+      { id: 'b', patientId: 'pt-1', visitId: 'v-1', status: 'COLLECTED', priority: 'NORMAL', createdAt: old },
+      { id: 'c', patientId: 'pt-1', visitId: 'v-1', status: 'VERIFIED', priority: 'NORMAL', createdAt: old },
+    ]);
+    prisma.labOrderItem.findMany.mockResolvedValue(['a', 'b', 'c'].map((orderId) => ({ id: `i-${orderId}`, orderId, testId: 't-1', parameters: '[]', results: '[]' })));
+    prisma.labTest.findMany.mockResolvedValue([{ id: 't-1', turnaroundHours: 2 }]);
+    const board: any = await svc.board('biz-1');
+    expect(board.open.map((o: any) => [o.id, o.overdue])).toEqual([['b', true], ['a', false]]);
+    expect(board.done[0].overdue).toBe(false);
+  });
+
+  it('an order whose tests have no turnaround is never overdue', async () => {
+    const { svc, prisma } = setup();
+    prisma.labOrder.findMany.mockResolvedValue([{ id: 'a', patientId: 'pt-1', visitId: 'v-1', status: 'COLLECTED', priority: 'NORMAL', createdAt: new Date(Date.now() - 99 * 3_600_000) }]);
+    prisma.labOrderItem.findMany.mockResolvedValue([{ id: 'i-a', orderId: 'a', testId: 't-1', parameters: '[]', results: '[]' }]);
+    prisma.labTest.findMany.mockResolvedValue([{ id: 't-1', turnaroundHours: null }]);
+    expect(((await svc.board('biz-1')) as any).open[0].overdue).toBe(false);
   });
 });

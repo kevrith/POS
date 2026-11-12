@@ -4,7 +4,8 @@ import { secondsUntilExpiry } from './jwt';
 
 /** An error from the server, with its HTTP status so callers can tell a rejected request from a lost connection. */
 export class ApiError extends Error {
-  constructor(message: string, public readonly status: number) {
+  /** `code` and `details` are set when the server refuses for a reason the screen can act on (RESTRICTED_SALE). */
+  constructor(message: string, public readonly status: number, public readonly code?: string, public readonly details?: unknown) {
     super(message);
     this.name = 'ApiError';
   }
@@ -99,7 +100,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new ApiError((err as { message?: string }).message ?? `API error ${res.status}`, res.status);
+    const e = err as { message?: string; code?: string; details?: unknown };
+    throw new ApiError(e.message ?? `API error ${res.status}`, res.status, e.code, e.details);
   }
   if (res.status === 204) return undefined as T;
   return res.json();

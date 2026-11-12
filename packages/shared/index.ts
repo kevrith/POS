@@ -205,6 +205,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'pos.*', 'customers.read', 'customers.create',
     'cash-drawer.own.*', 'reports.own.*',
     'patients.*', 'prescriptions.*', 'pharmacy.*',
+    // Reads the lots and their expiry; recalling and writing off stay with management.
+    'inventory.read',
   ],
   [UserRole.DOCTOR]: [
     'patients.*', 'prescriptions.create', 'prescriptions.read',

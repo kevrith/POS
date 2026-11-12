@@ -159,27 +159,32 @@ export class SalesController {
   }
 
   @Post('proformas')
-  async createProforma(@Body() dto: { businessId: string; customerName: string; customerPhone?: string; items: Array<{ name: string; quantity: number; unitPriceCents: number }>; validUntil?: string; notes?: string }) {
+  async createProforma(@Body() dto: { businessId: string; customerName: string; customerPhone?: string; items: Array<{ itemId?: string; name: string; quantity: number; unitPriceCents: number; discountPercent?: number }>; validUntil?: string; notes?: string }) {
     return this.salesService.createProforma(dto);
   }
 
   @Post('proformas/:id/convert')
   async convertProforma(
     @Param('id') id: string,
-    @Body() dto: { businessId: string; storeId: string; cashierId: string; payments: Array<{ method: string; amountCents: number }> },
+    @Body() dto: { businessId: string; storeId: string; cashierId: string; payments: Array<{ method: string; amountCents: number }>; restrictedOverride?: CheckoutDto['restrictedOverride'] },
+    @Req() req: Request & { user: AuthUser },
   ) {
-    return this.salesService.convertProformaToSale(id, dto);
+    return this.salesService.convertProformaToSale(id, {
+      ...dto,
+      restrictedOverride: dto.restrictedOverride ? await this.restrictedApproval(dto.restrictedOverride, dto.businessId, req) : undefined,
+    });
   }
 
   @Post('proforma/:id/convert')
   async convertProformaToSaleV2(
     @Param('id') id: string,
-    @Body() dto: { cashierId?: string; storeId?: string; payments: Array<{ method: string; amountCents: number; reference?: string }> },
+    @Body() dto: { cashierId?: string; storeId?: string; payments: Array<{ method: string; amountCents: number; reference?: string }>; restrictedOverride?: CheckoutDto['restrictedOverride'] },
     @Req() req: Request & { user: AuthUser },
   ) {
     return this.salesService.convertProformaToSaleV2(id, {
       ...dto,
       cashierId: dto.cashierId ?? req.user.id,
+      restrictedOverride: dto.restrictedOverride ? await this.restrictedApproval(dto.restrictedOverride, req.user.businessId, req) : undefined,
     });
   }
 

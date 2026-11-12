@@ -1,4 +1,4 @@
-import { canVerify, cleanParameters, evaluateResults, flagNumber, orderStatusFrom, rangeFor, type LabParameter } from './lab-results';
+import { canVerify, cleanParameters, overdueAt, evaluateResults, flagNumber, orderStatusFrom, rangeFor, type LabParameter } from './lab-results';
 
 const hb: LabParameter = { name: 'Haemoglobin', kind: 'NUMERIC', unit: 'g/dL', low: 13, high: 17, lowF: 12, highF: 15, lowC: 11.5, highC: 15.5, critLow: 7 };
 const malaria: LabParameter = { name: 'Result', kind: 'CHOICE', choices: ['Negative', 'Positive'], abnormal: ['Positive'] };
@@ -113,5 +113,15 @@ describe('children\'s ranges', () => {
   it('a child range must make sense', () => {
     expect(() => cleanParameters([{ name: 'A', low: 1, high: 9, lowC: 8, highC: 2 }])).toThrow(/child range/);
     expect(cleanParameters([{ name: 'A', low: 1, high: 9, lowC: '2', highC: 5 }])[0]).toMatchObject({ lowC: 2, highC: 5 });
+  });
+});
+
+describe('overdueAt', () => {
+  it('is creation plus the longest turnaround, and nothing when no test says', () => {
+    const at = new Date('2026-11-12T08:00:00Z');
+    expect(overdueAt(at, [1, 4, null])?.toISOString()).toBe('2026-11-12T12:00:00.000Z');
+    expect(overdueAt(at, [null, null])).toBeNull();
+    expect(overdueAt(at, [])).toBeNull();
+    expect(overdueAt(at, [0, -2])).toBeNull();
   });
 });

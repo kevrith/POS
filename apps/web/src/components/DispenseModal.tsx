@@ -59,8 +59,8 @@ export default function DispenseModal({
   const [override, setOverride] = useState<OverrideState>({ reason: '', pin: '' });
 
   const { data: quote, isError: quoteFailed } = useQuery<Quote>({
-    queryKey: ['rx-quote', rx.id],
-    queryFn: () => api.get(`/prescriptions/${rx.id}/quote`),
+    queryKey: ['rx-quote', rx.id, insured ? providerId : ''],
+    queryFn: () => api.get(`/prescriptions/${rx.id}/quote${insured && providerId ? `?providerId=${providerId}` : ''}`),
     staleTime: 0,
   });
   // Allergies, interactions and dose, checked against the patient's record as it is now.

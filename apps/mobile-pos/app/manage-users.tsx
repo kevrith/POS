@@ -40,12 +40,16 @@ interface BizUser {
  * manager does not sit waiting for a driver to appear on a till.
  */
 const ASSIGNABLE_ROLES = [
-  'MANAGER', 'CASHIER', 'WAITER', 'ACCOUNTANT', 'KITCHEN', 'DRIVER', 'SALES_AGENT',
+  'MANAGER', 'CASHIER', 'PHARMACIST', 'WAITER', 'ACCOUNTANT', 'KITCHEN', 'DOCTOR', 'NURSE', 'LAB_TECH', 'DRIVER', 'SALES_AGENT',
 ];
 
 const ROLE_HINT: Record<string, string> = {
   MANAGER: 'Full access on this app, except billing.',
   CASHIER: 'Sells on this app. Sees only their own sales.',
+  PHARMACIST: 'Sells like a cashier and can approve prescription-only sales on this app.',
+  DOCTOR: 'Works on the web or desktop app, not this one.',
+  NURSE: 'Works on the web or desktop app, not this one.',
+  LAB_TECH: 'Works on the web or desktop app, not this one.',
   WAITER: 'Takes table orders on this app.',
   KITCHEN: 'Kitchen display only — no till access.',
   ACCOUNTANT: 'Reports and expenses. No stock or staff.',
@@ -62,6 +66,10 @@ const ROLE_COLOR: Record<string, string> = {
   OWNER: Colors.indigo,
   MANAGER: Colors.warning,
   CASHIER: Colors.primary,
+  PHARMACIST: '#0891B2',
+  DOCTOR: '#E11D48',
+  NURSE: '#0284C7',
+  LAB_TECH: '#C026D3',
   WAITER: Colors.success,
   ACCOUNTANT: '#8B5CF6',
   KITCHEN: '#0EA5E9',

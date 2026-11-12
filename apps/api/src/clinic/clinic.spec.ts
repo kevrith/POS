@@ -114,6 +114,7 @@ function setup(opts: { invoice?: boolean } = {}) {
     appointment: { findFirst: jest.fn().mockResolvedValue(null), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     appointmentService: { findMany: jest.fn().mockResolvedValue([]) },
     business: { findFirst: jest.fn().mockResolvedValue({ name: 'Afya Clinic' }) },
+    insurerTariff: { findMany: jest.fn().mockResolvedValue([]) },
     insuranceProvider: { findFirst: jest.fn().mockResolvedValue(null) },
     insuranceClaim: { create: jest.fn().mockImplementation(async ({ data }: any) => ({ id: 'claim-1', ...data })) },
     coverCheck: { findMany: jest.fn().mockResolvedValue([]) },
@@ -313,6 +314,27 @@ describe('VisitsService charges and billing', () => {
       expect(directSales.createInTx).not.toHaveBeenCalled();
       expect(prisma.insuranceClaim.create).toHaveBeenCalledWith({ data: expect.objectContaining({ billedCents: 80000, saleId: null }) });
       expect(r.claimId).toBe('claim-1');
+    });
+
+    it('invoices at the insurer\'s own price where it has one, and splits and claims on that total', async () => {
+      const { svc, prisma, directSales } = setup({ invoice: true });
+      bill(prisma);
+      prisma.coverCheck.findMany.mockResolvedValue([check()]);
+      prisma.insurerTariff.findMany.mockResolvedValue([{ itemId: 'item-c', priceCents: 40000 }]);
+      await svc.complete('v-1', 'biz-1', NURSE, { payments: [{ method: 'CASH', amountCents: 14000 }], insurance: { providerId: 'sha', memberNumber: 'SHA-123', patientPct: 20 } });
+      const [, input] = directSales.createInTx.mock.calls[0];
+      expect(input.lines.map((l: any) => [l.name, l.unitPriceCents, l.totalCents])).toEqual([['Consultation', 40000, 40000], ['Malaria test', 30000, 30000]]);
+      expect(input.payments).toEqual([{ method: 'CASH', amountCents: 14000 }, { method: 'INSURANCE', amountCents: 56000 }]);
+      expect(prisma.insuranceClaim.create).toHaveBeenCalledWith({ data: expect.objectContaining({ billedCents: 56000, copayPct: 20 }) });
+    });
+
+    it('a visit not paid by an insurer is invoiced at the list price, whatever tariffs exist', async () => {
+      const { svc, prisma, directSales } = setup({ invoice: true });
+      bill(prisma);
+      prisma.insurerTariff.findMany.mockResolvedValue([{ itemId: 'item-c', priceCents: 40000 }]);
+      await svc.complete('v-1', 'biz-1', NURSE, { payments: [{ method: 'CASH', amountCents: 80000 }] });
+      expect(directSales.createInTx.mock.calls[0][1].lines.map((l: any) => l.unitPriceCents)).toEqual([50000, 30000]);
+      expect(prisma.insurerTariff.findMany).not.toHaveBeenCalled();
     });
 
     it('an insurer that does not require a check can be billed without one', async () => {

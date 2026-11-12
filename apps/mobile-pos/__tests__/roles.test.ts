@@ -4,6 +4,7 @@ import {
   canSeeFinance,
   canApprove,
   canSeeAllSales,
+  mobileSignInBlock,
   MANAGE_ROLES,
   FINANCE_ROLES,
 } from '../lib/roles';
@@ -82,5 +83,12 @@ describe('canSeeAllSales', () => {
     expect(canSeeAllSales('WAITER')).toBe(false);
     expect(canSeeAllSales('MANAGER')).toBe(true);
     expect(canSeeAllSales('ACCOUNTANT')).toBe(true);
+  });
+});
+
+describe('mobileSignInBlock', () => {
+  it('sends clinic roles to the web or desktop app, and lets the rest in', () => {
+    for (const r of ['DOCTOR', 'nurse', 'LAB_TECH']) expect(mobileSignInBlock(r)).toMatch(/web or desktop/);
+    for (const r of ['OWNER', 'MANAGER', 'CASHIER', 'PHARMACIST', 'WAITER', 'KITCHEN', 'ACCOUNTANT', undefined, null, '']) expect(mobileSignInBlock(r)).toBeNull();
   });
 });

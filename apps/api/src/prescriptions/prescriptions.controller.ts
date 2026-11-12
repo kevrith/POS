@@ -96,8 +96,8 @@ export class PrescriptionsController {
 
   /** What the next fill costs, for the pharmacist to collect against. */
   @Get(':id/quote')
-  quote(@Param('id') id: string, @Req() req: Authed) {
-    return this.svc.quote(id, req.user.businessId);
+  quote(@Param('id') id: string, @Query('providerId') providerId: string | undefined, @Req() req: Authed) {
+    return this.svc.quote(id, req.user.businessId, providerId || undefined);
   }
 
   @Patch(':id/dispense')

@@ -10,6 +10,18 @@ export const MANAGE_ROLES = ['OWNER', 'MANAGER', 'ADMIN'] as const;
 
 export type ManageRole = (typeof MANAGE_ROLES)[number];
 
+/**
+ * Clinic roles whose work is on the web and desktop apps (patients, visits, the lab). This app has none of those screens and the
+ * server would refuse everything else they try, so they are told where to sign in instead of landing on an empty till.
+ */
+export const NOT_ON_MOBILE = ['DOCTOR', 'NURSE', 'LAB_TECH'] as const;
+
+/** A sentence for a role that should not sign in here, or null when the role belongs on this app. */
+export function mobileSignInBlock(role?: string | null): string | null {
+  if (!role || !(NOT_ON_MOBILE as readonly string[]).includes(role.toUpperCase())) return null;
+  return 'Your work is on the web or desktop app: the clinic screens (patients, visits, the lab) are not on the phone app. Sign in there.';
+}
+
 /** True when the given role may access the Manage section. Case-insensitive. */
 export function canManage(role?: string | null): boolean {
   if (!role) return false;

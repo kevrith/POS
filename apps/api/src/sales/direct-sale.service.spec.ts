@@ -12,6 +12,7 @@ function setup(over: { taxType?: string; customer?: any } = {}) {
       update: jest.fn().mockResolvedValue({}),
     },
     sale: { create: jest.fn().mockImplementation(async ({ data }: any) => ({ id: 'sale-1', ...data, items: data.items.create, payments: data.payments.create })) },
+    item: { findMany: jest.fn().mockResolvedValue([]) },
   };
   const prisma: any = { business: { findUnique: jest.fn() } };
   const ledger = { autoPost: jest.fn().mockResolvedValue(undefined) };
@@ -280,5 +281,23 @@ describe('DirectSaleService.receiptFor', () => {
   it('another business\'s sale is not found', async () => {
     const { svc } = make(null, jest.fn());
     await expect(svc.receiptFor('sale-x', 'biz-1')).rejects.toThrow(/not found/i);
+  });
+});
+
+describe('a restricted medicine on a direct invoice', () => {
+  it('is refused on every invoice except a pharmacy dispense, before anything is written', async () => {
+    const { svc, tx } = setup();
+    tx.item.findMany.mockResolvedValue([{ id: 'item-1', name: 'Morphine 10mg/ml', requiresPrescription: false, scheduleClass: 'II', unitLabel: 'ml' }]);
+    for (const source of ['FUEL', 'HOTEL', 'CYBER', 'CLINIC', 'APPOINTMENT']) {
+      await expect(svc.createInTx(tx, input({ source }))).rejects.toThrow(/needs a prescription/);
+    }
+    expect(tx.sale.create).not.toHaveBeenCalled();
+    await expect(svc.createInTx(tx, input({ source: 'PHARMACY' }))).resolves.toBeDefined();
+  });
+
+  it('an ordinary invoice never even looks beyond its own items', async () => {
+    const { svc, tx } = setup();
+    await svc.createInTx(tx, input());
+    expect(tx.item.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { businessId: 'biz-1', id: { in: ['item-1'] } } }));
   });
 });

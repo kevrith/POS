@@ -1,3 +1,4 @@
+import { loadTariff } from '../cover/tariff';
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -218,37 +219,42 @@ export class PrescriptionsService {
    * What this fill costs, priced from the catalogue, for the pharmacist to collect against. For a business not on
    * the sales pipeline there is nothing to collect here (`invoice: false`). Changes nothing.
    */
-  async quote(id: string, businessId: string) {
+  async quote(id: string, businessId: string, providerId?: string) {
     const rx = await this.owned(id, businessId);
     const invoice = await this.directSales.isEnabled(businessId);
-    if (!invoice) return { invoice, lines: [], totalCents: 0, unpriced: [] as string[] };
-    const priced = await this.priceLines(this.prisma, businessId, this.lines(rx));
-    return { invoice, lines: priced.lines, totalCents: priced.totalCents, unpriced: priced.unpriced };
+    if (!invoice) return { invoice, lines: [], totalCents: 0, listTotalCents: 0, unpriced: [] as string[] };
+    // With an insurer chosen, the medicines are priced at that insurer's tariff where it has one.
+    const tariff = providerId ? await loadTariff(this.prisma, businessId, providerId) : undefined;
+    const priced = await this.priceLines(this.prisma, businessId, this.lines(rx), tariff);
+    return { invoice, lines: priced.lines, totalCents: priced.totalCents, listTotalCents: priced.listTotalCents, unpriced: priced.unpriced };
   }
 
   /**
    * The catalogue price of each line. A line with no item, or an item with no price, cannot be invoiced: it is
    * returned in `unpriced` so the pharmacist is told which, rather than the bill silently leaving it out.
    */
-  private async priceLines(db: any, businessId: string, lines: RxLine[]) {
+  private async priceLines(db: any, businessId: string, lines: RxLine[], tariff?: Map<string, number>) {
     const ids = [...new Set(lines.map((l) => l.itemId).filter(Boolean) as string[])];
     const items: any[] = ids.length ? await db.item.findMany({ where: { id: { in: ids }, businessId } }) : [];
     const byId = new Map(items.map((i) => [i.id, i]));
     const priced: DirectSaleLine[] = [];
     const unpriced: string[] = [];
+    let listTotalCents = 0;
     for (const l of lines) {
       const item = l.itemId ? byId.get(l.itemId) : undefined;
       if (!item || !(item.retailPriceCents > 0)) { unpriced.push(l.name); continue; }
+      const unit = tariff?.get(item.id) ?? item.retailPriceCents;
+      listTotalCents += Math.round(item.retailPriceCents * l.qty);
       priced.push({
         itemId: item.id,
         name: item.name,
         quantity: l.qty,
-        unitPriceCents: item.retailPriceCents,
-        totalCents: Math.round(item.retailPriceCents * l.qty),
+        unitPriceCents: unit,
+        totalCents: Math.round(unit * l.qty),
         taxClass: taxClassOf(item),
       });
     }
-    return { lines: priced, totalCents: priced.reduce((sum, l) => sum + l.totalCents, 0), unpriced };
+    return { lines: priced, totalCents: priced.reduce((sum, l) => sum + l.totalCents, 0), listTotalCents, unpriced };
   }
 
   /**
@@ -286,6 +292,7 @@ export class PrescriptionsService {
     // Check what was sent before anything is claimed, so a typo costs the pharmacist nothing.
     const invoice = await this.directSales.isEnabled(businessId);
     const terms = invoice ? await this.fillTerms(businessId, opts) : null;
+    const tariff = terms?.insurance ? await loadTariff(this.prisma, businessId, terms.insurance.providerId) : undefined;
     // Allergies, interactions and dose are checked against the record as it is NOW (an allergy may have been added since it was written).
     const safe = this.assertSafe(await this.safetyCheck(businessId, lines, rx.patientId, rx.id), opts.override);
 
@@ -319,7 +326,7 @@ export class PrescriptionsService {
       let insurerCents = 0;
       let claimId: string | null = null;
       if (invoice && terms) {
-        const priced = await this.priceLines(tx, businessId, lines);
+        const priced = await this.priceLines(tx, businessId, lines, tariff);
         if (priced.unpriced.length > 0) {
           throw new BadRequestException(`Link and price every medicine in the catalogue before dispensing. Missing: ${priced.unpriced.join(', ')}`);
         }

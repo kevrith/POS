@@ -456,6 +456,7 @@ export default function POSPage() {
         validUntil: invoiceValidUntil || undefined,
         notes: invoiceNotes || undefined,
         items: cart.map((i) => ({
+          itemId: i.id,
           name: i.name,
           quantity: i.quantity,
           unitPriceCents: i.unitPriceCents,

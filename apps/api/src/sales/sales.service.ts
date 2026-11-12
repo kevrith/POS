@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { enableBusinessModule } from '../common/business-modules';
 import { InventoryService } from '../inventory/inventory.service';
@@ -21,7 +22,7 @@ import { drawStock, restoreStock } from '../batch/batch-allocation';
 import { assertStockAvailable, blocksOversell, sellsInFractions, type StockLine } from './stock-guard';
 import { ROOM_CHARGE_FOLIO_TYPE } from '../common/folio';
 import { CLINICAL_APPROVER_ROLES, CLINICAL_SELF_APPROVE } from '../prescriptions/clinical-roles';
-import { assertRestrictedAllowed, restrictedItems, type RestrictedApproval } from './restricted-sale';
+import { assertRestrictedAllowed, loadRestricted, restrictedItems, type RestrictedApproval, type RestrictedItem } from './restricted-sale';
 
 /** How a customer may settle a credit sale. */
 const CREDIT_SETTLEMENT_METHODS = ['CASH', 'MPESA', 'CARD', 'BANK'] as const;
@@ -46,7 +47,7 @@ interface CreateProformaDto {
   customerName: string;
   customerPhone?: string;
   priceLevel?: string;
-  items: Array<{ name: string; quantity: number; unitPriceCents: number; discountPercent?: number }>;
+  items: Array<{ itemId?: string; name: string; quantity: number; unitPriceCents: number; discountPercent?: number }>;
   validUntil?: string;
   notes?: string;
 }
@@ -56,6 +57,8 @@ interface ConvertProformaDto {
   storeId: string;
   cashierId: string;
   payments: Array<{ method: string; amountCents: number }>;
+  /** A manager's approval to convert a quotation that holds prescription-only or controlled medicines. Verified by the controller. */
+  restrictedOverride?: RestrictedApproval;
 }
 
 interface CreateSaleDto {
@@ -160,6 +163,51 @@ export class SalesService {
    * Records a sale ONCE per offlineId. A till that lost the response to a successful checkout queues the sale
    * and sends it again; without this the retry created a second sale (double revenue, double stock deduction).
    */
+  /**
+   * Put a restricted sale on record: each medicine as an override with who approved it and why, and each controlled drug on
+   * the register against the person it went to. Runs inside the sale's own transaction, for the till and for a converted proforma.
+   */
+  private async recordRestrictedSale(
+    tx: Prisma.TransactionClient,
+    a: { businessId: string; saleId: string; receiptNumber: string | null; cashierId: string; lines: Array<{ itemId: string | null; quantity: number }>; restricted: RestrictedItem[]; approval: RestrictedApproval },
+  ) {
+    for (const r of a.restricted) {
+      await tx.rxSafetyOverride.create({
+        data: { businessId: a.businessId, saleId: a.saleId, kind: 'RESTRICTED_SALE', detail: `${r.name} sold without a prescription (${a.receiptNumber})`, reason: a.approval.reason.slice(0, 300), approvedById: a.approval.approvedById, approvedByName: a.approval.approvedByName },
+      });
+      if (r.controlled && r.schedule) {
+        const cashier = await tx.user.findFirst({ where: { id: a.cashierId, businessId: a.businessId }, select: { name: true } });
+        await tx.controlledSubstanceLog.create({
+          data: {
+            businessId: a.businessId,
+            itemName: r.name,
+            scheduleClass: r.schedule,
+            quantityDispensed: a.lines.filter((l) => l.itemId === r.itemId).reduce((sum, l) => sum + l.quantity, 0),
+            unit: r.unit,
+            patientName: a.approval.patientName ?? '',
+            patientIdNumber: a.approval.patientIdNumber,
+            prescriberName: a.approval.prescriberName ?? 'No prescription (manager approved)',
+            dispensedBy: cashier?.name ?? a.cashierId,
+            notes: `Sold without a prescription, receipt ${a.receiptNumber}. Approved by ${a.approval.approvedByName}: ${a.approval.reason}`.slice(0, 500),
+          },
+        });
+      }
+    }
+  }
+
+  /**
+   * The restricted medicines on a quotation's lines. A line that names a catalogue item is checked by it; an older line that
+   * kept only a name (quotations made before lines kept their item) is matched to the catalogue by that name.
+   */
+  private async restrictedForProforma(businessId: string, lines: Array<{ itemId: string | null; name: string }>): Promise<RestrictedItem[]> {
+    const byId = await loadRestricted(this.prisma, businessId, lines.map((l) => l.itemId));
+    const names = [...new Set(lines.filter((l) => !l.itemId).map((l) => l.name.trim()).filter(Boolean))];
+    if (names.length === 0) return byId;
+    const byName = restrictedItems(await this.prisma.item.findMany({ where: { businessId, OR: names.map((n) => ({ name: { equals: n, mode: 'insensitive' as const } })) }, select: { id: true, name: true, requiresPrescription: true, scheduleClass: true, unitLabel: true } }));
+    const seen = new Set(byId.map((r) => r.itemId));
+    return [...byId, ...byName.filter((r) => !seen.has(r.itemId))];
+  }
+
   async createSale(businessId: string, dto: CreateSaleDto) {
     const offlineId = this.cleanOfflineId(dto?.offlineId);
     if (!offlineId) return this.createSaleOnce(businessId, { ...dto, offlineId: undefined });
@@ -494,28 +542,7 @@ export class SalesService {
 
       // A restricted sale went ahead on a manager's say-so: that is on record, and a controlled drug is on the register.
       if (restrictedApproval) {
-        for (const r of restrictedItems(items.filter((i) => cart.some((c) => c.itemId === i.id)))) {
-          await tx.rxSafetyOverride.create({
-            data: { businessId, saleId: createdSale.id, kind: 'RESTRICTED_SALE', detail: `${r.name} sold without a prescription (${createdSale.receiptNumber})`, reason: restrictedApproval.reason.slice(0, 300), approvedById: restrictedApproval.approvedById, approvedByName: restrictedApproval.approvedByName },
-          });
-          if (r.controlled && r.schedule) {
-            const cashier = await tx.user.findFirst({ where: { id: dto.cashierId, businessId }, select: { name: true } });
-            await tx.controlledSubstanceLog.create({
-              data: {
-                businessId,
-                itemName: r.name,
-                scheduleClass: r.schedule,
-                quantityDispensed: cart.filter((c) => c.itemId === r.itemId).reduce((sum, c) => sum + c.quantity, 0),
-                unit: r.unit,
-                patientName: restrictedApproval.patientName ?? '',
-                patientIdNumber: restrictedApproval.patientIdNumber,
-                prescriberName: restrictedApproval.prescriberName ?? 'No prescription (manager approved)',
-                dispensedBy: cashier?.name ?? dto.cashierId,
-                notes: `Sold at the till without a prescription, receipt ${createdSale.receiptNumber}. Approved by ${restrictedApproval.approvedByName}: ${restrictedApproval.reason}`.slice(0, 500),
-              },
-            });
-          }
-        }
+        await this.recordRestrictedSale(tx, { businessId, saleId: createdSale.id, receiptNumber: createdSale.receiptNumber, cashierId: dto.cashierId, lines: cart, restricted: restrictedItems(items.filter((i) => cart.some((c) => c.itemId === i.id))), approval: restrictedApproval });
       }
 
       await this.chargeToRoom(tx, businessId, dto.cashierId, createdSale, dto.payments);
@@ -1207,6 +1234,11 @@ export class SalesService {
     // A hidden-by-default feature switches itself on the first time it is used, so its menu entry is there.
     void enableBusinessModule(this.prisma, dto.businessId, 'QUOTES');
 
+    // A line keeps the catalogue item it was quoted from (when it names one of this business's), so converting the quotation
+    // takes the stock and can apply the prescription-only rule. It used to be dropped, so a converted quotation never moved stock.
+    const wanted = [...new Set(dto.items.map((i) => i.itemId).filter((x): x is string => typeof x === 'string' && x !== ''))];
+    const known = new Set((wanted.length ? await this.prisma.item.findMany({ where: { businessId: dto.businessId, id: { in: wanted } }, select: { id: true } }) : []).map((i) => i.id));
+
     return this.prisma.sale.create({
       data: {
         offlineId: uuidv4(),
@@ -1230,6 +1262,7 @@ export class SalesService {
             const disc = i.discountPercent ? i.discountPercent / 100 : 0;
             const lineCents = Math.round(i.unitPriceCents * i.quantity * (1 - disc));
             return {
+              ...(i.itemId && known.has(i.itemId) ? { itemId: i.itemId } : {}),
               name: i.name,
               quantity: i.quantity,
               unitPriceCents: i.unitPriceCents,
@@ -1282,7 +1315,7 @@ export class SalesService {
 
   async convertProformaToSaleV2(
     proformaId: string,
-    dto: { cashierId: string; storeId?: string; payments: { method: string; amountCents: number; reference?: string }[] },
+    dto: { cashierId: string; storeId?: string; payments: { method: string; amountCents: number; reference?: string }[]; restrictedOverride?: RestrictedApproval },
   ) {
     // 1. Find the proforma (businessId/storeId come from the proforma itself)
     const proforma = await this.prisma.sale.findFirst({
@@ -1300,6 +1333,10 @@ export class SalesService {
     if (proforma.proformaValidUntil && new Date() > proforma.proformaValidUntil) {
       throw new BadRequestException('Proforma has expired');
     }
+
+    // A quotation for prescription-only or controlled medicines is converted only with a manager's approval, like a till sale.
+    const restricted = await this.restrictedForProforma(proforma.businessId, proforma.items);
+    const restrictedApproval = assertRestrictedAllowed(restricted, dto.restrictedOverride);
 
     // 2. Resolve store for the receipt sequence. Proformas created outside the POS
     //    (e.g. from a field order) carry no storeId — fall back to the caller's store,
@@ -1374,6 +1411,8 @@ export class SalesService {
         include: { items: true, payments: true },
       });
 
+      if (restrictedApproval) await this.recordRestrictedSale(tx, { businessId: proforma.businessId, saleId: newSale.id, receiptNumber, cashierId: dto.cashierId, lines: proforma.items, restricted, approval: restrictedApproval });
+
       // 4. Decrement inventory for stock-tracked items
       for (const item of proforma.items) {
         if (item.itemId) {
@@ -1425,6 +1464,8 @@ export class SalesService {
     if (proforma.status !== SaleStatus.PROFORMA) {
       throw new BadRequestException('Proforma already converted or voided');
     }
+    const restricted = await this.restrictedForProforma(dto.businessId, proforma.items);
+    const restrictedApproval = assertRestrictedAllowed(restricted, dto.restrictedOverride);
 
     const store = await this.prisma.store.findUnique({
       where: { id: dto.storeId },
@@ -1461,6 +1502,8 @@ export class SalesService {
         where: { id: dto.storeId },
         data: { receiptSequence: { increment: 1 } },
       });
+
+      if (restrictedApproval) await this.recordRestrictedSale(tx, { businessId: dto.businessId, saleId: sale.id, receiptNumber, cashierId: dto.cashierId, lines: proforma.items, restricted, approval: restrictedApproval });
 
       await this.audit.createEntry({
         businessId: dto.businessId,

@@ -8,6 +8,7 @@ import {
   canVerify, cleanParameters, evaluateResults, LAB_CATEGORIES, orderStatusFrom, parseParameters, parseValues, SPECIMENS,
 } from './lab-results';
 import { STARTER_TESTS } from './starter-tests';
+import { overdueAt } from './lab-results';
 import { Logger } from '@nestjs/common';
 
 export interface Actor { id: string; name: string; role: string }
@@ -212,9 +213,17 @@ export class LabService {
       take: 300,
     });
     const orders = await this.presentOrders(businessId, rows);
-    const open = orders.filter((o) => UNFINISHED.includes(String(o.status)))
-      .sort((a, b) => (a.priority === b.priority ? 0 : a.priority === 'URGENT' ? -1 : 1));
-    return { open, done: orders.filter((o) => o.status === 'VERIFIED').reverse() };
+    // Each test says how long it should take; an unfinished order past the longest of its tests is overdue.
+    const tests = await this.prisma.labTest.findMany({ where: { businessId, id: { in: [...new Set(orders.flatMap((o) => o.items.map((i) => i.testId)))] } }, select: { id: true, turnaroundHours: true } });
+    const hoursOf = new Map(tests.map((t) => [t.id, t.turnaroundHours]));
+    const now = new Date();
+    const withDue = orders.map((o) => {
+      const dueAt = overdueAt(o.createdAt as Date, o.items.map((i) => hoursOf.get(i.testId) ?? null));
+      return { ...o, dueAt, overdue: UNFINISHED.includes(String(o.status)) && !!dueAt && now > dueAt };
+    });
+    const open = withDue.filter((o) => UNFINISHED.includes(String(o.status)))
+      .sort((a, b) => Number(b.overdue) - Number(a.overdue) || (a.priority === b.priority ? 0 : a.priority === 'URGENT' ? -1 : 1));
+    return { open, done: withDue.filter((o) => o.status === 'VERIFIED').reverse() };
   }
 
   /** A patient's released results, newest first, so the doctor can compare with what they had before. */

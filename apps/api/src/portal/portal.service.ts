@@ -1,3 +1,4 @@
+import { refuseRestricted, restrictedItems } from '../sales/restricted-sale';
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { enableBusinessModule } from '../common/business-modules';
@@ -190,11 +191,14 @@ export class PortalService {
     const store = await this.prisma.store.findFirst({ where: { businessId } });
     if (!store) return { business, categories: [] };
 
-    const items = await this.prisma.item.findMany({
+    const rows = await this.prisma.item.findMany({
       where: { businessId, storeId: store.id, deletedAt: null },
-      select: { id: true, name: true, category: true, type: true, retailPriceCents: true, barcode: true },
+      select: { id: true, name: true, category: true, type: true, retailPriceCents: true, barcode: true, requiresPrescription: true, scheduleClass: true },
       orderBy: [{ category: 'asc' }, { name: 'asc' }],
     });
+    // A prescription-only or controlled medicine is not sold over the web: it is dispensed from a prescription at the pharmacy.
+    const held = new Set(restrictedItems(rows.map((r) => ({ id: r.id, name: r.name, requiresPrescription: r.requiresPrescription, scheduleClass: r.scheduleClass }))).map((r) => r.itemId));
+    const items = rows.filter((r) => !held.has(r.id)).map(({ requiresPrescription: _rx, scheduleClass: _sc, ...rest }) => rest);
 
     const categoryMap = new Map<string, typeof items>();
     for (const item of items) {
@@ -277,8 +281,10 @@ export class PortalService {
     if (wanted.some((id) => !id)) throw new BadRequestException('Every order line needs an item');
     const catalog = await this.prisma.item.findMany({
       where: { id: { in: wanted as string[] }, businessId: dto.businessId, isActive: true, deletedAt: null },
-      select: { id: true, name: true, retailPriceCents: true },
+      select: { id: true, name: true, retailPriceCents: true, requiresPrescription: true, scheduleClass: true },
     });
+    // Public orders are paid by M-Pesa and become a sale automatically: a medicine that needs a prescription cannot be in one.
+    refuseRestricted(restrictedItems(catalog), 'online');
     const lines = dto.items.map((i) => {
       const item = catalog.find((c) => c.id === i.itemId);
       if (!item) throw new BadRequestException('An item on your order is no longer available');

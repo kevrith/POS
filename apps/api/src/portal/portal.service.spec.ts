@@ -132,3 +132,41 @@ describe('PortalService.placeOrder', () => {
     expect(where.phone.in).toEqual(expect.arrayContaining(['254712345678', '0712345678', '+254712345678']));
   });
 });
+
+describe('prescription-only and controlled medicines on the public storefront', () => {
+  const AMOX = { id: 'i-rx', name: 'Amoxicillin 500mg', category: 'Medicine', type: 'PRODUCT', retailPriceCents: 4000, barcode: null, requiresPrescription: true, scheduleClass: null };
+  const MORPH = { id: 'i-c', name: 'Morphine 10mg/ml', category: 'Medicine', type: 'PRODUCT', retailPriceCents: 9000, barcode: null, requiresPrescription: false, scheduleClass: 'II' };
+  const PARA = { id: 'i-ok', name: 'Paracetamol 500mg', category: 'Medicine', type: 'PRODUCT', retailPriceCents: 500, barcode: null, requiresPrescription: false, scheduleClass: 'OTC' };
+
+  function build(catalog: Array<Record<string, unknown>>) {
+    const prisma = {
+      business: { findUnique: jest.fn().mockResolvedValue({ name: 'Pharmacy', taxType: 'VAT', posMode: 'CLINIC' }) },
+      store: { findFirst: jest.fn().mockResolvedValue({ id: 'store-1' }) },
+      customer: { findFirst: jest.fn().mockResolvedValue(null) },
+      item: { findMany: jest.fn().mockResolvedValue(catalog) },
+      deliveryOrder: { count: jest.fn().mockResolvedValue(0), create: jest.fn().mockImplementation(async ({ data }) => ({ id: 'o1', orderNumber: data.orderNumber })) },
+    };
+    return { svc: new PortalService(prisma as never, { sendSMS: jest.fn().mockResolvedValue({}) } as never, {} as never, {} as never), prisma };
+  }
+  const base = { businessId: 'b1', customerName: 'A', phone: '0712345678', address: 'x', orderType: 'DELIVERY' as const };
+
+  it('the public menu leaves them out, and does not leak the flags', async () => {
+    const { svc } = build([AMOX, MORPH, PARA]);
+    const menu: any = await svc.getMenu('b1');
+    const names = menu.categories.flatMap((c: any) => c.items.map((i: any) => i.name));
+    expect(names).toEqual(['Paracetamol 500mg']);
+    expect(JSON.stringify(menu)).not.toContain('requiresPrescription');
+    expect(JSON.stringify(menu)).not.toContain('scheduleClass');
+  });
+
+  it('an order that includes one is refused whole, and nothing is saved or charged', async () => {
+    const { svc, prisma } = build([AMOX, PARA]);
+    await expect(svc.placeOrder({ ...base, items: [{ itemId: 'i-ok', name: 'x', quantity: 1, priceCents: 1 }, { itemId: 'i-rx', name: 'x', quantity: 1, priceCents: 1 }] })).rejects.toMatchObject({ response: { code: 'RESTRICTED_SALE' } });
+    expect(prisma.deliveryOrder.create).not.toHaveBeenCalled();
+  });
+
+  it('an order of ordinary medicines still goes through', async () => {
+    const { svc } = build([PARA]);
+    await expect(svc.placeOrder({ ...base, items: [{ itemId: 'i-ok', name: 'x', quantity: 2, priceCents: 1 }] })).resolves.toMatchObject({ totalCents: 1000 });
+  });
+});

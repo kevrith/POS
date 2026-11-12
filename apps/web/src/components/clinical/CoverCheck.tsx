@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { ShieldCheck } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth';
-import { COVER_LABEL, COVER_TONE, type CoverCheck, type CoverStanding, type InsuranceProvider } from '../../lib/cover';
+import { COVER_LABEL, COVER_TONE, SHA_ID_TYPES, type CoverCheck, type CoverStanding, type InsuranceProvider, type ShaResult } from '../../lib/cover';
 import { Badge, Button, Input, Select, Textarea } from '../ui';
 import { Modal } from '../../pages/fuel/Modal';
 
@@ -36,7 +36,7 @@ type CheckResult = 'ELIGIBLE' | 'NOT_ELIGIBLE' | 'UNAVAILABLE';
  * call) and records the result here; it is kept with their name and the time, and the visit's bill relies on it.
  */
 export function CoverCheckModal({ patientId, visitId, providerId, memberNumber, onClose, onDone }: {
-  patientId: string; visitId?: string; providerId?: string; memberNumber?: string; onClose: () => void; onDone: (c: CoverCheck) => void;
+  patientId: string; visitId?: string; providerId?: string; memberNumber?: string; onClose: () => void; onDone: (c?: CoverCheck) => void;
 }) {
   const qc = useQueryClient();
   const { data: insurers = [] } = useInsurers();
@@ -45,6 +45,19 @@ export function CoverCheckModal({ patientId, visitId, providerId, memberNumber, 
   const [status, setStatus] = useState<CheckResult | ''>('');
   const [reference, setReference] = useState('');
   const [notes, setNotes] = useState('');
+  const insurer = insurers.find((i) => i.id === provider);
+  const { data: shaStatus } = useQuery<{ configured: boolean; enabled: boolean }>({ queryKey: ['cover', 'sha-status'], queryFn: () => api.get('/cover/sha/status'), enabled: insurer?.kind === 'SHA', staleTime: 60_000 });
+  const [idType, setIdType] = useState<string>('National ID');
+  const [idNumber, setIdNumber] = useState('');
+  const [sha, setSha] = useState<ShaResult | null>(null);
+  const ask = useMutation({
+    mutationFn: () => api.post<ShaResult>('/cover/sha/eligibility', { patientId, visitId, providerId: provider, identificationType: idType, identificationNumber: (idNumber || member).trim() }),
+    onSuccess: (r) => {
+      setSha(r);
+      if (r.recorded) { void qc.invalidateQueries({ queryKey: ['cover'] }); toast.success(r.status === 'ELIGIBLE' ? 'SHA confirms cover' : r.status === 'NOT_ELIGIBLE' ? 'SHA says not eligible' : 'SHA answered: please read it'); }
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
   const save = useMutation({
     mutationFn: () => api.post<CoverCheck>('/cover/checks', { patientId, visitId, providerId: provider, memberNumber: member.trim(), status, reference: reference.trim() || undefined, notes: notes.trim() || undefined }),
     onSuccess: (c) => {
@@ -57,11 +70,38 @@ export function CoverCheckModal({ patientId, visitId, providerId, memberNumber, 
   return (
     <Modal title="Check insurance cover" subtitle="Look the member up with the insurer, then record what they said" onClose={onClose}>
       <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); save.mutate(); }}>
-        <Select label="Insurer" value={provider} onChange={(e) => setProvider(e.target.value)} hint={insurers.length === 0 ? 'Add the insurer first in Pharmacy, Insurance Providers' : undefined}>
+        <Select label="Insurer" value={provider} onChange={(e) => { setProvider(e.target.value); setSha(null); }} hint={insurers.length === 0 ? 'Add the insurer first in Pharmacy, Insurance Providers' : undefined}>
           <option value="">Choose an insurer…</option>
           {insurers.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
         </Select>
         <Input label="Member number" value={member} onChange={(e) => setMember(e.target.value)} />
+        {insurer?.kind === 'SHA' && (
+          <div className="space-y-3 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
+            {shaStatus?.enabled ? (
+              <>
+                <p className="text-sm font-semibold">Ask SHA now</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Select label="Identified by" value={idType} onChange={(e) => setIdType(e.target.value)}>{SHA_ID_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}</Select>
+                  <Input label="Identifier" value={idNumber} onChange={(e) => setIdNumber(e.target.value)} placeholder={member || 'ID or number'} />
+                </div>
+                <Button variant="secondary" loading={ask.isPending} disabled={!(idNumber || member).trim()} onClick={() => ask.mutate()}>Check with SHA</Button>
+                {sha && (
+                  <div role="status" className="rounded-lg bg-white p-3 text-sm">
+                    {sha.recorded ? (
+                      <>
+                        <p className="mb-1 flex items-center gap-2"><CoverBadge standing={sha.status === 'UNAVAILABLE' ? 'UNAVAILABLE' : (sha.status as CoverStanding)} /> {sha.fullName ?? ''}{sha.memberCrNumber ? <span className="font-mono text-xs text-gray-500">CR {sha.memberCrNumber}</span> : null}</p>
+                        <p className="text-gray-700">{sha.summary}</p>
+                        {sha.message && <p className="mt-1 text-amber-800">{sha.message}</p>}
+                        {sha.schemes && sha.schemes.length > 0 && <ul className="mt-1 text-xs text-gray-600">{sha.schemes.map((s) => <li key={s.name}>{s.name}: {s.status || 'no status'}{s.endDate ? `, to ${s.endDate}` : ''}</li>)}</ul>}
+                        {sha.status !== 'UNAVAILABLE' && <div className="mt-2 flex justify-end"><Button size="sm" onClick={() => onDone()}>Done</Button></div>}
+                      </>
+                    ) : <p className="text-red-800">{sha.message}</p>}
+                  </div>
+                )}
+              </>
+            ) : <p className="text-sm text-gray-700">SHA is not connected for this business yet. An owner or manager can connect it under <b>Insurance Claims, SHA connection</b>. Until then, look the member up and record the result below.</p>}
+          </div>
+        )}
         <fieldset>
           <legend className="mb-1 text-[13px] font-semibold text-gray-700">What did the insurer say?</legend>
           <div className="grid gap-2">

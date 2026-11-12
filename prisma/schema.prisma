@@ -2795,6 +2795,30 @@ model InsuranceClaim {
   @@index([businessId, status, submittedAt])
 }
 
+/// A business's own connection to the Social Health Authority's eligibility service. The facility keeps its own credentials
+/// (client id and secret from SHA, and its Facility Registry code); the secret is stored encrypted and never sent back out.
+model ShaConnection {
+  id              String    @id @default(uuid())
+  businessId      String    @unique
+  /// The service's base address, such as https://host/api/v1. Only SHA and DHA hosts are accepted.
+  baseUrl         String
+  clientId        String
+  clientSecretEnc String
+  /// The facility's Facility Registry code, sent as X-Facility-Id.
+  facilityCode    String
+  tokenPath       String    @default("/tenants/token")
+  eligibilityPath String    @default("/patients/eligibility")
+  /// How the token request is written: json or form.
+  tokenFormat     String    @default("json")
+  enabled         Boolean   @default(true)
+  lastTestAt      DateTime?
+  lastTestOk      Boolean?
+  lastTestMessage String?
+  updatedBy       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
 /// One check of whether a patient's insurance covers them: made by hand from the insurer's portal or card today, and by the
 /// insurer's own service later. "Not checked" is the absence of a row, never a guess.
 model CoverCheck {

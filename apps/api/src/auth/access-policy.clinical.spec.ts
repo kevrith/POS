@@ -237,3 +237,27 @@ describe('resubmitting a claim', () => {
     for (const role of ['LAB_TECH', 'CASHIER', 'NURSE']) expect(can(role, 'POST', '/lab/orders/o-1/items/i-1/acknowledge')).toBe(false);
   });
 });
+
+describe('SHA connection', () => {
+  it('the owner or a manager sets it up and tests it; nobody else can even read the settings', () => {
+    for (const role of ['OWNER', 'MANAGER']) {
+      expect(can(role, 'PUT', '/cover/sha/config')).toBe(true);
+      expect(can(role, 'DELETE', '/cover/sha/config')).toBe(true);
+      expect(can(role, 'GET', '/cover/sha/config')).toBe(true);
+      expect(can(role, 'POST', '/cover/sha/test')).toBe(true);
+    }
+    for (const role of ['CASHIER', 'PHARMACIST', 'DOCTOR', 'NURSE', 'ACCOUNTANT', 'LAB_TECH']) {
+      expect(can(role, 'PUT', '/cover/sha/config')).toBe(false);
+      expect(can(role, 'GET', '/cover/sha/config')).toBe(false);
+      expect(can(role, 'POST', '/cover/sha/test')).toBe(false);
+    }
+  });
+
+  it('the front line can see whether it is connected and ask SHA about a patient', () => {
+    for (const role of ['CASHIER', 'PHARMACIST', 'MANAGER', 'OWNER']) {
+      expect(can(role, 'GET', '/cover/sha/status')).toBe(true);
+      expect(can(role, 'POST', '/cover/sha/eligibility')).toBe(true);
+    }
+    for (const role of ['WAITER', 'KITCHEN', 'NURSE', 'LAB_TECH', 'ACCOUNTANT']) expect(can(role, 'POST', '/cover/sha/eligibility')).toBe(false);
+  });
+});

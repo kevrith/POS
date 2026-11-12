@@ -12,6 +12,7 @@ import { Badge, Button, EmptyState, Input, PageHeader, Select, type BadgeTone } 
 import { Modal } from './fuel/Modal';
 import { useInsurers } from '../components/clinical/CoverCheck';
 import { useDialog } from '../components/Dialog';
+import ShaConnectionCard from '../components/clinical/ShaConnection';
 
 const TONE: Record<ClaimRow['status'], BadgeTone> = { SUBMITTED: 'brand', APPROVED: 'warning', PAID: 'success', REJECTED: 'danger', VOIDED: 'neutral' };
 
@@ -37,6 +38,8 @@ export default function ClaimsPage() {
   return (
     <div className="space-y-5 p-4 sm:p-6">
       <PageHeader title="Insurance claims" subtitle={owed > 0 ? `${formatKES(owed)} is owed by insurers` : 'What insurers owe, and what is holding each claim back'} />
+
+      {['OWNER', 'ADMIN', 'MANAGER'].includes(String(user?.role)) && <ShaConnectionCard />}
 
       {aging.length > 0 && (
         <div className="overflow-x-auto rounded-xl border bg-white dark:border-gray-700 dark:bg-gray-800">

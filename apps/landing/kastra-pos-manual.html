@@ -1355,6 +1355,39 @@ results stay on record. Create the lab technician under
 <strong>Settings, Staff</strong> with the role <strong>Lab
 technician</strong>: they sign in to the lab and see nothing else.</li>
 </ol></li>
+<li><strong>Connecting to SHA</strong> — each business connects with its
+<strong>own</strong> SHA credentials: nothing is shared between
+businesses. SHA gives a facility a <strong>client id</strong>, a
+<strong>client secret</strong> and a <strong>Facility Registry
+code</strong> when it is onboarded. An owner or manager opens
+<strong>Insurance Claims, SHA connection, Set up</strong>, enters them
+and the service address, saves, and presses <strong>Test
+connection</strong>. The secret is stored encrypted and is never shown
+again (leave it blank when editing to keep it). The address starts as
+DHA’s published <strong>test</strong> address; use the live address SHA
+gives you for real patients. Only addresses on SHA’s or DHA’s own
+domains are accepted. <strong>Switched on</strong> can be unticked to
+pause checks without deleting the credentials, and
+<strong>Remove</strong> deletes them. Then, in <strong>Check
+cover</strong> (on a patient, or in the billing window) for an insurer
+set up as SHA, <strong>Ask SHA now</strong> sends the identifier
+(National ID, ClientRegistry ID, Alien ID, Refugee ID, Mandate Number,
+birth certificate or notification) and records the answer as a cover
+check made by SHA. <em>Active</em> is recorded as eligible,
+<em>inactive</em> (or a person SHA has no record of, or one recorded as
+deceased) as not eligible, and an answer KASTRA cannot read as clearly
+active or inactive is recorded as <em>could not check</em> with what SHA
+said: it is never taken as eligible, so billing stays blocked until a
+person decides. If SHA is down or refuses the credentials nothing is
+recorded and the screen says why; recording by hand always remains.
+<strong>What is not built:</strong> sending claims to SHA. Claims still
+go in through SHA’s own portal or your certified HMIS, because SHA’s
+claim submission needs the patient’s consent step and a format we have
+not been given and cannot test. The connection was written from DHA’s
+published description and tested against a stand-in, not against SHA
+itself: if SHA’s real answers differ, <strong>Test connection</strong>
+and the <em>could not check</em> note will show it, and the advanced
+paths and request format can be changed without a new version.</li>
 <li><strong>Insurance cover and claims</strong> — set up each insurer
 once under <strong>Pharmacy Mgmt, Insurance Providers</strong> (there is
 a one-press button for <strong>Social Health Authority (SHA)</strong>).

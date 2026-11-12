@@ -289,6 +289,11 @@ export const ACCESS_RULES: readonly AccessRule[] = [
   r('*', '/patients/**', CLINICAL),
   // Cover checks are made by whoever registers or bills the patient; the claims board is money, so it is for management and the
   // accountant, like the claims themselves.
+  // Connecting to SHA (credentials, test) is the owner's or a manager's; asking SHA about a patient is the front line's.
+  r(['PUT', 'DELETE', 'POST'], '/cover/sha/config', MGMT),
+  r('POST', '/cover/sha/test', MGMT),
+  r('GET', '/cover/sha/config', MGMT),
+  r('*', '/cover/sha/**', CLINICAL),
   r('*', '/cover/checks', CLINICAL),
   r('GET', '/cover/standing', CLINICAL),
   r('POST', '/cover/claims/**', FIN),

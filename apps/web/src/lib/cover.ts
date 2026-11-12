@@ -43,3 +43,21 @@ export interface AgingRow { providerId: string; providerName: string; buckets: R
 export const CLAIM_STATUS_LABEL: Record<ClaimRow['status'], string> = { SUBMITTED: 'Billed', APPROVED: 'Approved', PAID: 'Paid', REJECTED: 'Rejected', VOIDED: 'Voided' };
 
 export const AGE_BUCKETS_LABEL = { '0-30': '0-30 days', '31-60': '31-60 days', '61-90': '61-90 days', '90+': 'Over 90 days' } as const;
+
+// ── the facility's connection to SHA ──────────────────────────────────────────────────────────────────────────────
+
+export const SHA_ID_TYPES = ['National ID', 'ClientRegistry ID', 'Alien ID', 'Refugee ID', 'Mandate Number', 'Birth Certificate', 'Birth Notification'] as const;
+
+export interface ShaConnection {
+  baseUrl: string; clientId: string; facilityCode: string; tokenPath: string; eligibilityPath: string; tokenFormat: 'json' | 'form';
+  enabled: boolean; secretSet: boolean; lastTestAt: string | null; lastTestOk: boolean | null; lastTestMessage: string | null;
+}
+export interface ShaConfig { defaults: { baseUrl: string; tokenPath: string; eligibilityPath: string; tokenFormat: string }; connection: ShaConnection | null }
+
+export interface ShaResult {
+  recorded: boolean;
+  verdict: 'ELIGIBLE' | 'NOT_ELIGIBLE' | 'UNKNOWN' | 'AUTH' | 'BAD_INPUT' | 'DOWN' | 'UNREACHABLE';
+  status?: 'ELIGIBLE' | 'NOT_ELIGIBLE' | 'UNAVAILABLE';
+  summary?: string; message?: string; memberCrNumber?: string | null; fullName?: string | null;
+  schemes?: Array<{ name: string; status: string; verdict: string; reason: string | null; endDate: string | null }>;
+}
